@@ -31,13 +31,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useCreateRole,
   useDeleteRole,
   useRolesPaginated,
   useUpdateRole,
 } from "@/lib/role.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];

@@ -38,6 +38,8 @@ const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
+const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
+const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
 /**
  * Determines OTLP authentication headers based on environment variables
@@ -205,28 +207,6 @@ export const getTrustedOrigins = (): string[] => {
   }
 
   return addLoopbackEquivalents(origins);
-};
-
-/**
- * Parse additional trusted SSO provider IDs from environment variable.
- * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
- *
- * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
- * Whitespace around each provider ID is trimmed.
- *
- * @returns Array of additional trusted SSO provider IDs
- */
-export const getAdditionalTrustedSsoProviderIds = (): string[] => {
-  const envValue = process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS?.trim();
-
-  if (!envValue) {
-    return [];
-  }
-
-  return envValue
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
 };
 
 /**
@@ -439,6 +419,45 @@ export const parseSampleRate = (
   return parsed;
 };
 
+/**
+ * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
+ *
+ * Fastify supports:
+ *   - true  – trust all proxies
+ *   - false – trust no proxies (default)
+ *   - a comma-separated string of IPs/CIDRs – trust specific proxies
+ *
+ * This maps the env var as follows:
+ *   undefined / ""  → false
+ *   "true"          → true
+ *   "false"         → false
+ *   anything else   → trimmed string passed directly to Fastify (IP/CIDR list)
+ */
+export const parseTrustProxy = (
+  envValue: string | undefined,
+): boolean | string => {
+  const trimmed = envValue?.trim();
+  if (!trimmed || trimmed === "false") return false;
+  if (trimmed === "true") return true;
+  return trimmed
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(",");
+};
+
+export const getAnalyticsConfig = () => ({
+  enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
+  posthog: {
+    key:
+      process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
+      DEFAULT_POSTHOG_KEY,
+    host:
+      process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
+      DEFAULT_POSTHOG_HOST,
+  },
+});
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -458,6 +477,7 @@ const config = {
       process.env.ARCHESTRA_API_BODY_LIMIT,
       DEFAULT_BODY_LIMIT,
     ),
+    trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
   },
   websocket: {
     path: "/ws",
@@ -500,10 +520,11 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
-    additionalTrustedSsoProviderIds: getAdditionalTrustedSsoProviderIds(),
   },
+  analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
   },
@@ -588,13 +609,30 @@ const config = {
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
-      /** Prefix for cross-region inference profile models (e.g., "us." or "eu.") */
-      inferenceProfilePrefix:
-        process.env.ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX || "",
+      /** Enable AWS IAM authentication (IRSA, env vars, instance profile) instead of API key */
+      iamAuthEnabled: process.env.ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED === "true",
+      /** Explicit AWS region override; falls back to extracting from base URL */
+      region: process.env.ARCHESTRA_BEDROCK_REGION || "",
+      /** Comma-separated list of provider prefixes to include (e.g., "anthropic,amazon"). Empty = allow all. */
+      allowedProviders: parseCommaSeparatedList(
+        process.env.ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS || "",
+      ),
+      /** Comma-separated list of inference region prefixes to include (e.g., "us,global"). Empty = allow all. */
+      allowedInferenceRegions: parseCommaSeparatedList(
+        process.env.ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS || "",
+      ),
     },
     minimax: {
       baseUrl:
         process.env.ARCHESTRA_MINIMAX_BASE_URL || "https://api.minimax.io/v1",
+    },
+    azure: {
+      baseUrl: process.env.ARCHESTRA_AZURE_OPENAI_BASE_URL || "",
+      apiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_API_VERSION || "2024-02-01",
+      responsesApiVersion:
+        process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
+        "2025-04-01-preview",
     },
   },
   chat: {
@@ -646,6 +684,9 @@ const config = {
     minimax: {
       apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
     },
+    azure: {
+      apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
+    },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
     defaultProvider: ((): SupportedProvider => {
@@ -694,6 +735,25 @@ const config = {
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },
+  mcpSandbox: {
+    /**
+     * Optional wildcard domain for per-server sandbox origins.
+     * When set (e.g. "mcp.example.com"), each MCP server gets a hash-based
+     * subdomain (e.g. "a1b2c3d4e5f6.mcp.example.com") with a real origin,
+     * enabling localStorage, CORS, and OAuth for MCP Apps.
+     * Requires wildcard DNS + TLS for *.{domain}.
+     * When null (default), sandbox uses opaque origin (single-port, zero config).
+     */
+    domain: process.env.ARCHESTRA_MCP_SANDBOX_DOMAIN || null,
+    /** Path to the sandbox proxy HTML file (co-located in backend static dir). */
+    filePath: path.resolve(__dirname, "static/mcp-sandbox-proxy.html"),
+    /**
+     * Explicitly configured origins that are allowed to embed the sandbox iframe.
+     * Empty array means no restriction (open / dev deployment).
+     * Mirrors the CORS/trusted-origin configuration so all three stay in sync.
+     */
+    allowedOrigins: addLoopbackEquivalents(getConfiguredOrigins()),
+  },
   observability: {
     otel: {
       captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
@@ -722,11 +782,11 @@ const config = {
         process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
-        0.2,
+        0.1,
       ),
       mcpGatewayTracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_MCP_GATEWAY_TRACES_SAMPLE_RATE,
-        0.05,
+        0.01,
       ),
       profilesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_PROFILES_SAMPLE_RATE,
@@ -817,4 +877,11 @@ export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
   if (normalized === "web" || normalized === "worker") return normalized;
   return "all";
+}
+
+export function parseCommaSeparatedList(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }

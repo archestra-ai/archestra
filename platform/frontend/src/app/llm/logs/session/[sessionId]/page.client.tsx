@@ -1,6 +1,14 @@
 "use client";
 
-import { ArrowLeft, Bot, ExternalLink, Layers, User } from "lucide-react";
+import { calculateCostSavings, DynamicInteraction } from "@shared";
+import {
+  ArrowLeft,
+  Bot,
+  ExternalLink,
+  Layers,
+  Loader2,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback } from "react";
@@ -19,15 +27,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   useInteractionSessions,
   useInteractions,
-} from "@/lib/interaction.query";
-import {
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@/lib/interaction.utils";
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+} from "@/lib/interactions/interaction.query";
+import { formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({
   paramsPromise,
@@ -43,13 +48,14 @@ export default function SessionDetailPage({
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = DEFAULT_TABLE_LIMIT;
 
-  const { data: interactionsResponse } = useInteractions({
-    sessionId: sessionId,
-    limit: pageSize,
-    offset: pageIndex * pageSize,
-    sortBy: "createdAt",
-    sortDirection: "desc",
-  });
+  const { data: interactionsResponse, isLoading: interactionsLoading } =
+    useInteractions({
+      sessionId: sessionId,
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+      sortBy: "createdAt",
+      sortDirection: "desc",
+    });
 
   // Fetch session metadata (profile name, user names, etc.)
   const { data: sessionResponse } = useInteractionSessions({
@@ -263,7 +269,19 @@ export default function SessionDetailPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {interactions.length === 0 ? (
+            {interactionsLoading ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
+                  <div className="flex items-center justify-center gap-2 py-6">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading session logs...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : interactions.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={6}

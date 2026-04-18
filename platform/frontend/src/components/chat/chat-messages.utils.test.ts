@@ -4,6 +4,7 @@ import {
   extractFileAttachments,
   filterOptimisticToolCalls,
   hasTextPart,
+  identifyCompactToolGroups,
 } from "./chat-messages.utils";
 
 describe("extractFileAttachments", () => {
@@ -182,5 +183,107 @@ describe("filterOptimisticToolCalls", () => {
     expect(filterOptimisticToolCalls(messages, optimisticToolCalls)).toEqual([
       optimisticToolCalls[1],
     ]);
+  });
+});
+
+describe("identifyCompactToolGroups", () => {
+  it("groups adjacent compact-eligible tool calls together", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: { location: "Toronto" },
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) => {
+        if (toolName === "archestra__todo_write") {
+          return "todo_write";
+        }
+        return null;
+      },
+    });
+    const group = groupMap.get(0);
+
+    expect(groupMap.size).toBe(1);
+    expect(group?.entries).toHaveLength(2);
+    expect(group?.entries.map((entry) => entry.toolName)).toEqual([
+      "google__search",
+      "google__maps",
+    ]);
+  });
+
+  it("does not group across a non-compact-eligible tool call", () => {
+    const parts = [
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "tool-archestra__todo_write",
+        toolCallId: "call_2",
+        state: "input-available",
+        input: { todos: [] },
+      },
+      {
+        type: "tool-archestra__todo_write",
+        toolCallId: "call_2",
+        state: "output-available",
+        output: "ok",
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_3",
+        state: "input-available",
+        input: { location: "Toronto" },
+      },
+      {
+        type: "tool-google__maps",
+        toolCallId: "call_3",
+        state: "output-available",
+        output: "map",
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap } = identifyCompactToolGroups(parts, {
+      getToolShortName: (toolName) => {
+        if (toolName === "archestra__todo_write") {
+          return "todo_write";
+        }
+        return null;
+      },
+    });
+
+    expect(groupMap.size).toBe(2);
+    expect(groupMap.get(0)?.entries).toHaveLength(1);
+    expect(groupMap.get(4)?.entries).toHaveLength(1);
   });
 });

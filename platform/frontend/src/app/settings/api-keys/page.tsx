@@ -25,13 +25,13 @@ import {
   useCreateApiKey,
   useDeleteApiKey,
 } from "@/lib/api-key.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { formatDate } from "@/lib/utils";
 import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
-} from "@/lib/format-relative-time";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { formatDate } from "@/lib/utils";
+} from "@/lib/utils/date-time";
 import { useSetSettingsAction } from "../layout";
 import { shouldSkipCreateApiKeySubmit } from "./page.utils";
 

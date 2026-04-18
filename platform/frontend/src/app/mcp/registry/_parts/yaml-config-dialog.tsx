@@ -18,10 +18,11 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useGetDeploymentYamlPreview,
   useUpdateInternalMcpCatalogItem,
-} from "@/lib/internal-mcp-catalog.query";
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { K8sYamlEditor } from "./k8s-yaml-editor";
 
 type CatalogItem =
@@ -53,6 +54,7 @@ export function YamlConfigContent({
   onClose,
   hideHeader = false,
 }: YamlConfigContentProps) {
+  const appName = useAppName();
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   // Fetch the deployment YAML preview (generates default if not stored)
@@ -180,11 +182,11 @@ export function YamlConfigContent({
             </p>
             <p>
               <strong>Protected fields</strong> are always overwritten by
-              Archestra: mcp-server-id and app labels, and the deployment
+              {appName}: mcp-server-id and app labels, and the deployment
               selector.
             </p>
             <p>
-              <strong>Transport-specific settings:</strong> Archestra requires{" "}
+              <strong>Transport-specific settings:</strong> {appName} requires{" "}
               <code className="bg-muted/80 text-foreground px-1.5 py-0.5 rounded font-mono text-xs border border-border">
                 stdin: true
               </code>{" "}

@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { DataTablePagination } from "./data-table-pagination";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
@@ -56,6 +57,8 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   /** Render a sub-component below a row when it is expanded. */
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /** Return an optional class name for each rendered row. */
+  getRowClassName?: (row: TData) => string | undefined;
   /** Show a loading spinner instead of "No results" when data is being fetched */
   isLoading?: boolean;
   /** Custom empty state message (defaults to "No results") */
@@ -68,6 +71,12 @@ interface DataTableProps<TData, TValue> {
   filteredEmptyMessage?: string;
   /** Called when the user clears active filters from the empty state */
   onClearFilters?: () => void;
+  /** Hide pagination controls when all rows fit on a single page. */
+  hidePaginationWhenSinglePage?: boolean;
+  /** Hide the table header row. */
+  hideHeader?: boolean;
+  /** Hide the rows-per-page selector and page counter in the pagination bar. */
+  compactPagination?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -85,12 +94,16 @@ export function DataTable<TData, TValue>({
   hideSelectedCount,
   getRowId,
   renderSubComponent,
+  getRowClassName,
   isLoading = false,
   emptyMessage = "No results",
   emptyIcon,
   hasActiveFilters = false,
   filteredEmptyMessage = "No results match your filters. Try adjusting your search.",
   onClearFilters,
+  hidePaginationWhenSinglePage = false,
+  hideHeader = false,
+  compactPagination = false,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -143,6 +156,7 @@ export function DataTable<TData, TValue>({
     onColumnVisibilityChange: setColumnVisibility,
     manualPagination,
     manualSorting,
+    autoResetPageIndex: false,
     pageCount: pagination
       ? Math.ceil(pagination.total / pagination.pageSize)
       : undefined,
@@ -180,46 +194,49 @@ export function DataTable<TData, TValue>({
     <div className="w-full space-y-4">
       <div className="overflow-hidden rounded-md border">
         <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      data-column-id={header.column.id}
-                      className={
-                        COMPACT_ICON_COLUMN_IDS.has(header.column.id)
-                          ? "w-0 px-2 md:px-2"
-                          : undefined
-                      }
-                      style={
-                        header.column.columnDef.size
-                          ? { width: header.getSize() }
-                          : undefined
-                      }
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
+          {!hideHeader && (
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="hover:bg-transparent">
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead
+                        key={header.id}
+                        data-column-id={header.column.id}
+                        className={
+                          COMPACT_ICON_COLUMN_IDS.has(header.column.id)
+                            ? "w-0 px-2 md:px-2"
+                            : undefined
+                        }
+                        style={
+                          header.column.columnDef.size
+                            ? { width: header.getSize() }
+                            : undefined
+                        }
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+          )}
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <React.Fragment key={row.id}>
                   <TableRow
                     data-state={row.getIsSelected() && "selected"}
-                    className={
-                      onRowClick ? "cursor-pointer hover:bg-muted/50" : ""
-                    }
+                    className={cn(
+                      onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
+                      getRowClassName?.(row.original),
+                    )}
                     onClick={(e) => onRowClick?.(row.original, e)}
                   >
                     {row.getVisibleCells().map((cell) => (
@@ -295,13 +312,17 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {(pagination || !manualPagination) && (
-        <DataTablePagination
-          table={table}
-          totalRows={pagination?.total}
-          hideSelectedCount={hideSelectedCount ?? !rowSelection}
-        />
-      )}
+      {(pagination || !manualPagination) &&
+        (!hidePaginationWhenSinglePage ||
+          (pagination?.total ?? data.length) >
+            (pagination?.pageSize ?? table.getState().pagination.pageSize)) && (
+          <DataTablePagination
+            table={table}
+            totalRows={pagination?.total}
+            hideSelectedCount={hideSelectedCount ?? !rowSelection}
+            compactPagination={compactPagination}
+          />
+        )}
     </div>
   );
 }

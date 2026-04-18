@@ -160,6 +160,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -176,8 +177,7 @@
                 "value": 1000
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
@@ -201,9 +201,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": true,
+        "showPercentChange": false,
         "textMode": "auto",
-        "wideLayout": true
+        "wideLayout": false
       },
       "pluginVersion": "12.3.2",
       "targets": [
@@ -301,9 +301,76 @@
     {
       "datasource": {
         "type": "prometheus",
+        "uid": "$metrics_datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 5
+      },
+      "id": 610,
+      "description": "Current number of active connector sync and batch embedding tasks. This is task-level progress, not a document count.",
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "expr": "sum(task_queue_active_tasks{task_type=~\"connector_sync|batch_embedding\"}) or vector(0)",
+          "hide": false,
+          "legendFormat": "",
+          "queryType": "range",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Tasks In Progress",
+      "type": "stat",
+      "transparent": true
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total documents ingested during the selected time range across all connector syncs",
+      "description": "Documents counted when connector sync summaries are reported. This can lag behind chunk creation while syncs are still running.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -333,7 +400,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 4,
         "x": 12,
         "y": 5
       },
@@ -369,7 +436,7 @@
           "refId": "A"
         }
       ],
-      "title": "Documents Ingested",
+      "title": "Documents Ingested (Completed Syncs)",
       "transparent": true,
       "type": "stat"
     },
@@ -408,8 +475,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 20,
         "y": 5
       },
       "id": 7,
@@ -571,7 +638,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__rate_interval])",
+          "expr": "sum by (connector_type, status) (rate(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__rate_interval]))",
           "legendFormat": "{{connector_type}} - {{status}}",
           "range": true,
           "refId": "A"
@@ -836,7 +903,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum(increase(rag_embedding_batches_total{status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total[$__range])), 1)",
+          "expr": "(100 * sum(increase(rag_embedding_batches_total{status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total[$__range])), 1)) or vector(0)",
           "legendFormat": "Embedding Error Rate",
           "range": true,
           "refId": "A"
@@ -969,7 +1036,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(rag_embedding_batches_total[$__rate_interval])) by (status)",
+          "expr": "sum(increase(rag_embedding_batches_total[$__rate_interval])) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -1102,7 +1169,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(rag_embedding_documents_total[$__rate_interval])) by (status)",
+          "expr": "sum(increase(rag_embedding_documents_total[$__rate_interval])) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"

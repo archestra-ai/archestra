@@ -1,8 +1,17 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { withSentryConfig } from "@sentry/nextjs";
 import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { NextConfig } from "next";
 
+const platformPkg = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, "../package.json"), "utf-8"),
+) as { name: string; version: string };
+
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: platformPkg.version,
+  },
   output: "standalone",
   transpilePackages: ["@shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
@@ -48,8 +57,16 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/v1/:path*`,
       },
       {
+        source: "/.well-known/:path*",
+        destination: `${backendUrl}/.well-known/:path*`,
+      },
+      {
         source: "/health",
         destination: `${backendUrl}/health`,
+      },
+      {
+        source: "/_sandbox/:path*",
+        destination: `${backendUrl}/_sandbox/:path*`,
       },
       {
         source: "/ws",

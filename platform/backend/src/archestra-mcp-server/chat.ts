@@ -1,9 +1,20 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  TOOL_ARTIFACT_WRITE_SHORT_NAME,
+  TOOL_SWAP_AGENT_SHORT_NAME,
+  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
+  TOOL_TODO_WRITE_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
-import { resolveConversationLlmSelectionForAgent } from "@/services/conversation-llm-selection";
+import {
+  AgentModel,
+  ConversationModel,
+  OrganizationModel,
+  ScheduleTriggerRunModel,
+} from "@/models";
+import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
   catchError,
   defineArchestraTool,
@@ -54,7 +65,7 @@ const ArtifactWriteOutputSchema = z.object({
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "todo_write",
+    shortName: TOOL_TODO_WRITE_SHORT_NAME,
     title: "Write Todos",
     description:
       "Write todos to the current conversation. You have access to this tool to help you manage and plan tasks. Use it VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress. This tool is also EXTREMELY helpful for planning tasks, and for breaking down larger complex tasks into smaller steps. If you do not use this tool when planning, you may forget to do important tasks - and that is unacceptable. It is critical that you mark todos as completed as soon as you are done with a task. Do not batch up multiple tasks before marking them as completed.",
@@ -85,7 +96,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "swap_agent",
+    shortName: TOOL_SWAP_AGENT_SHORT_NAME,
     title: "Swap Agent",
     description:
       "Switch the current conversation to a different agent. The new agent will automatically continue the conversation. Use this when the user asks to switch to or talk to a different agent.",
@@ -107,7 +118,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "swap_to_default_agent",
+    shortName: TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
     title: "Swap to Default Agent",
     description:
       "Return to the default agent. You MUST call this — without asking the user — when you don't have the right tools to fulfill a request, when you are stuck and cannot help further, when you are done with your task, or when the user wants to go back. Always write a brief message before calling this tool summarizing why you are switching back (e.g. what you accomplished, what tool is missing, or why you cannot continue).",
@@ -118,7 +129,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "artifact_write",
+    shortName: TOOL_ARTIFACT_WRITE_SHORT_NAME,
     title: "Write Artifact",
     description:
       "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
@@ -142,37 +153,54 @@ const registry = defineArchestraTools([
         {
           agentId: contextAgent.id,
           contentLength: args.content.length,
+          scheduleTriggerRunId: context.scheduleTriggerRunId ?? null,
+          conversationId: context.conversationId ?? null,
+          userId: context.userId ?? null,
+          organizationId: context.organizationId ?? null,
         },
         "artifact_write tool called",
       );
 
       try {
-        if (
-          !context.conversationId ||
-          !context.userId ||
-          !context.organizationId
-        ) {
-          return errorResult(
-            "This tool requires conversation context. It can only be used within an active chat conversation.",
+        // Scheduled run context — write to the run (conversationId is a
+        // synthetic isolation key, not a real DB conversation)
+        if (context.scheduleTriggerRunId) {
+          const updated = await ScheduleTriggerRunModel.setArtifact(
+            context.scheduleTriggerRunId,
+            args.content,
           );
-        }
 
-        const updated = await ConversationModel.update(
-          context.conversationId,
-          context.userId,
-          context.organizationId,
-          { artifact: args.content },
-        );
+          if (!updated) {
+            return errorResult(
+              "Failed to update scheduled run artifact. The run may no longer exist.",
+            );
+          }
+        } else if (
+          context.conversationId &&
+          context.userId &&
+          context.organizationId
+        ) {
+          const updated = await ConversationModel.update(
+            context.conversationId,
+            context.userId,
+            context.organizationId,
+            { artifact: args.content },
+          );
 
-        if (!updated) {
+          if (!updated) {
+            return errorResult(
+              "Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
+            );
+          }
+        } else {
           return errorResult(
-            "Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
+            "This tool requires conversation context. It can only be used within an active chat conversation or scheduled run.",
           );
         }
 
         return structuredSuccessResult(
           { success: true, characterCount: args.content.length },
-          `Successfully updated conversation artifact (${args.content.length} characters)`,
+          `Successfully updated artifact (${args.content.length} characters)`,
         );
       } catch (error) {
         return catchError(error, "writing artifact");

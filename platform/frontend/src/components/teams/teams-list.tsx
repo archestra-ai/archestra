@@ -20,11 +20,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
-import config from "@/lib/config";
-import { useFeature } from "@/lib/config.query";
-import { formatRelativeTimeFromNow } from "@/lib/format-relative-time";
-import { type TeamToken, useTokens } from "@/lib/team-token.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
+import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamMembersDialog } from "./team-members-dialog";
 import { TokenManagerDialog } from "./token-manager-dialog";
 

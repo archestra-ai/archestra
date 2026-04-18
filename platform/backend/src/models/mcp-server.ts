@@ -496,6 +496,8 @@ class McpServerModel {
       name: string;
       description: string;
       inputSchema: Record<string, unknown>;
+      _meta?: Record<string, unknown>;
+      annotations?: Record<string, unknown>;
     }>
   > {
     // Get catalog information if this server was installed from a catalog
@@ -526,6 +528,7 @@ class McpServerModel {
         catalogItem,
         mcpServerId: mcpServer.id,
         secrets,
+        secretId: mcpServer.secretId ?? undefined,
       });
 
       // Transform to ensure description is always a string
@@ -533,6 +536,8 @@ class McpServerModel {
         name: tool.name,
         description: tool.description || `Tool: ${tool.name}`,
         inputSchema: tool.inputSchema,
+        _meta: tool._meta,
+        annotations: tool.annotations,
       }));
     } catch (error) {
       logger.error(
@@ -678,6 +683,7 @@ class McpServerModel {
             catalogItem,
             mcpServerId: "validation",
             secrets,
+            secretId,
           });
           return {
             isValid: tools.length > 0,

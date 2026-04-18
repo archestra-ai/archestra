@@ -1,3 +1,8 @@
+import {
+  TOOL_CREATE_LLM_PROXY_SHORT_NAME,
+  TOOL_EDIT_LLM_PROXY_SHORT_NAME,
+  TOOL_GET_LLM_PROXY_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import { AgentScopeSchema, UpdateAgentSchemaBase, UuidIdSchema } from "@/types";
 import {
@@ -54,7 +59,7 @@ const EditLlmProxyToolArgsSchema = z
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "create_llm_proxy",
+    shortName: TOOL_CREATE_LLM_PROXY_SHORT_NAME,
     title: "Create LLM Proxy",
     description:
       "Create a new LLM proxy with the specified name and optional labels.",
@@ -68,7 +73,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_llm_proxy",
+    shortName: TOOL_GET_LLM_PROXY_SHORT_NAME,
     title: "Get LLM Proxy",
     description:
       "Get a specific LLM proxy by ID or name. When searching by name, only your personal proxies are matched.",
@@ -84,7 +89,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "edit_llm_proxy",
+    shortName: TOOL_EDIT_LLM_PROXY_SHORT_NAME,
     title: "Edit LLM Proxy",
     description:
       "Edit an existing LLM proxy. All fields are optional except id. Only provided fields are updated, and the tool respects the calling user's access level.",

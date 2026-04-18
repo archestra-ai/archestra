@@ -29,8 +29,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth.query";
-import config from "@/lib/config";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDisableInvitations } from "@/lib/config/config.query";
 import {
   type Invitation,
   type Member,
@@ -47,7 +48,7 @@ import {
   useMemberSignupStatus,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
-import { cn, DEFAULT_TABLE_LIMIT } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
 export default function UsersPageClient() {
@@ -142,7 +143,9 @@ function TabButtons({
 function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
-  const invitationsEnabled = !config.disableInvitations;
+  const disableInvitations = useDisableInvitations();
+  const invitationsEnabled =
+    disableInvitations === undefined ? false : !disableInvitations;
 
   if (!invitationsEnabled || !canInvite) return null;
 
@@ -184,11 +187,12 @@ function MembersTab({
   const pathname = usePathname();
 
   const pageFromUrl = searchParams.get("page");
+  const limitFromUrl = searchParams.get("limit");
   const nameFilter = searchParams.get("name") || "";
   const roleFilter = searchParams.get("role") || "";
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_TABLE_LIMIT;
+  const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
   const {
@@ -218,6 +222,11 @@ function MembersTab({
     (newPagination: { pageIndex: number; pageSize: number }) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(newPagination.pageIndex + 1));
+      if (newPagination.pageSize !== DEFAULT_TABLE_LIMIT) {
+        params.set("limit", String(newPagination.pageSize));
+      } else {
+        params.delete("limit");
+      }
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
@@ -566,8 +575,9 @@ function InvitationsTab({
   const pathname = usePathname();
 
   const pageFromUrl = searchParams.get("page");
+  const limitFromUrl = searchParams.get("limit");
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = DEFAULT_TABLE_LIMIT;
+  const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
   const { data: invitationsResponse, isPending } = useInvitationsPaginated({
@@ -584,6 +594,11 @@ function InvitationsTab({
       const params = new URLSearchParams(searchParams.toString());
       params.set("page", String(newPagination.pageIndex + 1));
       params.set("tab", "invitations");
+      if (newPagination.pageSize !== DEFAULT_TABLE_LIMIT) {
+        params.set("limit", String(newPagination.pageSize));
+      } else {
+        params.delete("limit");
+      }
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],

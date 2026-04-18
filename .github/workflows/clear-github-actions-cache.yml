@@ -3,16 +3,30 @@ name: Clear cache
 on:
   workflow_dispatch:
 
-permissions:
-  actions: write
+permissions: {}
+
+concurrency:
+  group: clear-github-actions-cache
+  cancel-in-progress: false
 
 jobs:
   clear-cache:
+    name: Clear GitHub Actions Cache
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      actions: write # Required to list and delete Actions caches.
+      contents: read # Required to checkout the repository for local workflow context.
     steps:
-      - name: Clear cache
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Clear cache
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
           script: |
             console.log("About to clear")
             const caches = await github.rest.actions.getActionsCacheList({

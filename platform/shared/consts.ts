@@ -1,144 +1,27 @@
-import { z } from "zod";
-import type { SupportedProvider } from "./model-constants";
-
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
-
-/** Maximum number of suggested prompts per agent */
-export const MAX_SUGGESTED_PROMPTS = 10;
-
-/** Maximum character length for a suggested prompt's summary title (button label) */
-export const MAX_SUGGESTED_PROMPT_TITLE_LENGTH = 50;
-
-/** Maximum character length for a suggested prompt's full prompt text */
-export const MAX_SUGGESTED_PROMPT_TEXT_LENGTH = 5000;
-
-/** Prefix for all Archestra-generated tokens (team tokens, user tokens, virtual API keys, API keys) */
-export const ARCHESTRA_TOKEN_PREFIX = "archestra_";
+export const DEFAULT_APP_FULL_NAME = "Archestra.AI";
+export const DEFAULT_APP_DESCRIPTION =
+  "Enterprise MCP-native Secure AI Platform";
 
 /**
- * Where an LLM proxy request originated from.
- * Stored in the `source` column of the interactions table.
+ * Prefix used for newly generated platform-managed tokens (team tokens, user
+ * tokens, virtual API keys, API keys). Keep this branding-neutral.
  */
-export const InteractionSourceSchema = z.enum([
-  "api",
-  "chat",
-  "chatops:slack",
-  "chatops:ms-teams",
-  "email",
-  "knowledge:embedding",
-  "knowledge:reranker",
-  "knowledge:query-expansion",
-]);
-
-export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
+export const ARCHESTRA_TOKEN_PREFIX = "arch_";
 
 /**
- * Display configuration for interaction sources.
- * Used by both frontend (SourceBadge) and any other consumer that needs
- * human-readable labels for source values.
+ * Legacy token prefixes that must remain valid for backwards compatibility.
  */
-export const INTERACTION_SOURCE_DISPLAY: Record<
-  InteractionSource,
-  { label: string }
-> = {
-  api: { label: "API" },
-  chat: { label: "Chat" },
-  "chatops:slack": { label: "Slack" },
-  "chatops:ms-teams": { label: "MS Teams" },
-  email: { label: "Email" },
-  "knowledge:embedding": { label: "Knowledge - Embedding" },
-  "knowledge:reranker": { label: "Knowledge - Reranker" },
-  "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
-};
+export const LEGACY_ARCHESTRA_TOKEN_PREFIXES = ["archestra_"] as const;
 
-export const E2eTestId = {
-  AgentsTable: "agents-table",
-  CreateAgentButton: "create-agent-button",
-  CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
-  DeleteAgentButton: "delete-agent-button",
-  OnboardingNextButton: "onboarding-next-button",
-  OnboardingFinishButton: "onboarding-finish-button",
-  OnboardingSkipButton: "onboarding-skip-button",
-  InviteMemberButton: "invite-member-button",
-  InviteEmailInput: "invite-email-input",
-  InviteRoleSelect: "invite-role-select",
-  GenerateInvitationButton: "generate-invitation-button",
-  InvitationLinkInput: "invitation-link-input",
-  InvitationLinkCopyButton: "invitation-link-copy-button",
-  InvitationErrorMessage: "invitation-error-message",
-  SidebarUserProfile: "sidebar-user-profile",
-  SidebarNavGuardrails: "sidebar-nav-tool-policies",
-  ManageCredentialsDialog: "manage-credentials-dialog",
-  ManageCredentialsDialogTable: "manage-credentials-dialog-table",
-  CredentialRow: "credential-row",
-  CredentialOwner: "credential-owner",
-  CredentialTeamSelect: "credential-team-select",
-  ManageCredentialsButton: "manage-credentials-button",
-  ManageToolsButton: "manage-tools-button",
-  ConfigureIdpTeamSyncButton: "configure-idp-team-sync-button",
-  IdpRoleMappingDefaultRole: "idp-role-mapping-default-role",
-  IdpRoleMappingRuleRole: "idp-role-mapping-rule-role",
-  IdpRoleMappingRuleTemplate: "idp-role-mapping-rule-template",
-  IdpRoleMappingAddRule: "idp-role-mapping-add-rule",
-  McpServerError: "mcp-server-error",
-  McpServerCard: "mcp-server-card",
-  McpServerToolsCount: "mcp-server-tools-count",
-  McpToolsDialog: "mcp-tools-dialog",
-  TokenSelect: "token-select",
-  ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
-  ConnectAgentButton: "connect-agent-button",
-  ConnectCatalogItemButton: "connect-catalog-item-button",
-  SelectCredentialTypePersonal: "select-credential-type-personal",
-  CredentialsCount: "credentials-count",
-  StaticCredentialToUse: "static-credential-to-use",
-  SelectCredentialTypeTeamDropdown: "select-credential-type-team-dropdown",
-  ProfileTeamBadge: "profile-team-badge",
-  EditAgentButton: "edit-agent-button",
-  RemoveTeamBadge: "remove-team-badge",
-  PromptOnInstallationCheckbox: "prompt-on-installation-checkbox",
-  RevokeCredentialButton: "revoke-credential-button",
-  ExternalSecretSelector: "external-secret-selector",
-  SelectEnvironmentVariableType: "select-environment-variable-type",
-  AddCatalogItemButton: "add-catalog-item-button",
-  ConfigureVaultFolderButton: "configure-vault-folder-button",
-  ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
-  ExternalSecretSelectorSecretTrigger:
-    "external-secret-selector-secret-trigger",
-  ExternalSecretSelectorSecretTriggerKey:
-    "external-secret-selector-secret-trigger-key",
-  InlineVaultSecretSelectorSecretTrigger:
-    "inline-vault-secret-selector-secret-trigger",
-  InlineVaultSecretSelectorSecretTriggerKey:
-    "inline-vault-secret-selector-secret-trigger-key",
-  ManageMembersButton: "manage-members-button",
-  // Chat Settings
-  ChatApiKeysTable: "chat-api-keys-table",
-  AddChatApiKeyButton: "add-chat-api-key-button",
-  ChatApiKeyRow: "chat-api-key-row",
-  ChatApiKeyForm: "chat-api-key-form",
-  EditChatApiKeyButton: "edit-chat-api-key-button",
-  DeleteChatApiKeyButton: "delete-chat-api-key-button",
-  SetDefaultChatApiKeyButton: "set-default-chat-api-key-button",
-  ManageProfilesChatApiKeyButton: "manage-profiles-chat-api-key-button",
-  ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
-  BulkAssignChatApiKeysButton: "bulk-assign-chat-api-keys-button",
-  BulkAssignChatApiKeysDialog: "bulk-assign-chat-api-keys-dialog",
-  // Chat Prompt Input
-  ChatFileUploadButton: "chat-file-upload-button",
-  ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
-  // Chat Model Selector
-  ChatModelSelectorTrigger: "chat-model-selector-trigger",
-  ChatPromptTextarea: "chat-prompt-textarea",
-  // MCP Logs
-  McpLogsDialog: "mcp-logs-dialog",
-  McpLogsContent: "mcp-logs-content",
-  McpLogsError: "mcp-logs-error",
-  McpLogsViewButton: "mcp-logs-view-button",
-  McpLogsEditConfigButton: "mcp-logs-edit-config-button",
-  McpLogsTab: "mcp-logs-tab",
-} as const;
-export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
+/**
+ * All accepted platform-managed token prefixes, ordered from current to legacy.
+ */
+export const ALL_ARCHESTRA_TOKEN_PREFIXES = [
+  ARCHESTRA_TOKEN_PREFIX,
+  ...LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+] as const;
 
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 export const DEFAULT_ADMIN_PASSWORD = "password";
@@ -155,56 +38,24 @@ export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 
+export const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
+export const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
+export const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
+
 /**
  * Separator used to construct fully-qualified MCP tool names
  * Format: {mcpServerName}__{toolName}
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
-export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 
-/**
- * Fixed UUID for the Archestra MCP catalog entry.
- * This ID is constant to ensure consistent catalog lookup across server restarts.
- * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
- */
-export const ARCHESTRA_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000001";
-
-/**
- * Prefix for agent delegation tools
- * Format: agent__{slugified_agent_name}
- * These are NOT archestra tools - they are dynamically generated per prompt
- */
-export const AGENT_TOOL_PREFIX = `agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-
-/**
- * Special tools which have handlers on the frontend...
- */
-export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
-export const TOOL_ARTIFACT_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}artifact_write`;
-export const TOOL_TODO_WRITE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`;
-export const TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}query_knowledge_sources`;
-export const TOOL_SWAP_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`;
-export const TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`;
-export const SWAP_AGENT_POKE_TEXT =
-  "(Agent was swapped. Please continue the conversation.)";
-export const SWAP_AGENT_POKE_PREFIX = "(Switched to ";
-export function makeSwapAgentPokeText(agentName: string): string {
-  return `${SWAP_AGENT_POKE_PREFIX}${agentName}. Please continue the conversation. If you have the swap_to_default_agent tool and you don't have the right tools to fulfill the request, use it immediately — write a brief message explaining why you are switching back, then call swap_to_default_agent.)`;
-}
-export const SWAP_AGENT_FAILED_POKE_TEXT =
-  "(The agent swap failed — you are still the same agent. Briefly explain to the user that the switch did not happen and continue the conversation.)";
-export const SWAP_TO_DEFAULT_AGENT_POKE_TEXT =
-  "(Switched back to the default agent. Briefly explain why you switched back and continue the conversation.)";
-
-export const DEFAULT_ARCHESTRA_TOOL_NAMES = [
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_TODO_WRITE_FULL_NAME,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
-];
+export const WEBSITE_URL = "https://archestra.ai";
+export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
+export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;
+export const COMMUNITY_SLACK_URL = `${WEBSITE_URL}/join-slack`;
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
-  "https://archestra.ai/mcp-catalog/api";
+  `${WEBSITE_URL}/mcp-catalog/api`;
 
 /**
  * Header name for external agent ID.
@@ -234,6 +85,12 @@ export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 export const SOURCE_HEADER = "X-Archestra-Source";
 
 /**
+ * Header used by internal delegated agent calls to indicate that the parent
+ * execution context was already untrusted/sensitive.
+ */
+export const UNTRUSTED_CONTEXT_HEADER = "X-Archestra-Context-Untrusted";
+
+/**
  * Header name for execution ID.
  * Clients can pass this header to associate interactions with a specific execution run.
  */
@@ -255,26 +112,6 @@ export const META_HEADER = "X-Archestra-Meta";
  */
 export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
 
-/**
- * SSO Provider IDs - these are the canonical provider identifiers used for:
- * - Account linking (trustedProviders)
- * - Provider registration
- * - Callback URLs (e.g., /api/auth/sso/callback/{providerId})
- */
-export const SSO_PROVIDER_ID = {
-  OKTA: "Okta",
-  GOOGLE: "Google",
-  GITHUB: "GitHub",
-  GITLAB: "GitLab",
-  ENTRA_ID: "EntraID",
-} as const;
-
-export type SsoProviderId =
-  (typeof SSO_PROVIDER_ID)[keyof typeof SSO_PROVIDER_ID];
-
-/** List of all predefined SSO provider IDs for account linking */
-export const SSO_TRUSTED_PROVIDER_IDS = Object.values(SSO_PROVIDER_ID);
-
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {
@@ -284,207 +121,15 @@ export const TimeInMs = {
   Day: 1_000 * 60 * 60 * 24,
 } as const;
 
-/**
- * Incoming email security modes.
- * - private: Requires sender email to match an Archestra user who has access to the agent
- * - internal: Only allows emails from a specific domain
- * - public: No sender restrictions (anyone can email the agent)
- */
-export const IncomingEmailSecurityModeSchema = z.enum([
-  "private",
-  "internal",
-  "public",
-]);
-export type IncomingEmailSecurityMode = z.infer<
-  typeof IncomingEmailSecurityModeSchema
->;
-export const IncomingEmailSecurityModes = Object.values(
-  IncomingEmailSecurityModeSchema.enum,
-);
+export const AUTO_PROVISIONED_INVITATION_STATUS = "auto-provisioned";
 
-/**
- * Constant object for incoming email security mode values.
- * Use this for type-safe comparisons and UI selects.
- */
-export const INCOMING_EMAIL_SECURITY_MODE = {
-  PRIVATE: "private",
-  INTERNAL: "internal",
-  PUBLIC: "public",
-} as const satisfies Record<string, IncomingEmailSecurityMode>;
-
-/**
- * Check if a value is a valid incoming email security mode
- */
-export function isValidIncomingEmailSecurityMode(
-  value: string,
-): value is IncomingEmailSecurityMode {
-  return IncomingEmailSecurityModes.includes(
-    value as IncomingEmailSecurityMode,
+export function getArchestraTokenPrefix(value: string): string | null {
+  return (
+    ALL_ARCHESTRA_TOKEN_PREFIXES.find((prefix) => value.startsWith(prefix)) ??
+    null
   );
 }
 
-/**
- * Regex pattern for validating domain format.
- * Matches domains like: company.com, sub.company.com, my-company.co.uk
- * Does not match: spaces, special characters (except hyphen), domains starting/ending with hyphen
- */
-export const DOMAIN_VALIDATION_REGEX =
-  /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
-
-/**
- * Maximum domain length per DNS specification (RFC 1035).
- */
-export const MAX_DOMAIN_LENGTH = 253;
-
-// =============================================================================
-// Browser Preview Feature
-// =============================================================================
-
-/**
- * Fixed UUID for the Playwright browser preview MCP catalog entry.
- * This ID is constant to ensure consistent catalog lookup across server restarts.
- * Must be a valid UUID format (version 4, variant 8/9/a/b) for Zod validation.
- */
-export const PLAYWRIGHT_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000002";
-export const PLAYWRIGHT_MCP_SERVER_NAME = "microsoft__playwright-mcp";
-
-/**
- * Set of all built-in MCP catalog item IDs that are system-managed
- * and should not be modified or deleted by users.
- */
-export const BUILT_IN_CATALOG_IDS = new Set([
-  ARCHESTRA_MCP_CATALOG_ID,
-  PLAYWRIGHT_MCP_CATALOG_ID,
-]);
-
-export function isBuiltInCatalogId(id: string): boolean {
-  return BUILT_IN_CATALOG_IDS.has(id);
+export function hasArchestraTokenPrefix(value: string): boolean {
+  return getArchestraTokenPrefix(value) !== null;
 }
-
-export function isPlaywrightCatalogItem(id: string): boolean {
-  return id === PLAYWRIGHT_MCP_CATALOG_ID;
-}
-
-/**
- * Default browser viewport dimensions used by Playwright MCP in browser preview feature.
- */
-export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH = 800;
-export const DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT = 800;
-
-/**
- * Approximate height of the browser preview header (title bar + URL bar).
- * Used when calculating popup window dimensions.
- */
-export const BROWSER_PREVIEW_HEADER_HEIGHT = 77;
-
-/**
- * Default URL to show when browser preview is opened for a new conversation.
- * Using about:blank ensures no automatic navigation happens until user requests it.
- */
-export const DEFAULT_BROWSER_PREVIEW_URL = "about:blank";
-
-// =============================================================================
-// OAuth 2.1 Authorization Server
-// =============================================================================
-
-/**
- * Scopes supported by the OAuth 2.1 authorization server.
- * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
- */
-export const OAUTH_SCOPES = [
-  "mcp",
-  "openid",
-  "profile",
-  "email",
-  "offline_access",
-] as const;
-export type OAuthScope = (typeof OAUTH_SCOPES)[number];
-
-/**
- * Human-readable descriptions for each OAuth scope.
- * Used by the consent page to explain what each scope grants.
- */
-export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
-  mcp: "Access MCP tools and resources",
-  openid: "Verify your identity",
-  profile: "Access your profile information",
-  email: "Access your email address",
-  offline_access: "Maintain access when you're not present",
-};
-
-/**
- * OAuth 2.1 endpoint paths (relative to base URL).
- * These are served by better-auth and proxied through the frontend catch-all.
- */
-export const OAUTH_ENDPOINTS = {
-  authorize: "/api/auth/oauth2/authorize",
-  token: "/api/auth/oauth2/token",
-  register: "/api/auth/oauth2/register",
-  jwks: "/api/auth/jwks",
-  consent: "/api/auth/oauth2/consent",
-} as const;
-
-/**
- * OAuth 2.1 page paths (frontend routes).
- */
-export const OAUTH_PAGES = {
-  login: "/auth/sign-in",
-  consent: "/oauth/consent",
-} as const;
-
-/**
- * Prefix for OAuth-derived token IDs in TokenAuthResult.
- * Used when constructing tokenId from OAuth access tokens (e.g. `oauth-${accessToken.id}`)
- * and when detecting OAuth auth method from tokenId.
- */
-export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
-
-/**
- * Path for deep-linking to MCP catalog install dialogs.
- * Used by backend error messages and frontend routing.
- * Append `?install={catalogId}` to auto-open the install dialog.
- */
-export const MCP_CATALOG_INSTALL_PATH = "/mcp/registry";
-export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
-
-/**
- * Query params for deep-linking to the re-authentication dialog.
- * Append `?reauth={catalogId}&server={mcpServerId}` to auto-open
- * the credential dialog for in-place re-authentication.
- */
-export const MCP_CATALOG_REAUTH_QUERY_PARAM = "reauth";
-export const MCP_CATALOG_SERVER_QUERY_PARAM = "server";
-
-/**
- * Providers where an API key is optional (self-hosted providers that typically don't require auth).
- */
-export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
-  "ollama",
-  "vllm",
-]);
-
-export const AUTO_PROVISIONED_INVITATION_STATUS = "auto-provisioned";
-
-/**
- * Delimiter used to separate multiple values within a single label key
- * in the labels query parameter. Pipe is used instead of comma because
- * label values themselves may contain commas.
- * Format: key1:val1|val2;key2:val3
- */
-export const LABELS_VALUE_DELIMITER = "|";
-
-/**
- * Delimiter used to separate label key:value groups in the labels query parameter.
- * Format: key1:val1|val2;key2:val3
- */
-export const LABELS_ENTRY_DELIMITER = ";";
-
-/**
- * Characters reserved for the labels query parameter format.
- * Label keys and values must not contain any of these.
- */
-export const LABEL_RESERVED_CHARS: string[] = [
-  LABELS_VALUE_DELIMITER,
-  LABELS_ENTRY_DELIMITER,
-  ":",
-];

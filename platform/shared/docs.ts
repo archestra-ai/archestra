@@ -1,4 +1,7 @@
-const DOCS_BASE_URL = "https://archestra.ai/docs";
+import { WEBSITE_URL } from "./consts";
+
+const DOCS_BASE_URL = `${WEBSITE_URL}/docs`;
+export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
 
 /**
  * All valid documentation page slugs.
@@ -12,18 +15,20 @@ export const DocsPage = {
   PlatformAccessControl: "platform-access-control",
   PlatformAddingLlmProviders: "platform-adding-llm-providers",
   PlatformAgentTriggersEmail: "platform-agent-triggers-email",
+  PlatformAgentTriggersSchedule: "platform-agent-triggers-schedule",
   PlatformAgents: "platform-agents",
+  PlatformArchestraMcpServer: "platform-archestra-mcp-server",
   PlatformApiReference: "platform-api-reference",
   PlatformBuiltInAgentsPolicyConfig: "platform-built-in-agents-policy-config",
   PlatformChat: "platform-chat",
   PlatformCostsAndLimits: "platform-costs-and-limits",
   PlatformDeployment: "platform-deployment",
   PlatformDeveloperQuickstart: "platform-developer-quickstart",
-  PlatformDynamicTools: "platform-dynamic-tools",
+  PlatformAiToolGuardrails: "platform-ai-tool-guardrails",
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",
+  PlatformKnowledgeConnectors: "platform-knowledge-connectors",
   PlatformKnowledgeGraphs: "platform-knowledge-graphs",
-  PlatformLangchainExample: "platform-langchain-example",
   PlatformLethalTrifecta: "platform-lethal-trifecta",
   PlatformLlmProxyAuthentication: "platform-llm-proxy-authentication",
   PlatformLlmProxy: "platform-llm-proxy",
@@ -34,6 +39,7 @@ export const DocsPage = {
   PlatformObservability: "platform-observability",
   PlatformOpenwebuiExample: "platform-openwebui-example",
   PlatformOrchestrator: "platform-orchestrator",
+  PlatformOverview: "platform-overview",
   PlatformPerformanceBenchmarks: "platform-performance-benchmarks",
   PlatformPrivateRegistry: "platform-private-registry",
   PlatformPydanticExample: "platform-pydantic-example",

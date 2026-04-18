@@ -46,6 +46,7 @@ function makeBuiltInAgent(params: {
     authorId: null,
     scope: "org",
     name: params.name,
+    slug: null,
     isDefault: false,
     considerContextUntrusted: false,
     agentType: "agent",
@@ -57,6 +58,7 @@ function makeBuiltInAgent(params: {
     incomingEmailAllowedDomain: null,
     llmApiKeyId: null,
     llmModel: null,
+    passthroughHeaders: null,
     identityProviderId: null,
     builtInAgentConfig:
       params.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
@@ -70,7 +72,7 @@ function makeBuiltInAgent(params: {
             }
           : {
               name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolAssignment: false,
+              autoConfigureOnToolDiscovery: false,
             },
     builtIn: true,
     createdAt: new Date(),

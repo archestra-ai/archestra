@@ -1,24 +1,21 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
-  SLACK_REQUIRED_BOT_SCOPES,
-} from "@shared";
+import { type archestraApiTypes, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useChatOpsStatus } from "@/lib/chatops.query";
-import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
-import { usePublicBaseUrl } from "@/lib/config.query";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
+import { usePublicBaseUrl } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
-import { useAppName } from "@/lib/use-app-name";
 
 type ConnectionMode = NonNullable<
   NonNullable<
@@ -37,6 +34,7 @@ export function SlackSetupDialog({
   onOpenChange,
   connectionMode,
 }: SlackSetupDialogProps) {
+  const docsUrl = getFrontendDocsUrl("platform-slack");
   const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
 
@@ -172,16 +170,20 @@ export function SlackSetupDialog({
       description={
         <>
           Follow these steps to connect your {configuredAppName} agents to
-          Slack. Find out more in our{" "}
-          <a
-            href={getDocsUrl(DocsPage.PlatformSlack)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline hover:no-underline"
-          >
-            documentation
-          </a>
-          .
+          Slack.
+          {docsUrl && (
+            <>
+              {" "}
+              Find out more in our{" "}
+              <ExternalDocsLink
+                href={docsUrl}
+                className="text-primary underline hover:no-underline"
+              >
+                documentation
+              </ExternalDocsLink>
+              .
+            </>
+          )}
         </>
       }
       steps={steps}

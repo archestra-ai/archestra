@@ -20,12 +20,14 @@ export const SupportedProvidersSchema = z.enum([
   "zhipuai",
   "deepseek",
   "minimax",
+  "azure",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
   "openai:embeddings",
   "gemini:generateContent",
+  "gemini:embeddings",
   "anthropic:messages",
   "bedrock:converse",
   "cohere:chat",
@@ -40,6 +42,8 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
+  "azure:chatCompletions",
+  "azure:responses",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -75,6 +79,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
+  azure: "Azure AI Foundry",
 };
 
 /**
@@ -124,6 +129,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
+  azure: "https://<resource>.openai.azure.com/openai/deployments/<deployment>",
 };
 
 /**
@@ -217,6 +223,10 @@ export const MODEL_MARKER_PATTERNS: Record<
     fastest: ["minimax-m2.5-highspeed", "minimax-m2.1-lightning"],
     best: ["minimax-m2.5", "minimax-m2.1", "minimax-m2"],
   },
+  azure: {
+    fastest: ["gpt-4o-mini"],
+    best: ["gpt-4o", "o3"],
+  },
   bedrock: {
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
@@ -227,7 +237,7 @@ export const MODEL_MARKER_PATTERNS: Record<
  * Fast models for each provider, used as fallback for title generation and other quick operations.
  * These are optimized for speed and cost rather than capability.
  *
- * Primary resolution uses ApiKeyModelModel.getFastestModel() from the database.
+ * Primary resolution uses LlmProviderApiKeyModelLinkModel.getFastestModel() from the database.
  * This map serves as a fallback when no database result is available.
  */
 export const FAST_MODELS: Record<SupportedProvider, string> = {
@@ -247,6 +257,7 @@ export const FAST_MODELS: Record<SupportedProvider, string> = {
   perplexity: "sonar", // Perplexity's fast model
   groq: "llama-3.1-8b-instant", // Groq's fast model
   xai: "grok-code-fast-1", // xAI's fast model
+  azure: "gpt-4o-mini",
 };
 
 /**
@@ -270,4 +281,5 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   deepseek: "deepseek-chat",
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
   minimax: "MiniMax-M2.5",
+  azure: "gpt-4o",
 };

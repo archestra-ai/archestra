@@ -1,11 +1,7 @@
-import type { Permission } from "@shared";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { ArchestraToolShortName, Permission } from "@shared";
 import { userHasPermission } from "@/auth/utils";
 import { UserModel } from "@/models";
-import type { ArchestraToolShortName } from ".";
+import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -84,39 +80,39 @@ export const TOOL_PERMISSIONS: Record<
   },
 
   // Knowledge Management
-  query_knowledge_sources: { resource: "knowledgeBase", action: "query" },
-  create_knowledge_base: { resource: "knowledgeBase", action: "create" },
-  get_knowledge_bases: { resource: "knowledgeBase", action: "read" },
-  get_knowledge_base: { resource: "knowledgeBase", action: "read" },
-  update_knowledge_base: { resource: "knowledgeBase", action: "update" },
-  delete_knowledge_base: { resource: "knowledgeBase", action: "delete" },
-  create_knowledge_connector: { resource: "knowledgeBase", action: "create" },
-  get_knowledge_connectors: { resource: "knowledgeBase", action: "read" },
-  get_knowledge_connector: { resource: "knowledgeBase", action: "read" },
-  update_knowledge_connector: { resource: "knowledgeBase", action: "update" },
-  delete_knowledge_connector: { resource: "knowledgeBase", action: "delete" },
+  query_knowledge_sources: { resource: "knowledgeSource", action: "query" },
+  create_knowledge_base: { resource: "knowledgeSource", action: "create" },
+  get_knowledge_bases: { resource: "knowledgeSource", action: "read" },
+  get_knowledge_base: { resource: "knowledgeSource", action: "read" },
+  update_knowledge_base: { resource: "knowledgeSource", action: "update" },
+  delete_knowledge_base: { resource: "knowledgeSource", action: "delete" },
+  create_knowledge_connector: { resource: "knowledgeSource", action: "create" },
+  get_knowledge_connectors: { resource: "knowledgeSource", action: "read" },
+  get_knowledge_connector: { resource: "knowledgeSource", action: "read" },
+  update_knowledge_connector: { resource: "knowledgeSource", action: "update" },
+  delete_knowledge_connector: { resource: "knowledgeSource", action: "delete" },
   assign_knowledge_connector_to_knowledge_base: {
-    resource: "knowledgeBase",
+    resource: "knowledgeSource",
     action: "update",
   },
   unassign_knowledge_connector_from_knowledge_base: {
-    resource: "knowledgeBase",
+    resource: "knowledgeSource",
     action: "update",
   },
   assign_knowledge_base_to_agent: {
-    resource: "knowledgeBase",
+    resource: "knowledgeSource",
     action: "update",
   },
   unassign_knowledge_base_from_agent: {
-    resource: "knowledgeBase",
+    resource: "knowledgeSource",
     action: "update",
   },
   assign_knowledge_connector_to_agent: {
-    resource: "knowledgeBase",
+    resource: "knowledgeSource",
     action: "update",
   },
   unassign_knowledge_connector_from_agent: {
-    resource: "knowledgeBase",
+    resource: "knowledgeSource",
     action: "update",
   },
 
@@ -135,7 +131,7 @@ export async function checkToolPermission(
   toolName: string,
   context: ArchestraContext,
 ) {
-  const shortName = extractShortName(toolName);
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
   if (!shortName) return null; // Not an Archestra tool — allow (handled elsewhere)
 
   // Cast is safe: unknown-but-prefixed tools return undefined here and are
@@ -177,7 +173,7 @@ export async function filterToolNamesByPermission(
     // No user context — only include tools with no permission requirement
     return new Set(
       toolNames.filter((name) => {
-        const shortName = extractShortName(name);
+        const shortName = archestraMcpBranding.getToolShortName(name);
         if (!shortName) return true; // Non-Archestra tool
         const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
         return perm === null; // null means no permission required
@@ -193,7 +189,7 @@ export async function filterToolNamesByPermission(
   // Collect unique permissions we need to check
   const permResults = new Map<string, boolean>();
   for (const name of toolNames) {
-    const shortName = extractShortName(name);
+    const shortName = archestraMcpBranding.getToolShortName(name);
     if (!shortName) continue;
     const perm = TOOL_PERMISSIONS[shortName as ArchestraToolShortName];
     if (perm) {
@@ -210,7 +206,7 @@ export async function filterToolNamesByPermission(
   // Filter tools
   const allowed = new Set<string>();
   for (const name of toolNames) {
-    const shortName = extractShortName(name);
+    const shortName = archestraMcpBranding.getToolShortName(name);
     if (!shortName) {
       allowed.add(name); // Non-Archestra tool
       continue;
@@ -226,13 +222,4 @@ export async function filterToolNamesByPermission(
   }
 
   return allowed;
-}
-
-// === Internal helpers ===
-
-const TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-
-function extractShortName(fullName: string): string | null {
-  if (!fullName.startsWith(TOOL_PREFIX)) return null;
-  return fullName.slice(TOOL_PREFIX.length);
 }

@@ -8,12 +8,16 @@ class ApiKeyModel {
    * Current-user API keys are intentionally returned as a complete list.
    * The UI presents these as a small user-scoped settings table rather than
    * a server-paginated resource.
+   *
+   * If we add organization-scoped Better Auth API keys, these user-specific
+   * helpers and the `userId` API response mapping should be renamed and
+   * generalized around `referenceId`.
    */
   static async listByUserId(userId: string): Promise<ApiKeyResponse[]> {
     const apiKeys = await db
       .select()
       .from(schema.apikeysTable)
-      .where(eq(schema.apikeysTable.userId, userId))
+      .where(eq(schema.apikeysTable.referenceId, userId))
       .orderBy(desc(schema.apikeysTable.createdAt));
 
     return apiKeys.map(normalizeApiKey);
@@ -29,7 +33,7 @@ class ApiKeyModel {
       .where(
         and(
           eq(schema.apikeysTable.id, id),
-          eq(schema.apikeysTable.userId, userId),
+          eq(schema.apikeysTable.referenceId, userId),
         ),
       )
       .limit(1);
@@ -48,7 +52,7 @@ function normalizeApiKey(apiKey: SelectApiKey): ApiKeyResponse {
     name: apiKey.name,
     start: apiKey.start,
     prefix: apiKey.prefix,
-    userId: apiKey.userId,
+    userId: apiKey.referenceId,
     enabled: apiKey.enabled,
     lastRequest: apiKey.lastRequest,
     expiresAt: apiKey.expiresAt,

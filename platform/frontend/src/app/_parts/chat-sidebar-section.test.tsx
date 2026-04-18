@@ -18,20 +18,20 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth.hook", () => ({
+vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/auth.query", () => ({
+vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
 }));
 
-vi.mock("@/lib/chat-utils", () => ({
+vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
     title ?? "Untitled chat",
 }));
 
-vi.mock("@/lib/chat.hook", () => ({
+vi.mock("@/lib/chat/chat.hook", () => ({
   useRecentlyGeneratedTitles: () => ({
     recentlyGeneratedTitles: new Set(),
     regeneratingTitles: new Set(),
@@ -49,7 +49,7 @@ let mockConversations: Array<{
   agent: { id: string; name: string };
 }> = [];
 
-vi.mock("@/lib/chat.query", () => ({
+vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
     data: mockConversations,
     isLoading: false,

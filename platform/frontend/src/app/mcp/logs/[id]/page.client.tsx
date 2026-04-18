@@ -4,7 +4,7 @@ import { type archestraApiTypes, parseFullToolName } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { CopyButton } from "@/components/copy-button";
+import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import {
@@ -16,7 +16,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { formatAuthMethod, useMcpToolCall } from "@/lib/mcp-tool-call.query";
+import {
+  formatAuthMethod,
+  useMcpToolCall,
+} from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
 
 export function McpToolCallDetailPage({
@@ -171,15 +174,7 @@ function McpToolCallDetail({
                 <span className="text-base font-semibold">Arguments</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
-                  <CopyButton
-                    text={JSON.stringify(toolCall.arguments, null, 2)}
-                    className="absolute top-2 right-2"
-                  />
-                  <pre className="text-xs whitespace-pre-wrap break-words">
-                    {JSON.stringify(toolCall.arguments, null, 2)}
-                  </pre>
-                </div>
+                <JsonCodeBlock value={toolCall.arguments} />
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -191,15 +186,7 @@ function McpToolCallDetail({
               <span className="text-base font-semibold">Result</span>
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-4">
-              <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px] relative">
-                <CopyButton
-                  text={JSON.stringify(toolResult, null, 2)}
-                  className="absolute top-2 right-2"
-                />
-                <pre className="text-xs whitespace-pre-wrap break-words">
-                  {JSON.stringify(toolResult, null, 2)}
-                </pre>
-              </div>
+              <JsonCodeBlock value={toolResult} />
             </AccordionContent>
           </AccordionItem>
         </Accordion>

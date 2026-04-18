@@ -5,7 +5,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { PolicyCondition } from "@/app/mcp/tool-policies/_parts/tool-call-policy-condition";
+import { toast } from "sonner";
+import type { PolicyCondition } from "@/app/mcp/tool-guardrails/_parts/tool-call-policy-condition";
 
 const {
   bulkUpsertDefaultCallPolicy,
@@ -27,6 +28,7 @@ import {
   transformToolInvocationPolicies,
   transformToolResultPolicies,
 } from "./policy.utils";
+import { handleApiError } from "./utils";
 
 export function useToolInvocationPolicies(
   initialData?: ReturnType<typeof transformToolInvocationPolicies>,
@@ -212,26 +214,35 @@ export function useCallPolicyMutation() {
         (p) => p.conditions.length === 0,
       );
 
-      if (defaultPolicy) {
-        // Update existing default policy
-        return await updateToolInvocationPolicy({
-          path: { id: defaultPolicy.id },
-          body: { action },
-        });
+      const result = defaultPolicy
+        ? await updateToolInvocationPolicy({
+            path: { id: defaultPolicy.id },
+            body: { action },
+          })
+        : await createToolInvocationPolicy({
+            body: {
+              toolId,
+              conditions: [],
+              action,
+              reason: null,
+            },
+          });
+
+      if (result.error) {
+        handleApiError(result.error);
+        return false;
       }
-      // Create new default policy with empty conditions
-      return await createToolInvocationPolicy({
-        body: {
-          toolId,
-          conditions: [],
-          action,
-          reason: null,
-        },
-      });
+
+      return true;
     },
-    onSuccess: () => {
+    onSuccess: (success) => {
+      if (!success) {
+        return;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      toast.success("Call policy updated");
     },
   });
 }
@@ -259,25 +270,34 @@ export function useResultPolicyMutation() {
         (p) => p.conditions.length === 0,
       );
 
-      if (defaultPolicy) {
-        // Update existing default policy
-        return await updateTrustedDataPolicy({
-          path: { id: defaultPolicy.id },
-          body: { action },
-        });
+      const result = defaultPolicy
+        ? await updateTrustedDataPolicy({
+            path: { id: defaultPolicy.id },
+            body: { action },
+          })
+        : await createTrustedDataPolicy({
+            body: {
+              toolId,
+              conditions: [],
+              action,
+            },
+          });
+
+      if (result.error) {
+        handleApiError(result.error);
+        return false;
       }
-      // Create new default policy with empty conditions
-      return await createTrustedDataPolicy({
-        body: {
-          toolId,
-          conditions: [],
-          action,
-        },
-      });
+
+      return true;
     },
-    onSuccess: () => {
+    onSuccess: (success) => {
+      if (!success) {
+        return;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      toast.success("Result policy updated");
     },
   });
 }
@@ -298,9 +318,16 @@ export function useBulkCallPolicyMutation() {
       });
       return result.data ?? { updated: 0, created: 0 };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      const total = result.updated + result.created;
+      toast.success(
+        `Updated default call policy for ${total} tool${total === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to update default call policies.");
     },
   });
 }
@@ -321,9 +348,16 @@ export function useBulkResultPolicyMutation() {
       });
       return result.data ?? { updated: 0, created: 0 };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      const total = result.updated + result.created;
+      toast.success(
+        `Updated default result policy for ${total} tool${total === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: () => {
+      toast.error("Failed to update default result policies.");
     },
   });
 }

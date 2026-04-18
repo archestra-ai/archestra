@@ -2,8 +2,8 @@
 title: Chat
 category: Agents
 order: 2
-description: Managing LLM provider API keys for the built-in Chat feature
-lastUpdated: 2025-12-15
+description: Built-in Chat interface with LLM API key configuration and MCP Apps support
+lastUpdated: 2026-03-11
 ---
 
 <!--
@@ -13,7 +13,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Archestra includes a built-in Chat interface that allows users to interact with AI agents using MCP tools. To use Chat, you need to configure LLM provider API keys.
 
-![Agent Platform Swarm](/docs/platform-chat.png)
+![Agent Platform Swarm](/docs/platform-chat.webp)
 
 ### API Keys
 Chat will use LLM API Keys configured in Settings -> LLM API Keys. When a chat request is made, the system determines which API key to use in this order:

@@ -1,6 +1,6 @@
 "use client";
 
-import type { McpDeploymentStatusEntry } from "@shared";
+import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
 import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -158,6 +158,7 @@ export function McpServerSettingsDialog({
 
   const defaultPage = initialPage ?? navItems[0]?.id ?? "configuration";
   const [activePage, setActivePage] = useState<SettingsPage>(defaultPage);
+  const [clickedServerId, setClickedServerId] = useState<string | null>(null);
 
   // Reset to initial page when dialog opens with a specific page
   const [lastInitialPage, setLastInitialPage] = useState(initialPage);
@@ -256,6 +257,11 @@ export function McpServerSettingsDialog({
                       "bg-accent text-accent-foreground font-medium",
                   )}
                   onClick={() => navigateTo(navItem.id)}
+                  data-testid={
+                    navItem.id === "connections"
+                      ? E2eTestId.McpServerSettingsConnectionsNavButton
+                      : undefined
+                  }
                 >
                   {navItem.label}
                   {navItem.badge != null && navItem.badge > 0 && (
@@ -360,7 +366,8 @@ export function McpServerSettingsDialog({
                   variant={variant}
                   onOpenPodLogs={
                     showDebug
-                      ? () => {
+                      ? (podServerId: string) => {
+                          setClickedServerId(podServerId);
                           setActivePage("debug-logs");
                         }
                       : undefined
@@ -381,7 +388,7 @@ export function McpServerSettingsDialog({
                       hideTabBar
                       controlledTab={DEBUG_TAB_MAP[validPage]}
                       onReinstall={() => onReinstall()}
-                      initialServerId={logsInitialServerId}
+                      initialServerId={clickedServerId ?? logsInitialServerId}
                     />
                   </div>
                 ) : (

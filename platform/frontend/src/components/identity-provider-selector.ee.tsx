@@ -5,9 +5,9 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { Button } from "@/components/ui/button";
+import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
-import { usePublicIdentityProviders } from "@/lib/identity-provider.query.ee";
+import config from "@/lib/config/config";
 import { getValidatedCallbackURLWithDefault } from "@/lib/utils/redirect-validation";
 
 interface IdentityProviderSelectorProps {
@@ -17,10 +17,12 @@ interface IdentityProviderSelectorProps {
    * Defaults to true.
    */
   showDivider?: boolean;
+  callbackURL?: string;
 }
 
 export function IdentityProviderSelector({
   showDivider = true,
+  callbackURL: callbackURLOverride,
 }: IdentityProviderSelectorProps) {
   const searchParams = useSearchParams();
   const { data: identityProviders = [], isLoading } =
@@ -29,9 +31,13 @@ export function IdentityProviderSelector({
   // Get the redirectTo URL from search params, defaulting to "/"
   // Validates that the path is safe (relative path, no protocol) to prevent open redirect attacks
   const callbackURL = useMemo(() => {
+    if (callbackURLOverride) {
+      return callbackURLOverride;
+    }
+
     const redirectTo = searchParams.get("redirectTo");
     return getValidatedCallbackURLWithDefault(redirectTo);
-  }, [searchParams]);
+  }, [callbackURLOverride, searchParams]);
 
   const handleSsoSignIn = useCallback(
     async (providerId: string) => {

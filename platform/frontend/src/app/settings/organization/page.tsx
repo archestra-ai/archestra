@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import {
@@ -12,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useOnUnmount } from "@/lib/lifecycle.hook";
+import { useOnUnmount } from "@/lib/hooks/use-lifecycle";
 import {
   organizationKeys,
   useOrganization,
@@ -80,6 +81,7 @@ export default function OrganizationSettingsPage() {
   const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
     string | null
   >(null);
+  const [slimChatErrorUi, setSlimChatErrorUi] = useState<boolean | null>(null);
   const [chatPlaceholders, setChatPlaceholders] = useState<string[] | null>(
     null,
   );
@@ -96,6 +98,8 @@ export default function OrganizationSettingsPage() {
   const effectiveChatLinks = chatLinks ?? organization?.chatLinks ?? [];
   const effectiveChatErrorSupportMessage =
     chatErrorSupportMessage ?? organization?.chatErrorSupportMessage ?? "";
+  const effectiveSlimChatErrorUi =
+    slimChatErrorUi ?? organization?.slimChatErrorUi ?? false;
   const effectiveChatPlaceholders =
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
@@ -124,6 +128,7 @@ export default function OrganizationSettingsPage() {
     footerText !== null ||
     chatLinks !== null ||
     chatErrorSupportMessage !== null ||
+    slimChatErrorUi !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
     showTwoFactor !== null;
@@ -140,6 +145,9 @@ export default function OrganizationSettingsPage() {
     }
     if (chatErrorSupportMessage !== null) {
       data.chatErrorSupportMessage = chatErrorSupportMessage.trim() || null;
+    }
+    if (slimChatErrorUi !== null) {
+      data.slimChatErrorUi = slimChatErrorUi;
     }
     if (chatPlaceholders !== null)
       data.chatPlaceholders =
@@ -161,6 +169,7 @@ export default function OrganizationSettingsPage() {
     setChatLinks(null);
     setShowChatLinkValidationErrors(false);
     setChatErrorSupportMessage(null);
+    setSlimChatErrorUi(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
@@ -211,20 +220,21 @@ export default function OrganizationSettingsPage() {
                 <Label htmlFor="appName">App Name</Label>
                 <Input
                   id="appName"
-                  placeholder="Archestra.AI"
+                  placeholder={DEFAULT_APP_NAME}
                   value={effectiveAppName}
                   onChange={(e) => setAppName(e.target.value)}
                   maxLength={100}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Shown in the browser tab title.
+                  Shown in the browser tab title. This also brands the built-in
+                  MCP server name and built-in MCP tool names and prefix.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ogDescription">OpenGraph Description</Label>
                 <Textarea
                   id="ogDescription"
-                  placeholder="Enterprise MCP Platform for AI Agents"
+                  placeholder={DEFAULT_APP_DESCRIPTION}
                   value={effectiveOgDescription}
                   onChange={(e) => setOgDescription(e.target.value)}
                   maxLength={500}
@@ -268,6 +278,24 @@ export default function OrganizationSettingsPage() {
                   Shown alongside errors in chat. Use this to direct users to
                   your support team.
                 </p>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="slimChatErrorUi">
+                    Simplified Chat Error Cards
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Hide provider, model, stack trace, and raw error details in
+                    chat. Users will only see the support message or default
+                    error text plus correlation IDs.
+                  </p>
+                </div>
+                <Switch
+                  id="slimChatErrorUi"
+                  className="mt-0.5"
+                  checked={effectiveSlimChatErrorUi}
+                  onCheckedChange={(checked) => setSlimChatErrorUi(checked)}
+                />
               </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">

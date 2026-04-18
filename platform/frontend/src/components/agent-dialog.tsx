@@ -5,10 +5,15 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
+  BLOCKED_PASSTHROUGH_HEADERS,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   DocsPage,
+  E2eTestId,
   getDocsUrl,
   getResourceForAgentType,
+  HEADER_NAME_REGEX,
+  MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
@@ -26,13 +31,12 @@ import {
   Globe,
   Key,
   Loader2,
-  Lock,
   Plus,
+  RotateCcw,
   User,
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -49,12 +53,18 @@ import {
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  formatPermissionRequirement,
+  PermissionRequirementHint,
+} from "@/components/permission-requirement-hint";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -108,6 +118,7 @@ import {
 } from "@/components/visibility-selector";
 import {
   useCreateProfile,
+  useDeleteProfile,
   useInternalAgents,
   useProfile,
   useUpdateProfile,
@@ -116,25 +127,26 @@ import {
   useAgentDelegations,
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useChatProfileMcpTools } from "@/lib/chat.query";
-import { useModelsByProvider } from "@/lib/chat-models.query";
-import { useAvailableChatApiKeys } from "@/lib/chat-settings.query";
-import config from "@/lib/config";
-import { useFeature } from "@/lib/config.query";
-import { useConnectors } from "@/lib/connector.query";
-import { useKnowledgeBases } from "@/lib/knowledge-base.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import config from "@/lib/config/config";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useConnectors } from "@/lib/knowledge/connector.query";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import { useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
+  normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/identity-provider.query.ee")
+    await import("@/lib/auth/identity-provider.query.ee")
   : {
       useIdentityProviders: (_params?: { enabled?: boolean }) => ({
         data: [] as Array<{ id: string; providerId: string; issuer: string }>,
@@ -377,6 +389,7 @@ function AccessLevelSelector({
   onScopeChange,
   isAdmin,
   isTeamAdmin,
+  canReadTeams,
   initialScope,
   agentType,
   teams,
@@ -389,6 +402,7 @@ function AccessLevelSelector({
   onScopeChange: (scope: AgentScope) => void;
   isAdmin: boolean;
   isTeamAdmin: boolean;
+  canReadTeams: boolean;
   initialScope?: AgentScope;
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
@@ -403,7 +417,7 @@ function AccessLevelSelector({
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
-    if (value === "team" && !canShareWithTeams) return true;
+    if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
@@ -419,6 +433,8 @@ function AccessLevelSelector({
   const getDisabledReason = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return "Shared agents cannot be made personal";
+    if (value === "team" && !canReadTeams)
+      return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
     if (value === "org" && !isAdmin)
@@ -447,7 +463,9 @@ function AccessLevelSelector({
         <div className="space-y-2">
           <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
-            disabled={!canShareWithTeams || hasNoAvailableTeams}
+            disabled={
+              !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
+            }
             options={
               teams?.map((team) => ({
                 value: team.id,
@@ -457,10 +475,20 @@ function AccessLevelSelector({
             value={assignedTeamIds}
             onChange={onTeamIdsChange}
             placeholder={
-              hasNoAvailableTeams ? "No teams available" : "Search teams..."
+              !canReadTeams
+                ? "Teams unavailable"
+                : hasNoAvailableTeams
+                  ? "No teams available"
+                  : "Search teams..."
             }
             emptyMessage="No teams found."
           />
+          {!canReadTeams && (
+            <PermissionRequirementHint
+              message="Team selection is unavailable without"
+              permissions={[{ resource: "team", action: "read" }]}
+            />
+          )}
         </div>
       )}
     </SharedVisibilitySelector>
@@ -477,6 +505,8 @@ interface AgentDialogProps {
   defaultIconType?: AgentIconVariant;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
+  /** When true, all fields are disabled and the save button is hidden */
+  readOnly?: boolean;
 }
 
 export function AgentDialog({
@@ -486,38 +516,59 @@ export function AgentDialog({
   agentType = "profile",
   defaultIconType = "agent",
   onCreated,
+  readOnly = false,
 }: AgentDialogProps) {
   const appName = useAppName();
-  const { data: allInternalAgents = [] } = useInternalAgents();
+  const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
+  const shouldLoadIdentityProviders = open;
+  const shouldLoadKnowledgeSources = open;
+  const shouldLoadLlmConfiguration = open && agentType === "agent";
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+
+  const { data: allInternalAgents = [] } = useInternalAgents({
+    enabled: shouldLoadInternalAgents && !!canReadAgents,
+  });
   const createAgent = useCreateProfile();
+  const deleteAgent = useDeleteProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
   const { data: currentDelegations = [] } = useAgentDelegations(
     agentType !== "llm_proxy" ? agent?.id : undefined,
   );
-  const incomingEmail = useFeature("incomingEmail");
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
   const { data: canReadKnowledgeBase } = useHasPermissions({
-    knowledgeBase: ["read"],
+    knowledgeSource: ["read"],
   });
+  const { data: canReadLlmProviderApiKeys } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
+  const { data: canReadLlmModels } = useHasPermissions({
+    llmModel: ["read"],
+  });
+  const cannotReadLlmConfiguration =
+    !canReadLlmProviderApiKeys && !canReadLlmModels;
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: identityProviders = [] } = useIdentityProviders({
-    enabled: !!canReadIdentityProviders,
+    enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
   const { data: knowledgeBasesData } = useKnowledgeBases({
-    enabled: !!canReadKnowledgeBase,
+    enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
   const knowledgeBases = knowledgeBasesData ?? [];
   const { data: connectorsData } = useConnectors({
-    enabled: !!canReadKnowledgeBase,
+    enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
   const connectors = connectorsData ?? [];
   const agentLlmApiKeyId = agent?.llmApiKeyId;
-  const { data: availableApiKeys = [] } = useAvailableChatApiKeys({
+  const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
     includeKeyId: agentLlmApiKeyId ?? undefined,
+    enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
   });
-  const { modelsByProvider } = useModelsByProvider();
+  const { modelsByProvider } = useLlmModelsByProvider({
+    enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
+  });
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
@@ -529,6 +580,7 @@ export function AgentDialog({
       });
       return response.data?.data ?? [];
     },
+    enabled: open && !!canReadTeams,
   });
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({
@@ -555,25 +607,21 @@ export function AgentDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
-  const [incomingEmailEnabled, setIncomingEmailEnabled] = useState(false);
-  const [incomingEmailSecurityMode, setIncomingEmailSecurityMode] = useState<
-    "private" | "internal" | "public"
-  >("private");
-  const [incomingEmailAllowedDomain, setIncomingEmailAllowedDomain] =
-    useState("");
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
-  const [identityProviderId, setIdentityProviderId] = useState<string | null>(
-    null,
-  );
+  const [identityProviderId, setIdentityProviderId] = useState<
+    string | null | undefined
+  >(undefined);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
-  const [autoConfigureOnToolAssignment, setAutoConfigureOnToolAssignment] =
+  const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
+  const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
@@ -585,7 +633,18 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-  const isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  const supportsIdentityProvider =
+    agentType === "agent" || agentType === "mcp_gateway";
+  const inferredIdentityProviderId =
+    supportsIdentityProvider && identityProviders.length === 1
+      ? identityProviders[0]?.id
+      : null;
+  const effectiveIdentityProviderId =
+    identityProviderId === undefined
+      ? inferredIdentityProviderId
+      : identityProviderId;
+  const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -624,19 +683,15 @@ export function AgentDialog({
         setAssignedTeamIds(agentData.teams.map((t) => t.id));
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
-        setIdentityProviderId(agentData.identityProviderId);
+        setIdentityProviderId(agentData.identityProviderId ?? undefined);
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
+        setPassthroughHeaders(agentData.passthroughHeaders ?? []);
         setScope(agentData.scope);
-        setIncomingEmailEnabled(agentData.incomingEmailEnabled);
-        setIncomingEmailSecurityMode(agentData.incomingEmailSecurityMode);
-        setIncomingEmailAllowedDomain(
-          agentData.incomingEmailAllowedDomain || "",
-        );
-        setAutoConfigureOnToolAssignment(
+        setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
             BUILT_IN_AGENT_IDS.POLICY_CONFIG
-            ? agentData.builtInAgentConfig.autoConfigureOnToolAssignment
+            ? agentData.builtInAgentConfig.autoConfigureOnToolDiscovery
             : false,
         );
         setDualLlmMaxRounds(
@@ -659,14 +714,12 @@ export function AgentDialog({
         setAssignedTeamIds([]);
         setLabels([]);
         setConsiderContextUntrusted(false);
-        setIdentityProviderId(null);
+        setIdentityProviderId(undefined);
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
-        setIncomingEmailEnabled(false);
-        setIncomingEmailSecurityMode("private");
-        setIncomingEmailAllowedDomain("");
-        setAutoConfigureOnToolAssignment(false);
+        setPassthroughHeaders([]);
+        setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
       // Reset counts when dialog opens
@@ -688,7 +741,7 @@ export function AgentDialog({
   }, [open, agentId, currentDelegationIds]);
 
   // LLM Configuration: computed values and bidirectional auto-linking
-  // (same reactive pattern as prompt input: ChatApiKeySelector + onProviderChange)
+  // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
   const selectedApiKey = useMemo(
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
@@ -719,7 +772,7 @@ export function AgentDialog({
   const lastAutoSelectedProviderRef = useRef<string | null>(null);
 
   // Reactive Model → Key: auto-select key when provider changes
-  // (mirrors ChatApiKeySelector's auto-select useEffect in prompt input)
+  // (mirrors LlmProviderApiKeySelector's auto-select useEffect in prompt input)
   useEffect(() => {
     // Don't auto-select if no model/provider is set
     if (!currentLlmProvider) {
@@ -736,8 +789,8 @@ export function AgentDialog({
     // Only auto-select when the provider actually changed (not when user cleared the key)
     if (lastAutoSelectedProviderRef.current === currentLlmProvider) return;
 
-    // Auto-select best key for this provider (personal > team > org_wide)
-    const scopePriority = { personal: 0, team: 1, org_wide: 2 } as const;
+    // Auto-select best key for this provider (personal > team > org)
+    const scopePriority = { personal: 0, team: 1, org: 2 } as const;
     const providerKeys = availableApiKeys
       .filter((k) => k.provider === currentLlmProvider)
       .sort(
@@ -814,33 +867,10 @@ export function AgentDialog({
       return;
     }
 
-    // Validate email domain when security mode is "internal"
-    if (
-      isInternalAgent &&
-      incomingEmailEnabled &&
-      incomingEmailSecurityMode === "internal"
-    ) {
-      const trimmedDomain = incomingEmailAllowedDomain.trim();
-      if (!trimmedDomain) {
-        toast.error("Allowed domain is required for internal security mode");
-        return;
-      }
-      // Basic domain format validation (no @, valid characters)
-      const domainRegex =
-        /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
-      if (!domainRegex.test(trimmedDomain)) {
-        toast.error("Please enter a valid domain (e.g., example.com)");
-        return;
-      }
-    }
-
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-    // Filter out incomplete suggested prompts (empty title or prompt)
-    const validSuggestedPrompts = suggestedPrompts.filter(
-      (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
-    );
+    const validSuggestedPrompts = normalizeSuggestedPrompts(suggestedPrompts);
     const normalizedDescription = shouldShowDescriptionField({
       agentType,
       isBuiltIn,
@@ -848,31 +878,24 @@ export function AgentDialog({
       ? description.trim() || null
       : undefined;
 
+    setIsSaving(true);
+
     try {
       let savedAgentId: string;
 
       // Save tool changes FIRST (before agent update triggers refetch that clears pending changes)
       // Skip for built-in agents as they don't have editable tools
       if (agent && !isBuiltIn) {
-        await agentToolsEditorRef.current?.saveChanges();
+        await agentToolsEditorRef.current?.saveChanges({
+          resourceLabel: agentTypeDisplayName[agentType] || "resource",
+        });
       }
-
-      // Build email settings for internal agents (always save, backend controls enforcement)
-      const emailSettings = isInternalAgent
-        ? {
-            incomingEmailEnabled,
-            incomingEmailSecurityMode,
-            ...(incomingEmailSecurityMode === "internal" && {
-              incomingEmailAllowedDomain: incomingEmailAllowedDomain.trim(),
-            }),
-          }
-        : {};
 
       if (agent && isBuiltIn) {
         const builtInAgentConfig = isPolicyConfigBuiltIn
           ? {
               name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              autoConfigureOnToolAssignment,
+              autoConfigureOnToolDiscovery,
             }
           : isDualLlmMainBuiltIn
             ? {
@@ -887,9 +910,7 @@ export function AgentDialog({
           id: agent.id,
           data: {
             builtInAgentConfig,
-            ...(isDualLlmBuiltIn && {
-              systemPrompt: trimmedSystemPrompt || null,
-            }),
+            systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             llmModel: llmModel || null,
           },
@@ -915,8 +936,8 @@ export function AgentDialog({
               llmModel: llmModel || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
-            ...(agentType === "mcp_gateway" && {
-              identityProviderId: identityProviderId || null,
+            ...(supportsIdentityProvider && {
+              identityProviderId: effectiveIdentityProviderId || null,
             }),
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -926,7 +947,10 @@ export function AgentDialog({
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
-            ...emailSettings,
+            ...(agentType === "mcp_gateway" && {
+              passthroughHeaders:
+                passthroughHeaders.length > 0 ? passthroughHeaders : null,
+            }),
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -948,8 +972,8 @@ export function AgentDialog({
             llmModel: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
-          ...(agentType === "mcp_gateway" && {
-            identityProviderId: identityProviderId || null,
+          ...(supportsIdentityProvider && {
+            identityProviderId: effectiveIdentityProviderId || null,
           }),
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
@@ -959,14 +983,30 @@ export function AgentDialog({
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
-          ...emailSettings,
+          ...(agentType === "mcp_gateway" && {
+            passthroughHeaders:
+              passthroughHeaders.length > 0 ? passthroughHeaders : null,
+          }),
         });
         if (!created) return;
         savedAgentId = created?.id ?? "";
 
         // Save tool changes with the new agent ID
         if (savedAgentId) {
-          await agentToolsEditorRef.current?.saveChanges(savedAgentId);
+          try {
+            await agentToolsEditorRef.current?.saveChanges({
+              agentId: savedAgentId,
+              resourceLabel: agentTypeDisplayName[agentType] || "resource",
+            });
+          } catch (error) {
+            await deleteAgent.mutateAsync(savedAgentId);
+            toast.error(
+              error instanceof Error && error.message
+                ? error.message
+                : `Failed to save ${agentTypeDisplayName[agentType] || "resource"}`,
+            );
+            return;
+          }
         }
 
         toast.success(getSuccessMessage(agentType, false));
@@ -998,8 +1038,10 @@ export function AgentDialog({
       onOpenChange(false);
     } catch (_error) {
       toast.error(
-        isInternalAgent ? "Failed to save agent" : "Failed to save profile",
+        `Failed to save ${agentTypeDisplayName[agentType] || "resource"}`,
       );
+    } finally {
+      setIsSaving(false);
     }
   }, [
     name,
@@ -1012,19 +1054,15 @@ export function AgentDialog({
     considerContextUntrusted,
     llmApiKeyId,
     llmModel,
-    incomingEmailEnabled,
-    incomingEmailSecurityMode,
-    incomingEmailAllowedDomain,
-    identityProviderId,
+    effectiveIdentityProviderId,
     knowledgeBaseIds,
     connectorIds,
     scope,
     agentType,
     agent,
     isBuiltIn,
-    autoConfigureOnToolAssignment,
+    autoConfigureOnToolDiscovery,
     dualLlmMaxRounds,
-    isDualLlmBuiltIn,
     isDualLlmMainBuiltIn,
     isInternalAgent,
     isPolicyConfigBuiltIn,
@@ -1037,6 +1075,9 @@ export function AgentDialog({
     syncDelegations,
     onCreated,
     onOpenChange,
+    supportsIdentityProvider,
+    passthroughHeaders,
+    deleteAgent,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1050,9 +1091,11 @@ export function AgentDialog({
           <div className="flex items-start justify-between gap-4 pr-6">
             <div className="min-w-0 flex-1">
               <DialogTitle className="flex items-center gap-2">
-                {isBuiltIn
-                  ? `Edit ${agent?.name ?? "Built-In Agent"}`
-                  : getDialogTitle(agentType, !!agent)}
+                {readOnly
+                  ? `View ${agent?.name ?? "Agent"}`
+                  : isBuiltIn
+                    ? `Edit ${agent?.name ?? "Built-In Agent"}`
+                    : getDialogTitle(agentType, !!agent)}
                 {!isBuiltIn && (
                   <AgentBadge type={scope} className="font-normal" />
                 )}
@@ -1060,16 +1103,15 @@ export function AgentDialog({
               {isBuiltIn && agent?.description && (
                 <p className="pt-2 text-sm text-muted-foreground">
                   {agent.description}.{" "}
-                  <a
+                  <ExternalDocsLink
                     href={getDocsUrl(
                       DocsPage.PlatformBuiltInAgentsPolicyConfig,
                     )}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="underline"
+                    showIcon={false}
                   >
                     Learn more
-                  </a>
+                  </ExternalDocsLink>
                 </p>
               )}
             </div>
@@ -1095,952 +1137,932 @@ export function AgentDialog({
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleSave}
         >
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-4">
-            {agentType === "profile" && (
-              <Alert variant="warning">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  This is a legacy entity that works both as MCP Gateway and LLM
-                  Proxy. It appears on both tables and shares Name, Team, and
-                  Labels.
-                </AlertDescription>
-              </Alert>
-            )}
+          <fieldset disabled={readOnly} className="contents">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-4">
+              {agentType === "profile" && (
+                <Alert variant="warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    This is a legacy entity that works both as MCP Gateway and
+                    LLM Proxy. It appears on both tables and shares Name, Team,
+                    and Labels.
+                  </AlertDescription>
+                </Alert>
+              )}
 
-            {/* Section 1: Name, Description, Visibility, LLM Configuration */}
-            {showPrimarySettingsCard && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
-                {!isBuiltIn && (
-                  <div className="space-y-4">
-                    <AgentIconPicker
-                      value={icon}
-                      onChange={setIcon}
-                      fallbackType={defaultIconType}
-                    />
+              {/* Section 1: Name, Description, Visibility, LLM Configuration */}
+              {showPrimarySettingsCard && (
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
+                  {!isBuiltIn && (
+                    <div className="space-y-4">
+                      <AgentIconPicker
+                        value={icon}
+                        onChange={setIcon}
+                        fallbackType={defaultIconType}
+                      />
+                      <div className="space-y-2">
+                        <Label htmlFor="agentName">Name *</Label>
+                        <Input
+                          id="agentName"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder={getNamePlaceholder(agentType)}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Description (hidden for built-in agents) */}
+                  {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
-                      <Label htmlFor="agentName">Name *</Label>
-                      <Input
-                        id="agentName"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder={getNamePlaceholder(agentType)}
-                        autoFocus
+                      <Label htmlFor="agentDescription">Description</Label>
+                      <Textarea
+                        id="agentDescription"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder={getDescriptionPlaceholder(agentType)}
+                        className="min-h-[60px]"
                       />
-                    </div>
-                  </div>
-                )}
-
-                {/* Description (hidden for built-in agents) */}
-                {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
-                  <div className="space-y-2">
-                    <Label htmlFor="agentDescription">Description</Label>
-                    <Textarea
-                      id="agentDescription"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder={getDescriptionPlaceholder(agentType)}
-                      className="min-h-[60px]"
-                    />
-                  </div>
-                )}
-
-                {/* Built-in agent config */}
-                {isPolicyConfigBuiltIn && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label
-                          htmlFor="auto-configure-on-tool-assignment"
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          Auto-configure on tool assignment
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically analyze and configure security policies
-                          when tools are assigned to agents
-                        </p>
-                      </div>
-                      <Switch
-                        id="auto-configure-on-tool-assignment"
-                        checked={autoConfigureOnToolAssignment}
-                        onCheckedChange={setAutoConfigureOnToolAssignment}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {isDualLlmMainBuiltIn && (
-                  <div className="space-y-2">
-                    <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
-                    <Input
-                      id="dual-llm-max-rounds"
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={dualLlmMaxRounds}
-                      onChange={(e) => setDualLlmMaxRounds(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Section 2: Instruction (Agent only) */}
-            {isInternalAgent && (
-              <div className="rounded-lg border bg-card p-4">
-                <SystemPromptEditor
-                  value={systemPrompt}
-                  onChange={setSystemPrompt}
-                  readOnly={isBuiltIn && !isDualLlmBuiltIn}
-                  variant="section"
-                />
-              </div>
-            )}
-
-            {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
-            {isInternalAgent && !isBuiltIn && (
-              <Collapsible
-                open={suggestedPromptsOpen}
-                onOpenChange={setSuggestedPromptsOpen}
-                className="group"
-              >
-                <div className="rounded-lg border bg-card">
-                  {suggestedPrompts.length > 0 ? (
-                    <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
-                      <div className="text-left">
-                        <h3 className="text-sm font-semibold">
-                          Suggested Prompts
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                            ({suggestedPrompts.length})
-                          </span>
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Shown to users when starting a new chat. Max{" "}
-                          {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                          {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
-                          {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {suggestedPromptsOpen && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={
-                                      suggestedPrompts.length >=
-                                      MAX_SUGGESTED_PROMPTS
-                                    }
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSuggestedPrompts((prev) => [
-                                        ...prev,
-                                        { summaryTitle: "", prompt: "" },
-                                      ]);
-                                    }}
-                                  >
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Add
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              {suggestedPrompts.length >=
-                                MAX_SUGGESTED_PROMPTS && (
-                                <TooltipContent>
-                                  Maximum of {MAX_SUGGESTED_PROMPTS} suggested
-                                  prompts reached
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                        <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
-                      </div>
-                    </CollapsibleTrigger>
-                  ) : (
-                    <div className="flex items-center justify-between p-4">
-                      <div>
-                        <h3 className="text-sm font-semibold">
-                          Suggested Prompts
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Shown to users when starting a new chat. Max{" "}
-                          {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                          {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
-                          {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSuggestedPrompts([
-                            { summaryTitle: "", prompt: "" },
-                          ]);
-                          setSuggestedPromptsOpen(true);
-                        }}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add
-                      </Button>
                     </div>
                   )}
-                  <CollapsibleContent>
-                    <div className="border-t p-4 space-y-4">
-                      {suggestedPrompts.map((sp, index) => (
-                        <div
-                          // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
-                          key={`sp-${index}`}
-                          className="space-y-2 rounded-md border p-3 relative"
-                        >
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-2 right-2 h-6 w-6"
-                            onClick={() => {
-                              setSuggestedPrompts((prev) => {
-                                const next = prev.filter((_, i) => i !== index);
-                                if (next.length === 0)
-                                  setSuggestedPromptsOpen(false);
-                                return next;
-                              });
-                            }}
+
+                  {/* Built-in agent config */}
+                  {isPolicyConfigBuiltIn && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="auto-configure-on-tool-discovery"
+                            className="text-sm font-medium cursor-pointer"
                           >
-                            <X className="h-3 w-3" />
-                          </Button>
-                          <div className="space-y-1 pr-8">
-                            <Label className="text-xs">Button Label</Label>
-                            <Input
-                              value={sp.summaryTitle}
-                              onChange={(e) =>
-                                setSuggestedPrompts((prev) =>
-                                  prev.map((p, i) =>
-                                    i === index
-                                      ? {
-                                          ...p,
-                                          summaryTitle: e.target.value,
-                                        }
-                                      : p,
-                                  ),
-                                )
-                              }
-                              placeholder="e.g. Summarize recent changes"
-                              maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Prompt</Label>
-                            <Textarea
-                              value={sp.prompt}
-                              onChange={(e) =>
-                                setSuggestedPrompts((prev) =>
-                                  prev.map((p, i) =>
-                                    i === index
-                                      ? { ...p, prompt: e.target.value }
-                                      : p,
-                                  ),
-                                )
-                              }
-                              placeholder="The full prompt sent when clicked"
-                              className="min-h-[60px]"
-                              maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
-                            />
-                          </div>
+                            Auto-configure on tool discovery
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically analyze and configure security
+                            policies when tools are discovered
+                          </p>
                         </div>
-                      ))}
+                        <Switch
+                          id="auto-configure-on-tool-discovery"
+                          checked={autoConfigureOnToolDiscovery}
+                          onCheckedChange={setAutoConfigureOnToolDiscovery}
+                        />
+                      </div>
                     </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
-            )}
-
-            {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
-            {showToolsAndSubagents && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">Capabilities</h3>
-
-                {/* Tools */}
-                <div className="space-y-2">
-                  <Label>Tools ({selectedToolsCount})</Label>
-                  {!agent && selectedToolsCount > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Some recommended Archestra MCP tools are pre-selected for
-                      you
-                    </p>
                   )}
-                  <AgentToolsEditor
-                    ref={agentToolsEditorRef}
-                    agentId={agent?.id}
-                    onSelectedCountChange={setSelectedToolsCount}
-                  />
-                </div>
 
-                {/* Subagents */}
-                <div className="space-y-2">
-                  <Label>
-                    Subagents ({selectedDelegationTargetIds.length})
-                  </Label>
-                  <SubagentsEditor
-                    availableAgents={allInternalAgents}
-                    selectedAgentIds={selectedDelegationTargetIds}
-                    onSelectionChange={setSelectedDelegationTargetIds}
-                    currentAgentId={agent?.id}
-                  />
+                  {isDualLlmMainBuiltIn && (
+                    <div className="space-y-2">
+                      <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
+                      <Input
+                        id="dual-llm-max-rounds"
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={dualLlmMaxRounds}
+                        onChange={(e) => setDualLlmMaxRounds(e.target.value)}
+                      />
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {/* Knowledge Sources */}
-                {(knowledgeBases.length > 0 || connectors.length > 0) && (
-                  <div className="space-y-2">
-                    <Label>Knowledge Sources</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Choose which knowledge this{" "}
-                      {(agentTypeDisplayName[agentType] || "agent").replace(
-                        /^./,
-                        (c) => c.toUpperCase(),
-                      )}{" "}
-                      can draw from when responding
-                    </p>
-                    <Popover modal>
-                      <PopoverTrigger asChild>
+              {/* Section 2: Instruction (Agent only) */}
+              {isInternalAgent && (
+                <div className="rounded-lg border bg-card p-4">
+                  <SystemPromptEditor
+                    value={systemPrompt}
+                    onChange={setSystemPrompt}
+                    variant="section"
+                    builtInAgentId={builtInAgentName}
+                    headerExtra={
+                      isBuiltIn && builtInAgentName ? (
                         <Button
+                          type="button"
                           variant="outline"
-                          className="w-full justify-between font-normal"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={
+                            systemPrompt ===
+                            (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                              builtInAgentName
+                            ] ?? "")
+                          }
+                          onClick={() =>
+                            setSystemPrompt(
+                              BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
+                                builtInAgentName
+                              ] ?? "",
+                            )
+                          }
                         >
-                          {(() => {
-                            const totalSelected =
-                              knowledgeBaseIds.length + connectorIds.length;
-                            return totalSelected === 0
-                              ? "Select connectors or knowledge bases"
-                              : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
-                          })()}
-                          <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                          <RotateCcw className="size-4" />
+                          Reset to Default
                         </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-96 p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search knowledge sources..." />
-                          <CommandList>
-                            <CommandEmpty>
-                              No knowledge sources found.
-                            </CommandEmpty>
-                            {knowledgeBases.length > 0 && (
-                              <CommandGroup heading="Knowledge Bases">
-                                {knowledgeBases.map((kb) => {
-                                  const isSelected = knowledgeBaseIds.includes(
-                                    kb.id,
-                                  );
-                                  const connectorTypes = [
-                                    ...new Set<string>(
-                                      kb.connectors?.map(
-                                        (c) => c.connectorType,
-                                      ) ?? [],
-                                    ),
-                                  ];
-                                  return (
-                                    <CommandItem
-                                      key={kb.id}
-                                      value={kb.name}
-                                      className="data-[selected=true]:bg-transparent"
-                                      onSelect={() => {
-                                        setKnowledgeBaseIds((prev) =>
-                                          isSelected
-                                            ? prev.filter((id) => id !== kb.id)
-                                            : [...prev, kb.id],
-                                        );
-                                      }}
-                                    >
-                                      <CheckIcon
-                                        className={cn(
-                                          "mr-2 h-4 w-4 shrink-0",
-                                          isSelected
-                                            ? "opacity-100"
-                                            : "opacity-0",
-                                        )}
-                                      />
-                                      <div className="flex-1 min-w-0">
-                                        <div className="truncate text-sm">
-                                          {kb.name}
-                                        </div>
-                                        {kb.description && (
-                                          <div className="truncate text-xs text-muted-foreground">
-                                            {kb.description}
-                                          </div>
-                                        )}
-                                      </div>
-                                      {connectorTypes.length > 0 && (
-                                        <OverlappedIcons
-                                          icons={connectorTypes.map(
-                                            (type: string) => ({
-                                              key: type,
-                                              icon: (
-                                                <ConnectorTypeIcon
-                                                  type={type}
-                                                  className="h-full w-full"
-                                                />
-                                              ),
-                                              tooltip: type,
-                                            }),
-                                          )}
-                                          maxVisible={3}
-                                          size="sm"
-                                          className="ml-2"
-                                        />
-                                      )}
-                                    </CommandItem>
-                                  );
-                                })}
-                              </CommandGroup>
-                            )}
-                            {connectors.length > 0 && (
-                              <CommandGroup heading="Connectors">
-                                {connectors.map((connector) => {
-                                  const isSelected = connectorIds.includes(
-                                    connector.id,
-                                  );
-                                  return (
-                                    <CommandItem
-                                      key={connector.id}
-                                      value={connector.name}
-                                      className="data-[selected=true]:bg-transparent"
-                                      onSelect={() => {
-                                        setConnectorIds((prev) =>
-                                          isSelected
-                                            ? prev.filter(
-                                                (id) => id !== connector.id,
-                                              )
-                                            : [...prev, connector.id],
-                                        );
-                                      }}
-                                    >
-                                      <CheckIcon
-                                        className={cn(
-                                          "mr-2 h-4 w-4 shrink-0",
-                                          isSelected
-                                            ? "opacity-100"
-                                            : "opacity-0",
-                                        )}
-                                      />
-                                      <div className="flex-1 min-w-0">
-                                        <div className="truncate text-sm">
-                                          {connector.name}
-                                        </div>
-                                        <div className="truncate text-xs text-muted-foreground">
-                                          {connector.description || (
-                                            <span className="capitalize">
-                                              {connector.connectorType}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="ml-2 shrink-0">
-                                        <ConnectorTypeIcon
-                                          type={connector.connectorType}
-                                          className="h-4 w-4"
-                                        />
-                                      </div>
-                                    </CommandItem>
-                                  );
-                                })}
-                              </CommandGroup>
-                            )}
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Section 4: Access & LLM */}
-            {(!isBuiltIn || isInternalAgent) && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                {/* Visibility / Scope */}
-                {!isBuiltIn && (
-                  <AccessLevelSelector
-                    scope={scope}
-                    onScopeChange={(newScope) => {
-                      setScope(newScope);
-                      if (newScope === "org") {
-                        setAssignedTeamIds([]);
-                      }
-                    }}
-                    isAdmin={!!isAdmin}
-                    isTeamAdmin={!!isTeamAdmin}
-                    initialScope={agent?.scope}
-                    agentType={agentType}
-                    teams={teams}
-                    assignedTeamIds={assignedTeamIds}
-                    onTeamIdsChange={setAssignedTeamIds}
-                    hasNoAvailableTeams={hasNoAvailableTeams}
-                    showTeamRequired={!isAdmin}
+                      ) : undefined
+                    }
                   />
-                )}
+                </div>
+              )}
 
-                {/* LLM Configuration (Agent and Built-in) */}
-                {(isInternalAgent || isBuiltIn) && (
+              {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
+              {isInternalAgent && !isBuiltIn && (
+                <Collapsible
+                  open={suggestedPromptsOpen}
+                  onOpenChange={setSuggestedPromptsOpen}
+                  className="group"
+                >
+                  <div className="rounded-lg border bg-card">
+                    {suggestedPrompts.length > 0 ? (
+                      <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
+                        <div className="text-left">
+                          <h3 className="text-sm font-semibold">
+                            Suggested Prompts
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                              ({suggestedPrompts.length})
+                            </span>
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Shown to users when starting a new chat. Max{" "}
+                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
+                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
+                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {suggestedPromptsOpen && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={
+                                        suggestedPrompts.length >=
+                                        MAX_SUGGESTED_PROMPTS
+                                      }
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSuggestedPrompts((prev) => [
+                                          ...prev,
+                                          { summaryTitle: "", prompt: "" },
+                                        ]);
+                                      }}
+                                    >
+                                      <Plus className="h-4 w-4 mr-1" />
+                                      Add
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                {suggestedPrompts.length >=
+                                  MAX_SUGGESTED_PROMPTS && (
+                                  <TooltipContent>
+                                    Maximum of {MAX_SUGGESTED_PROMPTS} suggested
+                                    prompts reached
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
+                        </div>
+                      </CollapsibleTrigger>
+                    ) : (
+                      <div className="flex items-center justify-between p-4">
+                        <div>
+                          <h3 className="text-sm font-semibold">
+                            Suggested Prompts
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Shown to users when starting a new chat. Max{" "}
+                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
+                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
+                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSuggestedPrompts([
+                              { summaryTitle: "", prompt: "" },
+                            ]);
+                            setSuggestedPromptsOpen(true);
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                    )}
+                    <CollapsibleContent>
+                      <div className="border-t p-4 space-y-4">
+                        {suggestedPrompts.map((sp, index) => (
+                          <div
+                            // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
+                            key={`sp-${index}`}
+                            className="space-y-2 rounded-md border p-3 relative"
+                          >
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute top-2 right-2 h-6 w-6"
+                              onClick={() => {
+                                setSuggestedPrompts((prev) => {
+                                  const next = prev.filter(
+                                    (_, i) => i !== index,
+                                  );
+                                  if (next.length === 0)
+                                    setSuggestedPromptsOpen(false);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                            <div className="space-y-1 pr-8">
+                              <Label className="text-xs">Button Label</Label>
+                              <Input
+                                value={sp.summaryTitle}
+                                onChange={(e) =>
+                                  setSuggestedPrompts((prev) =>
+                                    prev.map((p, i) =>
+                                      i === index
+                                        ? {
+                                            ...p,
+                                            summaryTitle: e.target.value,
+                                          }
+                                        : p,
+                                    ),
+                                  )
+                                }
+                                placeholder="e.g. Summarize recent changes"
+                                maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Prompt</Label>
+                              <Textarea
+                                value={sp.prompt}
+                                onChange={(e) =>
+                                  setSuggestedPrompts((prev) =>
+                                    prev.map((p, i) =>
+                                      i === index
+                                        ? { ...p, prompt: e.target.value }
+                                        : p,
+                                    ),
+                                  )
+                                }
+                                placeholder="The full prompt sent when clicked"
+                                className="min-h-[60px]"
+                                maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              )}
+
+              {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
+              {showToolsAndSubagents && (
+                <div
+                  className="rounded-lg border bg-card p-4 space-y-4"
+                  data-testid={E2eTestId.AgentCapabilitiesSection}
+                >
+                  <h3 className="text-sm font-semibold">Capabilities</h3>
+
+                  {/* Tools */}
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold">LLM Configuration</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedApiKey && selectedApiKey.scope !== "org_wide"
-                        ? "Selected key will be available to everyone who has access to this agent."
-                        : null}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Popover
-                        open={apiKeySelectorOpen}
-                        onOpenChange={setApiKeySelectorOpen}
-                      >
+                    <Label>Tools ({selectedToolsCount})</Label>
+                    {!agent && selectedToolsCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Some recommended {appName} MCP tools are pre-selected
+                        for you
+                      </p>
+                    )}
+                    <AgentToolsEditor
+                      ref={agentToolsEditorRef}
+                      agentId={agent?.id}
+                      assignmentScope={scope}
+                      assignmentTeamIds={assignedTeamIds}
+                      onSelectedCountChange={setSelectedToolsCount}
+                    />
+                  </div>
+
+                  {/* Subagents */}
+                  <div className="space-y-2">
+                    <Label>
+                      Subagents ({selectedDelegationTargetIds.length})
+                    </Label>
+                    <SubagentsEditor
+                      availableAgents={allInternalAgents}
+                      selectedAgentIds={selectedDelegationTargetIds}
+                      onSelectionChange={setSelectedDelegationTargetIds}
+                      currentAgentId={agent?.id}
+                    />
+                  </div>
+
+                  {/* Knowledge Sources */}
+                  {(knowledgeBases.length > 0 || connectors.length > 0) && (
+                    <div className="space-y-2">
+                      <Label>Knowledge Sources</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Choose which knowledge this{" "}
+                        {(agentTypeDisplayName[agentType] || "agent").replace(
+                          /^./,
+                          (c) => c.toUpperCase(),
+                        )}{" "}
+                        can draw from when responding
+                      </p>
+                      <Popover modal>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="h-8 px-3 gap-1.5 text-xs max-w-[250px]"
+                            className="w-full justify-between font-normal"
                           >
-                            <Key className="h-3 w-3 shrink-0" />
-                            {selectedApiKey ? (
-                              <>
-                                <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                                <span className="font-medium truncate">
-                                  {selectedApiKey.name}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                Dynamic API key
-                              </span>
-                            )}
+                            {(() => {
+                              const totalSelected =
+                                knowledgeBaseIds.length + connectorIds.length;
+                              return totalSelected === 0
+                                ? "Select connectors or knowledge bases"
+                                : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
+                            })()}
+                            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-96 p-0" align="start">
                           <Command>
-                            <CommandInput placeholder="Search API keys..." />
+                            <CommandInput placeholder="Search knowledge sources..." />
                             <CommandList>
-                              <CommandEmpty>No API keys found.</CommandEmpty>
-                              <CommandGroup>
-                                <CommandItem
-                                  onSelect={() => {
-                                    setLlmApiKeyId(null);
-                                    setLlmModel(null);
-                                    lastAutoSelectedProviderRef.current = null;
-                                    setApiKeySelectorOpen(false);
-                                  }}
-                                >
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-muted-foreground">
-                                      Dynamic API key
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      Resolved at runtime: org-wide → team →
-                                      personal
-                                    </span>
-                                  </div>
-                                  {!llmApiKeyId && (
-                                    <CheckIcon className="ml-auto h-4 w-4" />
-                                  )}
-                                </CommandItem>
-                              </CommandGroup>
-                              {(
-                                Object.keys(
-                                  apiKeysByProvider,
-                                ) as SupportedProvider[]
-                              ).map((provider) => (
-                                <CommandGroup
-                                  key={provider}
-                                  heading={
-                                    providerDisplayNames[provider] ?? provider
-                                  }
-                                >
-                                  {apiKeysByProvider[provider]?.map(
-                                    (
-                                      apiKey: (typeof availableApiKeys)[number],
-                                    ) => (
+                              <CommandEmpty>
+                                No knowledge sources found.
+                              </CommandEmpty>
+                              {knowledgeBases.length > 0 && (
+                                <CommandGroup heading="Knowledge Bases">
+                                  {knowledgeBases.map((kb) => {
+                                    const isSelected =
+                                      knowledgeBaseIds.includes(kb.id);
+                                    const connectorTypes = [
+                                      ...new Set<string>(
+                                        kb.connectors?.map(
+                                          (c) => c.connectorType,
+                                        ) ?? [],
+                                      ),
+                                    ];
+                                    return (
                                       <CommandItem
-                                        key={apiKey.id}
-                                        value={`${provider} ${apiKey.name} ${apiKey.teamName || ""}`}
+                                        key={kb.id}
+                                        value={kb.name}
+                                        className="data-[selected=true]:bg-transparent"
                                         onSelect={() => {
-                                          handleLlmApiKeyChange(apiKey.id);
-                                          setApiKeySelectorOpen(false);
+                                          setKnowledgeBaseIds((prev) =>
+                                            isSelected
+                                              ? prev.filter(
+                                                  (id) => id !== kb.id,
+                                                )
+                                              : [...prev, kb.id],
+                                          );
                                         }}
-                                        className="cursor-pointer"
                                       >
-                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                          {apiKey.scope === "personal" && (
-                                            <User className="h-3 w-3 shrink-0" />
+                                        <CheckIcon
+                                          className={cn(
+                                            "mr-2 h-4 w-4 shrink-0",
+                                            isSelected
+                                              ? "opacity-100"
+                                              : "opacity-0",
                                           )}
-                                          {apiKey.scope === "team" && (
-                                            <Users className="h-3 w-3 shrink-0" />
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="truncate text-sm">
+                                            {kb.name}
+                                          </div>
+                                          {kb.description && (
+                                            <div className="truncate text-xs text-muted-foreground">
+                                              {kb.description}
+                                            </div>
                                           )}
-                                          {apiKey.scope === "org_wide" && (
-                                            <Building2 className="h-3 w-3 shrink-0" />
-                                          )}
-                                          <span className="truncate">
-                                            {apiKey.name}
-                                          </span>
-                                          {apiKey.scope === "team" &&
-                                            apiKey.teamName && (
-                                              <span className="text-[10px] text-muted-foreground">
-                                                ({apiKey.teamName})
-                                              </span>
-                                            )}
                                         </div>
-                                        {llmApiKeyId === apiKey.id && (
-                                          <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
+                                        {connectorTypes.length > 0 && (
+                                          <OverlappedIcons
+                                            icons={connectorTypes.map(
+                                              (type: string) => ({
+                                                key: type,
+                                                icon: (
+                                                  <ConnectorTypeIcon
+                                                    type={type}
+                                                    className="h-full w-full"
+                                                  />
+                                                ),
+                                                tooltip: type,
+                                              }),
+                                            )}
+                                            maxVisible={3}
+                                            size="sm"
+                                            className="ml-2"
+                                          />
                                         )}
                                       </CommandItem>
-                                    ),
-                                  )}
+                                    );
+                                  })}
                                 </CommandGroup>
-                              ))}
+                              )}
+                              {connectors.length > 0 && (
+                                <CommandGroup heading="Connectors">
+                                  {connectors.map((connector) => {
+                                    const isSelected = connectorIds.includes(
+                                      connector.id,
+                                    );
+                                    return (
+                                      <CommandItem
+                                        key={connector.id}
+                                        value={connector.name}
+                                        className="data-[selected=true]:bg-transparent"
+                                        onSelect={() => {
+                                          setConnectorIds((prev) =>
+                                            isSelected
+                                              ? prev.filter(
+                                                  (id) => id !== connector.id,
+                                                )
+                                              : [...prev, connector.id],
+                                          );
+                                        }}
+                                      >
+                                        <CheckIcon
+                                          className={cn(
+                                            "mr-2 h-4 w-4 shrink-0",
+                                            isSelected
+                                              ? "opacity-100"
+                                              : "opacity-0",
+                                          )}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="truncate text-sm">
+                                            {connector.name}
+                                          </div>
+                                          <div className="truncate text-xs text-muted-foreground">
+                                            {connector.description || (
+                                              <span className="capitalize">
+                                                {connector.connectorType}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="ml-2 shrink-0">
+                                          <ConnectorTypeIcon
+                                            type={connector.connectorType}
+                                            className="h-4 w-4"
+                                          />
+                                        </div>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              )}
                             </CommandList>
                           </Command>
                         </PopoverContent>
                       </Popover>
+                    </div>
+                  )}
+                </div>
+              )}
 
-                      {!llmApiKeyId ? (
-                        <TooltipProvider delayDuration={300}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div>
-                                <ModelSelector
-                                  selectedModel=""
-                                  onModelChange={() => {}}
-                                  disabled
-                                  variant="outline"
-                                />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">
-                              Select a provider API key first
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+              {/* Section 4: Access & LLM */}
+              {(!isBuiltIn || isInternalAgent) && (
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  {/* Visibility / Scope */}
+                  {!isBuiltIn && (
+                    <AccessLevelSelector
+                      scope={scope}
+                      onScopeChange={(newScope) => {
+                        setScope(newScope);
+                        if (newScope === "org") {
+                          setAssignedTeamIds([]);
+                        }
+                      }}
+                      isAdmin={!!isAdmin}
+                      isTeamAdmin={!!isTeamAdmin}
+                      initialScope={agent?.scope}
+                      agentType={agentType}
+                      teams={teams}
+                      canReadTeams={!!canReadTeams}
+                      assignedTeamIds={assignedTeamIds}
+                      onTeamIdsChange={setAssignedTeamIds}
+                      hasNoAvailableTeams={hasNoAvailableTeams}
+                      showTeamRequired={!isAdmin}
+                    />
+                  )}
+
+                  {/* LLM Configuration (Agent and Built-in) */}
+                  {(isInternalAgent || isBuiltIn) && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">
+                        LLM Configuration
+                      </h3>
+                      {cannotReadLlmConfiguration ? (
+                        <Alert>
+                          <AlertDescription className="text-sm text-muted-foreground">
+                            You do not have permission to view LLM API keys or
+                            models. This agent will use the organization&apos;s
+                            default model configuration.
+                          </AlertDescription>
+                        </Alert>
                       ) : (
-                        <ModelSelector
-                          selectedModel={llmModel || ""}
-                          onModelChange={(modelId) =>
-                            handleLlmModelChange(modelId)
-                          }
-                          onClear={() => {
-                            setLlmModel(null);
-                            setLlmApiKeyId(null);
-                            lastAutoSelectedProviderRef.current = null;
-                          }}
-                          variant="outline"
-                          apiKeyId={llmApiKeyId}
-                        />
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            {selectedApiKey && selectedApiKey.scope !== "org"
+                              ? "Selected key will be available to everyone who has access to this agent."
+                              : null}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Popover
+                              open={apiKeySelectorOpen}
+                              onOpenChange={setApiKeySelectorOpen}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-3 gap-1.5 text-xs max-w-[250px]"
+                                >
+                                  <Key className="h-3 w-3 shrink-0" />
+                                  {selectedApiKey ? (
+                                    <>
+                                      <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                                      <span className="font-medium truncate">
+                                        {selectedApiKey.name}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      Dynamic API key
+                                    </span>
+                                  )}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-96 p-0"
+                                align="start"
+                              >
+                                <Command>
+                                  <CommandInput placeholder="Search API keys..." />
+                                  <CommandList>
+                                    <CommandEmpty>
+                                      No API keys found.
+                                    </CommandEmpty>
+                                    <CommandGroup>
+                                      <CommandItem
+                                        onSelect={() => {
+                                          setLlmApiKeyId(null);
+                                          setLlmModel(null);
+                                          lastAutoSelectedProviderRef.current =
+                                            null;
+                                          setApiKeySelectorOpen(false);
+                                        }}
+                                      >
+                                        <div className="flex flex-col min-w-0">
+                                          <span className="text-muted-foreground">
+                                            Dynamic API key
+                                          </span>
+                                          <span className="text-xs text-muted-foreground">
+                                            Resolved at runtime: org-wide → team
+                                            → personal
+                                          </span>
+                                        </div>
+                                        {!llmApiKeyId && (
+                                          <CheckIcon className="ml-auto h-4 w-4" />
+                                        )}
+                                      </CommandItem>
+                                    </CommandGroup>
+                                    {(
+                                      Object.keys(
+                                        apiKeysByProvider,
+                                      ) as SupportedProvider[]
+                                    ).map((provider) => (
+                                      <CommandGroup
+                                        key={provider}
+                                        heading={
+                                          providerDisplayNames[provider] ??
+                                          provider
+                                        }
+                                      >
+                                        {apiKeysByProvider[provider]?.map(
+                                          (
+                                            apiKey: (typeof availableApiKeys)[number],
+                                          ) => (
+                                            <CommandItem
+                                              key={apiKey.id}
+                                              value={`${provider} ${apiKey.name} ${apiKey.teamName || ""}`}
+                                              onSelect={() => {
+                                                handleLlmApiKeyChange(
+                                                  apiKey.id,
+                                                );
+                                                setApiKeySelectorOpen(false);
+                                              }}
+                                              className="cursor-pointer"
+                                            >
+                                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                {apiKey.scope ===
+                                                  "personal" && (
+                                                  <User className="h-3 w-3 shrink-0" />
+                                                )}
+                                                {apiKey.scope === "team" && (
+                                                  <Users className="h-3 w-3 shrink-0" />
+                                                )}
+                                                {apiKey.scope === "org" && (
+                                                  <Building2 className="h-3 w-3 shrink-0" />
+                                                )}
+                                                <span className="truncate">
+                                                  {apiKey.name}
+                                                </span>
+                                                {apiKey.scope === "team" &&
+                                                  apiKey.teamName && (
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                      ({apiKey.teamName})
+                                                    </span>
+                                                  )}
+                                              </div>
+                                              {llmApiKeyId === apiKey.id && (
+                                                <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
+                                              )}
+                                            </CommandItem>
+                                          ),
+                                        )}
+                                      </CommandGroup>
+                                    ))}
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+
+                            {!llmApiKeyId ? (
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div>
+                                      <ModelSelector
+                                        selectedModel=""
+                                        onModelChange={() => {}}
+                                        disabled
+                                        variant="outline"
+                                        enabled={false}
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="bottom"
+                                    className="text-xs"
+                                  >
+                                    Select a provider API key first
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <ModelSelector
+                                selectedModel={llmModel || ""}
+                                onModelChange={(modelId) =>
+                                  handleLlmModelChange(modelId)
+                                }
+                                onClear={() => {
+                                  setLlmModel(null);
+                                  setLlmApiKeyId(null);
+                                  lastAutoSelectedProviderRef.current = null;
+                                }}
+                                variant="outline"
+                                apiKeyId={llmApiKeyId}
+                                enabled={!!canReadLlmModels}
+                              />
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
 
-            {/* Section 5: Advanced (collapsible) — always shown for non-built-in (Labels are universal) */}
-            {!isBuiltIn && (
-              <Collapsible>
-                <div className="rounded-lg border bg-card">
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50 transition-colors [&[data-state=open]>svg]:rotate-90">
-                    <h3 className="text-sm font-semibold">Advanced</h3>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="border-t p-4 space-y-4">
-                      {/* Labels */}
-                      <ProfileLabels
-                        ref={agentLabelsRef}
-                        labels={labels}
-                        onLabelsChange={setLabels}
-                      />
+              {/* Section 5: Advanced (collapsible) — always shown for non-built-in (Labels are universal) */}
+              {!isBuiltIn && (
+                <Collapsible>
+                  <div className="rounded-lg border bg-card">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50 transition-colors [&[data-state=open]>svg]:rotate-90">
+                      <h3 className="text-sm font-semibold">Advanced</h3>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t p-4 space-y-4">
+                        {/* Labels */}
+                        <ProfileLabels
+                          ref={agentLabelsRef}
+                          labels={labels}
+                          onLabelsChange={setLabels}
+                        />
 
-                      {/* Security (LLM Proxy and Agent only) */}
-                      {showSecurity && (
-                        <div className="space-y-2">
-                          <Label>Security</Label>
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label
-                                htmlFor="consider-context-untrusted"
-                                className="text-sm font-medium cursor-pointer"
-                              >
-                                Treat context as untrusted from the start of
-                                chat
-                              </Label>
-                              <p className="text-sm text-muted-foreground">
-                                When enabled, the context is always considered
-                                untrusted. Only tools allowed to run in
-                                untrusted context will be permitted.
-                              </p>
-                            </div>
-                            <Switch
-                              id="consider-context-untrusted"
-                              checked={considerContextUntrusted}
-                              onCheckedChange={setConsiderContextUntrusted}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Agent Trigger Rules (Agent only, hidden for built-in) */}
-                      {isInternalAgent && !isBuiltIn && (
-                        <div className="space-y-4">
-                          {/* Email */}
-                          {incomingEmail?.enabled ? (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                  <label
-                                    htmlFor="incoming-email-enabled"
-                                    className="text-sm cursor-pointer"
-                                  >
-                                    Email
-                                  </label>
-                                  <p className="text-xs text-muted-foreground">
-                                    Users can interact with this agent via email
-                                  </p>
-                                </div>
-                                <Switch
-                                  id="incoming-email-enabled"
-                                  checked={incomingEmailEnabled}
-                                  onCheckedChange={setIncomingEmailEnabled}
-                                />
-                              </div>
-
-                              {incomingEmailEnabled && (
-                                <div className="space-y-4 pt-2 border-t">
-                                  <div className="space-y-2">
-                                    <Label
-                                      htmlFor="incoming-email-security-mode"
-                                      className="text-sm"
-                                    >
-                                      Security mode
-                                    </Label>
-                                    <Select
-                                      value={incomingEmailSecurityMode}
-                                      onValueChange={(
-                                        value:
-                                          | "private"
-                                          | "internal"
-                                          | "public",
-                                      ) => setIncomingEmailSecurityMode(value)}
-                                    >
-                                      <SelectTrigger id="incoming-email-security-mode">
-                                        <SelectValue placeholder="Select security mode">
-                                          <div className="flex items-center gap-2">
-                                            {incomingEmailSecurityMode ===
-                                              "private" && (
-                                              <>
-                                                <Lock className="h-4 w-4" />
-                                                <span>Private</span>
-                                              </>
-                                            )}
-                                            {incomingEmailSecurityMode ===
-                                              "internal" && (
-                                              <>
-                                                <Building2 className="h-4 w-4" />
-                                                <span>Internal</span>
-                                              </>
-                                            )}
-                                            {incomingEmailSecurityMode ===
-                                              "public" && (
-                                              <>
-                                                <Globe className="h-4 w-4" />
-                                                <span>Public</span>
-                                              </>
-                                            )}
-                                          </div>
-                                        </SelectValue>
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="private">
-                                          <div className="flex items-start gap-2">
-                                            <Lock className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">
-                                                Private
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                Only registered users with
-                                                access
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                        <SelectItem value="internal">
-                                          <div className="flex items-start gap-2">
-                                            <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">
-                                                Internal
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                Only emails from allowed domain
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                        <SelectItem value="public">
-                                          <div className="flex items-start gap-2">
-                                            <Globe className="h-4 w-4 mt-0.5 text-amber-500" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">
-                                                Public
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                Any email (use with caution)
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-
-                                  {incomingEmailSecurityMode === "internal" && (
-                                    <div className="space-y-2">
-                                      <Label
-                                        htmlFor="incoming-email-allowed-domain"
-                                        className="text-sm"
-                                      >
-                                        Allowed domain
-                                      </Label>
-                                      <Input
-                                        id="incoming-email-allowed-domain"
-                                        placeholder="company.com"
-                                        value={incomingEmailAllowedDomain}
-                                        onChange={(e) =>
-                                          setIncomingEmailAllowedDomain(
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
-                                      <p className="text-xs text-muted-foreground">
-                                        Only emails from @
-                                        {incomingEmailAllowedDomain ||
-                                          "your-domain.com"}{" "}
-                                        will be processed
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                  <span className="text-sm">Email</span>
-                                  <p className="text-xs text-muted-foreground">
-                                    Users can interact with this agent via
-                                    email, first run initial set up in{" "}
-                                    <Link
-                                      href="/agents/triggers/email"
-                                      className="underline hover:text-foreground"
-                                    >
-                                      Agent Triggers
-                                    </Link>
-                                  </p>
-                                </div>
-                                <Switch disabled checked={false} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Identity Provider for JWKS Auth (MCP Gateway only) */}
-                      {agentType === "mcp_gateway" &&
-                        identityProviders.length > 0 && (
+                        {/* Security (LLM Proxy and Agent only) */}
+                        {showSecurity && (
                           <div className="space-y-2">
-                            <Label>Identity Provider (JWKS Auth)</Label>
-                            <p className="text-sm text-muted-foreground">
-                              Optionally select an Identity Provider to validate
-                              incoming JWT tokens via JWKS. When configured, MCP
-                              clients can authenticate using JWTs issued by this
-                              IdP.{" "}
-                              <a
-                                href={getDocsUrl(
-                                  DocsPage.McpAuthentication,
-                                  "external-idp-jwks",
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline"
-                              >
-                                Learn more
-                              </a>
-                            </p>
-                            <Select
-                              value={identityProviderId ?? "none"}
-                              onValueChange={(value) =>
-                                setIdentityProviderId(
-                                  value === "none" ? null : value,
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="No Identity Provider" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">
-                                  No Identity Provider
-                                </SelectItem>
-                                {identityProviders.map((provider) => (
-                                  <SelectItem
-                                    key={provider.id}
-                                    value={provider.id}
-                                  >
-                                    {provider.providerId} ({provider.issuer})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Label>Security</Label>
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-0.5">
+                                <Label
+                                  htmlFor="consider-context-untrusted"
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  Treat context as sensitive from the start of
+                                  chat
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                  When enabled, the context is always considered
+                                  sensitive. Only tools allowed to run in
+                                  sensitive context will be permitted.
+                                </p>
+                              </div>
+                              <Switch
+                                id="consider-context-untrusted"
+                                checked={considerContextUntrusted}
+                                onCheckedChange={setConsiderContextUntrusted}
+                              />
+                            </div>
                           </div>
                         )}
-                    </div>
-                  </CollapsibleContent>
+
+                        {/* Custom Header Passthrough (MCP Gateway only) */}
+                        {agentType === "mcp_gateway" && (
+                          <div className="space-y-2">
+                            <Label>Custom Header Passthrough</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Client request headers to pass through to
+                              downstream MCP servers. Case-insensitive.
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {passthroughHeaders.map((header) => (
+                                <Badge
+                                  key={header}
+                                  variant="secondary"
+                                  className="gap-1 pr-1"
+                                >
+                                  {header}
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 p-0 hover:bg-transparent"
+                                    onClick={() =>
+                                      setPassthroughHeaders((prev) =>
+                                        prev.filter((h) => h !== header),
+                                      )
+                                    }
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </Badge>
+                              ))}
+                            </div>
+                            {passthroughHeaders.length <
+                              MAX_PASSTHROUGH_HEADERS && (
+                              <Input
+                                placeholder="Type header name and press Enter"
+                                onKeyDown={(e) => {
+                                  if (e.key !== "Enter") return;
+                                  e.preventDefault();
+                                  const value = e.currentTarget.value
+                                    .trim()
+                                    .toLowerCase();
+                                  if (!value) return;
+                                  if (!HEADER_NAME_REGEX.test(value)) {
+                                    toast.error(
+                                      "Header name must contain only alphanumeric characters and hyphens",
+                                    );
+                                    return;
+                                  }
+                                  if (BLOCKED_PASSTHROUGH_HEADERS.has(value)) {
+                                    toast.error(
+                                      `"${value}" is a hop-by-hop or protocol-level header and cannot be forwarded`,
+                                    );
+                                    return;
+                                  }
+                                  if (passthroughHeaders.includes(value)) {
+                                    toast.error(
+                                      `"${value}" is already in the list`,
+                                    );
+                                    return;
+                                  }
+                                  setPassthroughHeaders((prev) => [
+                                    ...prev,
+                                    value,
+                                  ]);
+                                  e.currentTarget.value = "";
+                                }}
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Identity Provider for enterprise-managed/JWKS auth */}
+                        {supportsIdentityProvider &&
+                          identityProviders.length > 0 && (
+                            <div className="space-y-2">
+                              <Label>Identity Provider (Enterprise/JWKS)</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Select the OIDC identity provider this MCP
+                                Gateway should trust for ID-JAG and direct JWKS
+                                JWT authentication. The same provider is also
+                                used when {appName} needs to resolve
+                                enterprise-managed downstream credentials for
+                                tool calls. When there is exactly one Identity
+                                Provider configured, {appName} uses it
+                                automatically if you leave this unset.
+                                {mcpAuthDocsUrl ? (
+                                  <>
+                                    {" "}
+                                    <ExternalDocsLink
+                                      href={mcpAuthDocsUrl}
+                                      className="underline"
+                                      showIcon={false}
+                                    >
+                                      Learn more
+                                    </ExternalDocsLink>
+                                  </>
+                                ) : null}
+                              </p>
+                              <Select
+                                value={effectiveIdentityProviderId ?? "none"}
+                                onValueChange={(value) =>
+                                  setIdentityProviderId(
+                                    value === "none" ? null : value,
+                                  )
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Use configured Identity Provider automatically" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">
+                                    No Identity Provider
+                                  </SelectItem>
+                                  {identityProviders.map((provider) => (
+                                    <SelectItem
+                                      key={provider.id}
+                                      value={provider.id}
+                                    >
+                                      {provider.providerId} ({provider.issuer})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              )}
+
+              {/* Labels for built-in agents (outside advanced section since advanced is hidden) */}
+              {isBuiltIn && (
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  <ProfileLabels
+                    ref={agentLabelsRef}
+                    labels={labels}
+                    onLabelsChange={setLabels}
+                  />
                 </div>
-              </Collapsible>
-            )}
-
-            {/* Labels for built-in agents (outside advanced section since advanced is hidden) */}
-            {isBuiltIn && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <ProfileLabels
-                  ref={agentLabelsRef}
-                  labels={labels}
-                  onLabelsChange={setLabels}
-                />
-              </div>
-            )}
-          </div>
-
+              )}
+            </div>
+          </fieldset>
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
+              {readOnly ? "Close" : "Cancel"}
             </Button>
-            <Button
-              type="submit"
-              disabled={
-                !name.trim() ||
-                createAgent.isPending ||
-                updateAgent.isPending ||
-                requiresTeamSelection ||
-                (!isAdmin && scope === "team" && hasNoAvailableTeams)
-              }
-            >
-              {(createAgent.isPending || updateAgent.isPending) && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {agent ? "Update" : "Create"}
-            </Button>
+            {!readOnly && (
+              <Button
+                type="submit"
+                disabled={
+                  !name.trim() ||
+                  isSaving ||
+                  createAgent.isPending ||
+                  updateAgent.isPending ||
+                  requiresTeamSelection ||
+                  (!isAdmin && scope === "team" && hasNoAvailableTeams)
+                }
+              >
+                {(isSaving ||
+                  createAgent.isPending ||
+                  updateAgent.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {agent ? "Update" : "Create"}
+              </Button>
+            )}
           </DialogStickyFooter>
         </DialogForm>
       </DialogContent>

@@ -2,6 +2,31 @@ import { describe, expect, test } from "@/test";
 import OAuthClientModel from "./oauth-client";
 
 describe("OAuthClientModel", () => {
+  describe("findByClientId", () => {
+    test("should return the full client when it exists", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "findable-client",
+        name: "Findable Client",
+      });
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(client.id);
+      expect(found?.clientId).toBe("findable-client");
+      expect(found?.name).toBe("Findable Client");
+      expect(found?.tokenEndpointAuthMethod).toBe("none");
+    });
+
+    test("should return null when the client does not exist", async () => {
+      const found = await OAuthClientModel.findByClientId("missing-client");
+
+      expect(found).toBeNull();
+    });
+  });
+
   describe("getNameByClientId", () => {
     test("should return client name when client exists", async ({
       makeOAuthClient,
@@ -20,21 +45,6 @@ describe("OAuthClientModel", () => {
       const name = await OAuthClientModel.getNameByClientId("nonexistent-id");
 
       expect(name).toBeNull();
-    });
-
-    test("should return null when client has no name", async ({
-      makeOAuthClient,
-    }) => {
-      const client = await makeOAuthClient({
-        clientId: "nameless-client",
-        name: undefined,
-      });
-
-      const name = await OAuthClientModel.getNameByClientId(client.clientId);
-
-      // name defaults to "Test Client ..." from fixture, so create one without name
-      // The fixture always sets a name, so we test the "not found" path instead
-      expect(name).toBeDefined();
     });
   });
 
@@ -106,6 +116,14 @@ describe("OAuthClientModel", () => {
 
       const name = await OAuthClientModel.getNameByClientId(clientId);
       expect(name).toBe("Updated Name");
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual(["http://localhost:9000/callback"]);
+      expect(found?.grantTypes).toEqual([
+        "authorization_code",
+        "refresh_token",
+      ]);
+      expect(found?.metadata).toEqual({ cimd: true, updated: true });
     });
 
     test("should store optional fields", async () => {
@@ -165,6 +183,104 @@ describe("OAuthClientModel", () => {
       expect(exists).toBe(true);
       const name = await OAuthClientModel.getNameByClientId(clientId);
       expect(name).toBe("Second");
+    });
+  });
+
+  describe("addRedirectUri", () => {
+    test("should add a new redirect URI to existing client", async () => {
+      const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+
+      await OAuthClientModel.upsertFromCimd({
+        id: crypto.randomUUID(),
+        clientId,
+        name: "Loopback Client",
+        redirectUris: ["http://127.0.0.1:3000/callback"],
+        grantTypes: ["authorization_code"],
+        responseTypes: ["code"],
+        tokenEndpointAuthMethod: "none",
+        isPublic: true,
+        metadata: { cimd: true },
+      });
+
+      await OAuthClientModel.addRedirectUri(
+        clientId,
+        "http://127.0.0.1:54321/callback",
+      );
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual([
+        "http://127.0.0.1:3000/callback",
+        "http://127.0.0.1:54321/callback",
+      ]);
+    });
+
+    test("should not duplicate an existing redirect URI", async () => {
+      const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+
+      await OAuthClientModel.upsertFromCimd({
+        id: crypto.randomUUID(),
+        clientId,
+        name: "No Dup Client",
+        redirectUris: ["http://127.0.0.1:3000/callback"],
+        grantTypes: ["authorization_code"],
+        responseTypes: ["code"],
+        tokenEndpointAuthMethod: "none",
+        isPublic: true,
+        metadata: { cimd: true },
+      });
+
+      await OAuthClientModel.addRedirectUri(
+        clientId,
+        "http://127.0.0.1:3000/callback",
+      );
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual(["http://127.0.0.1:3000/callback"]);
+    });
+
+    test("should preserve both redirect URIs across concurrent additions", async () => {
+      const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+
+      await OAuthClientModel.upsertFromCimd({
+        id: crypto.randomUUID(),
+        clientId,
+        name: "Concurrent Loopback Client",
+        redirectUris: ["http://127.0.0.1:3000/callback"],
+        grantTypes: ["authorization_code"],
+        responseTypes: ["code"],
+        tokenEndpointAuthMethod: "none",
+        isPublic: true,
+        metadata: { cimd: true },
+      });
+
+      await Promise.all([
+        OAuthClientModel.addRedirectUri(
+          clientId,
+          "http://127.0.0.1:54321/callback",
+        ),
+        OAuthClientModel.addRedirectUri(
+          clientId,
+          "http://127.0.0.1:54322/callback",
+        ),
+      ]);
+
+      const found = await OAuthClientModel.findByClientId(clientId);
+      expect(found?.redirectUris).toEqual(
+        expect.arrayContaining([
+          "http://127.0.0.1:3000/callback",
+          "http://127.0.0.1:54321/callback",
+          "http://127.0.0.1:54322/callback",
+        ]),
+      );
+      expect(found?.redirectUris).toHaveLength(3);
+    });
+
+    test("should do nothing for non-existent client", async () => {
+      await OAuthClientModel.addRedirectUri(
+        "non-existent-client",
+        "http://127.0.0.1:54321/callback",
+      );
+      // Should not throw
     });
   });
 });

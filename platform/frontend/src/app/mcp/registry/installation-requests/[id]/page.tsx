@@ -11,13 +11,13 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAddMcpServerInstallationRequestNote,
   useApproveMcpServerInstallationRequest,
   useDeclineMcpServerInstallationRequest,
   useMcpServerInstallationRequest,
-} from "@/lib/mcp-server-installation-request.query";
+} from "@/lib/mcp/mcp-server-installation-request.query";
 import { installationRequestStatusConfig } from "../status-config";
 
 export default function InstallationRequestDetailPage({

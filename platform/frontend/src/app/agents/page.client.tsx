@@ -8,7 +8,7 @@ import {
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Globe, Plus, User, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -21,31 +21,30 @@ import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
-import { ConnectDialog } from "@/components/connect-dialog";
+import {
+  ConnectDialog,
+  ConnectDialogSection,
+} from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
   useProfile,
   useProfiles,
   useProfilesPaginated,
 } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { AgentActions } from "./agent-actions";
 
 type AgentsInitialData = {
@@ -88,103 +87,6 @@ function SortIcon({
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
-}
-
-function VisibilityBadge({
-  scope,
-  teams,
-  authorId,
-  authorName,
-  currentUserId,
-}: {
-  scope: string | undefined;
-  teams: Array<{ id: string; name: string }> | undefined;
-  authorId: string | null | undefined;
-  authorName: string | null | undefined;
-  currentUserId: string | undefined;
-}) {
-  const MAX_TEAMS_TO_SHOW = 3;
-  const MAX_BADGE_TEXT_LENGTH = 15;
-
-  if (scope === "org") {
-    return (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <Globe className="h-3 w-3" />
-        Organization
-      </Badge>
-    );
-  }
-
-  if (scope === "personal") {
-    const displayName =
-      currentUserId && authorId === currentUserId ? "Me" : authorName;
-    if (!displayName) return <span className="text-muted-foreground">-</span>;
-    return (
-      <Badge
-        variant="secondary"
-        className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
-      >
-        <User className="h-3 w-3 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">
-          {truncateBadgeText(displayName, MAX_BADGE_TEXT_LENGTH)}
-        </span>
-      </Badge>
-    );
-  }
-
-  // scope === "team" or undefined
-  const hasTeams = teams && teams.length > 0;
-
-  if (!hasTeams) {
-    return <span className="text-muted-foreground">-</span>;
-  }
-
-  const visibleTeams = teams.slice(0, MAX_TEAMS_TO_SHOW);
-  const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
-
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      {visibleTeams.map((team) => (
-        <Badge
-          key={team.id}
-          variant="secondary"
-          className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
-        >
-          <Users className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {truncateBadgeText(team.name, MAX_BADGE_TEXT_LENGTH)}
-          </span>
-        </Badge>
-      ))}
-      {remainingTeams.length > 0 && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground cursor-help">
-                +{remainingTeams.length} more
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="flex flex-col gap-1">
-                {remainingTeams.map((team) => (
-                  <div key={team.id} className="text-xs">
-                    {team.name}
-                  </div>
-                ))}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-    </div>
-  );
-  function truncateBadgeText(text: string, maxLength: number) {
-    if (text.length <= maxLength) {
-      return text;
-    }
-
-    return `${text.slice(0, maxLength)}...`;
-  }
 }
 
 function Agents({ initialData }: { initialData?: AgentsInitialData }) {
@@ -243,6 +145,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   // Keep teams cache warm for AgentDialog
   const { data: userTeams } = useQuery({
@@ -254,6 +157,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
@@ -284,6 +188,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     agentType: AgentType;
   } | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
+  const [viewingAgent, setViewingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
   // Handle 'create' URL parameter to open the Create Agent dialog
@@ -311,6 +216,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     editAgentId,
     editAgentData,
     editingAgent,
+    searchParams,
+    pathname,
+    router,
+  ]);
+
+  // Handle 'view' URL parameter to open the View Agent dialog (read-only)
+  const viewAgentId = searchParams.get("view");
+  const { data: viewAgentData } = useProfile(viewAgentId ?? undefined);
+  useEffect(() => {
+    if (viewAgentId && viewAgentData && !viewingAgent) {
+      setViewingAgent(viewAgentData as AgentData);
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("view");
+      router.replace(`${pathname}?${newParams.toString()}`);
+    }
+  }, [
+    viewAgentId,
+    viewAgentData,
+    viewingAgent,
     searchParams,
     pathname,
     router,
@@ -470,7 +394,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: AgentData } }) => (
-              <VisibilityBadge
+              <ResourceVisibilityBadge
                 scope={row.original.scope}
                 teams={row.original.teams}
                 authorId={row.original.authorId}
@@ -507,6 +431,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             onConnect={setConnectingAgent}
             onEdit={(agentData) => {
               setEditingAgent(agentData);
+            }}
+            onView={(agentData) => {
+              setViewingAgent(agentData);
             }}
             onDelete={setDeletingAgentId}
           />
@@ -550,6 +477,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 />
                 <AgentScopeFilter showBuiltIn />
               </div>
+              {!canReadTeams && (
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
+              )}
               <ActiveFilterBadges />
             </div>
 
@@ -598,6 +531,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               agentType="agent"
             />
 
+            <AgentDialog
+              open={!!viewingAgent}
+              onOpenChange={(open) => !open && setViewingAgent(null)}
+              agent={viewingAgent}
+              agentType="agent"
+              readOnly
+            />
+
             {deletingAgentId && (
               <DeleteAgentDialog
                 agentId={deletingAgentId}
@@ -613,6 +554,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 }
 
 function AgentConnectionColumns({ agentId }: { agentId: string }) {
+  const appName = useAppName();
   // Fetch agent data for A2A connection instructions
   const { data: profiles, isPending } = useProfiles();
   const agent = profiles?.find((p) => p.id === agentId);
@@ -626,8 +568,13 @@ function AgentConnectionColumns({ agentId }: { agentId: string }) {
   }
 
   return (
-    <div className="p-4 rounded-lg border bg-card">
-      <A2AConnectionInstructions agent={agent} />
+    <div className="space-y-6">
+      <ConnectDialogSection
+        title="A2A Connection"
+        description={`Connect directly to this agent with ${appName}'s A2A endpoint, tokens, deep links, and optional email invocation.`}
+      >
+        <A2AConnectionInstructions agent={agent} />
+      </ConnectDialogSection>
     </div>
   );
 }

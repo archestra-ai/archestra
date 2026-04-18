@@ -1,7 +1,7 @@
 import { requiredPagePermissionsMap } from "@shared/access-control";
-import { usePermissionMap } from "@/lib/auth.query";
-import config from "@/lib/config";
-import { useEnterpriseFeature } from "@/lib/config.query";
+import { usePermissionMap } from "@/lib/auth/auth.query";
+import config from "@/lib/config/config";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
 export function useSettingsTabs() {
@@ -16,6 +16,9 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents" }]
+      : []),
+    ...(permissionMap?.["/settings/mcp"]
+      ? [{ label: "MCP", href: "/settings/mcp" }]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]

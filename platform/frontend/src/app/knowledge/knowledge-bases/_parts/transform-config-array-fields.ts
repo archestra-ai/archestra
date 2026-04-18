@@ -9,10 +9,13 @@ export function transformConfigArrayFields(
     "repos",
     "spaceKeys",
     "pageIds",
+    "databaseIds",
     "labelsToSkip",
     "commentEmailBlacklist",
     "states",
     "assignmentGroups",
+    "driveIds",
+    "fileTypes",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

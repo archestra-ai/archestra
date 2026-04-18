@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import {
@@ -32,8 +33,18 @@ export function ErrorBoundary({
   FallbackComponent?: React.ComponentType<FallbackProps>;
   onReset?: ComponentProps<typeof ReactErrorBoundary>["onReset"];
 }) {
-  const onError = (_error: unknown) => {
-    // we can do sth else with the error here
+  const onError: ComponentProps<typeof ReactErrorBoundary>["onError"] = (
+    error,
+    info,
+  ) => {
+    const capturedError =
+      error instanceof Error ? error : new Error("Unknown client error");
+
+    Sentry.captureException(capturedError, {
+      extra: {
+        componentStack: info.componentStack,
+      },
+    });
   };
 
   return (

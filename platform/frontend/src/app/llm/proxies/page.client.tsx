@@ -4,9 +4,7 @@ import {
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
-  DocsPage,
   E2eTestId,
-  getDocsUrl,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
@@ -15,12 +13,9 @@ import {
   ChevronUp,
   DollarSign,
   Eye,
-  Globe,
   Lock,
   Network,
   Plus,
-  User,
-  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -32,11 +27,17 @@ import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
-import { ConnectDialog } from "@/components/connect-dialog";
+import {
+  ConnectDialog,
+  ConnectDialogSection,
+} from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,11 +49,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/lib/utils";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
 type LlmProxiesInitialData = {
@@ -97,88 +99,8 @@ function SortIcon({
   );
 }
 
-function VisibilityBadge({
-  scope,
-  teams,
-  authorId,
-  authorName,
-  currentUserId,
-}: {
-  scope: string | undefined;
-  teams: Array<{ id: string; name: string }> | undefined;
-  authorId: string | null | undefined;
-  authorName: string | null | undefined;
-  currentUserId: string | undefined;
-}) {
-  const MAX_TEAMS_TO_SHOW = 3;
-
-  const scopeBadge =
-    scope === "org" ? (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <Globe className="h-3 w-3" />
-        Organization
-      </Badge>
-    ) : scope === "personal" ? (
-      (() => {
-        const displayName =
-          currentUserId && authorId === currentUserId ? "Me" : authorName;
-        return displayName ? (
-          <Badge variant="secondary" className="text-xs gap-1">
-            <User className="h-3 w-3" />
-            {displayName}
-          </Badge>
-        ) : null;
-      })()
-    ) : null;
-
-  const hasTeams = teams && teams.length > 0;
-
-  if (!scopeBadge && !hasTeams) {
-    return (
-      <Badge variant="secondary" className="text-xs gap-1">
-        <Users className="h-3 w-3" />
-        Team
-      </Badge>
-    );
-  }
-
-  const visibleTeams = hasTeams ? teams.slice(0, MAX_TEAMS_TO_SHOW) : [];
-  const remainingTeams = hasTeams ? teams.slice(MAX_TEAMS_TO_SHOW) : [];
-
-  return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {scopeBadge}
-      {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs gap-1">
-          <Users className="h-3 w-3" />
-          {team.name}
-        </Badge>
-      ))}
-      {remainingTeams.length > 0 && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground cursor-help">
-                +{remainingTeams.length} more
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="flex flex-col gap-1">
-                {remainingTeams.map((team) => (
-                  <div key={team.id} className="text-xs">
-                    {team.name}
-                  </div>
-                ))}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-    </div>
-  );
-}
-
 function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
+  const docsUrl = getFrontendDocsUrl("platform-llm-proxy");
   const {
     searchParams,
     pageIndex,
@@ -229,6 +151,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       : undefined,
     labels: labelsFromUrl || undefined,
   });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useQuery({
     queryKey: ["teams"],
@@ -239,6 +162,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       return data?.data || [];
     },
     initialData: initialData?.teams,
+    enabled: !!canReadTeams,
   });
 
   const { data: isAdmin } = useHasPermissions({ llmProxy: ["admin"] });
@@ -371,7 +295,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             header: "Accessible to",
             enableSorting: false,
             cell: ({ row }: { row: { original: ProxyData } }) => (
-              <VisibilityBadge
+              <ResourceVisibilityBadge
                 scope={row.original.scope}
                 teams={row.original.teams}
                 authorId={row.original.authorId}
@@ -426,15 +350,19 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         description={
           <p className="text-sm text-muted-foreground">
             LLM Proxies provide security, observability, and cost management for
-            your LLM API calls.{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformLlmProxy)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Read more in the docs
-            </a>
+            your LLM API calls.
+            {docsUrl && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  Read more in the docs
+                </ExternalDocsLink>
+              </>
+            )}
           </p>
         }
         actionButton={
@@ -459,6 +387,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 />
                 <AgentScopeFilter />
               </div>
+              {!canReadTeams && (
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
+              )}
               <ActiveFilterBadges />
             </div>
 
@@ -543,32 +477,36 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 function ProxyConnectionColumns({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-6">
-      <div className="flex gap-3">
-        <div className="flex-1 flex flex-col gap-2 p-3 rounded-lg bg-blue-500/5 border-2 border-blue-500/30">
-          <div className="flex items-center gap-2">
+      <ConnectDialogSection
+        title="Proxy Features"
+        description="Route model traffic through the LLM Proxy for security controls, observability, and cost tracking."
+      >
+        <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2 rounded-md border bg-blue-500/5 px-3 py-2 text-sm">
             <Network className="h-4 w-4 text-blue-500" />
             <span className="font-medium">LLM Proxy</span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Lock className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
-              <span className="text-[10px]">Security</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <Eye className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
-              <span className="text-[10px]">Observability</span>
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-background/60 border border-border/50">
-              <DollarSign className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
-              <span className="text-[10px]">Cost</span>
-            </div>
+          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
+            <Lock className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+            <span>Security</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
+            <Eye className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+            <span>Observability</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
+            <DollarSign className="h-3 w-3 text-green-600 dark:text-green-400" />
+            <span>Cost</span>
           </div>
         </div>
-      </div>
+      </ConnectDialogSection>
 
-      <div className="p-4 rounded-lg border bg-card">
+      <ConnectDialogSection
+        title="Connection Instructions"
+        description="Choose a provider, point your client at the proxy, and copy the exact URL or command."
+      >
         <ProxyConnectionInstructions agentId={agentId} />
-      </div>
+      </ConnectDialogSection>
     </div>
   );
 }

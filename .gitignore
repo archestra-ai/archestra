@@ -14,3 +14,10 @@
 
 platform/CLAUDE_LOCAL.md
 .pnpm-store/
+
+*.pyc
+__pycache__/
+
+.claude/worktrees/
+.turbo/
+

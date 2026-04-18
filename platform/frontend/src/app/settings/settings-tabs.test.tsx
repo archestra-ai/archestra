@@ -26,10 +26,6 @@ vi.mock("@shared", async () => {
   };
 });
 
-vi.mock("@/lib/auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
-
 let mockSecretsType = "DB";
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -40,7 +36,7 @@ vi.mock("@/lib/secrets.query", () => ({
 
 let mockEnterpriseFeatures = false;
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     get enterpriseFeatures() {
       return { core: mockEnterpriseFeatures };
@@ -107,6 +103,7 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("API Keys");
       expect(labels).toContain("Agents");
+      expect(labels).toContain("MCP");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -268,6 +265,7 @@ describe("useSettingsTabs", () => {
         "Your Account",
         "API Keys",
         "Agents",
+        "MCP",
         "LLM",
         "Users",
         "Teams",

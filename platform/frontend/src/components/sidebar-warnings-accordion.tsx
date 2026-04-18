@@ -13,9 +13,9 @@ import {
 import {
   useDefaultCredentialsEnabled,
   useHasPermissions,
-} from "@/lib/auth.query";
+} from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useFeature } from "@/lib/config.query";
+import { useFeature } from "@/lib/config/config.query";
 
 export function SidebarWarningsAccordion() {
   const { data: session } = authClient.useSession();
@@ -24,14 +24,18 @@ export function SidebarWarningsAccordion() {
     useDefaultCredentialsEnabled();
   const globalToolPolicy = useFeature("globalToolPolicy");
   const { data: canUpdateOrg } = useHasPermissions({
+    organization: ["update"],
+  });
+  const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
   });
 
   const isPermissive = globalToolPolicy === "permissive";
 
-  const showSecurityEngineWarning = !!session && canUpdateOrg && isPermissive;
+  const showSecurityEngineWarning =
+    !!session && canUpdateAgentSettings === true && isPermissive;
   const showDefaultCredsWarning =
-    canUpdateOrg &&
+    canUpdateOrg === true &&
     !isLoadingCreds &&
     defaultCredentialsEnabled !== undefined &&
     defaultCredentialsEnabled &&
@@ -66,7 +70,7 @@ export function SidebarWarningsAccordion() {
                 tooltip="Enable security engine"
                 className="text-destructive hover:text-destructive"
               >
-                <Link href="/mcp/tool-policies">
+                <Link href="/mcp/tool-guardrails">
                   <AlertTriangle className="shrink-0" />
                   <span>Enable security engine</span>
                 </Link>

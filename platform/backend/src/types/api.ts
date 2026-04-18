@@ -5,6 +5,8 @@ export { ApiError, ApiErrorTypeSchema };
 
 export const UuidIdSchema = z.uuidv4();
 
+export const UuidOrSlugSchema = z.string().min(1);
+
 export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
   {
     error: {

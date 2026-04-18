@@ -12,7 +12,7 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 <p align="center">
   <a href="https://www.archestra.ai/docs/platform-quickstart">Getting Started</a>
   - <a href="https://github.com/archestra-ai/archestra/releases">Releases</a>
-  - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-3d3ifjzg0-y2Z93cLLkZgRAooRpNu7ZA">Slack Community</a>
+  - <a href="https://archestra.ai/join-slack">Slack Community</a>
 </p>
 </div>
 
@@ -54,7 +54,7 @@ docker run -p 9000:9000 -p 3000:3000 \
 🎁 with private company-wide prompt registry!
 
 <div align="center">
-<img src="docs/assets/chat.png" alt="ChatGPT-like chat" />
+<img src="docs/assets/chat.webp" alt="ChatGPT-like chat" />
 </div>
 
 ## 📋 Private MCP registry with governance
@@ -64,7 +64,7 @@ Add MCPs to your private registry to share them with your team: self-hosted and 
 [Learn more about Private MCP Registry →](https://archestra.ai/docs/platform-private-registry)
 
 <div align="center">
-<img src="docs/assets/mcp-registry.png" alt="MCP Registry" />
+<img src="docs/assets/mcp-registry.webp" alt="MCP Registry" />
 </div>
 
 ## ☁️ Kubernetes-native MCP orchestrator
@@ -74,7 +74,7 @@ Run MCP servers in kubernetes, managing their state, API keys, OAuth.
 [Learn more about MCP Orchestrator →](https://archestra.ai/docs/platform-orchestrator)
 
 <div align="center">
-<img src="docs/assets/orchestrator.png" alt="MCP Orchestrator" />
+<img src="docs/assets/orchestrator.webp" alt="MCP Orchestrator" />
 </div>
 
 ## 🤖 Security sub-agents
@@ -84,14 +84,14 @@ Isolating dangerous tool responses from the main agent to prevent prompt injecti
 [Learn more about Dual LLM →](https://archestra.ai/docs/platform-dual-llm)
 
 <div align="center">
-<img src="docs/assets/dual-llm.png" alt="Dual-LLM sub-agent" />
+<img src="docs/assets/dual-llm.webp" alt="Dual-LLM sub-agent" />
 </div>
 
 ## 🚫 Non-probabalistic security to prevent data exfiltration
 
 Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration.
 
-[Learn more about Dynamic Tools →](https://archestra.ai/docs/platform-dynamic-tools) | [The Lethal Trifecta →](https://archestra.ai/docs/platform-lethal-trifecta)
+[Learn more about Tool Guardrails →](https://archestra.ai/docs/platform-ai-tool-guardrails) | [The Lethal Trifecta →](https://archestra.ai/docs/platform-lethal-trifecta)
 
 Live demo of archestra security engine preventing data leak from the private GitHub repo to the public repo:
 [![Archestra Demo](https://img.youtube.com/vi/SkmluS-xzmM/0.jpg)](https://www.youtube.com/watch?v=SkmluS-xzmM&t=2155s)
@@ -108,7 +108,7 @@ Per-team, per-agent or per-org cost monitoring and limitations. Dynamic optimize
 [Learn more about Costs & Limits →](https://archestra.ai/docs/platform-costs-and-limits)
 
 <div align="center">
-<img src="docs/assets/cost.png" alt="Cost & Limits" />
+<img src="docs/assets/cost.webp" alt="Cost & Limits" />
 </div>
 
 ## 📊 Observability
@@ -118,7 +118,7 @@ Metrics, traces and logs allowing to come to a conclusion about per-org, per-age
 [Learn more about Observability →](https://archestra.ai/docs/platform-observability)
 
 <div align="center">
-<img src="docs/assets/observability.png" alt="Observability" />
+<img src="docs/assets/observability.webp" alt="Observability" />
 </div>
 
 ## 👍 Ready for production
@@ -145,7 +145,7 @@ Thank you for contributing and continuously making <b>Archestra</b> better, <b>y
 
 <div align="center">
   <br />
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/linux-foundation-logo.png" height="50" alt="Linux Foundation" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/linux-foundation-logo.webp" height="50" alt="Linux Foundation" /></a>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/cncf-logo.png" height="50" alt="CNCF" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/cncf-logo.webp" height="50" alt="CNCF" /></a>
 </div>

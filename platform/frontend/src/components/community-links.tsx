@@ -1,14 +1,8 @@
 "use client";
 
-import { getDocsUrl } from "@shared";
+import { COMMUNITY_SLACK_URL, GITHUB_REPO_URL } from "@shared";
 import { Github, Slack } from "lucide-react";
-import config from "@/lib/config";
-
-export const COMMUNITY_GITHUB_URL = "https://github.com/archestra-ai/archestra";
-export const COMMUNITY_SLACK_URL = "https://archestra.ai/join-slack";
-export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
-export const COMMUNITY_BUG_REPORT_URL =
-  "https://github.com/archestra-ai/archestra/issues/new";
+import config from "@/lib/config/config";
 
 /**
  * Compact community links (GitHub + Slack) for use outside the sidebar,
@@ -22,7 +16,7 @@ export function CommunityLinks() {
   return (
     <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
       <a
-        href={COMMUNITY_GITHUB_URL}
+        href={GITHUB_REPO_URL}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"

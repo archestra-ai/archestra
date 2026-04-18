@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
+  normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -54,5 +55,56 @@ describe("shouldShowDescriptionField", () => {
     expect(
       shouldShowDescriptionField({ agentType: "agent", isBuiltIn: true }),
     ).toBe(false);
+  });
+});
+
+describe("normalizeSuggestedPrompts", () => {
+  it("uses summaryTitle as prompt when prompt is empty", () => {
+    const result = normalizeSuggestedPrompts([
+      { summaryTitle: "Check my cluster", prompt: "" },
+    ]);
+    expect(result).toEqual([
+      { summaryTitle: "Check my cluster", prompt: "Check my cluster" },
+    ]);
+  });
+
+  it("preserves explicit prompt when both fields are set", () => {
+    const result = normalizeSuggestedPrompts([
+      { summaryTitle: "Hello", prompt: "Say hello to me" },
+    ]);
+    expect(result).toEqual([
+      { summaryTitle: "Hello", prompt: "Say hello to me" },
+    ]);
+  });
+
+  it("discards entries when both fields are empty", () => {
+    const result = normalizeSuggestedPrompts([
+      { summaryTitle: "", prompt: "" },
+      { summaryTitle: "  ", prompt: "  " },
+    ]);
+    expect(result).toEqual([]);
+  });
+
+  it("trims whitespace from both fields", () => {
+    const result = normalizeSuggestedPrompts([
+      { summaryTitle: "  Draw something  ", prompt: "  Please draw  " },
+    ]);
+    expect(result).toEqual([
+      { summaryTitle: "Draw something", prompt: "Please draw" },
+    ]);
+  });
+
+  it("handles a mix of complete, label-only, and empty entries", () => {
+    const result = normalizeSuggestedPrompts([
+      { summaryTitle: "Full", prompt: "Full prompt text" },
+      { summaryTitle: "Label only", prompt: "" },
+      { summaryTitle: "", prompt: "" },
+      { summaryTitle: "  Whitespace  ", prompt: "   " },
+    ]);
+    expect(result).toEqual([
+      { summaryTitle: "Full", prompt: "Full prompt text" },
+      { summaryTitle: "Label only", prompt: "Label only" },
+      { summaryTitle: "Whitespace", prompt: "Whitespace" },
+    ]);
   });
 });

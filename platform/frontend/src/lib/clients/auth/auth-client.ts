@@ -13,7 +13,7 @@ import {
 } from "better-auth/client/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { createAuthClient } from "better-auth/react";
-import config from "@/lib/config";
+import config from "@/lib/config/config";
 
 const ac = createAccessControl(allAvailableActions);
 

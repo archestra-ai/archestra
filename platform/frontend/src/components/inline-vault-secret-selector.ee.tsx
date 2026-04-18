@@ -13,7 +13,7 @@ import {
   useTeamVaultFolderSecrets,
   useTeamVaultSecretKeys,
   type VaultSecretListItem,
-} from "@/lib/team-vault-folder.query.ee";
+} from "@/lib/teams/team-vault-folder.query.ee";
 import { E2eTestId } from "../../../shared";
 import { CurrentVaultSecret } from "./current-vault-secret.ee";
 

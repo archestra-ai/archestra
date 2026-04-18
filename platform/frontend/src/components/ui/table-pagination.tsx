@@ -26,6 +26,8 @@ interface TablePaginationProps {
   }) => void;
   /** Content to render on the left side (e.g., row selection count) */
   leftContent?: React.ReactNode;
+  /** Hide rows-per-page selector and page counter, show only nav arrows. */
+  compact?: boolean;
 }
 
 // --- Shared sub-components ---
@@ -121,6 +123,7 @@ export function TablePagination({
   total,
   onPaginationChange,
   leftContent,
+  compact = false,
 }: TablePaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = pageIndex + 1;
@@ -145,14 +148,23 @@ export function TablePagination({
           {leftContent}
         </div>
         <div className="flex items-center gap-6 lg:gap-8">
-          <RowsPerPageSelect
-            pageSize={pageSize}
-            onPageSizeChange={handlePageSizeChange}
-          />
-          <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-            Page {currentPage} of {totalPages}
-          </div>
+          {!compact && (
+            <RowsPerPageSelect
+              pageSize={pageSize}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          )}
+          {!compact && (
+            <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+              Page {currentPage} of {totalPages}
+            </div>
+          )}
           <div className="flex items-center gap-2">
+            {compact && (
+              <span className="text-sm font-medium">
+                Page {currentPage} of {totalPages}
+              </span>
+            )}
             <Button
               variant="outline"
               size="icon"

@@ -7,12 +7,12 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
-
-import chatApiKeysTable from "./chat-api-key";
 import identityProvidersTable from "./identity-provider";
+import llmProviderApiKeysTable from "./llm-provider-api-key";
 import usersTable from "./user";
 
 /**
@@ -44,6 +44,7 @@ const agentsTable = pgTable(
     }),
     scope: text("scope").$type<AgentScope>().notNull().default("personal"),
     name: text("name").notNull(),
+    slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
@@ -76,9 +77,12 @@ const agentsTable = pgTable(
 
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */
-    llmApiKeyId: uuid("llm_api_key_id").references(() => chatApiKeysTable.id, {
-      onDelete: "set null",
-    }),
+    llmApiKeyId: uuid("llm_api_key_id").references(
+      () => llmProviderApiKeysTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     /** Model ID for LLM calls */
     llmModel: text("llm_model"),
 
@@ -87,6 +91,9 @@ const agentsTable = pgTable(
       () => identityProvidersTable.id,
       { onDelete: "set null" },
     ),
+
+    /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
+    passthroughHeaders: text("passthrough_headers").array(),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(
@@ -105,6 +112,9 @@ const agentsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
+    uniqueIndex("agents_slug_idx")
+      .on(table.slug)
+      .where(sql`${table.slug} IS NOT NULL`),
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),

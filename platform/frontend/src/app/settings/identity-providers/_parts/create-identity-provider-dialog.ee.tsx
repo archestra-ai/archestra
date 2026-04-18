@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
@@ -16,7 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useCreateIdentityProvider } from "@/lib/identity-provider.query.ee";
+import { useCreateIdentityProvider } from "@/lib/auth/identity-provider.query.ee";
+import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -68,6 +70,7 @@ export function CreateIdentityProviderDialog({
               oidcConfig: {
                 issuer: "",
                 pkce: true,
+                enableRpInitiatedLogout: true,
                 clientId: "",
                 clientSecret: "",
                 discoveryEndpoint: "",
@@ -77,6 +80,7 @@ export function CreateIdentityProviderDialog({
                   email: "email",
                   name: "name",
                 },
+                overrideUserInfo: true,
               },
             }),
       }),
@@ -85,7 +89,9 @@ export function CreateIdentityProviderDialog({
 
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {
-      const result = await createIdentityProvider.mutateAsync(data);
+      const result = await createIdentityProvider.mutateAsync(
+        normalizeIdentityProviderFormValues(data),
+      );
       // Only close the dialog if creation succeeded (result is not null)
       if (result) {
         form.reset();
@@ -141,10 +147,11 @@ export function CreateIdentityProviderDialog({
               type="submit"
               permissions={{ identityProvider: ["create"] }}
               disabled={createIdentityProvider.isPending}
+              data-testid={E2eTestId.IdentityProviderCreateButton}
             >
               {createIdentityProvider.isPending
                 ? "Creating..."
-                : "Create & Test"}
+                : "Create Provider"}
             </PermissionButton>
           </DialogStickyFooter>
         </DialogForm>

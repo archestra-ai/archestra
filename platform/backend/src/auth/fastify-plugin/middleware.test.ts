@@ -94,6 +94,7 @@ describe("Authnz", () => {
         "/openapi.json",
         "/health",
         "/ready",
+        "/metrics",
       ];
 
       for (const url of whitelistedPaths) {
@@ -150,6 +151,24 @@ describe("Authnz", () => {
 
       const mockRequest = {
         url: publicSsoProviderUrl,
+        method: "GET",
+        headers: {},
+      } as FastifyRequest;
+
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(mockRequest, mockReply);
+
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
+    test("should skip auth for GET requests to public config endpoint", async () => {
+      const mockRequest = {
+        url: "/api/config/public",
         method: "GET",
         headers: {},
       } as FastifyRequest;
@@ -397,7 +416,6 @@ describe("Authnz", () => {
         "/.well-known-acme-challenge/test", // missing slash
         "/well-known/acme-challenge/test", // missing leading dot
         "/api/protected-endpoint",
-        "/metrics",
       ];
 
       for (const url of protectedPaths) {

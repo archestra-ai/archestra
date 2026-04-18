@@ -1,17 +1,12 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { AGENT_TOOL_PREFIX } from "@shared";
+import { AGENT_TOOL_PREFIX, slugify } from "@shared";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentTeamModel, ToolModel } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
-import {
-  errorResult,
-  isAbortLikeError,
-  slugify,
-  successResult,
-} from "./helpers";
+import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 export const delegationToolArgsSchema = z.object({
@@ -164,6 +159,10 @@ export async function handleDelegation(
       // Propagate conversationId for browser tab isolation
       conversationId: context.conversationId,
       abortSignal: context.abortSignal,
+      // We only need to propagate whether the parent was already unsafe at the
+      // delegation boundary. The child re-evaluates its own tool results and
+      // records its own unsafe boundary instead of inheriting the parent's.
+      parentContextIsTrusted: context.contextIsTrusted,
     });
 
     return successResult(result.text);

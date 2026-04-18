@@ -16,17 +16,19 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { readFileSync } from "node:fs";
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
+import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  createJsonSchemaTransformObject,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
-  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -41,6 +43,7 @@ import {
   PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
@@ -49,9 +52,8 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
-import AgentLabelModel from "@/models/agent-label";
 import OrganizationModel from "@/models/organization";
-import { metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { taskQueueService } from "@/task-queue";
@@ -225,7 +227,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     },
     hideUntagged: true,
     transform: jsonSchemaTransform,
-    transformObject: jsonSchemaTransformObject,
+    transformObject: createJsonSchemaTransformObject({
+      zodToJsonConfig: { target: "openapi-3.0" },
+    }),
   });
 }
 
@@ -243,12 +247,41 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
 }
 
 /**
+ * Register only the routes needed by the worker for A2A / scheduled task execution.
+ * These routes are called via localhost by executeA2AMessage and are not exposed
+ * externally — the K8s Service only targets platform pods, not worker pods.
+ */
+export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
+  // LLM Proxy routes (all providers)
+  fastify.register(routes.anthropicProxyRoutes);
+  fastify.register(routes.openAiProxyRoutes);
+  fastify.register(routes.geminiProxyRoutes);
+  fastify.register(routes.azureProxyRoutes);
+  fastify.register(routes.bedrockProxyRoutes);
+  fastify.register(routes.cerebrasProxyRoutes);
+  fastify.register(routes.cohereProxyRoutes);
+  fastify.register(routes.deepseekProxyRoutes);
+  fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.minimaxProxyRoutes);
+  fastify.register(routes.mistralProxyRoutes);
+  fastify.register(routes.ollamaProxyRoutes);
+  fastify.register(routes.openrouterProxyRoutes);
+  fastify.register(routes.perplexityProxyRoutes);
+  fastify.register(routes.vllmProxyRoutes);
+  fastify.register(routes.xaiProxyRoutes);
+  fastify.register(routes.zhipuaiProxyRoutes);
+  // MCP Gateway (tool listing + tool calls via JSON-RPC)
+  fastify.register(routes.mcpGatewayRoutes);
+}
+
+/**
  * Sets up logging and zod type provider + request validation & response serialization
  */
 export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
     disableRequestLogging: true,
+    trustProxy: config.api.trustProxy,
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
@@ -366,7 +399,7 @@ export const createFastifyInstance = () =>
  * Error: A metric with the name http_request_duration_seconds has already been registered.
  * at Registry.registerMetric (/app/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/registry.js:103:10)
  */
-const registerMetricsPlugin = async (
+export const registerMetricsPlugin = async (
   fastify: ReturnType<typeof createFastifyInstance>,
   endpointEnabled: boolean,
 ): Promise<void> => {
@@ -383,7 +416,7 @@ const registerMetricsPlugin = async (
   });
 };
 
-const addMetricsAuthenticationHook = (
+export const addMetricsAuthenticationHook = (
   fastify: FastifyInstanceWithZod,
 ): void => {
   const { secret: metricsSecret } = observability.metrics;
@@ -392,12 +425,12 @@ const addMetricsAuthenticationHook = (
     return;
   }
 
+  const metricsPath = observability.metrics.endpoint;
+
   fastify.addHook("preHandler", async (request, reply) => {
     if (
-      request.url === HEALTH_PATH ||
-      request.url === READY_PATH ||
-      request.url.startsWith(`${HEALTH_PATH}?`) ||
-      request.url.startsWith(`${READY_PATH}?`)
+      request.url !== metricsPath &&
+      !request.url.startsWith(`${metricsPath}?`)
     ) {
       return;
     }
@@ -416,7 +449,7 @@ const addMetricsAuthenticationHook = (
   });
 };
 
-const registerStandaloneMetricsEndpoint = async (params: {
+export const registerStandaloneMetricsEndpoint = async (params: {
   fastify: FastifyInstanceWithZod;
   enableDefaultMetrics: boolean;
 }): Promise<void> => {
@@ -464,6 +497,128 @@ const startMetricsServer = async () => {
         : " (no authentication)"
     }`,
   );
+};
+
+// ============ MCP Sandbox Server ============
+
+/**
+ * Allowlist-validate CSP domain entries.
+ * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com).
+ * Blocks dangerous CSP sources like *, data:, blob:, https: that a denylist would miss.
+ */
+// Matches bare domains (esm.sh), wildcard subdomains (*.esm.sh),
+// scheme-prefixed domains (https://esm.sh, wss://esm.sh), and optional port (:8443).
+const VALID_CSP_DOMAIN =
+  /^(wss?:\/\/|https?:\/\/)?(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+(:\d{1,5})?$/;
+
+export function sanitizeCspDomains(domains?: string[]): string[] {
+  if (!domains) return [];
+  return domains.filter(
+    (d) => typeof d === "string" && VALID_CSP_DOMAIN.test(d),
+  );
+}
+
+export function buildCspHeader(csp?: McpUiResourceCsp): string {
+  const resourceDomains = sanitizeCspDomains(csp?.resourceDomains).join(" ");
+  const connectDomains = sanitizeCspDomains(csp?.connectDomains).join(" ");
+  const frameDomains = sanitizeCspDomains(csp?.frameDomains).join(" ") || null;
+  const baseUriDomains =
+    sanitizeCspDomains(csp?.baseUriDomains).join(" ") || null;
+
+  const directives = [
+    "default-src 'none'",
+    `script-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+    `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+    `img-src 'self' data: blob: ${resourceDomains}`.trim(),
+    `font-src 'self' data: blob: ${resourceDomains}`.trim(),
+    `connect-src 'self' ${connectDomains}`.trim(),
+    `worker-src 'self' blob: ${resourceDomains}`.trim(),
+    frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
+    "object-src 'none'",
+    baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'",
+  ];
+
+  return directives.join("; ");
+}
+
+/**
+ * Read and prepare the sandbox proxy HTML at startup.
+ * Returns null if the file is not found (non-fatal — sandbox route won't be registered).
+ */
+const loadSandboxHtml = (): string | null => {
+  const { filePath } = config.mcpSandbox;
+  try {
+    const rawHtml = readFileSync(filePath, "utf-8");
+    // Inject allowed origins at startup (comes from env config, doesn't change at runtime).
+    // The placeholder is replaced with a JSON array; empty array = allow any origin (dev/open mode).
+    // Escape < and > to prevent </script> breakout when embedded in HTML.
+    const safeJson = JSON.stringify(config.mcpSandbox.allowedOrigins)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return rawHtml.replace("__ARCHESTRA_ALLOWED_ORIGINS__", safeJson);
+  } catch (err) {
+    logger.warn(
+      { err, filePath },
+      "MCP sandbox proxy HTML not found — /_sandbox/ route will not be registered",
+    );
+    return null;
+  }
+};
+
+const sandboxHtml = loadSandboxHtml();
+
+/**
+ * Register the sandbox proxy route on the main Fastify instance.
+ *
+ * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
+ * CSP for guest content is handled entirely by the proxy HTML (meta tag injection).
+ * Isolation comes from cross-origin (localhost swap or domain) or opaque origin fallback.
+ */
+const registerSandboxRoute = (
+  fastify: ReturnType<typeof createFastifyInstance>,
+) => {
+  if (!sandboxHtml) return;
+
+  if (process.env.ARCHESTRA_MCP_SANDBOX_PORT) {
+    logger.warn(
+      "ARCHESTRA_MCP_SANDBOX_PORT is deprecated and no longer used. " +
+        "The sandbox is now served from the main backend on /_sandbox/. " +
+        "Remove this env var from your configuration.",
+    );
+  }
+
+  fastify.get("/_sandbox/mcp-sandbox-proxy.html", async (request, reply) => {
+    // When a sandbox domain is configured, validate the Host header matches
+    // *.{domain} to prevent the sandbox route from being abused on the main origin.
+    if (config.mcpSandbox.domain) {
+      const host = request.hostname;
+      if (!host.endsWith(`.${config.mcpSandbox.domain}`)) {
+        return reply.status(403).send("Invalid sandbox host");
+      }
+    }
+
+    // frame-ancestors restricts which origins can embed this sandbox iframe.
+    // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
+    // Guest content CSP is handled by the proxy HTML (meta tag injection from sandbox-resource-ready message).
+    const frameAncestorsList = [...config.mcpSandbox.allowedOrigins];
+    if (config.mcpSandbox.domain) {
+      frameAncestorsList.push(`*.${config.mcpSandbox.domain}`);
+    }
+    const frameAncestors =
+      frameAncestorsList.length > 0 ? frameAncestorsList.join(" ") : "*";
+    void reply.header(
+      "Content-Security-Policy",
+      `frame-ancestors ${frameAncestors}`,
+    );
+
+    // Prevent caching to ensure fresh CSP on each load
+    void reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    void reply.header("Pragma", "no-cache");
+    void reply.header("Expires", "0");
+
+    void reply.type("text/html");
+    return reply.send(sandboxHtml);
+  });
 };
 
 const startMcpServerRuntime = async (
@@ -597,15 +752,14 @@ const startWebServer = async () => {
       promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
     );
 
-    const labelKeys = await AgentLabelModel.getAllKeys();
-    metrics.llm.initializeMetrics(labelKeys);
-    metrics.mcp.initializeMcpMetrics(labelKeys);
-    metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
-    metrics.rag.initializeRagMetrics();
-    metrics.taskQueue.initializeTaskQueueMetrics();
+    const labelKeys = await initializeObservabilityMetrics();
 
     // Start metrics server
     await startMetricsServer();
+
+    // Register sandbox proxy route on the main server (single-port setup).
+    // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
+    registerSandboxRoute(fastify);
 
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,
@@ -811,6 +965,14 @@ const startWorker = async () => {
     await initializeDatabase();
     cacheManager.start();
 
+    // Sync Archestra MCP branding so the worker recognises branded tool names
+    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // Without this, isToolName() only matches the default "archestra__" prefix
+    // and builtin tools fall through to mcpClient.executeToolCall() which fails
+    // because they have credentialResolutionMode "static" with no mcpServerId.
+    const organization = await OrganizationModel.getFirst();
+    archestraMcpBranding.syncFromOrganization(organization);
+
     // Set OpenMetrics content type to enable exemplar support
     const promClient = await import("prom-client");
     // eslint-disable-next-line -- default register is typed as Registry<PrometheusContentType> but setContentType accepts both at runtime
@@ -818,14 +980,19 @@ const startWorker = async () => {
       promClient.default.Registry.OPENMETRICS_CONTENT_TYPE,
     );
 
-    metrics.rag.initializeRagMetrics();
-    metrics.taskQueue.initializeTaskQueueMetrics();
+    const labelKeys = await initializeObservabilityMetrics({
+      includeMcpMetrics: true,
+      includeAgentExecutionMetrics: false,
+    });
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
-    // Minimal worker server for Kubernetes probes and Prometheus scraping
+    // Worker server for Kubernetes probes, Prometheus scraping,
+    // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
+    // These routes handle their own auth (Bearer tokens / API keys) and are
+    // not reachable from outside the pod — the K8s Service only targets platform pods.
     const healthServer = createFastifyInstance();
 
     healthServer.get("/health", async () => ({ status: "ok" }));
@@ -837,13 +1004,24 @@ const startWorker = async () => {
       return { status: "ok" };
     });
 
+    // Auth plugin decorates request.user / request.organizationId which route
+    // handlers reference. The proxy and gateway routes are skipped by the auth
+    // check (shouldSkipAuthCheck) but the decorators must exist.
+    healthServer.register(fastifyAuthPlugin);
+
+    // Register LLM Proxy and MCP Gateway routes so executeA2AMessage can call
+    // localhost instead of requiring the platform service URL.
+    await registerWorkerRoutes(healthServer);
+
     await registerStandaloneMetricsEndpoint({
       fastify: healthServer,
       enableDefaultMetrics: true,
     });
 
     await healthServer.listen({ port: port, host });
-    logger.info(`Worker server started on port ${port}`);
+    logger.info(
+      `Worker server started on port ${port} with ${labelKeys.length} agent label keys`,
+    );
 
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Worker received ${signal}, shutting down...`);

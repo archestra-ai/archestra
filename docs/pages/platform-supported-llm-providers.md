@@ -474,26 +474,192 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 ### Bedrock Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
-- **Authentication**: Pass your [Amazon Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) in the `Authorization` header as `Bearer <your-api-key>`
+- **Authentication**: Bearer API key or AWS IAM (see below)
+
+### Authentication Methods
+
+Bedrock supports two authentication methods:
+
+**API Key** (default) — Pass your [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) via the UI or `ARCHESTRA_CHAT_BEDROCK_API_KEY` env var.
+
+**AWS IAM** — Use the AWS credential chain (IRSA, instance profiles, environment variables) instead of API keys. When enabled, Archestra authenticates to Bedrock using SigV4 signing. No API key is needed — Bedrock appears as a system-configured provider automatically.
+
+### IAM Authentication Setup (IRSA)
+
+To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html):
+
+1. Create an IAM role with `AmazonBedrockFullAccess` or a scoped policy (see below)
+2. Create an [OIDC provider](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html) for your EKS cluster
+3. Configure the IAM role's trust policy to allow the Archestra service account:
+   ```json
+   {
+     "Effect": "Allow",
+     "Principal": {
+       "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>"
+     },
+     "Action": "sts:AssumeRoleWithWebIdentity",
+     "Condition": {
+       "StringEquals": {
+         "oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>:sub": "system:serviceaccount:archestra:archestra-platform"
+       }
+     }
+   }
+   ```
+4. Annotate the Archestra service account:
+   ```bash
+   kubectl annotate sa archestra-platform -n archestra \
+     eks.amazonaws.com/role-arn=arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+   ```
+5. Set the environment variables below and restart the deployment
+
+#### Minimum IAM Policy
+
+Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role needs these actions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:Converse", "bedrock:ConverseStream"],
+      "Resource": [
+        "arn:aws:bedrock:*:<ACCOUNT_ID>:inference-profile/us.anthropic.*",
+        "arn:aws:bedrock:*::foundation-model/anthropic.*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:ListInferenceProfiles"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Use `*` for the region in resource ARNs — cross-region inference profiles (`us.` prefix) can route requests to any US region.
 
 ### Environment Variables
 
-| Variable                                     | Required | Description                                                                                     |
-| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
-| `ARCHESTRA_BEDROCK_BASE_URL`                 | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`)          |
-| `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX` | No       | Region prefix for cross-region inference profiles (e.g., `us` or `eu`)                          |
-| `ARCHESTRA_CHAT_BEDROCK_API_KEY`             | No       | Default API key for Bedrock (can be overridden per conversation/team/org)                       |
+#### Common (both auth methods)
+
+| Variable                                 | Required | Description                                                                          |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `ARCHESTRA_BEDROCK_BASE_URL`             | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`    | No       | Comma-separated list of provider prefixes to include. When empty (default), all profiles are returned. |
+| `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` | No | Comma-separated list of inference region prefixes (e.g., `us,global`). When empty (default), all regions are returned. |
+
+#### API Key auth
+
+| Variable                         | Required | Description                                                        |
+| -------------------------------- | -------- | ------------------------------------------------------------------ |
+| `ARCHESTRA_CHAT_BEDROCK_API_KEY` | No       | Default API key for Bedrock (can be overridden per team/org in UI) |
+
+#### IAM auth (IRSA / instance profiles)
+
+| Variable                             | Required | Description                                                              |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------ |
+| `ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED` | Yes      | Set to `true` to enable IAM authentication                               |
+| `ARCHESTRA_BEDROCK_REGION`           | No       | Explicit AWS region. Falls back to extracting from base URL               |
+
+When IAM auth is enabled, Archestra uses the [AWS credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html) — IRSA on EKS, EC2 instance profiles, or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` env vars. No API key is needed.
 
 #### `ARCHESTRA_BEDROCK_BASE_URL`
 
-This variable is **required** to enable the Bedrock provider. It specifies the regional endpoint for the Bedrock Runtime API. The URL format follows AWS regional endpoints:
+**Required** to enable the Bedrock provider. The URL format follows AWS regional endpoints:
 
 ```
 https://bedrock-runtime.{region}.amazonaws.com
 ```
 
-#### `ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX`
+#### Model Discovery
 
-Some Bedrock models, such as Anthropic's Claude, require [cross-region inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html). Set this variable to enable those models. If not set, only models with on-demand inference support will be available.
+Archestra uses the Bedrock [ListInferenceProfiles](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListInferenceProfiles.html) API to discover available models. This means only models that have inference profiles configured in your AWS account will appear — ensuring the model picker only shows models you can actually use.
 
-For more details, see [how inference works in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-how.html).
+#### Filtering Models by Provider
+
+By default, Archestra returns all active inference profiles from your AWS account. Use `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS` to limit which providers appear in the model picker.
+
+The filter matches the provider segment of the inference profile ID (the part after the region prefix). For example, the profile `us.anthropic.claude-sonnet-4-6` has provider `anthropic`.
+
+```bash
+# Only Anthropic and Amazon models
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=anthropic,amazon
+
+# Only Anthropic models
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=anthropic
+
+# All providers (default)
+ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS=
+```
+
+Common provider prefixes: `anthropic`, `amazon`, `meta`, `mistral`, `deepseek`, `cohere`, `writer`, `stability`, `twelvelabs`.
+
+#### Filtering Models by Inference Region
+
+Use `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` to limit which inference
+regions appear in the model picker.
+
+The filter matches the region prefix of the inference profile ID (the first
+segment before the provider). For example, the profile
+`us.anthropic.claude-sonnet-4-6` has region prefix `us`.
+
+```bash
+# Only US and global profiles
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=us,global
+
+# Only EU profiles
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=eu
+
+# All regions (default)
+ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS=
+```
+
+Known region prefixes: `us`, `eu`, `ap`, `global`.
+
+## Azure AI Foundry
+
+[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides enterprise-grade access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
+
+### Supported Azure AI Foundry APIs
+
+- Chat Completions (streaming and non-streaming)
+- Responses API (streaming and non-streaming)
+
+### Azure AI Foundry Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/azure/{profile-id}`
+- **Authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Azure AI Foundry Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Full deployment URL: `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
+| `ARCHESTRA_AZURE_OPENAI_API_VERSION` | No | Azure OpenAI API version (default: `2024-02-01`) |
+| `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
+| `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
+
+### Getting an Azure API Key
+
+You can generate an API key from the [Azure Portal](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI) under your Azure OpenAI resource.
+
+### Base URL Format
+
+The `ARCHESTRA_AZURE_OPENAI_BASE_URL` must be the full deployment URL including the deployment name:
+
+```
+https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
+```
+
+For example: `https://my-company.openai.azure.com/openai/deployments/gpt-4o`
+
+The same format applies when configuring a Base URL in the API key settings UI.
+
+### Notes
+
+- **API Version**: Chat Completions and model discovery use `ARCHESTRA_AZURE_OPENAI_API_VERSION`. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. You do not need to include either query parameter in the base URL.
+- **Multiple Deployments**: To use multiple Azure deployments, create separate API key entries in Settings, each with its own deployment URL as the Base URL.
+- **Deployment URL configuration**: Keep using the deployment-specific base URL format shown above. Archestra derives the correct upstream endpoint automatically for both `/chat/completions` and `/responses` requests.
+- **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.
+- **OpenAI-compatible API**: Azure AI Foundry supports both Chat Completions and Responses-style request flows through Archestra.

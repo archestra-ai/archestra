@@ -4,8 +4,9 @@ import {
   DEFAULT_SORT_BY,
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
-  handleApiError,
-} from "./utils";
+} from "@/consts";
+import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
+import { handleApiError } from "@/lib/utils";
 
 const {
   createAgent,
@@ -26,6 +27,7 @@ export function useProfiles(
   params: {
     initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
     filters?: archestraApiTypes.GetAllAgentsData["query"];
+    enabled?: boolean;
   } = {},
 ) {
   const filters = {
@@ -39,6 +41,7 @@ export function useProfiles(
       return response.data ?? [];
     },
     initialData: params?.initialData,
+    enabled: params?.enabled,
   });
 }
 
@@ -209,6 +212,9 @@ export function useUpdateProfile() {
       });
       // Invalidate tokens queries since team changes affect which tokens are visible for a profile
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      queryClient.invalidateQueries({
+        queryKey: incomingEmailKeys.promptEmailAddress(variables.id),
+      });
       // Invalidate knowledge bases when knowledgeBaseIds change (updates assignedAgents)
       if (variables.data?.knowledgeBaseIds !== undefined) {
         queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });

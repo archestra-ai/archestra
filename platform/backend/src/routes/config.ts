@@ -3,14 +3,47 @@ import { RouteId, SupportedProvidersSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
+import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    PUBLIC_CONFIG_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetPublicConfig,
+        description: "Get public config",
+        tags: ["Config"],
+        response: {
+          200: z.strictObject({
+            disableBasicAuth: z.boolean(),
+            disableInvitations: z.boolean(),
+            analytics: z.strictObject({
+              enabled: z.boolean(),
+              posthog: z.strictObject({
+                key: z.string(),
+                host: z.string(),
+              }),
+            }),
+          }),
+        },
+      },
+    },
+    async (_request, reply) => {
+      return reply.send({
+        disableBasicAuth: config.auth.disableBasicAuth,
+        disableInvitations: config.auth.disableInvitations,
+        analytics: config.analytics,
+      });
+    },
+  );
+
   fastify.get(
     "/api/config",
     {
@@ -29,6 +62,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               orchestratorK8sRuntime: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+              bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               globalToolPolicy: z.enum(["permissive", "restrictive"]),
               incomingEmail: z.object({
@@ -42,6 +76,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
+              mcpSandboxDomain: z.string().nullable(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -67,6 +102,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
+          bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),
@@ -76,6 +112,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ngrokDomain: getNgrokDomain(),
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
+          mcpSandboxDomain: config.mcpSandbox.domain,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -94,6 +131,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          azure: config.llm.azure.baseUrl || null,
         },
       });
     },

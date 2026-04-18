@@ -1,4 +1,10 @@
-import { OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
+import {
+  MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
+  MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
+  OrganizationCustomFontSchema,
+  OrganizationThemeSchema,
+  SupportedProvidersSchema,
+} from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -92,6 +98,7 @@ export const AppearanceSettingsSchema = z.object({
   footerText: z.string().nullable(),
   chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
   chatErrorSupportMessage: z.string().nullable(),
+  slimChatErrorUi: z.boolean(),
   animateChatPlaceholders: z.boolean(),
 });
 
@@ -105,6 +112,11 @@ export const OrganizationCompressionScopeSchema = z.enum([
 ]);
 
 export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
+export const McpOauthAccessTokenLifetimeSecondsSchema = z
+  .number()
+  .int()
+  .min(MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS)
+  .max(MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS);
 
 const extendedFields = {
   theme: OrganizationThemeSchema,
@@ -115,7 +127,7 @@ const extendedFields = {
   embeddingModel: z.string().nullable(),
   embeddingDimensions: z.number().nullable(),
   defaultLlmModel: z.string().nullable(),
-  defaultLlmProvider: z.string().nullable(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -124,9 +136,11 @@ const extendedFields = {
   footerText: z.string().nullable(),
   chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
   chatErrorSupportMessage: z.string().nullable(),
+  slimChatErrorUi: z.boolean(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
+  mcpOauthAccessTokenLifetimeSeconds: McpOauthAccessTokenLifetimeSecondsSchema,
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -149,6 +163,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   footerText: z.string().max(500).nullable().optional(),
   chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
   chatErrorSupportMessage: z.string().max(500).nullable().optional(),
+  slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
   showTwoFactor: z.boolean().optional(),
@@ -167,17 +182,21 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateAgentSettingsSchema = z.object({
   defaultLlmModel: z.string().nullable().optional(),
-  defaultLlmProvider: z.string().nullable().optional(),
+  defaultLlmProvider: SupportedProvidersSchema.nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({
-  embeddingModel: z.string().min(1).optional(),
-  embeddingDimensions: z.union([z.literal(1536), z.literal(768)]).optional(),
+  embeddingModel: z.string().min(1).nullable().optional(),
   embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerModel: z.string().nullable().optional(),
+});
+
+export const UpdateMcpSettingsSchema = z.object({
+  mcpOauthAccessTokenLifetimeSeconds:
+    McpOauthAccessTokenLifetimeSecondsSchema.optional(),
 });
 
 export const CompleteOnboardingSchema = z.object({
@@ -195,6 +214,9 @@ export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
+export type McpOauthAccessTokenLifetimeSeconds = z.infer<
+  typeof McpOauthAccessTokenLifetimeSecondsSchema
+>;
 
 function isValidHttpUrl(value: string): boolean {
   try {

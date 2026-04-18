@@ -1,6 +1,12 @@
 "use client";
 import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
-import { E2eTestId } from "@shared";
+import {
+  COMMUNITY_DOCS_URL,
+  COMMUNITY_SLACK_URL,
+  E2eTestId,
+  GITHUB_REPO_NEW_ISSUE_URL,
+  GITHUB_REPO_URL,
+} from "@shared";
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import {
   BookOpen,
@@ -23,12 +29,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { AppLogo } from "@/components/app-logo";
-import {
-  COMMUNITY_BUG_REPORT_URL,
-  COMMUNITY_DOCS_URL,
-  COMMUNITY_GITHUB_URL,
-  COMMUNITY_SLACK_URL,
-} from "@/components/community-links";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
   Sidebar,
@@ -43,16 +43,15 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useIsAuthenticated } from "@/lib/auth.hook";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth.query";
-import config from "@/lib/config";
-import { useEnterpriseFeature } from "@/lib/config.query";
-import { useGithubStars } from "@/lib/github.query";
-import { useOrganization } from "@/lib/organization.query";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import config from "@/lib/config/config";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
+import { useGithubStars } from "@/lib/github/github.query";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -84,8 +83,7 @@ const headerNavItems: NavItem[] = [
     title: "New Chat",
     url: "/chat",
     icon: MessageCircle,
-    customIsActive: (pathname: string, searchParams: URLSearchParams) =>
-      pathname === "/chat" && !searchParams.get("conversation"),
+    customIsActive: (pathname: string) => pathname === "/chat",
   },
 ];
 
@@ -102,6 +100,12 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/agents") &&
           !pathname.startsWith("/agents/triggers"),
         subItems: [
+          {
+            title: "Scheduled",
+            url: "/scheduled-tasks",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/scheduled-tasks"),
+          },
           {
             title: "Triggers",
             url: "/agents/triggers",
@@ -130,10 +134,10 @@ const contentNavGroups: NavGroup[] = [
           },
           {
             title: "Guardrails",
-            url: "/mcp/tool-policies",
+            url: "/mcp/tool-guardrails",
             testId: E2eTestId.SidebarNavGuardrails,
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/tool-policies"),
+              pathname.startsWith("/mcp/tool-guardrails"),
           },
         ],
       },
@@ -332,7 +336,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Star us on GitHub">
                   <a
-                    href={COMMUNITY_GITHUB_URL}
+                    href={GITHUB_REPO_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -374,7 +378,7 @@ const NavSecondary = ({
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Report a bug">
                   <a
-                    href={COMMUNITY_BUG_REPORT_URL}
+                    href={GITHUB_REPO_NEW_ISSUE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -398,7 +402,7 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const { data: organization } = useOrganization();
+  const appIconLogo = useAppIconLogo();
   const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
   // Connect page requires at least one of these (OR logic)
   const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
@@ -459,11 +463,7 @@ export function AppSidebar() {
           href="/chat"
           className="hidden group-data-[collapsible=icon]:flex"
         >
-          <img
-            src={organization?.iconLogo || "/logo.png"}
-            alt="Logo"
-            className="size-7"
-          />
+          <img src={appIconLogo} alt="Logo" className="size-7" />
         </Link>
         <SidebarTrigger className="hidden group-data-[collapsible=icon]:flex size-8 cursor-pointer" />
       </SidebarHeader>
@@ -530,7 +530,6 @@ export function AppSidebar() {
           </SidebarGroup>
         </SignedIn>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

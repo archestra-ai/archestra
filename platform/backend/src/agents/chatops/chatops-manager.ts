@@ -895,7 +895,7 @@ export class ChatOpsManager {
 
       const contextMessages = history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
-        const sender = msg.isFromBot ? "Assistant" : msg.senderName;
+        const sender = msg.isFromBot ? "You (Archestra)" : msg.senderName;
         return `${sender}: ${text}`;
       });
 

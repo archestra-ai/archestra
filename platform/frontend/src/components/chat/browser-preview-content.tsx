@@ -32,9 +32,12 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfile } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useBrowserStream } from "@/lib/browser-stream.hook";
-import { useConversation, useHasPlaywrightMcpTools } from "@/lib/chat.query";
+import {
+  useConversation,
+  useHasPlaywrightMcpTools,
+} from "@/lib/chat/chat.query";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "../loading";
 

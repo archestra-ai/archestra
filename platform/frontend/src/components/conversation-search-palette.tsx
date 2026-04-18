@@ -1,5 +1,4 @@
 "use client";
-
 import { useDebounce } from "@uidotdev/usehooks";
 import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import {
@@ -15,10 +14,11 @@ import {
   Router,
   Settings,
   Shield,
+  UsersRound,
   Wrench,
   Zap,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,21 +30,31 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { useIsAuthenticated } from "@/lib/auth.hook";
 import {
-  useConversations,
-  useDeleteConversation,
-  usePinConversation,
-} from "@/lib/chat.query";
-import { getConversationDisplayTitle } from "@/lib/chat-utils";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
   SHORTCUT_PIN,
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
-} from "@/lib/keyboard-shortcuts";
-import { usePlatform } from "@/lib/platform.hook";
+} from "@/consts";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useConversations,
+  useDeleteConversation,
+  usePinConversation,
+} from "@/lib/chat/chat.query";
+import {
+  getConversationDisplayTitle,
+  getConversationShareTooltip,
+} from "@/lib/chat/chat-utils";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -148,10 +158,10 @@ const navigationItems = [
   },
   {
     icon: Wrench,
-    label: "Tool Policies",
-    value: "tool-policies",
-    keywords: "tools policies permissions",
-    href: "/mcp/tool-policies",
+    label: "Tool Guardrails",
+    value: "tool-guardrails",
+    keywords: "tools guardrails policies permissions security",
+    href: "/mcp/tool-guardrails",
   },
   {
     icon: Router,
@@ -195,13 +205,16 @@ export function ConversationSearchPalette({
   recentChatsView = false,
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
     null,
   );
   const isAuthenticated = useIsAuthenticated();
+  const { data: canReadConversation } = useHasPermissions({
+    chat: ["read"],
+  });
   const { modKey, altKey } = usePlatform();
 
   const deleteMutation = useDeleteConversation();
@@ -220,7 +233,7 @@ export function ConversationSearchPalette({
     isLoading,
     isFetching,
   } = useConversations({
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
   });
 
@@ -254,7 +267,7 @@ export function ConversationSearchPalette({
   }, [selectedValue, searchQuery]);
 
   const handleSelectConversation = (conversationId: string) => {
-    router.push(`/chat?conversation=${conversationId}`);
+    router.push(`/chat/${conversationId}`);
     onOpenChange(false);
   };
 
@@ -286,11 +299,11 @@ export function ConversationSearchPalette({
       setIsPendingDeletion(null);
 
       // Redirect to new chat if the deleted conversation is currently open
-      if (searchParams.get("conversation") === conversationId) {
+      if (pathname === `/chat/${conversationId}`) {
         router.push("/chat");
       }
     },
-    [deleteMutation, conversations, searchParams, router],
+    [deleteMutation, conversations, pathname, router],
   );
 
   const handlePinConversation = useCallback(
@@ -442,6 +455,18 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-start gap-2 w-full min-w-0">
           <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {conv.share && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <UsersRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {getConversationShareTooltip(conv.share.visibility)}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>

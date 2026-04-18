@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Paperclip } from "lucide-react";
+import { AlertTriangle, FileText, Paperclip } from "lucide-react";
 import {
   type KeyboardEventHandler,
   useEffect,
@@ -13,7 +13,12 @@ import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { preserveNewlines } from "@/lib/chat-utils";
+import {
+  getAttachmentFallbackLabel,
+  isCsvAttachment,
+  isPlainTextAttachment,
+} from "@/lib/chat/chat-attachment-display";
+import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
@@ -198,7 +203,7 @@ export function EditableUserMessage({
       className="group/message"
       onMouseLeave={() => setIsRegenerateConfirming(false)}
     >
-      <div className="relative flex flex-col items-end pb-8 w-full">
+      <div className="relative flex flex-col items-end pb-2 w-full">
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
@@ -220,9 +225,21 @@ export function EditableUserMessage({
                 key={attachment.url}
                 className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2"
               >
-                <Paperclip className="h-4 w-4 text-muted-foreground" />
+                {isCsvAttachment(attachment.mediaType, attachment.filename) ||
+                isPlainTextAttachment(
+                  attachment.mediaType,
+                  attachment.filename,
+                ) ? (
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                )}
                 <span className="truncate max-w-[200px]">
-                  {attachment.filename || "Attached file"}
+                  {attachment.filename ||
+                    getAttachmentFallbackLabel({
+                      mediaType: attachment.mediaType,
+                      filename: attachment.filename,
+                    })}
                 </span>
               </div>
             ))}
@@ -243,7 +260,7 @@ export function EditableUserMessage({
             isRegenerateConfirming={isRegenerateConfirming}
             editDisabled={editDisabled}
             className={cn(
-              "absolute -bottom-1 right-0 transition-opacity",
+              "absolute -bottom-1 right-0 translate-y-full z-10 transition-opacity",
               isRegenerateConfirming
                 ? "opacity-100"
                 : "opacity-0 group-hover/message:opacity-100",

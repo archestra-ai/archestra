@@ -13,19 +13,27 @@ import type { InteractionSource } from "@shared";
 import {
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
-  PROVIDERS_WITH_OPTIONAL_API_KEY,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
+  UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@shared";
 import type { streamText } from "ai";
+import {
+  createAzureFetchWithApiVersion,
+  normalizeAzureApiKey,
+} from "@/clients/azure-url";
+import {
+  getBedrockCredentialProvider,
+  getBedrockRegion,
+  isBedrockIamAuthEnabled,
+} from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatApiKeyModel, TeamModel } from "@/models";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { ApiError } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -93,100 +101,6 @@ export function detectProviderFromModel(model: string): SupportedProvider {
 }
 
 /**
- * Resolve API key for a provider using priority:
- * agent's configured key > conversation > personal > team > org_wide > environment variable
- *
- * When userId is provided: resolves via getCurrentApiKey (agent key > personal > team > org_wide).
- * When no userId: checks org_wide keys only.
- */
-export async function resolveProviderApiKey(params: {
-  organizationId: string;
-  userId?: string;
-  provider: SupportedProvider;
-  conversationId?: string | null;
-  agentLlmApiKeyId?: string | null;
-}): Promise<{
-  apiKey: string | undefined;
-  source: string;
-  chatApiKeyId: string | undefined;
-  baseUrl: string | null;
-}> {
-  const { organizationId, userId, provider, conversationId, agentLlmApiKeyId } =
-    params;
-
-  // Try scope-based resolution
-  let resolvedApiKey: {
-    id: string;
-    secretId: string | null;
-    scope: string;
-    baseUrl: string | null;
-  } | null = null;
-
-  if (userId) {
-    const userTeamIds = await TeamModel.getUserTeamIds(userId);
-    resolvedApiKey = await ChatApiKeyModel.getCurrentApiKey({
-      organizationId,
-      userId,
-      userTeamIds,
-      provider,
-      conversationId: conversationId ?? null,
-      agentLlmApiKeyId,
-    });
-  } else {
-    resolvedApiKey = await ChatApiKeyModel.findByScope(
-      organizationId,
-      provider,
-      "org_wide",
-    );
-  }
-
-  if (resolvedApiKey) {
-    if (resolvedApiKey.secretId) {
-      const secretValue = await getSecretValueForLlmProviderApiKey(
-        resolvedApiKey.secretId,
-      );
-      if (secretValue) {
-        return {
-          apiKey: secretValue as string,
-          source: resolvedApiKey.scope,
-          chatApiKeyId: resolvedApiKey.id,
-          baseUrl: resolvedApiKey.baseUrl,
-        };
-      }
-    }
-
-    // Key exists but has no secret (e.g. Ollama, vLLM with optional API key).
-    // Return the resolved key so the caller gets the baseUrl and chatApiKeyId.
-    if (PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider)) {
-      return {
-        apiKey: undefined,
-        source: resolvedApiKey.scope,
-        chatApiKeyId: resolvedApiKey.id,
-        baseUrl: resolvedApiKey.baseUrl,
-      };
-    }
-  }
-
-  // Fall back to environment variable
-  const envApiKey = envApiKeyGetters[provider]();
-  if (envApiKey) {
-    return {
-      apiKey: envApiKey,
-      source: "environment",
-      chatApiKeyId: undefined,
-      baseUrl: null,
-    };
-  }
-
-  return {
-    apiKey: undefined,
-    source: "environment",
-    chatApiKeyId: undefined,
-    baseUrl: null,
-  };
-}
-
-/**
  * Check if API key is required for the given provider
  */
 export function isApiKeyRequired(
@@ -247,6 +161,7 @@ export function createLLMModel(params: {
   sessionId?: string;
   source?: InteractionSource;
   baseUrl: string | null;
+  contextIsTrusted?: boolean;
 }): LLMModel {
   const {
     provider,
@@ -258,6 +173,7 @@ export function createLLMModel(params: {
     sessionId,
     source,
     baseUrl,
+    contextIsTrusted,
   } = params;
 
   // Build headers for LLM Proxy
@@ -273,6 +189,12 @@ export function createLLMModel(params: {
   }
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
+  }
+  // Only propagate the header when the caller has explicitly established that
+  // context is unsafe. `undefined` means trust was not evaluated for this flow,
+  // so we preserve the default trusted behavior.
+  if (contextIsTrusted === false) {
+    clientHeaders[UNTRUSTED_CONTEXT_HEADER] = "true";
   }
   if (baseUrl) {
     clientHeaders[PROVIDER_BASE_URL_HEADER] = baseUrl;
@@ -312,6 +234,7 @@ export async function createLLMModelForAgent(params: {
   sessionId?: string;
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
+  contextIsTrusted?: boolean;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -328,6 +251,7 @@ export async function createLLMModelForAgent(params: {
     sessionId,
     source,
     agentLlmApiKeyId,
+    contextIsTrusted,
   } = params;
 
   const {
@@ -344,16 +268,32 @@ export async function createLLMModelForAgent(params: {
 
   // Check if Gemini with Vertex AI (doesn't require API key)
   const isGeminiWithVertexAi = provider === "gemini" && isVertexAiEnabled();
+  // Check if Bedrock with IAM auth (doesn't require API key)
+  const isBedrockWithIamAuth =
+    provider === "bedrock" && isBedrockIamAuthEnabled();
   // vLLM and Ollama typically don't require API keys
   const isVllm = provider === "vllm";
   const isOllama = provider === "ollama";
 
   logger.info(
-    { apiKeySource, provider, isGeminiWithVertexAi, isVllm, isOllama },
+    {
+      apiKeySource,
+      provider,
+      isGeminiWithVertexAi,
+      isBedrockWithIamAuth,
+      isVllm,
+      isOllama,
+    },
     "Using LLM provider API key",
   );
 
-  if (!apiKey && !isGeminiWithVertexAi && !isVllm && !isOllama) {
+  if (
+    !apiKey &&
+    !isGeminiWithVertexAi &&
+    !isBedrockWithIamAuth &&
+    !isVllm &&
+    !isOllama
+  ) {
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -370,6 +310,7 @@ export async function createLLMModelForAgent(params: {
     sessionId,
     source,
     baseUrl,
+    contextIsTrusted,
   });
 
   return { model, provider, apiKeySource };
@@ -378,29 +319,6 @@ export async function createLLMModelForAgent(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
-
-/**
- * Environment variable API key getter for each provider.
- * TypeScript enforces that ALL providers in SupportedProvider have an entry.
- */
-const envApiKeyGetters: Record<SupportedProvider, () => string | undefined> = {
-  anthropic: () => config.chat.anthropic.apiKey,
-  bedrock: () => config.chat.bedrock.apiKey,
-  cerebras: () => config.chat.cerebras.apiKey,
-  cohere: () => config.chat.cohere.apiKey,
-  gemini: () => config.chat.gemini.apiKey,
-  minimax: () => config.chat.minimax.apiKey,
-  mistral: () => config.chat.mistral.apiKey,
-  ollama: () => config.chat.ollama.apiKey,
-  openai: () => config.chat.openai.apiKey,
-  openrouter: () => config.chat.openrouter?.apiKey || undefined,
-  perplexity: () => config.chat.perplexity.apiKey,
-  groq: () => config.chat.groq.apiKey,
-  xai: () => config.chat.xai.apiKey,
-  vllm: () => config.chat.vllm.apiKey,
-  zhipuai: () => config.chat.zhipuai.apiKey,
-  deepseek: () => config.chat.deepseek.apiKey,
-};
 
 /**
  * Unified model creation config for each provider.
@@ -533,6 +451,35 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
   },
 
+  azure: {
+    createModel: ({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch: providedFetch,
+    }) => {
+      // The AI SDK client can't set Azure's api-version as a default query param,
+      // so we wrap fetch and inject it on every request.
+      const fetchWithVersion = createAzureFetchWithApiVersion({
+        apiVersion: config.llm.azure.apiVersion,
+        fetch: providedFetch,
+      });
+      const normalizedApiKey = normalizeAzureApiKey(apiKey);
+      return createOpenAI({
+        apiKey: normalizedApiKey,
+        baseURL,
+        headers: normalizedApiKey
+          ? { ...headers, "api-key": normalizedApiKey }
+          : headers,
+        fetch: fetchWithVersion,
+      }).chat(modelName);
+    },
+    defaultBaseUrl: config.llm.azure.baseUrl || undefined,
+    apiKeyRequiredMessage:
+      "Azure AI Foundry API key is required. Please configure ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY.",
+  },
+
   // --- OpenAI-compatible providers with optional API key ---
 
   vllm: {
@@ -602,10 +549,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   bedrock: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      // Extract region from Bedrock base URL if present; falls back to us-east-1
-      const regionMatch = baseURL?.match(/bedrock-runtime\.([a-z0-9-]+)\./);
+      const region = getBedrockRegion(baseURL);
 
-      const region = regionMatch?.[1] || "us-east-1";
+      if (!apiKey && isBedrockIamAuthEnabled()) {
+        return createAmazonBedrock({
+          region,
+          baseURL,
+          credentialProvider: getBedrockCredentialProvider(),
+          headers,
+          fetch,
+        })(modelName);
+      }
+
       return createAmazonBedrock({
         apiKey,
         region,
@@ -619,8 +574,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       })(modelName);
     },
     defaultBaseUrl: config.llm.bedrock.baseUrl,
-    apiKeyRequiredMessage:
-      "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
+    apiKeyRequiredMessage: isBedrockIamAuthEnabled()
+      ? undefined
+      : "Amazon Bedrock API key is required. Please configure ARCHESTRA_CHAT_BEDROCK_API_KEY.",
   },
 };
 

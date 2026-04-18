@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
-import { useHasPermissions } from "@/lib/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useCustomRoles } from "@/lib/role.query";
 

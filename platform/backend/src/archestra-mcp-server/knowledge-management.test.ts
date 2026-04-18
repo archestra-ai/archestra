@@ -5,7 +5,11 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { vi } from "vitest";
-import { queryService } from "@/knowledge-base";
+import {
+  knowledgeSourceAccessControlService,
+  queryService,
+} from "@/knowledge-base";
+import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -91,6 +95,7 @@ describe("knowledge-management tool execution", () => {
       const querySpy = vi
         .spyOn(queryService, "query")
         .mockResolvedValueOnce(mockResults as any);
+      const teamIdsSpy = vi.spyOn(TeamModel, "getUserTeamIds");
 
       const contextWithOrg: ArchestraContext = {
         agent: { id: agentWithKb.id, name: agentWithKb.name },
@@ -119,6 +124,7 @@ describe("knowledge-management tool execution", () => {
       expect(callArgs.organizationId).toBe(org.id);
       expect(callArgs.queryText).toBe("relevant document");
       expect(callArgs.limit).toBe(10);
+      expect(teamIdsSpy).toHaveBeenCalledOnce();
 
       querySpy.mockRestore();
     });
@@ -218,6 +224,265 @@ describe("knowledge-management tool execution", () => {
       expect(callArgs.queryText).toBe("jira tickets");
 
       querySpy.mockRestore();
+    });
+
+    test("filters out hidden knowledge sources before querying", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const restrictedTeamOwner = await makeUser();
+      const restrictedTeam = await makeTeam(org.id, restrictedTeamOwner.id);
+
+      const visibleKb = await makeKnowledgeBase(org.id);
+      const visibleConnector = await makeKnowledgeBaseConnector(
+        visibleKb.id,
+        org.id,
+      );
+      const hiddenKb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(hiddenKb.id, org.id, {
+        visibility: "team-scoped",
+        teamIds: [restrictedTeam.id],
+      });
+
+      const agentWithMixedSources = await makeAgent({
+        name: "Agent With Mixed Sources",
+        organizationId: org.id,
+        knowledgeBaseIds: [visibleKb.id, hiddenKb.id],
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        {
+          agent: {
+            id: agentWithMixedSources.id,
+            name: agentWithMixedSources.name,
+          },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].connectorIds).toEqual([
+        visibleConnector.id,
+      ]);
+
+      querySpy.mockRestore();
+    });
+
+    test("returns only results from knowledge sources visible to the caller", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const restrictedTeamOwner = await makeUser();
+      const restrictedTeam = await makeTeam(org.id, restrictedTeamOwner.id);
+
+      const visibleKb = await makeKnowledgeBase(org.id);
+      const visibleConnector = await makeKnowledgeBaseConnector(
+        visibleKb.id,
+        org.id,
+        {
+          name: "Visible Connector",
+        },
+      );
+      const hiddenKb = await makeKnowledgeBase(org.id);
+      const hiddenConnector = await makeKnowledgeBaseConnector(
+        hiddenKb.id,
+        org.id,
+        {
+          name: "Hidden Connector",
+          visibility: "team-scoped",
+          teamIds: [restrictedTeam.id],
+        },
+      );
+
+      const agentWithMixedSources = await makeAgent({
+        name: "Agent With Mixed Sources",
+        organizationId: org.id,
+        knowledgeBaseIds: [visibleKb.id, hiddenKb.id],
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockImplementation(async ({ connectorIds }) => {
+          const results = [];
+          if (connectorIds.includes(visibleConnector.id)) {
+            results.push({
+              content: "Visible connector result",
+              score: 0.95,
+              chunkIndex: 0,
+              metadata: { connector: "visible" },
+              citation: {
+                title: "Visible Doc",
+                sourceUrl: "https://example.com/visible",
+                documentId: "visible-doc",
+                connectorType: "confluence" as const,
+              },
+            });
+          }
+          if (connectorIds.includes(hiddenConnector.id)) {
+            results.push({
+              content: "Hidden connector result",
+              score: 0.99,
+              chunkIndex: 0,
+              metadata: { connector: "hidden" },
+              citation: {
+                title: "Hidden Doc",
+                sourceUrl: "https://example.com/hidden",
+                documentId: "hidden-doc",
+                connectorType: "confluence" as const,
+              },
+            });
+          }
+          return results as any;
+        });
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        {
+          agent: {
+            id: agentWithMixedSources.id,
+            name: agentWithMixedSources.name,
+          },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].connectorIds).toEqual([
+        visibleConnector.id,
+      ]);
+      expect(result.structuredContent).toEqual({
+        results: [
+          expect.objectContaining({
+            content: "Visible connector result",
+          }),
+        ],
+        totalChunks: 1,
+      });
+      expect((result.content[0] as any).text).toContain(
+        "Visible connector result",
+      );
+      expect((result.content[0] as any).text).not.toContain(
+        "Hidden connector result",
+      );
+
+      querySpy.mockRestore();
+    });
+
+    test("passes ACL bypass to queryService for admin callers", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        visibility: "team-scoped",
+        teamIds: [crypto.randomUUID()],
+      });
+
+      const agentWithKb = await makeAgent({
+        name: "Admin Agent",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        {
+          agent: { id: agentWithKb.id, name: agentWithKb.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].bypassAcl).toBe(true);
+
+      querySpy.mockRestore();
+    });
+
+    test("returns error when no assigned knowledge source is visible to the caller", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      const restrictedTeamOwner = await makeUser();
+      const restrictedTeam = await makeTeam(org.id, restrictedTeamOwner.id);
+      const hiddenKb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(hiddenKb.id, org.id, {
+        visibility: "team-scoped",
+        teamIds: [restrictedTeam.id],
+      });
+
+      const agentWithHiddenKb = await makeAgent({
+        name: "Agent With Hidden Sources",
+        organizationId: org.id,
+        knowledgeBaseIds: [hiddenKb.id],
+      });
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "test query" },
+        {
+          agent: { id: agentWithHiddenKb.id, name: agentWithHiddenKb.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "No connectors found for the assigned knowledge bases or agent",
+      );
     });
 
     test("returns error when organizationId is missing", async ({
@@ -426,6 +691,29 @@ describe("knowledge-management tool execution", () => {
       );
     });
 
+    test("create_knowledge_connector rejects team-scoped connectors without team_ids", async () => {
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "Invalid Scoped Connector",
+          connector_type: "jira",
+          visibility: "team-scoped",
+          team_ids: [],
+          config: {
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
+    });
+
     test("get_knowledge_connectors returns empty list", async () => {
       const result = await executeArchestraTool(
         t("get_knowledge_connectors"),
@@ -556,6 +844,117 @@ describe("knowledge-management tool execution", () => {
       );
       expect(verifyResult.isError).toBe(true);
       expect((verifyResult.content[0] as any).text).toContain("not found");
+    });
+
+    test("update_knowledge_connector refreshes document ACL when visibility changes", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+    }) => {
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        mockContext.organizationId!,
+      );
+      const team = await makeTeam(
+        mockContext.organizationId!,
+        mockContext.userId!,
+        {
+          name: "Scoped Team",
+        },
+      );
+      const document = await KbDocumentModel.create({
+        organizationId: mockContext.organizationId!,
+        sourceId: "ext-1",
+        connectorId: connector.id,
+        title: "Doc 1",
+        content: "content",
+        contentHash: "hash-1",
+        acl: ["org:*"],
+      });
+      await KbChunkModel.insertMany([
+        {
+          documentId: document.id,
+          content: "chunk 1",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const result = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          visibility: "team-scoped",
+          team_ids: [team.id],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const refreshedDocument = await KbDocumentModel.findById(document.id);
+      const refreshedChunks = await KbChunkModel.findByDocument(document.id);
+      expect(refreshedDocument?.acl).toEqual([`team:${team.id}`]);
+      expect(refreshedChunks[0]?.acl).toEqual([`team:${team.id}`]);
+    });
+
+    test("update_knowledge_connector skips ACL refresh when visibility inputs are unchanged", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        mockContext.organizationId!,
+        {
+          visibility: "team-scoped",
+          teamIds: ["team-a"],
+        },
+      );
+
+      const refreshSpy = vi.spyOn(
+        knowledgeSourceAccessControlService,
+        "refreshConnectorDocumentAccessControlLists",
+      );
+
+      const result = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          visibility: "team-scoped",
+          team_ids: ["team-a"],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    test("update_knowledge_connector rejects team-scoped connectors without team_ids", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(mockContext.organizationId!);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        mockContext.organizationId!,
+      );
+
+      const result = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          visibility: "team-scoped",
+          team_ids: [],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "At least one team must be selected for team-scoped connectors",
+      );
     });
   });
 
@@ -806,7 +1205,7 @@ describe("knowledge-management tool execution", () => {
     ];
 
     for (const { tool, args } of mutationTools) {
-      test(`${tool} is denied for member without knowledgeBase permission`, async () => {
+      test(`${tool} is denied for member without knowledgeSources permission`, async () => {
         const result = await executeArchestraTool(t(tool), args, memberContext);
         expect(result.isError).toBe(true);
         expect((result.content[0] as any).text).toContain(

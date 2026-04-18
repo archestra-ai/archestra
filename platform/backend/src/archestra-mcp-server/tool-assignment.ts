@@ -1,4 +1,8 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
+  TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -6,7 +10,7 @@ import {
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import { AgentModel, TeamModel } from "@/models";
-import { assignToolToAgent } from "@/routes/agent-tool";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
   catchError,
@@ -23,18 +27,13 @@ const AgentAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
     "The ID of the tool to assign.",
   ),
-  credentialSourceMcpServerId:
-    AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-      "For remote MCP tools, the deployed MCP server ID that should provide credentials.",
+  resolveAtCallTime:
+    AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+      "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
     ),
-  executionSourceMcpServerId:
-    AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
-    ),
-  useDynamicTeamCredential:
-    AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
-    ),
+  mcpServerId: AgentToolAssignmentInputSchema.shape.mcpServerId.describe(
+    "Optional MCP server installation to pin the tool to when using static credential resolution.",
+  ),
   agentId: UuidIdSchema.describe("The agent ID to assign the tool to."),
 }).strict();
 
@@ -42,28 +41,35 @@ const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   toolId: AgentToolAssignmentInputSchema.shape.toolId.describe(
     "The ID of the tool to assign.",
   ),
-  credentialSourceMcpServerId:
-    AgentToolAssignmentInputSchema.shape.credentialSourceMcpServerId.describe(
-      "For remote MCP tools, the deployed MCP server ID that should provide credentials.",
+  resolveAtCallTime:
+    AgentToolAssignmentInputSchema.shape.resolveAtCallTime.describe(
+      "When true, resolve credentials and execution target at tool call time. Prefer this for builder flows.",
     ),
-  executionSourceMcpServerId:
-    AgentToolAssignmentInputSchema.shape.executionSourceMcpServerId.describe(
-      "For local MCP tools, the deployed MCP server ID that should execute the tool.",
-    ),
-  useDynamicTeamCredential:
-    AgentToolAssignmentInputSchema.shape.useDynamicTeamCredential.describe(
-      "When true, resolve credentials dynamically from the invoking team instead of pinning a deployment.",
-    ),
+  mcpServerId: AgentToolAssignmentInputSchema.shape.mcpServerId.describe(
+    "Optional MCP server installation to pin the tool to when using static credential resolution.",
+  ),
   mcpGatewayId: UuidIdSchema.describe(
     "The MCP gateway ID to assign the tool to.",
   ),
 }).strict();
+
+type AgentAssignmentInput = z.infer<typeof AgentAssignmentSchema>;
+type McpGatewayAssignmentInput = z.infer<typeof McpGatewayAssignmentSchema>;
+type BulkAssignmentInput = AgentAssignmentInput | McpGatewayAssignmentInput;
 
 const BulkAgentAssignmentResultSchema = z
   .object({
     agentId: UuidIdSchema.describe("The target agent ID."),
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
+    errorCode: z
+      .enum(["not_found", "validation_error"])
+      .optional()
+      .describe("Structured assignment error code."),
+    errorType: z
+      .string()
+      .optional()
+      .describe("Structured assignment error type."),
   })
   .strict();
 
@@ -72,6 +78,14 @@ const BulkMcpGatewayAssignmentResultSchema = z
     mcpGatewayId: UuidIdSchema.describe("The target MCP gateway ID."),
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
+    errorCode: z
+      .enum(["not_found", "validation_error"])
+      .optional()
+      .describe("Structured assignment error code."),
+    errorType: z
+      .string()
+      .optional()
+      .describe("Structured assignment error type."),
   })
   .strict();
 
@@ -101,7 +115,7 @@ const BulkAssignMcpGatewaysOutputSchema = z.object({
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "bulk_assign_tools_to_agents",
+    shortName: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
     title: "Bulk Assign Tools to Agents",
     description:
       "Assign multiple tools to multiple agents in bulk with validation and error handling",
@@ -122,7 +136,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "bulk_assign_tools_to_mcp_gateways",
+    shortName: TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
     title: "Bulk Assign Tools to MCP Gateways",
     description:
       "Assign multiple tools to multiple MCP gateways in bulk with validation and error handling",
@@ -154,7 +168,7 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 async function handleBulkAssignTool(params: {
-  assignments: Array<Record<string, unknown>>;
+  assignments: BulkAssignmentInput[];
   context: ArchestraContext;
   bulkAssignType: "agent" | "mcp_gateway";
 }): Promise<CallToolResult> {
@@ -180,7 +194,9 @@ async function handleBulkAssignTool(params: {
     const { organizationId, userId } = context;
 
     const uniqueTargetIds = [
-      ...new Set(assignments.map((assignment) => String(assignment[idField]))),
+      ...new Set(
+        assignments.map((assignment) => getBulkAssignmentTargetId(assignment)),
+      ),
     ];
     const [targetAgents, checker] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
@@ -198,7 +214,7 @@ async function handleBulkAssignTool(params: {
       : [];
     const results = await Promise.allSettled(
       assignments.map(async (assignment) => {
-        const targetId = String(assignment[idField]);
+        const targetId = getBulkAssignmentTargetId(assignment);
         const target = targetAgents.get(targetId);
         if (target) {
           checker.require(target.agentType, "update");
@@ -213,20 +229,12 @@ async function handleBulkAssignTool(params: {
           });
         }
 
-        return assignToolToAgent(
-          targetId,
-          String(assignment.toolId),
-          (assignment.credentialSourceMcpServerId as
-            | string
-            | null
-            | undefined) ?? undefined,
-          (assignment.executionSourceMcpServerId as
-            | string
-            | null
-            | undefined) ?? undefined,
-          undefined,
-          assignment.useDynamicTeamCredential as boolean | undefined,
-        );
+        return assignToolToAgent({
+          agentId: targetId,
+          toolId: assignment.toolId,
+          resolveAtCallTime: assignment.resolveAtCallTime,
+          mcpServerId: assignment.mcpServerId ?? undefined,
+        });
       }),
     );
 
@@ -235,16 +243,21 @@ async function handleBulkAssignTool(params: {
     const duplicates: { [key: string]: string }[] = [];
 
     results.forEach((result, index) => {
-      const entityId = String(assignments[index][idField]);
-      const toolId = String(assignments[index].toolId);
+      const entityId = getBulkAssignmentTargetId(assignments[index]);
+      const toolId = assignments[index].toolId;
       if (result.status === "fulfilled") {
         if (result.value === null || result.value === "updated") {
           succeeded.push({ [idField]: entityId, toolId });
         } else if (result.value === "duplicate") {
           duplicates.push({ [idField]: entityId, toolId });
         } else {
-          const error = result.value.error.message || "Unknown error";
-          failed.push({ [idField]: entityId, toolId, error });
+          failed.push({
+            [idField]: entityId,
+            toolId,
+            error: result.value.error.message || "Unknown error",
+            errorCode: result.value.code,
+            errorType: result.value.error.type,
+          });
         }
       } else if (result.status === "rejected") {
         const error =
@@ -260,4 +273,8 @@ async function handleBulkAssignTool(params: {
   } catch (error) {
     return catchError(error, `bulk assigning tools to ${bulkAssignLabel}`);
   }
+}
+
+function getBulkAssignmentTargetId(assignment: BulkAssignmentInput) {
+  return "agentId" in assignment ? assignment.agentId : assignment.mcpGatewayId;
 }

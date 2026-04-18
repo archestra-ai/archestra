@@ -21,8 +21,7 @@ const TOKEN_RANDOM_LENGTH = 16;
 const TOKEN_START_LENGTH = 14;
 
 /**
- * Generate a secure random token with archestra_ prefix
- * Format: archestra_<32 hex characters>
+ * Generate a secure random token with the current platform token prefix.
  * Total length: 42 characters
  */
 function generateToken(): string {
@@ -200,7 +199,7 @@ class UserTokenModel {
     tokenValue: string,
   ): Promise<SelectUserToken | null> {
     // Use tokenStart (first 14 chars) to narrow candidates instead of scanning all tokens.
-    // tokenStart has very low collision rate (archestra_ prefix + 4 hex chars), so this
+    // tokenStart has very low collision rate (prefix + leading random chars), so this
     // typically returns 0-1 candidates.
     const tokenStart = getTokenStart(tokenValue);
     const candidates = await db

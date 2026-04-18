@@ -2,10 +2,13 @@ import {
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
   isAgentTool,
-  isArchestraMcpServerTool,
+  TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
+  TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
+  TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
 } from "@shared";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -23,13 +26,6 @@ export type PolicyEvaluationContext = {
   teamIds: string[];
   externalAgentId?: string;
 };
-
-const BLOCK_ALWAYS_REASON =
-  "Tool invocation blocked: policy is configured to always block tool call";
-const UNTRUSTED_CONTEXT_REASON =
-  "Tool invocation blocked: context contains untrusted data";
-const NO_POLICY_UNTRUSTED_REASON =
-  "Tool invocation blocked: forbidden in untrusted context by default";
 
 class ToolInvocationPolicyModel {
   static async create(
@@ -236,7 +232,7 @@ class ToolInvocationPolicyModel {
     }
 
     // Archestra tools always bypass policies (consistent with evaluateBatch)
-    if (isArchestraMcpServerTool(toolName)) {
+    if (archestraMcpBranding.isToolName(toolName)) {
       return false;
     }
 
@@ -433,7 +429,7 @@ class ToolInvocationPolicyModel {
     // Filter out Archestra tools and agent delegation tools (always allowed)
     const externalToolCalls = toolCalls.filter(
       (tc) =>
-        !isArchestraMcpServerTool(tc.toolCallName) &&
+        !archestraMcpBranding.isToolName(tc.toolCallName) &&
         !isAgentTool(tc.toolCallName),
     );
 
@@ -526,7 +522,7 @@ class ToolInvocationPolicyModel {
         if (policy.action === "block_always") {
           return {
             isAllowed: false,
-            reason: policy.reason || BLOCK_ALWAYS_REASON,
+            reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
             toolCallName,
           };
         }
@@ -536,7 +532,7 @@ class ToolInvocationPolicyModel {
           if (!isContextTrusted) {
             return {
               isAllowed: false,
-              reason: UNTRUSTED_CONTEXT_REASON,
+              reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
               toolCallName,
             };
           }
@@ -557,7 +553,7 @@ class ToolInvocationPolicyModel {
         if (!isContextTrusted && !specificAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason: UNTRUSTED_CONTEXT_REASON,
+            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
             toolCallName,
           };
         }
@@ -572,7 +568,7 @@ class ToolInvocationPolicyModel {
           if (policy.action === "block_always") {
             return {
               isAllowed: false,
-              reason: policy.reason || BLOCK_ALWAYS_REASON,
+              reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
               toolCallName,
             };
           }
@@ -582,7 +578,7 @@ class ToolInvocationPolicyModel {
             if (!isContextTrusted) {
               return {
                 isAllowed: false,
-                reason: UNTRUSTED_CONTEXT_REASON,
+                reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
                 toolCallName,
               };
             }
@@ -601,7 +597,7 @@ class ToolInvocationPolicyModel {
         if (!isContextTrusted && !defaultAllowsUntrusted) {
           return {
             isAllowed: false,
-            reason: UNTRUSTED_CONTEXT_REASON,
+            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
             toolCallName,
           };
         }
@@ -612,13 +608,51 @@ class ToolInvocationPolicyModel {
       if (!isContextTrusted) {
         return {
           isAllowed: false,
-          reason: NO_POLICY_UNTRUSTED_REASON,
+          reason: TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
           toolCallName,
         };
       }
     }
 
     return { isAllowed: true, reason: "" };
+  }
+
+  /**
+   * Check if a tool has any policy that could lead to blocking during streaming.
+   * Only `allow_when_context_is_untrusted` with empty conditions ("Allow always")
+   * is safe to stream — any other policy action or custom conditions requires buffering.
+   */
+  static async hasBlockingPolicy(
+    toolName: string,
+    contextIsTrusted: boolean,
+  ): Promise<boolean> {
+    const blockingActions: ToolInvocation.ToolInvocationPolicyAction[] =
+      contextIsTrusted
+        ? ["block_always", "require_approval"]
+        : [
+            "block_always",
+            "require_approval",
+            "block_when_context_is_untrusted",
+          ];
+    const result = await db
+      .select({ id: schema.toolInvocationPoliciesTable.id })
+      .from(schema.toolInvocationPoliciesTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.toolInvocationPoliciesTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.name, toolName),
+          or(
+            inArray(schema.toolInvocationPoliciesTable.action, blockingActions),
+            sql`jsonb_typeof(${schema.toolInvocationPoliciesTable.conditions}) = 'array' AND jsonb_array_length(${schema.toolInvocationPoliciesTable.conditions}) > 0`,
+          ),
+        ),
+      )
+      .limit(1);
+
+    return result.length > 0;
   }
 }
 

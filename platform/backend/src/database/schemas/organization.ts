@@ -1,4 +1,9 @@
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type {
+  OrganizationCustomFont,
+  OrganizationTheme,
+  SupportedProvider,
+} from "@shared";
+import { DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
 import {
   boolean,
   integer,
@@ -59,11 +64,15 @@ const organizationsTable = pgTable("organization", {
   /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
   embeddingModel: text("embedding_model"),
 
-  /** Vector dimensions for the embedding column (1536 or 768) */
+  /**
+   * @deprecated temporary transition field while embedding dimensions move to `models.embeddingDimensions`.
+   *
+   * TODO: Remove references and drop this column in a future release after existing org configs have been migrated.
+   */
   embeddingDimensions: integer("embedding_dimensions"),
 
   /**
-   * Chat API key used for generating embeddings (must use an embedding-compatible provider: OpenAI, Ollama).
+   * Chat API key used for generating embeddings.
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only
    * (Drizzle .references() causes TS circular inference: organization → chat-api-key → team → organization).
    */
@@ -82,7 +91,7 @@ const organizationsTable = pgTable("organization", {
   defaultLlmModel: text("default_llm_model"),
 
   /** Provider for the default LLM model (e.g. "openai") */
-  defaultLlmProvider: text("default_llm_provider"),
+  defaultLlmProvider: text("default_llm_provider").$type<SupportedProvider>(),
 
   /**
    * Chat API key used for the default LLM model.
@@ -126,8 +135,21 @@ const organizationsTable = pgTable("organization", {
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),
 
+  /** When enabled, chat shows only support text plus correlation IDs in error cards */
+  slimChatErrorUi: boolean("slim_chat_error_ui").notNull().default(false),
+
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
+
+  /**
+   * OAuth access token lifetime for MCP-native auth flows.
+   * Returned to clients via `expires_in` and used to persist token expiration.
+   */
+  mcpOauthAccessTokenLifetimeSeconds: integer(
+    "mcp_oauth_access_token_lifetime_seconds",
+  )
+    .notNull()
+    .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 });
 
 export default organizationsTable;

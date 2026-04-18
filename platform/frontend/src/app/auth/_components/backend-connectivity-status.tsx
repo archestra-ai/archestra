@@ -1,5 +1,6 @@
 "use client";
 
+import { GITHUB_REPO_URL } from "@shared";
 import {
   AlertCircle,
   CheckCircle2,
@@ -19,7 +20,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useBackendConnectivity } from "@/lib/backend-connectivity";
+import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface BackendConnectivityStatusProps {
   /**
@@ -138,6 +140,7 @@ function ConnectionStatusView({
   estimatedTotalAttempts: number;
   retry: () => void;
 }) {
+  const appName = useAppName();
   const isUnreachable = status === "unreachable";
 
   return (
@@ -161,7 +164,7 @@ function ConnectionStatusView({
           <CardDescription>
             {isUnreachable
               ? "Unable to establish a connection to the backend server after multiple attempts."
-              : "Establishing connection to the Archestra backend server."}
+              : `Establishing connection to the ${appName} backend server.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -215,10 +218,7 @@ function ConnectionStatusView({
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  window.open(
-                    "https://github.com/archestra-ai/archestra/issues",
-                    "_blank",
-                  )
+                  window.open(`${GITHUB_REPO_URL}/issues`, "_blank")
                 }
               >
                 Report issue on GitHub

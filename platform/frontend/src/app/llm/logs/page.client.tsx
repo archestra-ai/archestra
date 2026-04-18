@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@shared";
@@ -30,13 +31,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
   useInteractionSessions,
   useUniqueUserIds,
-} from "@/lib/interaction.query";
-import { DynamicInteraction } from "@/lib/interaction.utils";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
-import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
+} from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -237,7 +237,7 @@ function SessionsTable({
     profileFilter !== "all" ||
     userFilter !== "all" ||
     sourceFilter !== "all" ||
-    dateTimePicker.dateRange !== undefined ||
+    dateTimePicker.startDate !== undefined ||
     !!searchFromUrl;
 
   const clearFilters = useCallback(() => {
@@ -278,7 +278,7 @@ function SessionsTable({
                       : conversationTitle}
                   </span>
                   <Link
-                    href={`/chat?conversation=${session.sessionId}`}
+                    href={`/chat/${session.sessionId}`}
                     onClick={(e) => e.stopPropagation()}
                     className="shrink-0"
                   >
@@ -517,19 +517,17 @@ function SessionsTable({
         />
 
         <DateTimeRangePicker
-          dateRange={dateTimePicker.dateRange}
+          startDate={dateTimePicker.startDate}
+          endDate={dateTimePicker.endDate}
           isDialogOpen={dateTimePicker.isDateDialogOpen}
-          tempDateRange={dateTimePicker.tempDateRange}
-          fromTime={dateTimePicker.fromTime}
-          toTime={dateTimePicker.toTime}
+          tempStartDate={dateTimePicker.tempStartDate}
+          tempEndDate={dateTimePicker.tempEndDate}
           displayText={dateTimePicker.getDateRangeDisplay()}
           onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-          onTempDateRangeChange={dateTimePicker.setTempDateRange}
-          onFromTimeChange={dateTimePicker.setFromTime}
-          onToTimeChange={dateTimePicker.setToTime}
+          onTempStartDateChange={dateTimePicker.setTempStartDate}
+          onTempEndDateChange={dateTimePicker.setTempEndDate}
           onOpenDialog={dateTimePicker.openDateDialog}
           onApply={dateTimePicker.handleApplyDateRange}
-          idPrefix="llm-proxy-"
         />
       </TableFilters>
 

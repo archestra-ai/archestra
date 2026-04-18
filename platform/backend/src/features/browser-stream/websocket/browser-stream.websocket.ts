@@ -71,7 +71,6 @@ export class BrowserStreamSocketClientContext {
     clientContext: {
       userId: string;
       organizationId: string;
-      userIsAgentAdmin: boolean;
     },
   ): Promise<boolean> {
     if (!this.isBrowserWebSocketMessage(message.type)) {
@@ -195,7 +194,7 @@ export class BrowserStreamSocketClientContext {
       // The browser stream shares the same MCP client (keyed by agentId:userId:conversationId)
       // as the chat agentic loop. Closing it here would kill in-flight tool calls
       // from the agentic loop, causing AI_MissingToolResultsError.
-      // The MCP client manages its own lifecycle via the LRU cache in chat-mcp-client.ts.
+      // Idle conversation clients are reaped by the LRU TTL in chat-mcp-client.ts.
 
       logger.info(
         {
@@ -213,7 +212,6 @@ export class BrowserStreamSocketClientContext {
     clientContext: {
       userId: string;
       organizationId: string;
-      userIsAgentAdmin: boolean;
     },
     initialUrl?: string,
   ): Promise<void> {
@@ -272,7 +270,6 @@ export class BrowserStreamSocketClientContext {
     const userContext: BrowserUserContext = {
       userId: clientContext.userId,
       organizationId: clientContext.organizationId,
-      userIsAgentAdmin: clientContext.userIsAgentAdmin,
     };
 
     // Select or create the tab for this conversation

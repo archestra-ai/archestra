@@ -1,3 +1,4 @@
+import type { ModelInputModality } from "@shared";
 import { z } from "zod";
 
 // ===== Connector Type =====
@@ -7,6 +8,10 @@ const CONFLUENCE = z.literal("confluence");
 const GITHUB = z.literal("github");
 const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
+const NOTION = z.literal("notion");
+const SHAREPOINT = z.literal("sharepoint");
+const GDRIVE = z.literal("gdrive");
+const DROPBOX = z.literal("dropbox");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -14,6 +19,10 @@ export const ConnectorTypeSchema = z.union([
   GITHUB,
   GITLAB,
   SERVICENOW,
+  NOTION,
+  SHAREPOINT,
+  GDRIVE,
+  DROPBOX,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -153,7 +162,82 @@ export const ServiceNowCheckpointSchema = z.object({
 });
 export type ServiceNowCheckpoint = z.infer<typeof ServiceNowCheckpointSchema>;
 
+// ===== Notion Config & Checkpoint =====
+
+export const NotionConfigSchema = z.object({
+  type: NOTION,
+  databaseIds: z.array(z.string()).optional(),
+  pageIds: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+});
+export type NotionConfig = z.infer<typeof NotionConfigSchema>;
+
+export const NotionCheckpointSchema = z.object({
+  type: NOTION,
+  lastSyncedAt: z.string().optional(),
+  lastEditedAt: z.string().optional(),
+});
+export type NotionCheckpoint = z.infer<typeof NotionCheckpointSchema>;
+
+// ===== SharePoint Config & Checkpoint =====
+
+export const SharePointConfigSchema = z.object({
+  type: SHAREPOINT,
+  tenantId: z.string().min(1),
+  siteUrl: connectorUrlSchema,
+  driveIds: z.array(z.string()).optional(),
+  folderPath: z.string().optional(),
+  includePages: z.boolean().optional(),
+  batchSize: z.number().optional(),
+});
+export type SharePointConfig = z.infer<typeof SharePointConfigSchema>;
+
+export const SharePointCheckpointSchema = z.object({
+  type: SHAREPOINT,
+  lastSyncedAt: z.string().optional(),
+});
+export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
+
+// ===== Google Drive Config & Checkpoint =====
+
+export const GoogleDriveConfigSchema = z.object({
+  type: GDRIVE,
+  driveId: z.string().optional(),
+  driveIds: z.array(z.string()).optional(),
+  folderId: z.string().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().int().min(1).max(100).optional(),
+  fileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+});
+export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
+
+export const GoogleDriveCheckpointSchema = z.object({
+  type: GDRIVE,
+  lastSyncedAt: z.string().optional(),
+});
+export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
+
 // ===== Discriminated Unions =====
+
+// ===== Dropbox Config & Checkpoint =====
+
+export const DropboxConfigSchema = z.object({
+  type: DROPBOX,
+  rootPath: z.string().optional(),
+  fileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().optional(),
+});
+export type DropboxConfig = z.infer<typeof DropboxConfigSchema>;
+
+export const DropboxCheckpointSchema = z.object({
+  type: DROPBOX,
+  lastSyncedAt: z.string().optional(),
+  cursor: z.string().optional(),
+});
+export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
@@ -161,6 +245,10 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   GithubConfigSchema,
   GitlabConfigSchema,
   ServiceNowConfigSchema,
+  NotionConfigSchema,
+  SharePointConfigSchema,
+  GoogleDriveConfigSchema,
+  DropboxConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -170,6 +258,10 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   GithubCheckpointSchema,
   GitlabCheckpointSchema,
   ServiceNowCheckpointSchema,
+  NotionCheckpointSchema,
+  SharePointCheckpointSchema,
+  GoogleDriveCheckpointSchema,
+  DropboxCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
@@ -187,6 +279,17 @@ export interface ConnectorDocument {
     users?: string[];
     groups?: string[];
     isPublic?: boolean;
+  };
+  /**
+   * Optional inline media (image) data. When present, the pipeline will embed
+   * this as a multimodal chunk in addition to the text content.
+   * Only indexed when the configured embedding model supports the given modality.
+   */
+  mediaContent?: {
+    /** IANA MIME type, e.g. "image/jpeg" */
+    mimeType: string;
+    /** Base64-encoded binary data */
+    data: string;
   };
 }
 
@@ -239,5 +342,11 @@ export interface Connector {
     checkpoint: Record<string, unknown> | null;
     startTime?: Date;
     endTime?: Date;
+    /**
+     * Input modalities supported by the configured embedding model.
+     * Connectors can use this to conditionally ingest non-text content
+     * (e.g. images) only when the embedding model can handle it.
+     */
+    embeddingInputModalities?: ModelInputModality[];
   }): AsyncGenerator<ConnectorSyncBatch>;
 }

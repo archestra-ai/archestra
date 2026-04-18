@@ -72,9 +72,6 @@ benchmark-config.env
 /playwright/
 playwright-report/
 
-*.pyc
-__pycache__/
-
 # Dolt database files (added by bd init)
 .dolt/
 *.db

@@ -1,9 +1,9 @@
 "use client";
 
+import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import { useState } from "react";
-import { McpCatalogIcon } from "@/components/agent-tools-editor";
 import {
   Tool,
   ToolContent,
@@ -12,17 +12,19 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import {
   getCompactToolState,
   getToolHeaderState,
-} from "./chat-tools-display.utils";
+} from "@/lib/chat/chat-tools-display.utils";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { cn } from "@/lib/utils";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -33,12 +35,6 @@ type CompactToolEntry = {
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
 };
-
-function formatToolName(toolName: string): string {
-  // Remove MCP server prefix (e.g. "server__tool" -> "tool")
-  const parts = toolName.split("__");
-  return parts[parts.length - 1].replace(/_/g, " ");
-}
 
 function CompactCircle({
   toolName,
@@ -91,7 +87,7 @@ function CompactCircle({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {formatToolName(toolName)}
+          {parseFullToolName(toolName).toolName.replace(/_/g, " ")}
           {state === "running"
             ? " (running)"
             : state === "error"
@@ -124,6 +120,7 @@ export function CompactToolGroup({
   }) => void;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const { isToolName } = useArchestraMcpIdentity();
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
@@ -133,10 +130,13 @@ export function CompactToolGroup({
   const expandedTool = tools.find((t) => t.key === expandedKey);
 
   return (
-    <div className="mb-4">
+    <div className="mb-1">
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((tool) => {
           const iconInfo = toolIconMap?.get(tool.toolName);
+          const fallbackCatalogId =
+            iconInfo?.catalogId ??
+            (isToolName(tool.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
           return (
             <CompactCircle
               key={tool.key}
@@ -149,7 +149,7 @@ export function CompactToolGroup({
               isExpandable={canExpandToolCalls}
               onClick={() => handleToggle(tool.key)}
               icon={iconInfo?.icon}
-              catalogId={iconInfo?.catalogId}
+              catalogId={fallbackCatalogId}
             />
           );
         })}

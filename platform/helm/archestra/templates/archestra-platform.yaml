@@ -4,6 +4,33 @@ Validation: Ensure postgresql.enabled=false when using external database
 {{- if and .Values.postgresql.external_database_url .Values.postgresql.enabled (ne (toString .Values.postgresql.external_database_url) "from_vault") }}
 {{- fail "Configuration error: When postgresql.external_database_url is set, you must also set postgresql.enabled=false to prevent deploying an unused PostgreSQL instance." }}
 {{- end }}
+{{/*
+Validation: Ensure diagnostics storage supports concurrent pod mounts
+*/}}
+{{- $usesChartManagedDiagnosticsClaim := and .Values.archestra.diagnostics.enabled (not .Values.archestra.diagnostics.existingClaimName) }}
+{{- $diagnosticsAccessModes := .Values.archestra.diagnostics.accessModes | default (list) }}
+{{- $supportsConcurrentDiagnosticsMounts := has "ReadWriteMany" $diagnosticsAccessModes }}
+{{- $webReplicas := int .Values.archestra.replicaCount }}
+{{- if .Values.archestra.horizontalPodAutoscaler.enabled }}
+{{- $webReplicas = int .Values.archestra.horizontalPodAutoscaler.minReplicas }}
+{{- end }}
+{{- $workerReplicas := 0 }}
+{{- if .Values.archestra.worker.enabled }}
+{{- $workerReplicas = int .Values.archestra.worker.replicaCount }}
+{{- end }}
+{{- $totalDiagnosticsPods := add $webReplicas $workerReplicas }}
+{{- $webMaxSurge := "0" }}
+{{- if and .Values.archestra.deploymentStrategy (eq (.Values.archestra.deploymentStrategy.type | default "RollingUpdate") "RollingUpdate") .Values.archestra.deploymentStrategy.rollingUpdate }}
+{{- $webMaxSurge = toString (.Values.archestra.deploymentStrategy.rollingUpdate.maxSurge | default 0) }}
+{{- end }}
+{{- $workerMaxSurge := "0" }}
+{{- if and .Values.archestra.worker.enabled .Values.archestra.worker.deploymentStrategy (eq (.Values.archestra.worker.deploymentStrategy.type | default "RollingUpdate") "RollingUpdate") .Values.archestra.worker.deploymentStrategy.rollingUpdate }}
+{{- $workerMaxSurge = toString (.Values.archestra.worker.deploymentStrategy.rollingUpdate.maxSurge | default 0) }}
+{{- end }}
+{{- $rolloutCanOverlapDiagnosticsPods := or (and (gt $webReplicas 0) (ne $webMaxSurge "0") (ne $webMaxSurge "0%")) (and (gt $workerReplicas 0) (ne $workerMaxSurge "0") (ne $workerMaxSurge "0%")) }}
+{{- if and $usesChartManagedDiagnosticsClaim (not $supportsConcurrentDiagnosticsMounts) (or (gt $totalDiagnosticsPods 1) $rolloutCanOverlapDiagnosticsPods) }}
+{{- fail "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments." }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

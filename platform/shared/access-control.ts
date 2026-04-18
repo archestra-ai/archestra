@@ -27,10 +27,13 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
   agentTrigger: ["read", "create", "update", "delete"],
+  scheduledTask: ["read", "create", "update", "delete", "admin"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
-  llmProvider: ["read", "create", "update", "delete"],
+  llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
+  llmVirtualKey: ["read", "create", "update", "delete", "admin"],
+  llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
@@ -43,7 +46,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
 
   // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete", "query"],
+  knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -76,10 +79,13 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   agentTrigger: ["read", "create", "update", "delete"],
+  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
-  llmProvider: ["read", "create", "update", "delete"],
+  llmProviderApiKey: ["read", "create", "update", "delete"],
+  llmVirtualKey: ["read", "create", "update", "delete"],
+  llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
@@ -92,7 +98,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeBase: ["read", "create", "update", "delete", "query"],
+  knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -125,23 +131,26 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   agentTrigger: [],
+  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete"],
-  llmProvider: ["read"],
+  llmProviderApiKey: ["read"],
+  llmVirtualKey: ["read"],
+  llmModel: ["read"],
   llmLimit: [],
   optimizationRule: [],
   llmCost: [],
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete"],
-  toolPolicy: ["read", "create", "update", "delete"],
+  toolPolicy: ["read"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
 
   // Knowledge
-  knowledgeBase: ["read", "query"],
+  knowledgeSource: ["read", "query"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -203,6 +212,12 @@ export const permissionDescriptions: Record<string, string> = {
   "agentTrigger:create": "Set up new agent triggers",
   "agentTrigger:update": "Modify agent trigger configurations",
   "agentTrigger:delete": "Remove agent triggers",
+  "scheduledTask:read": "View scheduled tasks and their run history",
+  "scheduledTask:create": "Create new scheduled tasks and trigger runs",
+  "scheduledTask:update": "Modify scheduled task configuration",
+  "scheduledTask:delete": "Delete scheduled tasks",
+  "scheduledTask:admin":
+    "View and manage all scheduled tasks, not just your own",
 
   // MCP
   "mcpGateway:read": "View and list MCP gateways",
@@ -244,10 +259,20 @@ export const permissionDescriptions: Record<string, string> = {
   "llmProxy:team-admin": "Manage team assignments for LLM proxies",
   "llmProxy:admin":
     "Full administrative control over all LLM proxies, bypassing team restrictions",
-  "llmProvider:read": "View LLM provider API keys, virtual keys, and models",
-  "llmProvider:create": "Add new LLM provider API keys or virtual keys",
-  "llmProvider:update": "Modify LLM provider configuration and model pricing",
-  "llmProvider:delete": "Remove LLM provider API keys or virtual keys",
+  "llmProviderApiKey:read": "View LLM provider API keys",
+  "llmProviderApiKey:create": "Add new LLM provider API keys",
+  "llmProviderApiKey:update":
+    "Modify LLM provider API key configuration and visibility",
+  "llmProviderApiKey:delete": "Remove LLM provider API keys",
+  "llmProviderApiKey:admin":
+    "Manage all LLM provider API keys, including org-wide keys",
+  "llmVirtualKey:read": "View LLM virtual keys",
+  "llmVirtualKey:create": "Create LLM virtual keys",
+  "llmVirtualKey:update": "Modify LLM virtual keys and their visibility",
+  "llmVirtualKey:delete": "Delete LLM virtual keys",
+  "llmVirtualKey:admin": "Manage all LLM virtual keys and view every scope",
+  "llmModel:read": "View synced LLM models and capabilities",
+  "llmModel:update": "Modify LLM model pricing and modality settings",
   "llmLimit:read": "View token usage limits",
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
@@ -300,11 +325,13 @@ export const permissionDescriptions: Record<string, string> = {
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
-  "knowledgeBase:read": "View knowledge bases and connectors",
-  "knowledgeBase:create": "Create knowledge bases and connectors",
-  "knowledgeBase:update": "Modify knowledge bases and connectors",
-  "knowledgeBase:delete": "Delete knowledge bases and connectors",
-  "knowledgeBase:query": "Query knowledge sources for information retrieval",
+  "knowledgeSource:read": "View knowledge bases and connectors",
+  "knowledgeSource:create": "Create knowledge bases and connectors",
+  "knowledgeSource:update": "Modify knowledge bases and connectors",
+  "knowledgeSource:delete": "Delete knowledge bases and connectors",
+  "knowledgeSource:query": "Query knowledge sources for information retrieval",
+  "knowledgeSource:admin":
+    "View all knowledge bases and connectors, bypassing visibility restrictions",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -348,10 +375,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetDefaultLlmProxy]: {
     llmProxy: ["read"],
   },
-  // Agent-tool routes: tool:read checked statically, agent-type read checked dynamically in handler
-  [RouteId.GetAgentTools]: {
-    toolPolicy: ["read"],
-  },
+  // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
+  [RouteId.GetAgentTools]: {},
   [RouteId.GetAllAgentTools]: {
     toolPolicy: ["read"],
   },
@@ -648,14 +673,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatMcpTools]: {
     chat: ["read"],
   },
-  [RouteId.GetChatModels]: {
-    chat: ["read"],
+  [RouteId.GetLlmModels]: {
+    llmModel: ["read"],
   },
-  [RouteId.SyncChatModels]: {
-    llmProvider: ["update"],
-  },
-  [RouteId.SyncChatModelsFull]: {
-    llmProvider: ["update"],
+  [RouteId.SyncLlmModels]: {
+    llmModel: ["update"],
   },
   [RouteId.UpdateChatMessage]: {
     chat: ["update"],
@@ -684,23 +706,23 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ForkSharedConversation]: {
     chat: ["create"],
   },
-  [RouteId.GetChatApiKeys]: {
-    llmProvider: ["read"],
+  [RouteId.GetLlmProviderApiKeys]: {
+    llmProviderApiKey: ["read"],
   },
-  [RouteId.GetAvailableChatApiKeys]: {
-    llmProvider: ["read"],
+  [RouteId.GetAvailableLlmProviderApiKeys]: {
+    llmProviderApiKey: ["read"],
   },
-  [RouteId.CreateChatApiKey]: {
-    llmProvider: ["create"],
+  [RouteId.CreateLlmProviderApiKey]: {
+    llmProviderApiKey: ["create"],
   },
-  [RouteId.GetChatApiKey]: {
-    llmProvider: ["read"],
+  [RouteId.GetLlmProviderApiKey]: {
+    llmProviderApiKey: ["read"],
   },
-  [RouteId.UpdateChatApiKey]: {
-    llmProvider: ["update"],
+  [RouteId.UpdateLlmProviderApiKey]: {
+    llmProviderApiKey: ["update"],
   },
-  [RouteId.DeleteChatApiKey]: {
-    llmProvider: ["delete"],
+  [RouteId.DeleteLlmProviderApiKey]: {
+    llmProviderApiKey: ["delete"],
   },
   [RouteId.GetApiKeys]: {
     apiKey: ["read"],
@@ -715,19 +737,25 @@ export const requiredEndpointPermissionsMap: Partial<
     apiKey: ["delete"],
   },
   [RouteId.GetVirtualApiKeys]: {
-    llmProvider: ["read"],
+    llmVirtualKey: ["read"],
   },
   [RouteId.GetAllVirtualApiKeys]: {
-    llmProvider: ["read"],
+    llmVirtualKey: ["read"],
   },
   [RouteId.CreateVirtualApiKey]: {
-    llmProvider: ["create"],
+    llmVirtualKey: ["create"],
+  },
+  [RouteId.UpdateVirtualApiKey]: {
+    llmVirtualKey: ["update"],
   },
   [RouteId.DeleteVirtualApiKey]: {
-    llmProvider: ["delete"],
+    llmVirtualKey: ["delete"],
   },
   [RouteId.GetModelsWithApiKeys]: {
-    llmProvider: ["read"],
+    llmModel: ["read"],
+  },
+  [RouteId.UpdateModel]: {
+    llmModel: ["update"],
   },
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
@@ -773,6 +801,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
+  [RouteId.UpdateMcpSettings]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },
@@ -789,6 +820,12 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicIdentityProviders]: {},
+  /**
+   * Get public config for login and invitation UI
+   * Available to unauthenticated users
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicConfig]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -831,9 +868,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.UpdateModel]: {
-    llmProvider: ["update"],
-  },
   [RouteId.GetTeamStatistics]: {
     llmCost: ["read"],
   },
@@ -903,35 +937,77 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },
+  // Schedule Trigger Routes
+  [RouteId.GetScheduleTriggers]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.CreateScheduleTrigger]: {
+    scheduledTask: ["create"],
+  },
+  [RouteId.GetScheduleTrigger]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.UpdateScheduleTrigger]: {
+    scheduledTask: ["update"],
+  },
+  [RouteId.DeleteScheduleTrigger]: {
+    scheduledTask: ["delete"],
+  },
+  [RouteId.EnableScheduleTrigger]: {
+    scheduledTask: ["update"],
+  },
+  [RouteId.DisableScheduleTrigger]: {
+    scheduledTask: ["update"],
+  },
+  [RouteId.RunScheduleTriggerNow]: {
+    scheduledTask: ["create"],
+  },
+  [RouteId.GetScheduleTriggerRuns]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.GetScheduleTriggerRun]: {
+    scheduledTask: ["read"],
+  },
+  [RouteId.CreateScheduleTriggerRunConversation]: {
+    scheduledTask: ["create"],
+  },
+
   // Knowledge Base Routes
-  [RouteId.GetKnowledgeBases]: { knowledgeBase: ["read"] },
-  [RouteId.CreateKnowledgeBase]: { knowledgeBase: ["create"] },
-  [RouteId.GetKnowledgeBase]: { knowledgeBase: ["read"] },
-  [RouteId.UpdateKnowledgeBase]: { knowledgeBase: ["update"] },
-  [RouteId.DeleteKnowledgeBase]: { knowledgeBase: ["delete"] },
-  [RouteId.GetKnowledgeBaseHealth]: { knowledgeBase: ["read"] },
+  [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
+  [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
+  [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
+  [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes
-  [RouteId.GetConnectors]: { knowledgeBase: ["read"] },
-  [RouteId.CreateConnector]: { knowledgeBase: ["create"] },
-  [RouteId.GetConnector]: { knowledgeBase: ["read"] },
-  [RouteId.UpdateConnector]: { knowledgeBase: ["update"] },
-  [RouteId.DeleteConnector]: { knowledgeBase: ["delete"] },
-  [RouteId.SyncConnector]: { knowledgeBase: ["update"] },
-  [RouteId.ForceResyncConnector]: { knowledgeBase: ["update"] },
-  [RouteId.TestConnectorConnection]: { knowledgeBase: ["read"] },
+  [RouteId.GetConnectors]: { knowledgeSource: ["read"] },
+  [RouteId.CreateConnector]: { knowledgeSource: ["create"] },
+  [RouteId.GetConnector]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
 
   // Connector Knowledge Base Assignment Routes
-  [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeBase: ["update"] },
-  [RouteId.UnassignConnectorFromKnowledgeBase]: { knowledgeBase: ["update"] },
-  [RouteId.GetConnectorKnowledgeBases]: { knowledgeBase: ["read"] },
+  [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeSource: ["update"] },
+  [RouteId.UnassignConnectorFromKnowledgeBase]: {
+    knowledgeSource: ["update"],
+  },
+  [RouteId.GetConnectorKnowledgeBases]: { knowledgeSource: ["read"] },
 
   // Connector Run Routes
-  [RouteId.GetConnectorRuns]: { knowledgeBase: ["read"] },
-  [RouteId.GetConnectorRun]: { knowledgeBase: ["read"] },
+  [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+
+  // MCP Gateway Routes - available to all authenticated users
+  [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
+  [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
+  [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
 };
 
 /**
@@ -941,7 +1017,7 @@ export const requiredEndpointPermissionsMap: Partial<
 export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
-  "/chat/shared": { chat: ["read"] },
+  "/chat/[conversationId]": { chat: ["read"] },
 
   // Agents
   "/agents": { agent: ["read"] },
@@ -949,12 +1025,16 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
-  "/llm/providers/api-keys": { llmProvider: ["read"] },
-  "/llm/providers/virtual-keys": { llmProvider: ["read"] },
-  "/llm/providers/models": { llmProvider: ["read"] },
+  "/llm/providers/api-keys": { llmProviderApiKey: ["read"] },
+  "/llm/providers/virtual-keys": {
+    llmVirtualKey: ["read"],
+    llmProviderApiKey: ["read"],
+  },
+  "/llm/providers/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },
@@ -963,6 +1043,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
+  "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {
     mcpServerInstallationRequest: ["read"],
   },
@@ -972,8 +1053,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
 
   // Knowledge
-  "/knowledge/knowledge-bases": { knowledgeBase: ["read"] },
-  "/knowledge/connectors": { knowledgeBase: ["read"] },
+  "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
+  "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings
   "/settings/account": {},
@@ -985,6 +1066,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
+  "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };

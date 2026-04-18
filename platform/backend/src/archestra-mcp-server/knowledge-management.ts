@@ -1,6 +1,30 @@
-import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
+import {
+  TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
+  TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
+  TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_CREATE_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_CREATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+  TOOL_DELETE_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_DELETE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_UNASSIGN_KNOWLEDGE_BASE_FROM_AGENT_SHORT_NAME,
+  TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
+  TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_UPDATE_KNOWLEDGE_BASE_SHORT_NAME,
+  TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
+} from "@shared";
 import { z } from "zod";
-import { buildUserAcl, queryService } from "@/knowledge-base";
+import {
+  buildUserAccessControlList,
+  didKnowledgeSourceAclInputsChange,
+  isTeamScopedWithoutTeams,
+  knowledgeSourceAccessControlService,
+  queryService,
+} from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -8,17 +32,18 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  TeamModel,
   UserModel,
 } from "@/models";
 import {
   type AclEntry,
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
+  KnowledgeSourceVisibilitySchema,
   UpdateKnowledgeBaseConnectorSchema,
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   defineArchestraTool,
@@ -75,6 +100,13 @@ const ConnectorCreateToolArgsSchema = z
     description: InsertKnowledgeBaseConnectorSchema.shape.description
       .optional()
       .describe("Description of the knowledge connector."),
+    visibility: KnowledgeSourceVisibilitySchema.optional().describe(
+      "Visibility for the knowledge connector.",
+    ),
+    team_ids: z
+      .array(z.string())
+      .optional()
+      .describe("Team IDs allowed to access a team-scoped connector."),
   })
   .strict();
 
@@ -90,6 +122,13 @@ const ConnectorUpdateToolArgsSchema = z
     enabled: UpdateKnowledgeBaseConnectorSchema.shape.enabled
       .optional()
       .describe("Whether the connector is enabled."),
+    visibility: KnowledgeSourceVisibilitySchema.optional().describe(
+      "Updated visibility for the connector.",
+    ),
+    team_ids: z
+      .array(z.string())
+      .optional()
+      .describe("Updated team IDs for a team-scoped connector."),
     config: DynamicObjectSchema.optional().describe(
       "Updated connector configuration (provider-specific settings).",
     ),
@@ -131,8 +170,6 @@ const KnowledgeBaseOutputItemSchema = z.object({
     .nullable()
     .describe("The knowledge base description, if any."),
   status: z.string().describe("The knowledge base status."),
-  visibility: z.string().describe("The knowledge base visibility."),
-  teamIds: z.array(z.string()).describe("Team IDs with access."),
 });
 
 const KnowledgeBasesOutputSchema = z.object({
@@ -244,7 +281,7 @@ type ConnectorAgentAssignmentArgs = z.infer<
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: "query_knowledge_sources",
+    shortName: TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     title: "Query Knowledge Sources",
     description:
       "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
@@ -256,7 +293,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Base CRUD ---
   defineArchestraTool({
-    shortName: "create_knowledge_base",
+    shortName: TOOL_CREATE_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Create Knowledge Base",
     description:
       "Create a new knowledge base for organizing knowledge connectors.",
@@ -267,7 +304,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_bases",
+    shortName: TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
     schema: EmptyToolArgsSchema,
@@ -277,7 +314,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_base",
+    shortName: TOOL_GET_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Get Knowledge Base",
     description: "Get details of a specific knowledge base by ID.",
     schema: GetKnowledgeBaseToolArgsSchema,
@@ -287,7 +324,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "update_knowledge_base",
+    shortName: TOOL_UPDATE_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Update Knowledge Base",
     description: "Update an existing knowledge base.",
     schema: KnowledgeBaseUpdateToolArgsSchema,
@@ -297,7 +334,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "delete_knowledge_base",
+    shortName: TOOL_DELETE_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Delete Knowledge Base",
     description: "Delete a knowledge base by ID.",
     schema: DeleteKnowledgeBaseToolArgsSchema,
@@ -307,7 +344,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Connector CRUD ---
   defineArchestraTool({
-    shortName: "create_knowledge_connector",
+    shortName: TOOL_CREATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Create Knowledge Connector",
     description:
       "Create a new knowledge connector for ingesting data from external sources.",
@@ -318,7 +355,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_connectors",
+    shortName: TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
     title: "Get Knowledge Connectors",
     description: "List all knowledge connectors in the organization.",
     schema: EmptyToolArgsSchema,
@@ -328,7 +365,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "get_knowledge_connector",
+    shortName: TOOL_GET_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Get Knowledge Connector",
     description: "Get details of a specific knowledge connector by ID.",
     schema: GetKnowledgeConnectorToolArgsSchema,
@@ -338,7 +375,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "update_knowledge_connector",
+    shortName: TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Update Knowledge Connector",
     description: "Update an existing knowledge connector.",
     schema: ConnectorUpdateToolArgsSchema,
@@ -348,7 +385,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "delete_knowledge_connector",
+    shortName: TOOL_DELETE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
     title: "Delete Knowledge Connector",
     description: "Delete a knowledge connector by ID.",
     schema: DeleteKnowledgeConnectorToolArgsSchema,
@@ -358,7 +395,7 @@ const registry = defineArchestraTools([
   }),
   // --- Connector <-> Knowledge Base Assignments ---
   defineArchestraTool({
-    shortName: "assign_knowledge_connector_to_knowledge_base",
+    shortName: TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Assign Knowledge Connector to Knowledge Base",
     description: "Assign a knowledge connector to a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,
@@ -370,7 +407,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "unassign_knowledge_connector_from_knowledge_base",
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
     title: "Unassign Knowledge Connector from Knowledge Base",
     description: "Remove a knowledge connector from a knowledge base.",
     schema: ConnectorKnowledgeBaseAssignmentSchema,
@@ -383,7 +420,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Base <-> Agent Assignments ---
   defineArchestraTool({
-    shortName: "assign_knowledge_base_to_agent",
+    shortName: TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
     title: "Assign Knowledge Base to Agent",
     description: "Assign a knowledge base to an agent.",
     schema: KnowledgeBaseAgentAssignmentSchema,
@@ -392,7 +429,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "unassign_knowledge_base_from_agent",
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_BASE_FROM_AGENT_SHORT_NAME,
     title: "Unassign Knowledge Base from Agent",
     description: "Remove a knowledge base from an agent.",
     schema: KnowledgeBaseAgentAssignmentSchema,
@@ -402,7 +439,7 @@ const registry = defineArchestraTools([
   }),
   // --- Knowledge Connector <-> Agent Assignments ---
   defineArchestraTool({
-    shortName: "assign_knowledge_connector_to_agent",
+    shortName: TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
     title: "Assign Knowledge Connector to Agent",
     description:
       "Directly assign a knowledge connector to an agent (bypassing knowledge base).",
@@ -412,7 +449,7 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "unassign_knowledge_connector_from_agent",
+    shortName: TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
     title: "Unassign Knowledge Connector from Agent",
     description:
       "Remove a directly-assigned knowledge connector from an agent.",
@@ -439,7 +476,9 @@ async function handleQueryKnowledgeSources(params: {
   logger.info(
     {
       agentId: contextAgent.id,
-      tool: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      tool: archestraMcpBranding.getToolName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      ),
       args,
     },
     "knowledge-management tool called",
@@ -463,16 +502,60 @@ async function handleQueryKnowledgeSources(params: {
       );
     }
 
-    const kbConnectorIdArrays = hasKbs
-      ? await Promise.all(
-          agent.knowledgeBaseIds.map((kbId) =>
-            KnowledgeBaseConnectorModel.getConnectorIds(kbId),
-          ),
+    const access =
+      context.userId && organizationId
+        ? await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: context.userId,
+            organizationId,
+          })
+        : null;
+
+    const validKbs = hasKbs
+      ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
+      : [];
+    const visibleKbs = access
+      ? knowledgeSourceAccessControlService.filterKnowledgeBases(
+          access,
+          validKbs,
         )
+      : validKbs;
+
+    const directConnectors = directConnectorIds.length
+      ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
+      : [];
+    const visibleDirectConnectors = access
+      ? knowledgeSourceAccessControlService.filterConnectors(
+          access,
+          directConnectors,
+        )
+      : directConnectors;
+
+    const connectorIdsFromVisibleKbs = visibleKbs.length
+      ? (
+          await Promise.all(
+            visibleKbs.map((kb) =>
+              KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
+                canReadAll: access?.canReadAll,
+                viewerTeamIds: access?.teamIds,
+              }),
+            ),
+          )
+        )
+          .flat()
+          .map((connector) => connector.id)
       : [];
     const connectorIds = [
-      ...new Set([...kbConnectorIdArrays.flat(), ...directConnectorIds]),
+      ...new Set([
+        ...connectorIdsFromVisibleKbs,
+        ...visibleDirectConnectors.map((connector) => connector.id),
+      ]),
     ];
+
+    if (visibleKbs.length === 0 && visibleDirectConnectors.length === 0) {
+      return errorResult(
+        "No visible knowledge sources found for the current user.",
+      );
+    }
 
     if (connectorIds.length === 0) {
       return errorResult(
@@ -480,30 +563,13 @@ async function handleQueryKnowledgeSources(params: {
       );
     }
 
-    const validKbs = hasKbs
-      ? (
-          await Promise.all(
-            agent.knowledgeBaseIds.map((id) => KnowledgeBaseModel.findById(id)),
-          )
-        ).filter((kb): kb is NonNullable<typeof kb> => kb !== null)
-      : [];
-
     let userAcl: AclEntry[] = ["org:*"];
     if (context.userId) {
-      const [user, teamIds] = await Promise.all([
-        UserModel.getById(context.userId),
-        TeamModel.getUserTeamIds(context.userId),
-      ]);
+      const user = await UserModel.getById(context.userId);
       if (user?.email) {
-        const visibility = validKbs.some((kb) => kb.visibility === "org-wide")
-          ? "org-wide"
-          : validKbs.some((kb) => kb.visibility === "team-scoped")
-            ? "team-scoped"
-            : "auto-sync-permissions";
-        userAcl = buildUserAcl({
+        userAcl = buildUserAccessControlList({
           userEmail: user.email,
-          teamIds,
-          visibility,
+          teamIds: access?.teamIds ?? [],
         });
       }
     }
@@ -513,6 +579,7 @@ async function handleQueryKnowledgeSources(params: {
       organizationId,
       queryText: args.query,
       userAcl,
+      bypassAcl: access?.canReadAll ?? false,
       limit: 10,
     });
 
@@ -671,6 +738,14 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
+    const teamIds = args.team_ids ?? [];
+    const visibility = args.visibility ?? "org-wide";
+    if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+      return errorResult(
+        "At least one team must be selected for team-scoped connectors",
+      );
+    }
+
     const connector = await KnowledgeBaseConnectorModel.create(
       InsertKnowledgeBaseConnectorSchema.parse({
         organizationId: context.organizationId,
@@ -678,6 +753,8 @@ async function handleCreateKnowledgeConnector(params: {
         connectorType: args.connector_type,
         config: { type: args.connector_type, ...args.config },
         description: args.description ?? null,
+        visibility: args.visibility,
+        teamIds: args.team_ids,
       }),
     );
     return structuredSuccessResult(
@@ -699,8 +776,17 @@ async function handleGetKnowledgeConnectors(params: {
       return errorResult("Organization context not available");
     }
 
+    const access = context.userId
+      ? await knowledgeSourceAccessControlService.buildAccessControlContext({
+          userId: context.userId,
+          organizationId: context.organizationId,
+        })
+      : null;
+
     const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: context.organizationId,
+      canReadAll: access?.canReadAll,
+      viewerTeamIds: access?.teamIds,
     });
     if (connectors.length === 0) {
       return structuredSuccessResult(
@@ -728,8 +814,24 @@ async function handleGetKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const connector = await KnowledgeBaseConnectorModel.findById(args.id);
-    if (!connector || connector.organizationId !== context.organizationId) {
+    const [connector, access] = await Promise.all([
+      KnowledgeBaseConnectorModel.findById(args.id),
+      context.userId
+        ? knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: context.userId,
+            organizationId: context.organizationId,
+          })
+        : null,
+    ]);
+    if (
+      !connector ||
+      connector.organizationId !== context.organizationId ||
+      (access &&
+        !knowledgeSourceAccessControlService.canAccessConnector(
+          access,
+          connector,
+        ))
+    ) {
       return errorResult(`Knowledge connector not found: ${args.id}`);
     }
     return structuredSuccessResult(
@@ -757,6 +859,8 @@ async function handleUpdateKnowledgeConnector(params: {
     if (args.description !== undefined)
       rawUpdates.description = args.description;
     if (args.enabled !== undefined) rawUpdates.enabled = args.enabled;
+    if (args.visibility !== undefined) rawUpdates.visibility = args.visibility;
+    if (args.team_ids !== undefined) rawUpdates.teamIds = args.team_ids;
     if (args.config !== undefined) rawUpdates.config = args.config;
     if (Object.keys(rawUpdates).length === 0) {
       return errorResult("At least one field to update is required");
@@ -764,14 +868,37 @@ async function handleUpdateKnowledgeConnector(params: {
 
     const updates =
       UpdateKnowledgeBaseConnectorSchema.partial().parse(rawUpdates);
-    const existingConnector = await KnowledgeBaseConnectorModel.findById(
-      args.id,
-    );
+    const [existingConnector, access] = await Promise.all([
+      KnowledgeBaseConnectorModel.findById(args.id),
+      context.userId
+        ? knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: context.userId,
+            organizationId: context.organizationId,
+          })
+        : null,
+    ]);
     if (
       !existingConnector ||
-      existingConnector.organizationId !== context.organizationId
+      existingConnector.organizationId !== context.organizationId ||
+      (access &&
+        !knowledgeSourceAccessControlService.canAccessConnector(
+          access,
+          existingConnector,
+        ))
     ) {
       return errorResult(`Knowledge connector not found: ${args.id}`);
+    }
+    const nextVisibility = updates.visibility ?? existingConnector.visibility;
+    const nextTeamIds = updates.teamIds ?? existingConnector.teamIds;
+    if (
+      isTeamScopedWithoutTeams({
+        visibility: nextVisibility,
+        teamIds: nextTeamIds,
+      })
+    ) {
+      return errorResult(
+        "At least one team must be selected for team-scoped connectors",
+      );
     }
     const connector = await KnowledgeBaseConnectorModel.update(
       args.id,
@@ -779,6 +906,21 @@ async function handleUpdateKnowledgeConnector(params: {
     );
     if (!connector) {
       return errorResult(`Knowledge connector not found: ${args.id}`);
+    }
+    if (
+      didKnowledgeSourceAclInputsChange({
+        current: existingConnector,
+        updates: {
+          visibility: updates.visibility,
+          teamIds: updates.teamIds,
+        },
+      })
+    ) {
+      // This rewrites ACLs across every document and chunk for the connector,
+      // so only run it when the connector's actual ACL inputs changed.
+      await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
+        args.id,
+      );
     }
     return structuredSuccessResult(
       { knowledgeConnector: connector },
@@ -800,8 +942,24 @@ async function handleDeleteKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const existing = await KnowledgeBaseConnectorModel.findById(args.id);
-    if (!existing || existing.organizationId !== context.organizationId) {
+    const [existing, access] = await Promise.all([
+      KnowledgeBaseConnectorModel.findById(args.id),
+      context.userId
+        ? knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: context.userId,
+            organizationId: context.organizationId,
+          })
+        : null,
+    ]);
+    if (
+      !existing ||
+      existing.organizationId !== context.organizationId ||
+      (access &&
+        !knowledgeSourceAccessControlService.canAccessConnector(
+          access,
+          existing,
+        ))
+    ) {
       return errorResult(`Knowledge connector not found: ${args.id}`);
     }
     await KnowledgeBaseConnectorModel.delete(args.id);

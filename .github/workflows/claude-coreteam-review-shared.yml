@@ -12,17 +12,24 @@ on:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
 
+permissions: {}
+
+concurrency:
+  group: claude-coreteam-review-shared-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pr-review:
+    name: PR Review
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
+      contents: read # Required to checkout the repository and inspect the PR diff.
+      pull-requests: write # Required to publish review comments.
+      id-token: write # Required by the Claude action's GitHub-backed auth flow.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -38,3 +45,4 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: "true"
           track_progress: "true"
+          show_full_output: "true"

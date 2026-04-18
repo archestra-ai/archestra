@@ -3,16 +3,8 @@
 import type { archestraApiTypes } from "@shared";
 import { Building2 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 type CatalogItem =
@@ -61,49 +53,44 @@ export function NoAuthInstallDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            <span>Install {catalogItem.name}</span>
-          </DialogTitle>
-          <DialogDescription>
-            This MCP server doesn't require authentication. Click Install to
-            proceed.
-          </DialogDescription>
-        </DialogHeader>
-
-        <DialogForm onSubmit={handleInstall}>
-          <div className="py-4">
-            <SelectMcpServerCredentialTypeAndTeams
-              onTeamChange={setSelectedTeamId}
-              catalogId={catalogItem?.id}
-              onCanInstallChange={setCanInstall}
-              preselectedTeamId={preselectedTeamId}
-              personalOnly={personalOnly}
-            />
-          </div>
-
-          <DialogFooter>
-            {canInstall && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleClose}
-                disabled={isInstalling}
-              >
-                Cancel
-              </Button>
-            )}
-            {canInstall && (
-              <Button type="submit" disabled={isInstalling}>
-                {isInstalling ? "Installing..." : "Install"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <StandardFormDialog
+      open={isOpen}
+      onOpenChange={handleClose}
+      title={
+        <span className="flex items-center gap-2">
+          <Building2 className="h-5 w-5" />
+          <span>Install {catalogItem.name}</span>
+        </span>
+      }
+      description="This MCP server doesn't require authentication. Click Install to proceed."
+      size="medium"
+      bodyClassName="space-y-4"
+      onSubmit={handleInstall}
+      footer={
+        canInstall ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={isInstalling}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isInstalling}>
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      <SelectMcpServerCredentialTypeAndTeams
+        onTeamChange={setSelectedTeamId}
+        catalogId={catalogItem.id}
+        onCanInstallChange={setCanInstall}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={personalOnly}
+      />
+    </StandardFormDialog>
   );
 }

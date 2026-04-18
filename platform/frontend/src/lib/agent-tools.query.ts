@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { handleApiError } from "./utils";
+import { getApiErrorMessage, handleApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -22,6 +22,9 @@ const {
 type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
 >;
+type CredentialResolutionMode = NonNullable<
+  archestraApiTypes.AssignToolToAgentData["body"]
+>["credentialResolutionMode"];
 
 export function useAllProfileTools({
   initialData,
@@ -44,7 +47,7 @@ export function useAllProfileTools({
     search?: string;
     agentId?: string;
     origin?: string;
-    credentialSourceMcpServerId?: string;
+    mcpServerId?: string;
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
@@ -61,7 +64,7 @@ export function useAllProfileTools({
         search: filters?.search,
         agentId: filters?.agentId,
         origin: filters?.origin,
-        credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+        mcpServerId: filters?.mcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
         skipPagination,
       },
@@ -109,35 +112,36 @@ export function useAssignTool() {
     mutationFn: async ({
       agentId,
       toolId,
-      credentialSourceMcpServerId,
-      executionSourceMcpServerId,
-      useDynamicTeamCredential,
+      mcpServerId,
+      resolveAtCallTime,
+      credentialResolutionMode,
       skipInvalidation,
     }: {
       agentId: string;
       toolId: string;
-      credentialSourceMcpServerId?: string | null;
-      executionSourceMcpServerId?: string | null;
-      useDynamicTeamCredential?: boolean;
+      mcpServerId?: string | null;
+      resolveAtCallTime?: boolean;
+      credentialResolutionMode?: CredentialResolutionMode;
       skipInvalidation?: boolean;
     }) => {
       const body =
-        credentialSourceMcpServerId ||
-        executionSourceMcpServerId ||
-        useDynamicTeamCredential !== undefined
+        mcpServerId ||
+        resolveAtCallTime !== undefined ||
+        credentialResolutionMode
           ? {
-              credentialSourceMcpServerId:
-                credentialSourceMcpServerId || undefined,
-              executionSourceMcpServerId:
-                executionSourceMcpServerId || undefined,
-              useDynamicTeamCredential,
+              mcpServerId: mcpServerId ?? undefined,
+              resolveAtCallTime,
+              credentialResolutionMode,
             }
           : null;
 
-      const { data } = await assignToolToAgent({
+      const { data, error } = await assignToolToAgent({
         path: { agentId, toolId },
         body,
       });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
     onSuccess: (result) => {
@@ -239,9 +243,12 @@ export function useUnassignTool() {
       toolId: string;
       skipInvalidation?: boolean;
     }) => {
-      const { data } = await unassignToolFromAgent({
+      const { data, error } = await unassignToolFromAgent({
         path: { agentId, toolId },
       });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
     onSuccess: (result) => {
@@ -284,7 +291,7 @@ export function useProfileToolPatchMutation() {
         path: { id: updatedProfileTool.id },
       });
       if (result.error) {
-        handleApiError(result.error);
+        throw new Error(getApiErrorMessage(result.error));
       }
       return { data: result.data ?? null, skipInvalidation };
     },

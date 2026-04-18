@@ -1,13 +1,14 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { McpServerModel, ToolModel } from "@/models";
-import type { InternalMcpCatalog, McpServer } from "@/types";
+import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
 
 /**
  * Checks if a catalog edit requires new user input for reinstallation.
  *
  * Returns true (manual reinstall required) when:
  * - Server name changed (local servers) - affects secret paths
+ * - Local execution config changed (command/args/docker/transport) - restart should be explicit
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - OAuth config changed: added or removed (remote servers)
  * - Required userConfig fields changed: added, removed, or type changed (remote servers)
@@ -46,6 +47,14 @@ export function requiresNewUserInputForReinstall(
       logger.info(
         { catalogId: newCatalogItem.id },
         "Prompted env vars changed - manual reinstall required",
+      );
+      return true;
+    }
+
+    if (localExecutionConfigChanged(oldCatalogItem, newCatalogItem)) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Local execution config changed - manual reinstall required",
       );
       return true;
     }
@@ -97,6 +106,20 @@ export function requiresNewUserInputForReinstall(
 export async function autoReinstallServer(
   server: McpServer,
   catalogItem: InternalMcpCatalog,
+  options?: {
+    getTools?: (params: {
+      server: McpServer;
+      catalogItem: InternalMcpCatalog;
+    }) => Promise<
+      Array<{
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+        _meta?: Record<string, unknown>;
+        annotations?: Record<string, unknown>;
+      }>
+    >;
+  },
 ): Promise<void> {
   logger.info(
     { serverId: server.id, serverName: server.name },
@@ -139,7 +162,12 @@ export async function autoReinstallServer(
   }
 
   // Fetch and sync tools
-  const tools = await McpServerModel.getToolsFromServer(server);
+  const tools = options?.getTools
+    ? await options.getTools({
+        server,
+        catalogItem,
+      })
+    : await McpServerModel.getToolsFromServer(server);
 
   // Use catalog item name for tool naming (consistent with install flow)
   const toolNamePrefix = catalogItem.name;
@@ -147,6 +175,7 @@ export async function autoReinstallServer(
     name: ToolModel.slugifyName(toolNamePrefix, tool.name),
     description: tool.description,
     parameters: tool.inputSchema,
+    meta: { _meta: tool._meta, annotations: tool.annotations },
     catalogId: catalogItem.id,
     // Pass the raw tool name from MCP server for accurate matching
     // This handles cases where catalog name contains `__` (e.g., huggingface__remote-mcp)
@@ -176,6 +205,16 @@ export async function autoReinstallServer(
 // ===== Internal helpers =====
 
 type PromptedEnvVarInfo = { required: boolean; type: string };
+type ComparableLocalConfig = Pick<
+  LocalConfig,
+  | "command"
+  | "arguments"
+  | "dockerImage"
+  | "transportType"
+  | "httpPort"
+  | "httpPath"
+  | "serviceAccount"
+>;
 
 /**
  * Extract prompted env vars from a catalog item as a map of key -> { required, type }
@@ -214,6 +253,30 @@ function promptedEnvVarsChanged(
   }
 
   return false;
+}
+
+function localExecutionConfigChanged(
+  oldCatalog: InternalMcpCatalog,
+  newCatalog: InternalMcpCatalog,
+): boolean {
+  return (
+    JSON.stringify(getLocalExecutionConfig(oldCatalog)) !==
+    JSON.stringify(getLocalExecutionConfig(newCatalog))
+  );
+}
+
+function getLocalExecutionConfig(
+  catalog: InternalMcpCatalog,
+): ComparableLocalConfig {
+  return {
+    command: catalog.localConfig?.command ?? "",
+    arguments: catalog.localConfig?.arguments ?? [],
+    dockerImage: catalog.localConfig?.dockerImage ?? "",
+    transportType: catalog.localConfig?.transportType,
+    httpPort: catalog.localConfig?.httpPort,
+    httpPath: catalog.localConfig?.httpPath ?? "",
+    serviceAccount: catalog.localConfig?.serviceAccount ?? "",
+  };
 }
 
 type UserConfigFieldInfo = { type: string };

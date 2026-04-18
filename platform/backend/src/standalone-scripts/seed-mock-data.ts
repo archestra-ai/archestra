@@ -347,9 +347,15 @@ async function seedMockData() {
 
   // Show statistics
   const blockedCount = interactionData.filter((i) => {
-    if ("choices" in i.response) {
-      const message = i.response.choices[0]?.message;
-      return message && "refusal" in message && message.refusal;
+    const response = i.response as { choices?: Array<{ message?: unknown }> };
+    if (Array.isArray(response.choices)) {
+      const message = response.choices[0]?.message;
+      return (
+        !!message &&
+        typeof message === "object" &&
+        "refusal" in message &&
+        Boolean(message.refusal)
+      );
     }
     return false;
   }).length;

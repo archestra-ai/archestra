@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import { predefinedPermissionsMap } from "@shared/access-control";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import OrganizationRoleModel from "./organization-role";
 
 describe("OrganizationRoleModel", () => {
@@ -55,6 +55,40 @@ describe("OrganizationRoleModel", () => {
     test("should include apiKey:create for editor role", () => {
       const permissions = predefinedPermissionsMap[EDITOR_ROLE_NAME];
       expect(permissions.apiKey).toContain("create");
+    });
+  });
+
+  describe("sanitizePermissions", () => {
+    test("returns valid permissions unchanged", () => {
+      const permissions = {
+        agent: ["read", "create"],
+        log: ["read"],
+      };
+
+      expect(OrganizationRoleModel.sanitizePermissions(permissions)).toEqual(
+        permissions,
+      );
+    });
+
+    test("removes invalid actions and unknown resources", () => {
+      expect(
+        OrganizationRoleModel.sanitizePermissions({
+          log: ["read", "create", "update", "delete"],
+          optimizationRule: ["team-admin", "read"],
+          unknownResource: ["read"],
+        }),
+      ).toEqual({
+        log: ["read"],
+        optimizationRule: ["read"],
+      });
+    });
+
+    test("returns empty permissions for malformed input", () => {
+      expect(OrganizationRoleModel.sanitizePermissions("{not-json}")).toEqual(
+        {},
+      );
+      expect(OrganizationRoleModel.sanitizePermissions([])).toEqual({});
+      expect(OrganizationRoleModel.sanitizePermissions(null)).toEqual({});
     });
   });
 
@@ -191,6 +225,48 @@ describe("OrganizationRoleModel", () => {
         org.id,
       );
       expect(permissions).toEqual({});
+    });
+
+    test("should cache custom role permissions until invalidated", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const customRole = await makeCustomRole(org.id, {
+        role: "cached_custom_role",
+        name: "Cached Custom Role",
+        permission: { agent: ["read", "create"] },
+      });
+      const getByIdentifierSpy = vi.spyOn(
+        OrganizationRoleModel,
+        "getByIdentifier",
+      );
+
+      const firstPermissions = await OrganizationRoleModel.getPermissions(
+        customRole.role,
+        org.id,
+      );
+      const secondPermissions = await OrganizationRoleModel.getPermissions(
+        customRole.role,
+        org.id,
+      );
+
+      expect(firstPermissions).toEqual({ agent: ["read", "create"] });
+      expect(secondPermissions).toEqual({ agent: ["read", "create"] });
+      expect(getByIdentifierSpy).toHaveBeenCalledTimes(1);
+
+      OrganizationRoleModel.invalidatePermissionsCacheForRole(
+        org.id,
+        customRole.role,
+      );
+
+      const thirdPermissions = await OrganizationRoleModel.getPermissions(
+        customRole.role,
+        org.id,
+      );
+
+      expect(thirdPermissions).toEqual({ agent: ["read", "create"] });
+      expect(getByIdentifierSpy).toHaveBeenCalledTimes(2);
     });
   });
 

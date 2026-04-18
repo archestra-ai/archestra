@@ -5,7 +5,7 @@ export interface ProviderConfig {
   providerLabel: string;
   providerIcon: string;
   webhookPath: string;
-  docsUrl: string;
+  docsUrl: string | null;
   slashCommand: string;
   buildDeepLink: (binding: {
     channelId: string;

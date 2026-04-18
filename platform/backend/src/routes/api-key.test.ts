@@ -1,3 +1,4 @@
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -74,27 +75,30 @@ describe("api key routes", () => {
     await db.insert(schema.apikeysTable).values([
       {
         id: "key-1",
+        configId: "default",
         name: "CLI Key",
         key: "hashed-key-1",
-        userId,
+        referenceId: userId,
         enabled: true,
         createdAt: new Date("2026-03-15T00:00:00.000Z"),
         updatedAt: new Date("2026-03-15T00:00:00.000Z"),
       },
       {
         id: "key-2",
+        configId: "default",
         name: "Docs Key",
         key: "hashed-key-2",
-        userId,
+        referenceId: userId,
         enabled: true,
         createdAt: new Date("2026-03-14T00:00:00.000Z"),
         updatedAt: new Date("2026-03-14T00:00:00.000Z"),
       },
       {
         id: "key-3",
+        configId: "default",
         name: "Other User Key",
         key: "hashed-key-3",
-        userId: otherUserId,
+        referenceId: otherUserId,
         enabled: true,
         createdAt: new Date("2026-03-13T00:00:00.000Z"),
         updatedAt: new Date("2026-03-13T00:00:00.000Z"),
@@ -116,9 +120,10 @@ describe("api key routes", () => {
   test("gets one API key by id for the authenticated user", async () => {
     await db.insert(schema.apikeysTable).values({
       id: "key-1",
+      configId: "default",
       name: "CLI Key",
       key: "hashed-key-1",
-      userId,
+      referenceId: userId,
       enabled: true,
       createdAt: new Date("2026-03-15T00:00:00.000Z"),
       updatedAt: new Date("2026-03-15T00:00:00.000Z"),
@@ -140,9 +145,10 @@ describe("api key routes", () => {
   test("returns 404 when an API key does not belong to the authenticated user", async () => {
     await db.insert(schema.apikeysTable).values({
       id: "key-1",
+      configId: "default",
       name: "Other User Key",
       key: "hashed-key-1",
-      userId: otherUserId,
+      referenceId: otherUserId,
       enabled: true,
       createdAt: new Date("2026-03-15T00:00:00.000Z"),
       updatedAt: new Date("2026-03-15T00:00:00.000Z"),
@@ -163,20 +169,32 @@ describe("api key routes", () => {
   });
 
   test("normalizes a successful create response", async () => {
+    const tokenStart = `${ARCHESTRA_TOKEN_PREFIX}abcd`;
+    const tokenValue = `${ARCHESTRA_TOKEN_PREFIX}abcd1234`;
+
     createApiKeyMock.mockResolvedValue({
       id: "key-1",
+      configId: "default",
       name: "CLI Key",
-      start: "archestra_abcd",
-      prefix: "archestra_",
-      userId,
+      start: tokenStart,
+      prefix: ARCHESTRA_TOKEN_PREFIX,
+      referenceId: userId,
       enabled: true,
+      refillInterval: null,
+      refillAmount: null,
+      lastRefillAt: null,
+      rateLimitEnabled: false,
+      rateLimitTimeWindow: null,
+      rateLimitMax: null,
+      requestCount: 0,
+      remaining: null,
       lastRequest: null,
       expiresAt: "2026-03-15T01:00:00.000Z",
       createdAt: "2026-03-15T00:00:00.000Z",
       updatedAt: "2026-03-15T00:00:00.000Z",
       metadata: { scope: "cli" },
       permissions: { apiKey: ["read"] },
-      key: "archestra_abcd1234",
+      key: tokenValue,
     });
 
     const response = await app.inject({
@@ -192,20 +210,69 @@ describe("api key routes", () => {
     expect(response.json()).toMatchObject({
       id: "key-1",
       name: "CLI Key",
-      start: "archestra_abcd",
-      prefix: "archestra_",
-      key: "archestra_abcd1234",
+      start: tokenStart,
+      prefix: ARCHESTRA_TOKEN_PREFIX,
+      key: tokenValue,
       metadata: { scope: "cli" },
       permissions: { apiKey: ["read"] },
     });
   });
 
+  test("omits a null name before calling better-auth createApiKey", async () => {
+    const tokenStart = `${ARCHESTRA_TOKEN_PREFIX}abcd`;
+    const tokenValue = `${ARCHESTRA_TOKEN_PREFIX}abcd1234`;
+
+    createApiKeyMock.mockResolvedValue({
+      id: "key-1",
+      configId: "default",
+      name: null,
+      start: tokenStart,
+      prefix: ARCHESTRA_TOKEN_PREFIX,
+      referenceId: userId,
+      enabled: true,
+      refillInterval: null,
+      refillAmount: null,
+      lastRefillAt: null,
+      rateLimitEnabled: false,
+      rateLimitTimeWindow: null,
+      rateLimitMax: null,
+      requestCount: 0,
+      remaining: null,
+      lastRequest: null,
+      expiresAt: null,
+      createdAt: "2026-03-15T00:00:00.000Z",
+      updatedAt: "2026-03-15T00:00:00.000Z",
+      metadata: null,
+      permissions: null,
+      key: tokenValue,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/api-keys",
+      payload: {
+        name: null,
+        expiresIn: 3600,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createApiKeyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: {
+          expiresIn: 3600,
+        },
+      }),
+    );
+  });
+
   test("maps upstream delete 404 errors to a safe API key message", async () => {
     await db.insert(schema.apikeysTable).values({
       id: "key-1",
+      configId: "default",
       name: "Existing key",
       key: "hashed-key-1",
-      userId,
+      referenceId: userId,
       enabled: true,
       createdAt: new Date("2026-03-15T00:00:00.000Z"),
       updatedAt: new Date("2026-03-15T00:00:00.000Z"),

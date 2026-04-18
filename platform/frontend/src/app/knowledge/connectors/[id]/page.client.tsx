@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
   Database,
+  Logs,
   MoreHorizontal,
   Pencil,
   Play,
@@ -67,10 +68,10 @@ import {
   useSyncConnector,
   useTestConnectorConnection,
   useUnassignConnectorFromKnowledgeBase,
-} from "@/lib/connector.query";
-import { formatCronSchedule } from "@/lib/format-cron";
-import { useKnowledgeBases } from "@/lib/knowledge-base.query";
+} from "@/lib/knowledge/connector.query";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { formatDate } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorRunItem =
   archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number];
@@ -139,23 +140,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
-        const { status, error } = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            <ConnectorStatusBadge status={status} />
-            {error && (
-              <Button
-                variant="ghost"
-                className="h-auto p-0"
-                onClick={() => setSelectedRunId(row.original.id)}
-              >
-                <Badge variant="destructive" className="text-xs">
-                  Error
-                </Badge>
-              </Button>
-            )}
-          </div>
-        );
+        return <ConnectorStatusBadge status={row.original.status} />;
       },
     },
     {
@@ -202,6 +187,28 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       id: "documentsIngested",
       header: "Ingested",
       cell: ({ row }) => <div>{row.original.documentsIngested ?? 0}</div>,
+    },
+    {
+      id: "logs",
+      header: "Logs",
+      cell: ({ row }) => {
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground"
+                onClick={() => setSelectedRunId(row.original.id)}
+                aria-label="View run logs"
+              >
+                <Logs className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View logs</TooltipContent>
+          </Tooltip>
+        );
+      },
     },
   ];
 

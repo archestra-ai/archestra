@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "@/test";
+import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
 import ConversationModel from "./conversation";
 import InteractionModel from "./interaction";
@@ -47,6 +48,43 @@ describe("InteractionModel", () => {
       expect(interaction.profileId).toBe(profileId);
       expect(interaction.request).toBeDefined();
       expect(interaction.response).toBeDefined();
+    });
+
+    test("can create and serialize an Azure interaction", async () => {
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello Azure" }],
+        },
+        response: {
+          id: "azure-response",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Hi from Azure",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+          },
+        },
+        type: "azure:chatCompletions",
+      });
+
+      const parsed = SelectInteractionSchema.safeParse(interaction);
+      expect(parsed.success).toBe(true);
     });
   });
 

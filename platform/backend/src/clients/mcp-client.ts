@@ -5,14 +5,28 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  ContentBlock,
+  ReadResourceResult,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 import {
+  type AssignedCredentialUnavailableMcpToolError,
+  type AuthExpiredMcpToolError,
+  type AuthRequiredMcpToolError,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  type McpToolError,
   parseFullToolName,
+  TimeInMs,
 } from "@shared";
+import QuickLRU from "quick-lru";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -24,19 +38,47 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import { refreshOAuthToken } from "@/routes/oauth";
+import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import {
+  type ResolvedEnterpriseTransportCredential,
+  resolveEnterpriseTransportCredential,
+} from "@/services/identity-providers/enterprise-managed/broker";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
+  EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
   McpToolAssignment,
 } from "@/types";
+import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
+import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+
+const MCP_CLIENT_EXTENSION_CAPABILITIES = {
+  ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+} as const;
+
+export class McpServerNotReadyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpServerNotReadyError";
+  }
+}
+
+export class McpServerConnectionTimeoutError extends Error {
+  constructor(
+    message = "MCP server did not become reachable within 30 seconds. Verify its configuration and runtime logs, then try again.",
+  ) {
+    super(message);
+    this.name = "McpServerConnectionTimeoutError";
+  }
+}
 
 /**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
@@ -66,6 +108,10 @@ export type TokenAuthContext = {
   isExternalIdp?: boolean;
   /** Raw JWT token for propagation to underlying MCP servers (set when isExternalIdp is true) */
   rawToken?: string;
+  /** True if authenticated via browser session (MCP proxy route) */
+  isSessionAuth?: boolean;
+  /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
+  passthroughHeaders?: Record<string, string>;
 };
 
 /**
@@ -130,36 +176,104 @@ class ConnectionLimiter {
 type TransportKind = "stdio" | "http";
 
 const HTTP_CONCURRENCY_LIMIT = 4;
+const OAUTH_TOKEN_REFRESH_BUFFER_MS = 5 * TimeInMs.Minute;
+const CLIENT_CREDENTIALS_FALLBACK_TTL_MS = 5 * TimeInMs.Minute;
+// Idle TTL for shared MCP active connections. These clients can retain HTTP
+// session affinity, tool-name caches, and browser-backed remote state, so we
+// want them to age out after inactivity instead of accumulating forever.
+// Fifteen minutes keeps sequential tool calls in an active chat warm while
+// reclaiming abandoned connections on a reasonable operational timescale.
+const ACTIVE_CONNECTION_CACHE_TTL_MS = 15 * TimeInMs.Minute;
+const ACTIVE_CONNECTION_CACHE_MAX_SIZE = 500;
+
+const RESOURCE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
+const RESOURCE_CACHE_MAX_SIZE = 1000;
+
+type ResourceContents = { contents: ReadResourceResult["contents"] };
+
+type CachedResource = {
+  result: ResourceContents;
+  ttl: number;
+};
+
+type CachedServerState = {
+  secretId: string | null;
+};
 
 class McpClient {
+  private static readonly TOOL_NAME_CACHE_MAX_ENTRIES = 1_000;
+  private static readonly SECRETS_CACHE_MAX_ENTRIES = 1_000;
+  private static readonly SECRETS_CACHE_TTL_MS = 30_000;
+  private static readonly ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES = 1_000;
+  private static readonly ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS = 30_000;
+
   private clients = new Map<string, Client>();
-  private activeConnections = new Map<string, Client>();
+  private activeConnections = new LRUCacheManager<Client>({
+    maxSize: ACTIVE_CONNECTION_CACHE_MAX_SIZE,
+    defaultTtl: ACTIVE_CONNECTION_CACHE_TTL_MS,
+    onEviction: (key: string, value: unknown) => {
+      const client = value as Client;
+      Promise.resolve(client.close()).catch((error) => {
+        logger.warn(
+          { connectionKey: key, error },
+          "Error closing evicted active MCP connection",
+        );
+      });
+      this.activeConnectionServerState.delete(key);
+      this.toolNameCache.delete(key);
+      this.pendingHttpSessionMetadata.delete(key);
+    },
+  });
+  private activeConnectionServerState = new Map<string, CachedServerState>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
-  private toolNameCache = new Map<string, Map<string, string>>();
+  private toolNameCache = new LRUCacheManager<Map<string, string>>({
+    maxSize: McpClient.TOOL_NAME_CACHE_MAX_ENTRIES,
+    defaultTtl: 0,
+  });
   // Per-connectionKey lock to prevent thundering-herd when multiple concurrent
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // Per-secretId lock to prevent concurrent OAuth refresh attempts from
+  // thrashing rotating refresh tokens when multiple tool calls arrive at once.
+  private oauthRefreshLocks = new Map<
+    string,
+    Promise<{
+      refreshed: boolean;
+      updatedSecret: Record<string, unknown> | null;
+    }>
+  >();
   // Session affinity metadata discovered during transport creation.
   // Used when persisting fresh session IDs after connect().
   private pendingHttpSessionMetadata = new Map<
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  // Cache for resource reads: key is `${agentId}:${uri}`, value is cached result with TTL.
+  // Bounded to RESOURCE_CACHE_MAX_SIZE entries (LRU eviction) to prevent unbounded growth
+  // in multi-tenant environments with many agents and resources.
+  private resourceCache = new QuickLRU<string, CachedResource>({
+    maxSize: RESOURCE_CACHE_MAX_SIZE,
+  });
   // Short-lived cache for MCP server secrets to avoid N+1 queries when multiple
   // tool calls hit the same MCP server within a batch or concurrent request window.
-  // Key: targetMcpServerId, Value: { result, expiresAt }
-  private secretsCache = new Map<
+  private secretsCache = new LRUCacheManager<{
+    secrets: Record<string, unknown>;
+    secretId?: string;
+  }>({
+    maxSize: McpClient.SECRETS_CACHE_MAX_ENTRIES,
+    defaultTtl: McpClient.SECRETS_CACHE_TTL_MS,
+  });
+  private enterpriseCredentialCache =
+    new LRUCacheManager<ResolvedEnterpriseTransportCredential>({
+      maxSize: McpClient.ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES,
+      defaultTtl: McpClient.ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS,
+    });
+  private clientCredentialsLocks = new Map<
     string,
-    {
-      result:
-        | { secrets: Record<string, unknown>; secretId?: string }
-        | { error: CommonToolResult };
-      expiresAt: number;
-    }
+    Promise<Record<string, unknown>>
   >();
-  private static readonly SECRETS_CACHE_TTL_MS = 30_000;
 
   /**
    * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
@@ -183,6 +297,7 @@ class McpClient {
         );
       }
       this.activeConnections.delete(connectionKey);
+      this.activeConnectionServerState.delete(connectionKey);
       this.toolNameCache.delete(connectionKey);
       this.pendingHttpSessionMetadata.delete(connectionKey);
       logger.info({ connectionKey }, "Closed cached MCP session");
@@ -207,19 +322,22 @@ class McpClient {
     options?: { conversationId?: string },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
-    const authInfo = tokenAuth
-      ? {
-          userId: tokenAuth.userId,
-          authMethod: deriveAuthMethod(tokenAuth),
-        }
-      : undefined;
+    const authInfo =
+      tokenAuth && Object.keys(tokenAuth).length
+        ? {
+            userId: tokenAuth.userId,
+            authMethod: deriveAuthMethod(tokenAuth),
+          }
+        : undefined;
 
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(toolCall, agentId);
     if ("error" in validationResult) {
       return validationResult.error;
     }
-    const { tool, catalogItem } = validationResult;
+    const { tool, catalogItem, resolvedToolCall } = validationResult;
+    // Use the resolved name (may have been prefixed by suffix fallback lookup)
+    toolCall = resolvedToolCall;
 
     const targetMcpServerIdResult =
       await this.determineTargetMcpServerIdForCatalogItem({
@@ -233,6 +351,51 @@ class McpClient {
       return targetMcpServerIdResult.error;
     }
     const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
+    const _targetMcpServer = await McpServerModel.findById(targetMcpServerId);
+    const effectiveEnterpriseManagedConfig =
+      catalogItem.enterpriseManagedConfig ?? null;
+    if (
+      tool.credentialResolutionMode === "enterprise_managed" &&
+      !effectiveEnterpriseManagedConfig
+    ) {
+      return this.createErrorResult(
+        toolCall,
+        agentId,
+        "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
+        mcpServerName,
+        authInfo,
+      );
+    }
+    const enterpriseTransportCredential =
+      tool.credentialResolutionMode === "enterprise_managed"
+        ? await this.resolveCachedEnterpriseTransportCredential({
+            agentId,
+            tokenAuth,
+            enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
+          })
+        : null;
+
+    if (
+      tool.credentialResolutionMode === "enterprise_managed" &&
+      !enterpriseTransportCredential
+    ) {
+      const authError = this.buildExpiredAuthMessage(
+        catalogItem.name,
+        catalogItem.id,
+        targetMcpServerId,
+        tokenAuth,
+        "Archestra could not resolve a usable identity-provider token for your current session. Re-authenticate to continue using this tool.",
+      );
+      return this.createErrorResult(
+        toolCall,
+        agentId,
+        authError.message,
+        mcpServerName,
+        authInfo,
+        authError,
+      );
+    }
+
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
@@ -241,7 +404,7 @@ class McpClient {
     if ("error" in secretsResult) {
       return secretsResult.error;
     }
-    const { secrets, secretId } = secretsResult;
+    const { secrets, secretId, serverState } = secretsResult;
 
     // Build connection cache key using the resolved target server ID.
     // When conversationId is provided, each (agent, conversation) gets its own connection
@@ -264,11 +427,52 @@ class McpClient {
       isRetry = false,
     ): Promise<CommonToolResult> => {
       try {
+        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
+          .refresh_token;
+        const shouldRefreshBeforeCall =
+          !isRetry &&
+          !!catalogItem.oauthConfig &&
+          !!secretId &&
+          hasRefreshToken &&
+          shouldProactivelyRefreshOAuthToken(currentSecrets);
+
+        if (shouldRefreshBeforeCall) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName,
+            catalogItem,
+            targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
+            executeRetry: (nextGetTransport, secrets) =>
+              executeToolCall(nextGetTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+
+          logger.warn(
+            { toolName: toolCall.name, secretId, catalogId: catalogItem.id },
+            "Proactive OAuth refresh failed, falling back to existing token",
+          );
+        }
+
         // Get the appropriate transport
         const transport = await getTransport();
 
         // Get or create client
-        const client = await this.getOrCreateClient(connectionKey, transport);
+        const client = await this.getOrCreateClient(
+          connectionKey,
+          transport,
+          targetMcpServerId,
+          serverState,
+        );
 
         // Determine the actual tool name by stripping the server/catalog prefix.
         // We prioritize the `catalogName` prefix, which is standard for local MCP servers.
@@ -284,7 +488,7 @@ class McpClient {
         }
 
         if (targetToolName === toolCall.name) {
-          // Neither prefix matched (e.g. server name contains "__" separator).
+          // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
           // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
           targetToolName = parseFullToolName(toolCall.name).toolName;
         }
@@ -303,15 +507,67 @@ class McpClient {
           arguments: toolCall.arguments,
         });
 
+        const isOAuthServer = !!catalogItem.oauthConfig;
+        const toolResultAuthError = isAuthRelatedToolResult(result);
+        if (
+          toolResultAuthError &&
+          isOAuthServer &&
+          secretId &&
+          hasRefreshToken &&
+          !isRetry
+        ) {
+          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+            secretId,
+            catalogId: catalogItem.id,
+            connectionKey,
+            toolCall,
+            agentId,
+            mcpServerName,
+            catalogItem,
+            targetMcpServerId,
+            tokenAuth,
+            toolCatalogId: tool.catalogId,
+            toolCatalogName: tool.catalogName,
+            executeRetry: (nextGetTransport, secrets) =>
+              executeToolCall(nextGetTransport, secrets, true),
+          });
+
+          if (retryToolCallResult) {
+            return retryToolCallResult;
+          }
+        }
+
+        if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
+          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          const authError = this.buildExpiredAuthMessage(
+            catalogDisplayName,
+            tool.catalogId,
+            targetMcpServerId,
+            tokenAuth,
+          );
+          return await this.createErrorResult(
+            toolCall,
+            agentId,
+            authError.message,
+            mcpServerName,
+            authInfo,
+            authError,
+          );
+        }
+
         // Apply template and return
-        return await this.createSuccessResult(
+        return await this.createSuccessResult({
           toolCall,
           agentId,
           mcpServerName,
-          result.content,
-          !!result.isError,
+          content: result.content as ContentBlock[],
+          isError: !!result.isError,
+          _meta: result._meta,
           authInfo,
-        );
+          structuredContent: result.structuredContent as
+            | Record<string, unknown>
+            | undefined,
+        });
       } catch (error) {
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
         // handshake when `transport.sessionId` is already set (session
@@ -373,6 +629,7 @@ class McpClient {
               }
             }
             this.activeConnections.delete(connectionKey);
+            this.activeConnectionServerState.delete(connectionKey);
             this.toolNameCache.delete(connectionKey);
             this.pendingHttpSessionMetadata.delete(connectionKey);
             return await executeToolCall(getTransport, currentSecrets, true);
@@ -395,6 +652,7 @@ class McpClient {
 
         // Only attempt token refresh for OAuth servers with a refresh token
         const isOAuthServer = !!catalogItem.oauthConfig;
+        const usesClientCredentials = usesOAuthClientCredentials(catalogItem);
         const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
           .refresh_token;
 
@@ -403,7 +661,8 @@ class McpClient {
           isAuthError &&
           isOAuthServer &&
           targetMcpServerId &&
-          !hasRefreshToken
+          !hasRefreshToken &&
+          !usesClientCredentials
         ) {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
@@ -446,35 +705,93 @@ class McpClient {
           // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
         }
 
+        if (!isRetry && isAuthError && usesClientCredentials && secretId) {
+          const resetSecrets = {
+            ...currentSecrets,
+            access_token: null,
+            client_credentials_expires_at: null,
+            client_credentials_refresh_at: null,
+          };
+          await secretManager().updateSecret(secretId, resetSecrets);
+          this.secretsCache.set(targetMcpServerId, {
+            secrets: resetSecrets,
+            secretId,
+          });
+          this.activeConnections.delete(connectionKey);
+          this.activeConnectionServerState.delete(connectionKey);
+          this.toolNameCache.delete(connectionKey);
+          this.pendingHttpSessionMetadata.delete(connectionKey);
+
+          return await executeToolCall(
+            () =>
+              this.getTransport(
+                catalogItem,
+                targetMcpServerId,
+                resetSecrets,
+                secretId,
+                connectionKey,
+                tokenAuth,
+                enterpriseTransportCredential ?? undefined,
+              ),
+            resetSecrets,
+            true,
+          );
+        }
+
         // For auth errors, return an actionable message with re-auth URL
         if (isAuthError && tool.catalogId) {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
           // Credentials exist but failed → "expired/invalid" message with manage link
           if (targetMcpServerId) {
+            const targetServer =
+              await McpServerModel.findById(targetMcpServerId);
+            if (
+              targetServer?.ownerId &&
+              !targetServer.teamId &&
+              tokenAuth?.userId !== targetServer.ownerId
+            ) {
+              const assignmentError =
+                this.buildAssignedCredentialUnavailableMessage(
+                  catalogDisplayName,
+                  tool.catalogId,
+                );
+              return await this.createErrorResult(
+                toolCall,
+                agentId,
+                assignmentError.message,
+                mcpServerName,
+                authInfo,
+                assignmentError,
+              );
+            }
+            const authError = this.buildExpiredAuthMessage(
+              catalogDisplayName,
+              tool.catalogId,
+              targetMcpServerId,
+              tokenAuth,
+            );
             return await this.createErrorResult(
               toolCall,
               agentId,
-              this.buildExpiredAuthMessage(
-                catalogDisplayName,
-                tool.catalogId,
-                targetMcpServerId,
-                tokenAuth,
-              ),
+              authError.message,
               mcpServerName,
               authInfo,
+              authError,
             );
           }
           // No server resolved → "auth required" message with install link
+          const authError = this.buildAuthRequiredMessage(
+            catalogDisplayName,
+            tool.catalogId,
+            tokenAuth,
+          );
           return await this.createErrorResult(
             toolCall,
             agentId,
-            this.buildAuthRequiredMessage(
-              catalogDisplayName,
-              tool.catalogId,
-              tokenAuth,
-            ),
+            authError.message,
             mcpServerName,
             authInfo,
+            authError,
           );
         }
 
@@ -495,8 +812,10 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             secrets,
+            secretId,
             connectionKey,
             tokenAuth,
+            enterpriseTransportCredential ?? undefined,
           ),
         secrets,
       );
@@ -512,18 +831,29 @@ class McpClient {
       connectionKey,
       concurrencyLimit,
       () =>
-        executeToolCall(
-          () =>
-            this.getTransportWithKind(
-              catalogItem,
-              targetMcpServerId,
-              secrets,
-              transportKind,
-              connectionKey,
-              tokenAuth,
-            ),
-          secrets,
-        ),
+        executeToolCall(async () => {
+          const resolvedSecrets = await this.resolveSecretsForTransport({
+            catalogItem,
+            secrets,
+            secretId,
+          });
+          if (resolvedSecrets !== secrets) {
+            this.secretsCache.set(targetMcpServerId, {
+              secrets: resolvedSecrets,
+              ...(secretId ? { secretId } : {}),
+            });
+          }
+
+          return this.getTransportWithKind(
+            catalogItem,
+            targetMcpServerId,
+            resolvedSecrets,
+            transportKind,
+            connectionKey,
+            tokenAuth,
+            enterpriseTransportCredential ?? undefined,
+          );
+        }, secrets),
     );
   }
 
@@ -533,18 +863,54 @@ class McpClient {
   private async getOrCreateClient(
     connectionKey: string,
     transport: Transport,
+    targetMcpServerId: string,
+    currentServerState: CachedServerState,
   ): Promise<Client> {
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
+      const cachedServerState =
+        this.activeConnectionServerState.get(connectionKey);
+      if (
+        !cachedServerState ||
+        !this.hasMatchingServerState(cachedServerState, currentServerState)
+      ) {
+        logger.info(
+          {
+            connectionKey,
+            targetMcpServerId,
+            cachedSecretId: cachedServerState?.secretId ?? null,
+            currentSecretId: currentServerState.secretId,
+          },
+          "Discarding cached MCP client after MCP server secret changed",
+        );
+        try {
+          await existingClient.close();
+        } catch (error) {
+          logger.warn(
+            { connectionKey, targetMcpServerId, error },
+            "Error closing stale cached MCP client after credential change",
+          );
+        }
+        this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+      }
+    }
+
+    const reusableClient = this.activeConnections.get(connectionKey);
+    if (reusableClient) {
       // Health check: ping the client to verify connection is still alive
       try {
-        await existingClient.ping();
+        await reusableClient.ping();
         logger.debug(
           { connectionKey },
           "Client ping successful, reusing cached client",
         );
-        return existingClient;
+        this.activeConnections.set(connectionKey, reusableClient);
+        this.activeConnectionServerState.set(connectionKey, currentServerState);
+        return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
         logger.warn(
@@ -555,6 +921,7 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
         this.toolNameCache.delete(connectionKey);
         this.pendingHttpSessionMetadata.delete(connectionKey);
         // If the transport carries a stored session ID the session is likely
@@ -571,17 +938,17 @@ class McpClient {
       }
     }
 
+    // Create the client with UI extension capabilities
+    const capabilities: ClientCapabilitiesWithExtensions = {
+      roots: { listChanged: true },
+      extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
+    };
+
     // Create new client
     logger.info({ connectionKey }, "Creating new MCP client");
-    const client = new Client(
-      {
-        name: "archestra-platform",
-        version: "1.0.0",
-      },
-      {
-        capabilities: {},
-      },
-    );
+    const client = new Client(buildMcpClientInfo("archestra-platform"), {
+      capabilities,
+    });
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const usedStoredSession =
@@ -634,6 +1001,7 @@ class McpClient {
     // This prevents a race where a second request creates a duplicate connection
     // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
+    this.activeConnectionServerState.set(connectionKey, currentServerState);
 
     // Persist the MCP session ID so other backend pods can reuse it.
     // With --isolated, each Mcp-Session-Id maps to a separate browser context;
@@ -672,14 +1040,37 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
   ): Promise<
-    | { tool: McpToolAssignment; catalogItem: InternalMcpCatalog }
+    | {
+        tool: McpToolAssignment;
+        catalogItem: InternalMcpCatalog;
+        resolvedToolCall: CommonToolCall;
+      }
     | { error: CommonToolResult }
   > {
     // Get MCP tool from agent-assigned tools
-    const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
+    let mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       [toolCall.name],
       agentId,
     );
+
+    // Fallback: if the name has no server prefix (no MCP_SERVER_TOOL_NAME_SEPARATOR), try finding a tool
+    // that ends with "__<name>". This handles MCP App iframes calling oncalltool
+    // with the raw tool name (e.g. "refresh-stats" instead of "system__refresh-stats"),
+    // which happens when third-party hosts render MCP Apps.
+    if (
+      mcpTools.length === 0 &&
+      !toolCall.name.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)
+    ) {
+      mcpTools = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        toolCall.name,
+        agentId,
+      );
+      if (mcpTools.length > 0) {
+        // Use the full prefixed name for downstream execution but don't mutate the caller's object.
+        toolCall = { ...toolCall, name: mcpTools[0].toolName };
+      }
+    }
+
     const tool = mcpTools[0];
 
     if (!tool) {
@@ -717,7 +1108,7 @@ class McpClient {
       };
     }
 
-    return { tool, catalogItem };
+    return { tool, catalogItem, resolvedToolCall: toolCall };
   }
 
   // Gets secrets of a given MCP server, with short-lived caching to prevent
@@ -731,38 +1122,11 @@ class McpClient {
     toolCall: CommonToolCall;
     agentId: string;
   }): Promise<
-    | { secrets: Record<string, unknown>; secretId?: string }
-    | { error: CommonToolResult }
-  > {
-    const now = Date.now();
-    const cached = this.secretsCache.get(targetMcpServerId);
-    if (cached && cached.expiresAt > now) {
-      return cached.result;
-    }
-
-    const result = await this.fetchSecretsForMcpServer(
-      targetMcpServerId,
-      toolCall,
-      agentId,
-    );
-
-    // Only cache successful results (not errors) so transient failures can be retried
-    if (!("error" in result)) {
-      this.secretsCache.set(targetMcpServerId, {
-        result,
-        expiresAt: now + McpClient.SECRETS_CACHE_TTL_MS,
-      });
-    }
-
-    return result;
-  }
-
-  private async fetchSecretsForMcpServer(
-    targetMcpServerId: string,
-    toolCall: CommonToolCall,
-    agentId: string,
-  ): Promise<
-    | { secrets: Record<string, unknown>; secretId?: string }
+    | {
+        secrets: Record<string, unknown>;
+        secretId?: string;
+        serverState: CachedServerState;
+      }
     | { error: CommonToolResult }
   > {
     const mcpServer = await McpServerModel.findById(targetMcpServerId);
@@ -776,20 +1140,53 @@ class McpClient {
         ),
       };
     }
+
+    const currentServerState = this.toCachedServerState(mcpServer);
+    const cached = this.secretsCache.get(targetMcpServerId);
+    if (cached?.secretId === currentServerState.secretId) {
+      return { ...cached, serverState: currentServerState };
+    }
+
+    if (cached) {
+      this.secretsCache.delete(targetMcpServerId);
+    }
+
+    const result = await this.fetchSecretsForLoadedMcpServer(mcpServer);
+
+    this.secretsCache.set(targetMcpServerId, {
+      secrets: result.secrets,
+      secretId: result.secretId,
+    });
+
+    return result;
+  }
+
+  private async fetchSecretsForLoadedMcpServer(
+    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
+  ): Promise<{
+    secrets: Record<string, unknown>;
+    secretId?: string;
+    serverState: CachedServerState;
+  }> {
+    const serverState = this.toCachedServerState(mcpServer);
     if (mcpServer.secretId) {
       const secret = await secretManager().getSecret(mcpServer.secretId);
       if (secret?.secret) {
         logger.info(
           {
-            targetMcpServerId,
+            targetMcpServerId: mcpServer.id,
             secretId: mcpServer.secretId,
           },
-          `Found secrets for MCP server ${targetMcpServerId}`,
+          `Found secrets for MCP server ${mcpServer.id}`,
         );
-        return { secrets: secret.secret, secretId: mcpServer.secretId };
+        return {
+          secrets: secret.secret,
+          secretId: mcpServer.secretId,
+          serverState,
+        };
       }
     }
-    return { secrets: {} };
+    return { secrets: {}, serverState };
   }
 
   // Determines the target MCP server ID for a local catalog item
@@ -819,60 +1216,65 @@ class McpClient {
       },
       "Determining target MCP server ID for catalog item",
     );
-    // Static credential case: use pre-configured execution source
-    if (!tool.useDynamicTeamCredential) {
-      if (
-        catalogItem.serverType === "local" &&
-        !tool.executionSourceMcpServerId
-      ) {
+    // Static credential case: tool has a bound MCP server credential to use.
+    if (tool.credentialResolutionMode === "static") {
+      if (!tool.mcpServerId) {
         return {
           error: await this.createErrorResult(
             toolCall,
             agentId,
-            "Execution source is required for local MCP server tools when dynamic team credential is disabled.",
+            "An MCP server installation is required for statically assigned MCP tools.",
             fallbackName,
           ),
         };
       }
-      if (
-        catalogItem.serverType === "remote" &&
-        !tool.credentialSourceMcpServerId
-      ) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
-            fallbackName,
-          ),
-        };
-      }
-      const targetMcpServerId =
-        catalogItem.serverType === "local"
-          ? tool.executionSourceMcpServerId
-          : tool.credentialSourceMcpServerId;
-      if (!targetMcpServerId) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
-            fallbackName,
-          ),
-        };
-      }
-      const mcpServer = await McpServerModel.findById(targetMcpServerId);
+      const mcpServer = await McpServerModel.findById(tool.mcpServerId);
       logger.info(
         {
           toolName: toolCall.name,
           catalogItem: catalogItem,
-          targetMcpServerId,
+          targetMcpServerId: tool.mcpServerId,
         },
         "Determined target MCP server ID for catalog item",
       );
       return {
-        targetMcpServerId,
+        targetMcpServerId: tool.mcpServerId,
         mcpServerName: mcpServer?.name || fallbackName,
+      };
+    }
+
+    // If mcp server is configured to use enterprise-managed credentials, we can use any pod.
+    // Mcp server pod will request credentials from the IDP.
+    if (tool.credentialResolutionMode === "enterprise_managed") {
+      const explicitTargetMcpServerId = tool.mcpServerId;
+      if (explicitTargetMcpServerId) {
+        const mcpServer = await McpServerModel.findById(
+          explicitTargetMcpServerId,
+        );
+        return {
+          targetMcpServerId: explicitTargetMcpServerId,
+          mcpServerName: mcpServer?.name || fallbackName,
+        };
+      }
+
+      const allServers = await McpServerModel.findByCatalogId(
+        tool.catalogId ?? "",
+      );
+      const resolvedServer = allServers[0];
+      if (!resolvedServer) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
+            fallbackName,
+          ),
+        };
+      }
+
+      return {
+        targetMcpServerId: resolvedServer.id,
+        mcpServerName: resolvedServer.name,
       };
     }
 
@@ -902,9 +1304,9 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // Priority 1: Personal credential owned by current user (no teamId)
-    // That happens only from chat UI when we know the user ID
+    // User token: try user's personal server, then team-owned servers for teams the user belongs to
     if (tokenAuth.userId) {
+      // Priority 1: Personal credential owned by current user
       const userServer = allServers.find(
         (s) => s.ownerId === tokenAuth.userId && !s.teamId,
       );
@@ -916,82 +1318,72 @@ class McpClient {
             serverId: userServer.id,
             userId: tokenAuth.userId,
           },
-          `Dynamic resolution: using user-owned server of ${userServer.id} for tool ${toolCall.name}`,
+          `Dynamic resolution: using user-owned server for tool ${toolCall.name}`,
         );
         return {
           targetMcpServerId: userServer.id,
           mcpServerName: userServer.name,
         };
       }
-    }
 
-    // Priority 2 & 3: Team token used - batch-load team members once to avoid N+1 queries
-    if (tokenAuth.teamId) {
-      const teamMembers = await TeamModel.getTeamMembers(tokenAuth.teamId);
-      const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
-
-      // Priority 2: Personal credential owned by a team member (no teamId on server)
-      for (const server of allServers) {
-        if (
-          server.ownerId &&
-          !server.teamId &&
-          teamMemberIds.has(server.ownerId)
-        ) {
-          logger.info(
-            {
-              toolName: toolCall.name,
-              catalogId: tool.catalogId,
-              serverId: server.id,
-              ownerId: server.ownerId,
-              teamId: tokenAuth.teamId,
-            },
-            `Dynamic resolution: using server owned by personal credential of ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-          );
-          return {
-            targetMcpServerId: server.id,
-            mcpServerName: server.name,
-          };
-        }
-      }
-
-      // Priority 3: Any server owned by a team member
-      for (const server of allServers) {
-        if (server.ownerId && teamMemberIds.has(server.ownerId)) {
-          logger.info(
-            {
-              toolName: toolCall.name,
-              catalogId: tool.catalogId,
-              serverId: server.id,
-              ownerId: server.ownerId,
-              teamId: tokenAuth.teamId,
-            },
-            `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
-          );
-          return {
-            targetMcpServerId: server.id,
-            mcpServerName: server.name,
-          };
-        }
-      }
-    }
-
-    // Priority 4: Otherwise, if organization-wide token is used, use first available server
-    if (tokenAuth.isOrganizationToken && allServers.length > 0) {
-      logger.info(
-        {
-          toolName: toolCall.name,
-          catalogId: tool.catalogId,
-          serverId: allServers[0].id,
-        },
-        `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
+      // Priority 2: Team-owned server for a team the user is a member of
+      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
+      const userTeamIds = new Set(userTeams.map((t) => t.id));
+      const teamServer = allServers.find(
+        (s) => s.teamId && userTeamIds.has(s.teamId),
       );
+      if (teamServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: teamServer.id,
+            teamId: teamServer.teamId,
+            userId: tokenAuth.userId,
+          },
+          `Dynamic resolution: using team-owned server for user ${tokenAuth.userId}`,
+        );
+        return {
+          targetMcpServerId: teamServer.id,
+          mcpServerName: teamServer.name,
+        };
+      }
+    }
+
+    // Team token: only try team-owned servers for the token's team
+    if (tokenAuth.teamId) {
+      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
+      if (teamServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: teamServer.id,
+            teamId: tokenAuth.teamId,
+          },
+          `Dynamic resolution: using team-owned server for team ${tokenAuth.teamId}`,
+        );
+        return {
+          targetMcpServerId: teamServer.id,
+          mcpServerName: teamServer.name,
+        };
+      }
+    }
+
+    // Org-wide token is incompatible with dynamic credential resolution
+    if (tokenAuth.isOrganizationToken) {
       return {
-        targetMcpServerId: allServers[0].id,
-        mcpServerName: allServers[0].name,
+        error: await this.createErrorResult(
+          toolCall,
+          agentId,
+          "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
+          fallbackName,
+        ),
       };
     }
 
-    // Priority 5: Fallback for external IdP users if earlier team-based resolution didn't match
+    // Fallback for external IdP users if earlier resolution didn't match
+    // TODO: works only we are doing end-to-end JWKS pattern.
     if (tokenAuth.isExternalIdp && allServers.length > 0) {
       logger.info(
         {
@@ -1009,16 +1401,19 @@ class McpClient {
 
     // No server found - return an actionable error with install link
     const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const authError = this.buildAuthRequiredMessage(
+      catalogDisplayName,
+      tool.catalogId,
+      tokenAuth,
+    );
     return {
       error: await this.createErrorResult(
         toolCall,
         agentId,
-        this.buildAuthRequiredMessage(
-          catalogDisplayName,
-          tool.catalogId,
-          tokenAuth,
-        ),
+        authError.message,
         fallbackName,
+        undefined,
+        authError,
       ),
     };
   }
@@ -1054,6 +1449,10 @@ class McpClient {
     transportKind: TransportKind,
     connectionKey?: string,
     tokenAuth?: TokenAuthContext,
+    enterpriseTransportCredential?: {
+      headerName: string;
+      headerValue: string;
+    },
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
@@ -1106,14 +1505,24 @@ class McpClient {
           });
         }
 
-        const localHeaders: Record<string, string> = {};
-        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+        const localHeaders = buildStaticCredentialHeaders({
+          catalogItem,
+          secrets,
+        });
+        if (enterpriseTransportCredential) {
+          localHeaders[enterpriseTransportCredential.headerName] =
+            enterpriseTransportCredential.headerValue;
+        } else if (
+          !hasStaticAuthorizationCredential(secrets) &&
+          tokenAuth?.isExternalIdp &&
+          tokenAuth.rawToken
+        ) {
+          // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
+          // (upstream server validates the same JWT against the IdP's JWKS)
           localHeaders.Authorization = `Bearer ${tokenAuth.rawToken}`;
-        } else if (secrets.access_token) {
-          localHeaders.Authorization = `Bearer ${secrets.access_token}`;
-        } else if (secrets.raw_access_token) {
-          localHeaders.Authorization = String(secrets.raw_access_token);
         }
+
+        mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
@@ -1126,15 +1535,24 @@ class McpClient {
           throw new Error("Remote server missing serverUrl");
         }
 
-        const headers: Record<string, string> = {};
-        if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
-          // Propagate external IdP JWT to the underlying MCP server
+        const headers = buildStaticCredentialHeaders({
+          catalogItem,
+          secrets,
+        });
+        if (enterpriseTransportCredential) {
+          headers[enterpriseTransportCredential.headerName] =
+            enterpriseTransportCredential.headerValue;
+        } else if (
+          !hasStaticAuthorizationCredential(secrets) &&
+          tokenAuth?.isExternalIdp &&
+          tokenAuth.rawToken
+        ) {
+          // Fallback: propagate external IdP JWT for end-to-end JWKS pattern
+          // (upstream server validates the same JWT against the IdP's JWKS)
           headers.Authorization = `Bearer ${tokenAuth.rawToken}`;
-        } else if (secrets.access_token) {
-          headers.Authorization = `Bearer ${secrets.access_token}`;
-        } else if (secrets.raw_access_token) {
-          headers.Authorization = String(secrets.raw_access_token);
         }
+
+        mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
 
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
@@ -1149,6 +1567,11 @@ class McpClient {
       if (catalogItem.serverType !== "local") {
         throw new Error("Stdio transport is only supported for local servers");
       }
+      if (enterpriseTransportCredential) {
+        throw new Error(
+          "Enterprise-managed credentials require an HTTP-based MCP transport. Stdio transport is not supported.",
+        );
+      }
 
       // Stdio transport - use K8s attach!
       // Use getOrLoadDeployment to handle multi-replica scenarios where the deployment
@@ -1156,12 +1579,16 @@ class McpClient {
       const k8sDeployment =
         await McpServerRuntimeManager.getOrLoadDeployment(targetMcpServerId);
       if (!k8sDeployment) {
-        throw new Error("Deployment not found for MCP server");
+        throw new McpServerNotReadyError(
+          "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+        );
       }
 
       const podName = await k8sDeployment.getRunningPodName();
       if (!podName) {
-        throw new Error("No running pod found for MCP server deployment");
+        throw new McpServerNotReadyError(
+          "MCP server is not running yet. Start or restart it, then try inspecting it again.",
+        );
       }
 
       return new K8sAttachTransport({
@@ -1175,13 +1602,177 @@ class McpClient {
     throw new Error(`Unsupported transport kind: ${transportKind}`);
   }
 
+  private async resolveSecretsForTransport(params: {
+    catalogItem: InternalMcpCatalog;
+    secrets: Record<string, unknown>;
+    secretId?: string;
+  }): Promise<Record<string, unknown>> {
+    if (!usesOAuthClientCredentials(params.catalogItem)) {
+      return params.secrets;
+    }
+
+    if (hasUsableClientCredentialsToken(params.secrets)) {
+      return params.secrets;
+    }
+
+    const oauthConfig = params.catalogItem.oauthConfig;
+    if (!oauthConfig) {
+      throw new Error(
+        "OAuth client credentials configuration is missing oauthConfig",
+      );
+    }
+    const clientId =
+      getOptionalSecretString(params.secrets, "client_id") ||
+      oauthConfig.client_id;
+    const clientSecret =
+      getOptionalSecretString(params.secrets, "client_secret") ||
+      oauthConfig.client_secret;
+    const audience =
+      getOptionalSecretString(params.secrets, "audience") ||
+      oauthConfig.audience;
+
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        "OAuth client credentials configuration requires client_id and client_secret",
+      );
+    }
+
+    const cacheKey =
+      params.secretId ||
+      [
+        params.catalogItem.id,
+        clientId,
+        audience,
+        oauthConfig.token_endpoint || oauthConfig.auth_server_url || "",
+      ].join(":");
+    const existingLock = this.clientCredentialsLocks.get(cacheKey);
+    if (existingLock) {
+      return await existingLock;
+    }
+
+    const resolutionPromise = this.fetchClientCredentialsAccessToken({
+      catalogItem: params.catalogItem,
+      existingSecrets: params.secrets,
+      secretId: params.secretId,
+      clientId,
+      clientSecret,
+      audience,
+    }).finally(() => {
+      this.clientCredentialsLocks.delete(cacheKey);
+    });
+
+    this.clientCredentialsLocks.set(cacheKey, resolutionPromise);
+    return await resolutionPromise;
+  }
+
+  private async fetchClientCredentialsAccessToken(params: {
+    catalogItem: InternalMcpCatalog;
+    existingSecrets: Record<string, unknown>;
+    secretId?: string;
+    clientId: string;
+    clientSecret: string;
+    audience?: string;
+  }): Promise<Record<string, unknown>> {
+    const oauthConfig = params.catalogItem.oauthConfig;
+    if (!oauthConfig) {
+      throw new Error(
+        "OAuth client credentials configuration is missing oauthConfig",
+      );
+    }
+    let tokenEndpoint = oauthConfig.token_endpoint;
+    if (!tokenEndpoint) {
+      const endpoints = await discoverOAuthEndpoints(oauthConfig);
+      tokenEndpoint = endpoints.tokenEndpoint;
+    }
+
+    const configuredScopes =
+      oauthConfig.scopes.length > 0
+        ? oauthConfig.scopes
+        : oauthConfig.default_scopes;
+    const requestBody: Record<string, string> = {
+      grant_type: "client_credentials",
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+    };
+    if (params.audience) {
+      requestBody.audience = params.audience;
+    }
+    if (configuredScopes.length > 0) {
+      requestBody.scope = configuredScopes.join(" ");
+    }
+
+    const tokenResponse = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams(requestBody),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(
+        `Client credentials token request to ${tokenEndpoint} failed: ${tokenResponse.status} ${errorText}`,
+      );
+    }
+
+    const tokenData = (await tokenResponse.json()) as {
+      access_token?: string;
+      expires_in?: number;
+    };
+    if (!tokenData.access_token) {
+      throw new Error(
+        "Client credentials token response did not include access_token",
+      );
+    }
+
+    const timing = buildClientCredentialsTokenTiming(
+      tokenData.access_token,
+      tokenData.expires_in,
+    );
+    const resolvedSecrets = {
+      ...params.existingSecrets,
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+      ...(params.audience ? { audience: params.audience } : {}),
+      access_token: tokenData.access_token,
+      ...(timing.expiresAt
+        ? { client_credentials_expires_at: timing.expiresAt }
+        : {}),
+      client_credentials_refresh_at: timing.refreshAt,
+    };
+
+    if (params.secretId) {
+      await secretManager().updateSecret(params.secretId, resolvedSecrets);
+    }
+
+    return resolvedSecrets;
+  }
+
   private async getTransport(
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
+    secretId?: string,
     connectionKey?: string,
     tokenAuth?: TokenAuthContext,
+    enterpriseTransportCredential?: {
+      headerName: string;
+      headerValue: string;
+    },
   ): Promise<Transport> {
+    const resolvedSecrets = await this.resolveSecretsForTransport({
+      catalogItem,
+      secrets,
+      secretId,
+    });
+    if (resolvedSecrets !== secrets) {
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: resolvedSecrets,
+        ...(secretId ? { secretId } : {}),
+      });
+    }
     const transportKind = await this.getTransportKind(
       catalogItem,
       targetMcpServerId,
@@ -1189,10 +1780,11 @@ class McpClient {
     return this.getTransportWithKind(
       catalogItem,
       targetMcpServerId,
-      secrets,
+      resolvedSecrets,
       transportKind,
       connectionKey,
       tokenAuth,
+      enterpriseTransportCredential,
     );
   }
 
@@ -1253,13 +1845,25 @@ class McpClient {
       userId?: string;
       authMethod?: MCPGatewayAuthMethod;
     },
+    structuredError?: McpToolError,
   ): Promise<CommonToolResult> {
+    const normalizedError: McpToolError = structuredError ?? {
+      type: "generic",
+      message: error,
+    };
+
     const errorResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content: [{ type: "text", text: error }],
       isError: true,
       error,
+      _meta: {
+        archestraError: normalizedError,
+      },
+      structuredContent: {
+        archestraError: normalizedError,
+      },
     };
 
     await this.persistToolCall(
@@ -1275,22 +1879,34 @@ class McpClient {
   /**
    * Create success result with template application
    */
-  private async createSuccessResult(
-    toolCall: CommonToolCall,
-    agentId: string,
-    mcpServerName: string,
-    content: unknown,
-    isError: boolean,
-    authInfo?: {
-      userId?: string;
-      authMethod?: MCPGatewayAuthMethod;
-    },
-  ): Promise<CommonToolResult> {
+  private async createSuccessResult(opts: {
+    toolCall: CommonToolCall;
+    agentId: string;
+    mcpServerName: string;
+    content: ContentBlock[];
+    isError: boolean;
+    _meta?: Record<string, unknown>;
+    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod };
+    structuredContent?: Record<string, unknown>;
+  }): Promise<CommonToolResult> {
+    const {
+      toolCall,
+      agentId,
+      mcpServerName,
+      content,
+      isError,
+      _meta,
+      authInfo,
+      structuredContent,
+    } = opts;
+
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
+      _meta,
+      structuredContent,
     };
 
     await this.persistToolCall(
@@ -1346,22 +1962,16 @@ class McpClient {
       "attemptTokenRefreshAndRetry: authentication error detected, attempting token refresh and retry",
     );
 
-    // Invalidate existing client since token is going to be changed
-    const existingClient = this.activeConnections.get(connectionKey);
-    if (existingClient) {
-      try {
-        await existingClient.close();
-      } catch {
-        // Ignore close errors
-      }
-      this.activeConnections.delete(connectionKey);
-      this.pendingHttpSessionMetadata.delete(connectionKey);
-    }
+    // Attempt refresh, deduplicated per secret so concurrent callers do not
+    // race a rotating refresh token or thrash connection teardown state.
+    const refreshResult = await this.refreshOAuthTokenWithLock({
+      secretId,
+      catalogId,
+      connectionKey,
+      targetMcpServerId,
+    });
 
-    // Attempt refresh
-    const refreshResult = await refreshOAuthToken(secretId, catalogId);
-
-    if (!refreshResult) {
+    if (!refreshResult.refreshed) {
       logger.warn(
         { toolName: toolCall.name, secretId },
         "attemptTokenRefreshAndRetry: token refresh failed",
@@ -1389,8 +1999,8 @@ class McpClient {
 
     try {
       // Re-fetch updated secrets and retry once
-      const updatedSecret = await secretManager().getSecret(secretId);
-      if (!updatedSecret?.secret) {
+      const updatedSecret = refreshResult.updatedSecret;
+      if (!updatedSecret) {
         logger.warn(
           { toolName: toolCall.name, secretId },
           "attemptTokenRefreshAndRetry: failed to fetch updated secret after refresh",
@@ -1400,9 +2010,14 @@ class McpClient {
 
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
-        this.getTransport(catalogItem, targetMcpServerId, updatedSecret.secret);
+        this.getTransport(
+          catalogItem,
+          targetMcpServerId,
+          updatedSecret,
+          secretId,
+        );
 
-      return await executeRetry(getUpdatedTransport, updatedSecret.secret);
+      return await executeRetry(getUpdatedTransport, updatedSecret);
     } catch (retryError) {
       const retryErrorMsg =
         retryError instanceof Error ? retryError.message : String(retryError);
@@ -1420,16 +2035,19 @@ class McpClient {
 
       if (isRetryAuthError && toolCatalogId) {
         const catalogDisplayName = toolCatalogName || toolCatalogId;
+        const authError = this.buildExpiredAuthMessage(
+          catalogDisplayName,
+          toolCatalogId,
+          targetMcpServerId,
+          tokenAuth,
+        );
         return await this.createErrorResult(
           toolCall,
           agentId,
-          this.buildExpiredAuthMessage(
-            catalogDisplayName,
-            toolCatalogId,
-            targetMcpServerId,
-            tokenAuth,
-          ),
+          authError.message,
           mcpServerName,
+          undefined,
+          authError,
         );
       }
 
@@ -1442,6 +2060,74 @@ class McpClient {
     }
   }
 
+  private async refreshOAuthTokenWithLock(params: {
+    secretId: string;
+    catalogId: string;
+    connectionKey: string;
+    targetMcpServerId: string;
+  }): Promise<{
+    refreshed: boolean;
+    updatedSecret: Record<string, unknown> | null;
+  }> {
+    const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
+    const existingRefresh = this.oauthRefreshLocks.get(secretId);
+    if (existingRefresh) {
+      logger.info(
+        { secretId, catalogId },
+        "Waiting for concurrent OAuth token refresh",
+      );
+      return existingRefresh;
+    }
+
+    const refreshPromise = (async () => {
+      const existingClient = this.activeConnections.get(connectionKey);
+      if (existingClient) {
+        try {
+          await existingClient.close();
+        } catch {
+          // Ignore close errors during refresh teardown.
+        }
+        this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+      }
+
+      const refreshed = await refreshOAuthToken(secretId, catalogId);
+      if (!refreshed) {
+        return { refreshed: false, updatedSecret: null };
+      }
+
+      const updatedSecret = await secretManager().getSecret(secretId);
+      if (!updatedSecret?.secret) {
+        logger.warn(
+          { secretId, catalogId },
+          "OAuth token refresh succeeded but updated secret could not be loaded",
+        );
+        return { refreshed: false, updatedSecret: null };
+      }
+
+      this.secretsCache.set(targetMcpServerId, {
+        secrets: updatedSecret.secret,
+        secretId,
+      });
+
+      return { refreshed: true, updatedSecret: updatedSecret.secret };
+    })()
+      .catch((error) => {
+        logger.error(
+          { secretId, catalogId, error },
+          "OAuth token refresh lock encountered an unexpected error",
+        );
+        return { refreshed: false, updatedSecret: null };
+      })
+      .finally(() => {
+        this.oauthRefreshLocks.delete(secretId);
+      });
+
+    this.oauthRefreshLocks.set(secretId, refreshPromise);
+    return refreshPromise;
+  }
+
   /**
    * Build an actionable authentication error message with a link to the MCP registry
    * for the user to set up credentials.
@@ -1450,17 +2136,23 @@ class McpClient {
     catalogDisplayName: string,
     catalogId: string,
     tokenAuth?: TokenAuthContext,
-  ): string {
+  ): AuthRequiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
-    return formatActionableAuthError({
-      title: `Authentication required for "${catalogDisplayName}"`,
-      detail: `No credentials were found for your account (${context}).`,
-      actionLabel: "set up your credentials",
-      url: installUrl,
-      postAction:
-        "Once you have completed authentication, retry this tool call.",
-    });
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `Authentication required for "${catalogDisplayName}"`,
+        detail: `No credentials were found for your account (${context}).`,
+        actionLabel: "set up your credentials",
+        url: installUrl,
+        postAction:
+          "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      installUrl,
+    };
   }
 
   /**
@@ -1472,16 +2164,42 @@ class McpClient {
     catalogId: string,
     mcpServerId: string,
     tokenAuth?: TokenAuthContext,
-  ): string {
+    detailOverride?: string,
+  ): AuthExpiredMcpToolError {
     const context = this.formatAuthContext(tokenAuth);
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
-    return formatActionableAuthError({
-      title: `Expired or invalid authentication for "${catalogDisplayName}"`,
-      detail: `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
-      actionLabel: "re-authenticate",
-      url: reauthUrl,
-      postAction: "Once you have re-authenticated, retry this tool call.",
-    });
+    return {
+      type: "auth_expired",
+      message: formatActionableAuthError({
+        title: `Expired or invalid authentication for "${catalogDisplayName}"`,
+        detail:
+          detailOverride ??
+          `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
+        actionLabel: "re-authenticate",
+        url: reauthUrl,
+        postAction: "Once you have re-authenticated, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      serverId: mcpServerId,
+      reauthUrl,
+    };
+  }
+
+  private buildAssignedCredentialUnavailableMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AssignedCredentialUnavailableMcpToolError {
+    return {
+      type: "assigned_credential_unavailable",
+      message: [
+        `Expired / Invalid Authentication: credentials for "${catalogDisplayName}" have expired or are invalid.`,
+        "Re-authenticate to continue using this tool.",
+        "Ask the agent owner or an admin to re-authenticate.",
+      ].join("\n"),
+      catalogId,
+      catalogName: catalogDisplayName,
+    };
   }
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {
@@ -1551,12 +2269,27 @@ class McpClient {
   }
 
   /**
-   * Create a timeout promise
+   * Race a promise against a timeout, clearing the timer when the primary
+   * promise settles to prevent dangling timers under high throughput.
    */
-  private createTimeout(ms: number, message: string): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
+  private raceWithTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    errorOrMessage: string | Error,
+  ): Promise<T> {
+    let timerId: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => {
+        reject(
+          typeof errorOrMessage === "string"
+            ? new Error(errorOrMessage)
+            : errorOrMessage,
+        );
+      }, ms);
     });
+    return Promise.race([promise, timeout]).finally(() =>
+      clearTimeout(timerId),
+    );
   }
 
   /**
@@ -1566,8 +2299,9 @@ class McpClient {
     catalogItem: InternalMcpCatalog;
     mcpServerId: string;
     secrets: Record<string, unknown>;
+    secretId?: string;
   }): Promise<CommonMcpToolDefinition[]> {
-    const { catalogItem, mcpServerId, secrets } = params;
+    const { catalogItem, mcpServerId, secrets, secretId } = params;
 
     // For local servers, retry connection a few times since the MCP server process
     // may need time to initialize even after the pod is ready
@@ -1583,30 +2317,32 @@ class McpClient {
           catalogItem,
           mcpServerId,
           secrets,
+          secretId,
         );
+
+        const capabilities: ClientCapabilitiesWithExtensions = {
+          roots: { listChanged: true },
+          extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
+        };
 
         // Create client with transport
-        const client = new Client(
-          {
-            name: "archestra-platform",
-            version: "1.0.0",
-          },
-          {
-            capabilities: {},
-          },
-        );
+        const client = new Client(buildMcpClientInfo("archestra-platform"), {
+          capabilities,
+        });
 
         // Connect with timeout
-        await Promise.race([
+        await this.raceWithTimeout(
           client.connect(transport),
-          this.createTimeout(30000, "Connection timeout after 30 seconds"),
-        ]);
+          30000,
+          "Connection timeout after 30 seconds",
+        );
 
         // List tools with timeout
-        const toolsResult = await Promise.race([
+        const toolsResult = await this.raceWithTimeout(
           client.listTools(),
-          this.createTimeout(30000, "List tools timeout after 30 seconds"),
-        ]);
+          30000,
+          "List tools timeout after 30 seconds",
+        );
 
         // Close connection (we just needed the tools)
         await client.close();
@@ -1616,6 +2352,8 @@ class McpClient {
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
+          _meta: tool._meta,
+          annotations: tool.annotations,
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
@@ -1662,36 +2400,39 @@ class McpClient {
       catalogItem,
       mcpServerId,
       secrets,
+      undefined,
     );
 
-    const client = new Client(
-      { name: "archestra-inspector", version: "1.0.0" },
-      { capabilities: {} },
-    );
+    const client = new Client(buildMcpClientInfo("archestra-inspector"), {
+      capabilities: {},
+    });
 
     try {
-      await Promise.race([
+      await this.raceWithTimeout(
         client.connect(transport),
-        this.createTimeout(30000, "Connection timeout after 30 seconds"),
-      ]);
+        30000,
+        new McpServerConnectionTimeoutError(),
+      );
 
       if (method === "tools/list") {
-        return await Promise.race([
+        return await this.raceWithTimeout(
           client.listTools(),
-          this.createTimeout(30000, "List tools timeout"),
-        ]);
+          30000,
+          "List tools timeout",
+        );
       }
 
       if (!params.toolName) {
         throw new Error("toolName is required for tools/call");
       }
-      return await Promise.race([
+      return await this.raceWithTimeout(
         client.callTool({
           name: params.toolName,
           arguments: params.toolArguments ?? {},
         }),
-        this.createTimeout(60000, "Tool call timeout"),
-      ]);
+        60000,
+        "Tool call timeout",
+      );
     } finally {
       await client.close().catch(() => {});
     }
@@ -1722,8 +2463,13 @@ class McpClient {
 
     // Also disconnect active connections
     const activeDisconnectPromises = Array.from(
-      this.activeConnections.values(),
-    ).map(async (client) => {
+      this.activeConnections.keys(),
+    ).map(async (connectionKey) => {
+      const client = this.activeConnections.get(connectionKey);
+      if (!client) {
+        return;
+      }
+
       try {
         await client.close();
       } catch (error) {
@@ -1733,7 +2479,484 @@ class McpClient {
 
     await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
     this.activeConnections.clear();
+    this.activeConnectionServerState.clear();
     this.pendingHttpSessionMetadata.clear();
+  }
+
+  async invalidateConnectionsForServer(
+    targetMcpServerId: string,
+  ): Promise<void> {
+    const matchingConnectionKeys = Array.from(
+      this.activeConnections.keys(),
+    ).filter((connectionKey) => {
+      const parts = connectionKey.split(":");
+      return parts[1] === targetMcpServerId;
+    });
+
+    await Promise.all(
+      matchingConnectionKeys.map(async (connectionKey) => {
+        const client = this.activeConnections.get(connectionKey);
+        if (client) {
+          try {
+            await client.close();
+          } catch (error) {
+            logger.warn(
+              { connectionKey, targetMcpServerId, error },
+              "Error closing active MCP connection during server invalidation",
+            );
+          }
+        }
+
+        this.activeConnections.delete(connectionKey);
+        this.activeConnectionServerState.delete(connectionKey);
+        this.toolNameCache.delete(connectionKey);
+        this.pendingHttpSessionMetadata.delete(connectionKey);
+        await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
+          (error) => {
+            logger.warn(
+              { connectionKey, targetMcpServerId, error },
+              "Failed to delete stale MCP HTTP session during server invalidation",
+            );
+          },
+        );
+      }),
+    );
+
+    const matchingSecretKeys = Array.from(this.secretsCache.keys()).filter(
+      (cacheKey) => cacheKey === targetMcpServerId,
+    );
+    for (const cacheKey of matchingSecretKeys) {
+      this.secretsCache.delete(cacheKey);
+    }
+  }
+
+  /**
+   * Read a resource from its assigned MCP server
+   */
+  async readResource(
+    uri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<ResourceContents> {
+    // Include userId in cache key so per-user OAuth sessions are never mixed.
+    const userScope = tokenAuth?.userId ?? "anonymous";
+    const cacheKey = `${agentId}:${userScope}:${uri}`;
+    const now = Date.now();
+
+    const cached = this.resourceCache.get(cacheKey);
+    if (cached && cached.ttl > now) {
+      logger.debug(
+        { uri, agentId, cached: true },
+        "readResource: Cache hit, returning cached result",
+      );
+      this.refreshResourceInBackground(
+        uri,
+        agentId,
+        tokenAuth,
+        cacheKey,
+        cached.result,
+      ).catch((err) =>
+        logger.warn(
+          { err, uri, agentId },
+          "readResource: Background refresh failed",
+        ),
+      );
+      return cached.result;
+    }
+
+    const staleCache = cached;
+
+    logger.info(
+      { uri, agentId, hasStaleCache: !!staleCache },
+      "readResource: Starting resource read",
+    );
+
+    const mcpServer = await this.findMcpServerForResource(uri, agentId);
+
+    if (!mcpServer) {
+      logger.error(
+        { uri, agentId },
+        "readResource: No server could be found for resource",
+      );
+      if (staleCache) {
+        logger.info(
+          { uri, agentId },
+          "readResource: Returning stale cache due to no server found",
+        );
+        return staleCache.result;
+      }
+      throw new Error(`Resource not found or no server could read it: ${uri}`);
+    }
+
+    try {
+      const result = await this.doReadResource(
+        uri,
+        agentId,
+        mcpServer,
+        tokenAuth,
+      );
+      this.resourceCache.set(cacheKey, {
+        result,
+        ttl: now + RESOURCE_CACHE_TTL_MS,
+      });
+      logger.info(
+        { uri, agentId, serverId: mcpServer.server.id },
+        "readResource: Successfully read and cached resource",
+      );
+      return result;
+    } catch (error) {
+      if (staleCache) {
+        logger.warn(
+          { uri, agentId, error },
+          "readResource: Refresh failed, returning stale cache",
+        );
+        return staleCache.result;
+      }
+      throw error;
+    }
+  }
+
+  private async findMcpServerForResource(
+    uri: string,
+    agentId: string,
+  ): Promise<{
+    server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
+    catalogItem: NonNullable<
+      Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+    >;
+  } | null> {
+    const matchingTools = await ToolModel.findToolsByUiResourceUri(
+      agentId,
+      uri,
+    );
+
+    if (matchingTools.length > 0 && matchingTools[0].catalogId) {
+      const catalogId = matchingTools[0].catalogId;
+      const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+      if (catalogItem) {
+        const servers = await McpServerModel.findByCatalogId(catalogId);
+        const server = servers[0];
+        if (server) {
+          logger.info(
+            { uri, agentId, serverId: server.id, serverName: catalogItem.name },
+            "readResource: Found server via tool meta (fast lookup)",
+          );
+          return { server, catalogItem };
+        }
+      }
+    }
+
+    logger.warn(
+      { uri, agentId },
+      "readResource: No tool found with matching ui/resourceUri in meta",
+    );
+    return null;
+  }
+
+  private async doReadResource(
+    uri: string,
+    agentId: string,
+    mcpServer: {
+      server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
+      catalogItem: NonNullable<
+        Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      >;
+    },
+    tokenAuth?: TokenAuthContext,
+  ): Promise<ResourceContents> {
+    const { server, catalogItem } = mcpServer;
+
+    const secretResult = await this.getSecretsForMcpServer({
+      targetMcpServerId: server.id,
+      toolCall: { id: "resource-read", name: "read", arguments: {} },
+      agentId,
+    });
+
+    if ("error" in secretResult) {
+      throw new Error(`Secret resolution failed: ${secretResult.error}`);
+    }
+    const { secrets, secretId } = secretResult;
+
+    const transport = await this.getTransport(
+      catalogItem,
+      server.id,
+      secrets,
+      secretId,
+      undefined,
+      tokenAuth,
+    );
+    const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+    const client = await this.getOrCreateClient(
+      connectionKey,
+      transport,
+      server.id,
+      secretResult.serverState,
+    );
+
+    const result = await client.readResource({ uri });
+    return result;
+  }
+
+  private async refreshResourceInBackground(
+    uri: string,
+    agentId: string,
+    _tokenAuth: TokenAuthContext | undefined,
+    cacheKey: string,
+    _currentResult: ResourceContents,
+  ): Promise<void> {
+    try {
+      const mcpServer = await this.findMcpServerForResource(uri, agentId);
+      if (!mcpServer) {
+        logger.debug(
+          { uri, agentId },
+          "readResource: Background refresh - no server found",
+        );
+        return;
+      }
+
+      const newResult = await this.doReadResource(
+        uri,
+        agentId,
+        mcpServer,
+        _tokenAuth,
+      );
+      this.resourceCache.set(cacheKey, {
+        result: newResult,
+        ttl: Date.now() + RESOURCE_CACHE_TTL_MS,
+      });
+      logger.debug(
+        { uri, agentId },
+        "readResource: Background refresh succeeded",
+      );
+    } catch (error) {
+      logger.warn(
+        { uri, agentId, error },
+        "readResource: Background refresh failed, keeping old data",
+      );
+    }
+  }
+
+  /**
+   * Get connected MCP SDK clients for all upstream servers of an agent.
+   * Returns one client per distinct catalog item (MCP server installation).
+   */
+  private async getClientsForAgent(agentId: string): Promise<Client[]> {
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+
+    // Collect distinct catalog IDs (skip Archestra built-in tools which have no upstream server)
+    const catalogIds = [
+      ...new Set(
+        tools.map((t) => t.catalogId).filter((id): id is string => !!id),
+      ),
+    ];
+
+    const clients: Client[] = [];
+
+    for (const catalogId of catalogIds) {
+      try {
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+        if (!catalogItem) continue;
+
+        const servers = await McpServerModel.findByCatalogId(catalogId);
+        const server = servers[0];
+        if (!server) continue;
+
+        const secretResult = await this.getSecretsForMcpServer({
+          targetMcpServerId: server.id,
+          toolCall: { id: "list-op", name: "list", arguments: {} },
+          agentId,
+        });
+        if ("error" in secretResult) continue;
+
+        const transport = await this.getTransport(
+          catalogItem,
+          server.id,
+          secretResult.secrets,
+          secretResult.secretId,
+        );
+        const connectionKey = `${catalogItem.id}:${server.id}`;
+        const client = await this.getOrCreateClient(
+          connectionKey,
+          transport,
+          server.id,
+          secretResult.serverState,
+        );
+        clients.push(client);
+      } catch (error) {
+        logger.warn(
+          { agentId, catalogId, error },
+          "getClientsForAgent: failed to connect to upstream server, skipping",
+        );
+      }
+    }
+
+    return clients;
+  }
+
+  /**
+   * List resources from all upstream MCP servers connected to an agent.
+   */
+  async listResources(
+    agentId: string,
+  ): Promise<{ resources: Array<Record<string, unknown>> }> {
+    const clients = await this.getClientsForAgent(agentId);
+    const allResources: Array<Record<string, unknown>> = [];
+
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const result = await client.listResources();
+          allResources.push(
+            ...(result.resources as unknown as Array<Record<string, unknown>>),
+          );
+        } catch (error) {
+          logger.warn(
+            { error },
+            "listResources: upstream server failed, skipping",
+          );
+        }
+      }),
+    );
+
+    return { resources: allResources };
+  }
+
+  /**
+   * List resource templates from all upstream MCP servers connected to an agent.
+   */
+  async listResourceTemplates(
+    agentId: string,
+  ): Promise<{ resourceTemplates: Array<Record<string, unknown>> }> {
+    const clients = await this.getClientsForAgent(agentId);
+    const allTemplates: Array<Record<string, unknown>> = [];
+
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const result = await client.listResourceTemplates();
+          allTemplates.push(
+            ...(result.resourceTemplates as unknown as Array<
+              Record<string, unknown>
+            >),
+          );
+        } catch (error) {
+          logger.warn(
+            { error },
+            "listResourceTemplates: upstream server failed, skipping",
+          );
+        }
+      }),
+    );
+
+    return { resourceTemplates: allTemplates };
+  }
+
+  /**
+   * List prompts from all upstream MCP servers connected to an agent.
+   */
+  async listPrompts(
+    agentId: string,
+  ): Promise<{ prompts: Array<Record<string, unknown>> }> {
+    const clients = await this.getClientsForAgent(agentId);
+    const allPrompts: Array<Record<string, unknown>> = [];
+
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const result = await client.listPrompts();
+          allPrompts.push(
+            ...(result.prompts as unknown as Array<Record<string, unknown>>),
+          );
+        } catch (error) {
+          logger.warn(
+            { error },
+            "listPrompts: upstream server failed, skipping",
+          );
+        }
+      }),
+    );
+
+    return { prompts: allPrompts };
+  }
+
+  private async resolveCachedEnterpriseTransportCredential(params: {
+    agentId: string;
+    tokenAuth?: TokenAuthContext;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  }): Promise<ResolvedEnterpriseTransportCredential | null> {
+    const cacheKey = this.buildEnterpriseCredentialCacheKey(params);
+    if (cacheKey) {
+      const cachedCredential = this.enterpriseCredentialCache.get(cacheKey);
+      if (cachedCredential) {
+        return cachedCredential;
+      }
+    }
+
+    const credential = await resolveEnterpriseTransportCredential(params);
+    if (cacheKey && credential) {
+      this.enterpriseCredentialCache.set(
+        cacheKey,
+        credential,
+        this.resolveEnterpriseCredentialCacheTtl(credential.expiresInSeconds),
+      );
+    }
+
+    return credential;
+  }
+
+  private buildEnterpriseCredentialCacheKey(params: {
+    agentId: string;
+    tokenAuth?: TokenAuthContext;
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  }): string | null {
+    if (!params.enterpriseManagedConfig || !params.tokenAuth) {
+      return null;
+    }
+
+    return JSON.stringify({
+      agentId: params.agentId,
+      identityProviderId: params.enterpriseManagedConfig.identityProviderId,
+      resourceIdentifier: params.enterpriseManagedConfig.resourceIdentifier,
+      requestedIssuer: params.enterpriseManagedConfig.requestedIssuer,
+      requestedCredentialType:
+        params.enterpriseManagedConfig.requestedCredentialType,
+      tokenInjectionMode: params.enterpriseManagedConfig.tokenInjectionMode,
+      headerName: params.enterpriseManagedConfig.headerName,
+      responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
+      audience: params.enterpriseManagedConfig.audience,
+      scopes: params.enterpriseManagedConfig.scopes ?? [],
+      tokenId: params.tokenAuth.tokenId,
+      userId: params.tokenAuth.userId ?? null,
+      teamId: params.tokenAuth.teamId,
+      isOrganizationToken: params.tokenAuth.isOrganizationToken,
+      isExternalIdp: params.tokenAuth.isExternalIdp ?? false,
+      rawToken: params.tokenAuth.rawToken ?? null,
+    });
+  }
+
+  private resolveEnterpriseCredentialCacheTtl(
+    expiresInSeconds: number | null,
+  ): number {
+    if (expiresInSeconds && expiresInSeconds > 0) {
+      return expiresInSeconds * 1000;
+    }
+
+    return McpClient.ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS;
+  }
+
+  private hasMatchingServerState(
+    left: CachedServerState,
+    right: CachedServerState,
+  ): boolean {
+    return left.secretId === right.secretId;
+  }
+
+  private toCachedServerState(
+    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
+  ): CachedServerState {
+    return {
+      secretId: mcpServer.secretId ?? null,
+    };
   }
 }
 
@@ -1760,6 +2983,58 @@ function isAuthRelatedError(errorMessage: string): boolean {
     lower.includes("access denied") ||
     lower.includes("invalid credentials") ||
     lower.includes("credentials expired")
+  );
+}
+
+function isAuthRelatedToolResult(result: {
+  isError?: boolean;
+  content?: Array<{ type?: string; text?: string }>;
+  structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}): boolean {
+  if (!result.isError) {
+    return false;
+  }
+
+  const contentText = (result.content ?? [])
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+  const structuredText = result.structuredContent
+    ? JSON.stringify(result.structuredContent)
+    : "";
+  const metaText = result._meta ? JSON.stringify(result._meta) : "";
+
+  return isOAuthTokenFailureText(
+    `${contentText}\n${structuredText}\n${metaText}`,
+  );
+}
+
+function shouldProactivelyRefreshOAuthToken(
+  secrets: Record<string, unknown>,
+): boolean {
+  const expiresAt = secrets.expires_at;
+  if (typeof expiresAt !== "number") {
+    return false;
+  }
+
+  return expiresAt <= Date.now() + OAUTH_TOKEN_REFRESH_BUFFER_MS;
+}
+
+function isOAuthTokenFailureText(errorText: string): boolean {
+  const lower = errorText.toLowerCase();
+  return (
+    lower.includes("invalid_token") ||
+    lower.includes("invalid token") ||
+    lower.includes("invalid bearer token") ||
+    lower.includes("token_expired") ||
+    lower.includes("token expired") ||
+    lower.includes("expired token") ||
+    lower.includes("access token expired") ||
+    lower.includes("refresh token expired") ||
+    lower.includes("invalid bearer") ||
+    lower.includes('bearer realm="') ||
+    (lower.includes("www-authenticate") && lower.includes("bearer"))
   );
 }
 
@@ -1814,4 +3089,213 @@ function formatActionableAuthError(params: {
     "",
     params.postAction,
   ].join("\n");
+}
+
+/** Merge passthrough headers into target, skipping keys already present (case-insensitive). */
+function mergePassthroughHeaders(
+  target: Record<string, string>,
+  passthrough: Record<string, string> | undefined,
+): void {
+  if (!passthrough) return;
+  const existing = new Set(Object.keys(target).map((k) => k.toLowerCase()));
+  for (const [name, value] of Object.entries(passthrough)) {
+    if (!existing.has(name.toLowerCase())) {
+      target[name] = value;
+    }
+  }
+}
+
+function buildStaticCredentialHeaders(params: {
+  catalogItem: InternalMcpCatalog;
+  secrets: Record<string, unknown>;
+}): Record<string, string> {
+  const { catalogItem, secrets } = params;
+  const headers: Record<string, string> = {};
+  const tokenFieldUsesExplicitHeader = Boolean(
+    catalogItem.userConfig?.access_token?.headerName ||
+      catalogItem.userConfig?.raw_access_token?.headerName,
+  );
+
+  if (!catalogItem.userConfig) {
+    return buildDefaultAuthorizationHeaders(headers, secrets);
+  }
+
+  for (const [fieldName, config] of Object.entries(catalogItem.userConfig)) {
+    if (!config.headerName) {
+      continue;
+    }
+
+    const secretValue = secrets[fieldName];
+    if (typeof secretValue !== "string" || secretValue.length === 0) {
+      continue;
+    }
+
+    headers[config.headerName] = getStaticCredentialHeaderValue({
+      fieldName,
+      headerName: config.headerName,
+      secretValue,
+    });
+  }
+
+  if (tokenFieldUsesExplicitHeader) {
+    return headers;
+  }
+
+  return buildDefaultAuthorizationHeaders(headers, secrets);
+}
+
+function usesOAuthClientCredentials(catalogItem: InternalMcpCatalog): boolean {
+  return catalogItem.oauthConfig?.grant_type === "client_credentials";
+}
+
+function getOptionalSecretString(
+  secrets: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = secrets[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function hasUsableClientCredentialsToken(
+  secrets: Record<string, unknown>,
+): boolean {
+  const accessToken = getOptionalSecretString(secrets, "access_token");
+  if (!accessToken) {
+    return false;
+  }
+
+  const refreshAt = toOptionalTimestamp(secrets.client_credentials_refresh_at);
+  if (refreshAt) {
+    return Date.now() < refreshAt;
+  }
+
+  const expiresAt = toOptionalTimestamp(secrets.client_credentials_expires_at);
+  if (expiresAt) {
+    return Date.now() + TimeInMs.Minute < expiresAt;
+  }
+
+  return false;
+}
+
+function buildClientCredentialsTokenTiming(
+  accessToken: string,
+  expiresIn?: number,
+): {
+  expiresAt?: number;
+  refreshAt: number;
+} {
+  const now = Date.now();
+  const jwtExpiration = getJwtExpirationMs(accessToken);
+  if (jwtExpiration && jwtExpiration > now) {
+    const lifetimeMs = jwtExpiration - now;
+    return {
+      expiresAt: jwtExpiration,
+      refreshAt: now + Math.max(lifetimeMs / 2, TimeInMs.Minute),
+    };
+  }
+
+  if (
+    typeof expiresIn === "number" &&
+    Number.isFinite(expiresIn) &&
+    expiresIn > 0
+  ) {
+    const lifetimeMs = expiresIn * 1000;
+    return {
+      expiresAt: now + lifetimeMs,
+      refreshAt: now + Math.max(lifetimeMs / 2, TimeInMs.Minute),
+    };
+  }
+
+  return {
+    refreshAt: now + CLIENT_CREDENTIALS_FALLBACK_TTL_MS,
+  };
+}
+
+function toOptionalTimestamp(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return undefined;
+}
+
+function getJwtExpirationMs(token: string): number | undefined {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    return undefined;
+  }
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload =
+      normalizedPayload + "=".repeat((4 - (normalizedPayload.length % 4)) % 4);
+    const decoded = JSON.parse(
+      Buffer.from(paddedPayload, "base64").toString("utf8"),
+    ) as { exp?: number };
+    if (
+      typeof decoded.exp === "number" &&
+      Number.isFinite(decoded.exp) &&
+      decoded.exp > 0
+    ) {
+      return decoded.exp * 1000;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function hasStaticAuthorizationCredential(
+  secrets: Record<string, unknown>,
+): boolean {
+  if (
+    typeof secrets.access_token === "string" &&
+    secrets.access_token.length > 0
+  ) {
+    return true;
+  }
+
+  if (
+    typeof secrets.raw_access_token === "string" &&
+    secrets.raw_access_token.length > 0
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function getStaticCredentialHeaderValue(params: {
+  fieldName: string;
+  headerName: string;
+  secretValue: string;
+}): string {
+  if (
+    params.fieldName === "access_token" &&
+    params.headerName.toLowerCase() === "authorization"
+  ) {
+    return `Bearer ${params.secretValue}`;
+  }
+
+  return params.secretValue;
+}
+
+function buildDefaultAuthorizationHeaders(
+  headers: Record<string, string>,
+  secrets: Record<string, unknown>,
+): Record<string, string> {
+  const hasAuthorizationHeader = Object.keys(headers).some(
+    (headerName) => headerName.toLowerCase() === "authorization",
+  );
+
+  if (typeof secrets.access_token === "string" && !hasAuthorizationHeader) {
+    headers.Authorization = `Bearer ${secrets.access_token}`;
+  } else if (
+    typeof secrets.raw_access_token === "string" &&
+    !hasAuthorizationHeader
+  ) {
+    headers.Authorization = String(secrets.raw_access_token);
+  }
+
+  return headers;
 }

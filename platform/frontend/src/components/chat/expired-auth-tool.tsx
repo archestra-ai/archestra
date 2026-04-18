@@ -14,19 +14,25 @@ export function ExpiredAuthTool({
   reauthUrl,
   onReauth,
 }: ExpiredAuthToolProps) {
+  const displayName = catalogName || toolName || "this tool";
+
   return (
     <AuthErrorTool
-      toolName={toolName}
       title="Expired / Invalid Authentication"
       description={
         <>
-          Your credentials for &ldquo;{catalogName}&rdquo; have expired or are
+          Your credentials for &ldquo;{displayName}&rdquo; have expired or are
           invalid. Re-authenticate to continue using this tool.
         </>
       }
       buttonText={onReauth ? "Re-authenticate" : "Manage credentials"}
       buttonUrl={reauthUrl}
       onAction={onReauth}
+      actionTooltipText={
+        onReauth
+          ? `This will redirect you to ${displayName} to authorize access, then return you to this chat.`
+          : undefined
+      }
     />
   );
 }

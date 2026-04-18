@@ -38,6 +38,7 @@ namespace Bedrock {
 
     export type Tool = z.infer<typeof BedrockTools.ToolSchema>;
     export type ToolSpec = z.infer<typeof BedrockTools.ToolSpecSchema>;
+    export type ToolChoice = z.infer<typeof BedrockTools.ToolChoiceSchema>;
     export type ToolConfig = z.infer<typeof BedrockTools.ToolConfigSchema>;
 
     export type FoundationModel = z.infer<typeof FoundationModelSchema>;

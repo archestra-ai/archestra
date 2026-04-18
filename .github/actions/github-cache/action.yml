@@ -1,0 +1,38 @@
+name: GitHub Cache
+description: Wrapper around actions/cache pinned to a vetted version.
+inputs:
+  path:
+    description: Files, directories, and wildcard patterns to cache.
+    required: true
+  key:
+    description: Explicit key for restoring and saving the cache.
+    required: true
+  restore-keys:
+    description: Ordered multiline string listing the prefix-matched keys.
+    required: false
+    default: ""
+  enableCrossOsArchive:
+    description: Enable cross OS archive support.
+    required: false
+    default: "false"
+outputs:
+  cache-hit:
+    description: A boolean value to indicate an exact match was found for the key.
+    value: ${{ steps.cache.outputs.cache-hit }}
+  cache-primary-key:
+    description: The primary key provided by the action.
+    value: ${{ steps.cache.outputs.cache-primary-key }}
+  cache-matched-key:
+    description: The actual cache key that was restored.
+    value: ${{ steps.cache.outputs.cache-matched-key }}
+runs:
+  using: composite
+  steps:
+    - name: Cache
+      id: cache
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+        restore-keys: ${{ inputs.restore-keys }}
+        enableCrossOsArchive: ${{ inputs.enableCrossOsArchive }}

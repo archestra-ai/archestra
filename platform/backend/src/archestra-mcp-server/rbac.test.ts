@@ -1,14 +1,11 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import { ARCHESTRA_TOOL_SHORT_NAMES, getArchestraToolFullName } from "@shared";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { UserModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
-import { ALL_TOOL_SHORT_NAMES } from ".";
 import {
   checkToolPermission,
   filterToolNamesByPermission,
@@ -16,13 +13,25 @@ import {
 } from "./rbac";
 
 const t = (name: string) =>
-  `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`;
+  getArchestraToolFullName(name as (typeof ARCHESTRA_TOOL_SHORT_NAMES)[number]);
+const brandedTool = (name: string) =>
+  getArchestraToolFullName(
+    name as (typeof ARCHESTRA_TOOL_SHORT_NAMES)[number],
+    {
+      appName: "Acme Copilot",
+      fullWhiteLabeling: true,
+    },
+  );
+
+afterEach(() => {
+  archestraMcpBranding.syncFromOrganization(null);
+});
 
 // === Permission map completeness ===
 
 describe("TOOL_PERMISSIONS map", () => {
   test("has an entry for every registered tool", () => {
-    for (const shortName of ALL_TOOL_SHORT_NAMES) {
+    for (const shortName of ARCHESTRA_TOOL_SHORT_NAMES) {
       expect(TOOL_PERMISSIONS).toHaveProperty(shortName);
     }
   });
@@ -78,7 +87,7 @@ describe("checkToolPermission", () => {
   });
 
   test("allows member to use tools they have permission for", async () => {
-    // Members have knowledgeBase:read by default
+    // Members have knowledgeSources:read by default
     const result = await checkToolPermission(
       t("get_knowledge_bases"),
       memberContext,
@@ -93,7 +102,7 @@ describe("checkToolPermission", () => {
     makeCustomRole,
     makeAgent,
   }) => {
-    // Create a user with a custom role that has NO knowledgeBase permissions
+    // Create a user with a custom role that has NO knowledgeSources permissions
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
@@ -140,6 +149,18 @@ describe("checkToolPermission", () => {
     );
     expect(result).toBeNull();
   });
+
+  test("allows white-labeled built-in tool names through the same permission map", async () => {
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const result = await checkToolPermission(
+      brandedTool("get_knowledge_bases"),
+      memberContext,
+    );
+    expect(result).toBeNull();
+  });
 });
 
 // === filterToolNamesByPermission ===
@@ -171,7 +192,7 @@ describe("filterToolNamesByPermission", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    // Custom role with only agent:read — no knowledgeBase permissions
+    // Custom role with only agent:read — no knowledgeSources permissions
     const role = await makeCustomRole(org.id, {
       permission: { agent: ["read"] },
     });
@@ -190,8 +211,8 @@ describe("filterToolNamesByPermission", () => {
 
     expect(result.has(t("whoami"))).toBe(true); // null perm
     expect(result.has(t("get_agent"))).toBe(true); // agent:read ✓
-    expect(result.has(t("create_knowledge_base"))).toBe(false); // knowledgeBase:create ✗
-    expect(result.has(t("get_knowledge_bases"))).toBe(false); // knowledgeBase:read ✗
+    expect(result.has(t("create_knowledge_base"))).toBe(false); // knowledgeSources:create ✗
+    expect(result.has(t("get_knowledge_bases"))).toBe(false); // knowledgeSources:read ✗
   });
 
   test("admin sees all tools", async ({
@@ -256,5 +277,32 @@ describe("filterToolNamesByPermission", () => {
 
     expect(result.size).toBe(4);
     expect(permissionsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("filters white-labeled built-in tool names using the same short-name permissions", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { agent: ["read"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+
+    const result = await filterToolNamesByPermission(
+      [brandedTool("get_agent"), brandedTool("create_knowledge_base")],
+      user.id,
+      org.id,
+    );
+
+    expect(result.has(brandedTool("get_agent"))).toBe(true);
+    expect(result.has(brandedTool("create_knowledge_base"))).toBe(false);
   });
 });

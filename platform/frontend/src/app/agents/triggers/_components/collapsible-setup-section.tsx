@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-} from "lucide-react";
-import Link from "next/link";
+import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +9,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ExternalDocsLink } from "./external-docs-link";
 
 export function CollapsibleSetupSection({
   allStepsCompleted,
@@ -26,7 +21,7 @@ export function CollapsibleSetupSection({
   allStepsCompleted: boolean;
   isLoading: boolean;
   providerLabel: string;
-  docsUrl: string;
+  docsUrl: string | null;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -38,15 +33,9 @@ export function CollapsibleSetupSection({
         <div>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Setup</h2>
-            <Link
-              href={docsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
+            <ExternalDocsLink href={docsUrl} className="text-xs">
               Learn more
-              <ExternalLink className="h-3 w-3" />
-            </Link>
+            </ExternalDocsLink>
           </div>
           {!isLoading && (
             <p className="text-xs text-muted-foreground mt-1">
@@ -77,15 +66,9 @@ export function CollapsibleSetupSection({
               </Badge>
             </div>
             <div className="flex items-center gap-1">
-              <Link
-                href={docsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
+              <ExternalDocsLink href={docsUrl} className="text-xs">
                 Learn more
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+              </ExternalDocsLink>
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"

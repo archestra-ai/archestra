@@ -19,11 +19,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
-import { formatAuthMethod, useMcpToolCalls } from "@/lib/mcp-tool-call.query";
-import { useDateTimeRangePicker } from "@/lib/use-date-time-range-picker";
-import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
+import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import {
+  formatAuthMethod,
+  useMcpToolCalls,
+} from "@/lib/mcp/mcp-tool-call.query";
+import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 type McpToolCallData =
@@ -378,7 +382,7 @@ function McpToolCallsTable({
 
   const hasFilters =
     profileFilter !== "all" ||
-    dateTimePicker.dateRange !== undefined ||
+    dateTimePicker.startDate !== undefined ||
     !!searchFromUrl;
 
   const clearFilters = useCallback(() => {
@@ -398,19 +402,17 @@ function McpToolCallsTable({
   // Shared date picker component
   const datePickerComponent = (
     <DateTimeRangePicker
-      dateRange={dateTimePicker.dateRange}
+      startDate={dateTimePicker.startDate}
+      endDate={dateTimePicker.endDate}
       isDialogOpen={dateTimePicker.isDateDialogOpen}
-      tempDateRange={dateTimePicker.tempDateRange}
-      fromTime={dateTimePicker.fromTime}
-      toTime={dateTimePicker.toTime}
+      tempStartDate={dateTimePicker.tempStartDate}
+      tempEndDate={dateTimePicker.tempEndDate}
       displayText={dateTimePicker.getDateRangeDisplay()}
       onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-      onTempDateRangeChange={dateTimePicker.setTempDateRange}
-      onFromTimeChange={dateTimePicker.setFromTime}
-      onToTimeChange={dateTimePicker.setToTime}
+      onTempStartDateChange={dateTimePicker.setTempStartDate}
+      onTempEndDateChange={dateTimePicker.setTempEndDate}
       onOpenDialog={dateTimePicker.openDateDialog}
       onApply={dateTimePicker.handleApplyDateRange}
-      idPrefix="mcp-gateway-"
     />
   );
 

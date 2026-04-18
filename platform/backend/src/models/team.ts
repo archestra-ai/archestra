@@ -246,10 +246,11 @@ class TeamModel {
    */
   static async delete(id: string): Promise<boolean> {
     logger.debug({ id }, "TeamModel.delete: deleting team");
-    const result = await db
+    const rows = await db
       .delete(schema.teamsTable)
-      .where(eq(schema.teamsTable.id, id));
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+      .where(eq(schema.teamsTable.id, id))
+      .returning({ id: schema.teamsTable.id });
+    const deleted = rows.length > 0;
     logger.debug({ id, deleted }, "TeamModel.delete: completed");
     return deleted;
   }
@@ -366,16 +367,17 @@ class TeamModel {
    */
   static async removeMember(teamId: string, userId: string): Promise<boolean> {
     logger.debug({ teamId, userId }, "TeamModel.removeMember: removing member");
-    const result = await db
+    const rows = await db
       .delete(schema.teamMembersTable)
       .where(
         and(
           eq(schema.teamMembersTable.teamId, teamId),
           eq(schema.teamMembersTable.userId, userId),
         ),
-      );
+      )
+      .returning({ teamId: schema.teamMembersTable.teamId });
 
-    const removed = result.rowCount !== null && result.rowCount > 0;
+    const removed = rows.length > 0;
     logger.debug(
       { teamId, userId, removed },
       "TeamModel.removeMember: completed",
@@ -504,6 +506,40 @@ class TeamModel {
     logger.debug(
       { teamId, userId, isMember },
       "TeamModel.isUserInTeam: completed",
+    );
+    return isMember;
+  }
+
+  /**
+   * Check if a user is a member of any of the provided teams.
+   */
+  static async isUserInAnyTeam(
+    teamIds: string[],
+    userId: string,
+  ): Promise<boolean> {
+    if (teamIds.length === 0) {
+      return false;
+    }
+
+    logger.debug(
+      { teamIds, userId },
+      "TeamModel.isUserInAnyTeam: checking memberships",
+    );
+    const [membership] = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          inArray(schema.teamMembersTable.teamId, teamIds),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    const isMember = !!membership;
+    logger.debug(
+      { teamIds, userId, isMember },
+      "TeamModel.isUserInAnyTeam: completed",
     );
     return isMember;
   }
@@ -653,16 +689,17 @@ class TeamModel {
       { teamId, groupIdentifier },
       "TeamModel.removeExternalGroup: removing external group",
     );
-    const result = await db
+    const rows = await db
       .delete(schema.teamExternalGroupsTable)
       .where(
         and(
           eq(schema.teamExternalGroupsTable.teamId, teamId),
           eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
         ),
-      );
+      )
+      .returning({ id: schema.teamExternalGroupsTable.id });
 
-    const removed = result.rowCount !== null && result.rowCount > 0;
+    const removed = rows.length > 0;
     logger.debug(
       { teamId, groupIdentifier, removed },
       "TeamModel.removeExternalGroup: completed",
@@ -682,16 +719,17 @@ class TeamModel {
       { teamId, groupId },
       "TeamModel.removeExternalGroupById: removing external group",
     );
-    const result = await db
+    const rows = await db
       .delete(schema.teamExternalGroupsTable)
       .where(
         and(
           eq(schema.teamExternalGroupsTable.id, groupId),
           eq(schema.teamExternalGroupsTable.teamId, teamId),
         ),
-      );
+      )
+      .returning({ id: schema.teamExternalGroupsTable.id });
 
-    const removed = result.rowCount !== null && result.rowCount > 0;
+    const removed = rows.length > 0;
     logger.debug(
       { teamId, groupId, removed },
       "TeamModel.removeExternalGroupById: completed",

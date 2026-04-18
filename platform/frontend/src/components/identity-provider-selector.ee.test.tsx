@@ -2,9 +2,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
-import { usePublicIdentityProviders } from "@/lib/identity-provider.query.ee";
+import config from "@/lib/config/config";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
 
 // Mock next/navigation
@@ -22,12 +22,12 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
 }));
 
 // Mock identity providers query
-vi.mock("@/lib/identity-provider.query.ee", () => ({
+vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   usePublicIdentityProviders: vi.fn(),
 }));
 
 // Mock config
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config/config", () => ({
   default: {
     enterpriseFeatures: { core: true },
   },
@@ -62,6 +62,27 @@ describe("IdentityProviderSelector", () => {
   });
 
   describe("callbackURL handling", () => {
+    it("should prefer an explicit callback URL override", async () => {
+      mockSearchParams.get.mockReturnValue(
+        encodeURIComponent("/oauth/consent?client_id=test"),
+      );
+      const user = userEvent.setup();
+
+      render(
+        <IdentityProviderSelector
+          callbackURL={`${mockOrigin}/oauth/consent?client_id=test&scope=mcp`}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: /sign in with/i }));
+
+      expect(authClient.signIn.sso).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callbackURL: `${mockOrigin}/oauth/consent?client_id=test&scope=mcp`,
+        }),
+      );
+    });
+
     it("should use home URL when no redirectTo param is present", async () => {
       mockSearchParams.get.mockReturnValue(null);
       const user = userEvent.setup();

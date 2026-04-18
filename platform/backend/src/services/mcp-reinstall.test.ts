@@ -247,7 +247,7 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns false when only non-prompted config changes (command/args)", () => {
+      test("returns true when command or args change", () => {
         const envVars = [
           {
             key: "API_KEY",
@@ -274,7 +274,40 @@ describe("mcp-reinstall", () => {
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
+      });
+
+      test("returns true when docker or transport config changes", () => {
+        const oldConfig = {
+          ...createLocalCatalog([]),
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:1",
+            transportType: "stdio",
+            httpPort: undefined,
+            httpPath: undefined,
+            serviceAccount: "default",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+        const newConfig = {
+          ...createLocalCatalog([]),
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            dockerImage: "registry.example.com/mcp:2",
+            transportType: "streamable-http",
+            httpPort: 8080,
+            httpPath: "/mcp",
+            serviceAccount: "custom-sa",
+            environment: [],
+          },
+        } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
       });
 
       test("returns false when only non-prompted env vars are added", () => {
@@ -860,6 +893,39 @@ describe("mcp-reinstall", () => {
       expect(McpServerModel.update).toHaveBeenCalledWith(server.id, {
         name: "microsoft__playwright-mcp-user-123",
       });
+    });
+
+    test("passes _meta and annotations as meta when syncing tools", async () => {
+      const server = createServer({ serverType: "remote" });
+      const catalog = createCatalog({ serverType: "remote" });
+
+      const toolMeta = { ui: { resourceUri: "mcp://app/view" } };
+      const toolAnnotations = { readOnlyHint: true };
+
+      vi.mocked(McpServerModel.getToolsFromServer).mockResolvedValue([
+        {
+          name: "ui-tool",
+          description: "Tool with UI",
+          inputSchema: {},
+          _meta: toolMeta,
+          annotations: toolAnnotations,
+        },
+      ]);
+      vi.mocked(ToolModel.syncToolsForCatalog).mockResolvedValue({
+        created: [],
+        updated: [],
+        unchanged: [],
+        deleted: [],
+      });
+      vi.mocked(McpServerModel.update).mockResolvedValue({} as McpServer);
+
+      await autoReinstallServer(server, catalog);
+
+      expect(ToolModel.syncToolsForCatalog).toHaveBeenCalledWith([
+        expect.objectContaining({
+          meta: { _meta: toolMeta, annotations: toolAnnotations },
+        }),
+      ]);
     });
 
     test("succeeds for local server with full flow", async () => {

@@ -9,7 +9,7 @@ import {
   supportsFileUploads,
 } from "@shared";
 import type { ChatStatus } from "ai";
-import { MoreVerticalIcon, PaperclipIcon, RotateCcwIcon } from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -30,15 +30,16 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { ChatApiKeySelector } from "@/components/chat/chat-api-key-selector";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { KnowledgeBaseUploadIndicator } from "@/components/chat/knowledge-base-upload-indicator";
+import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
   ModelSelector,
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -51,13 +52,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
-import { useChatPlaceholder } from "@/lib/chat-placeholder.hook";
-import { conversationStorageKeys } from "@/lib/chat-utils";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
+import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
-import type { ModelSource } from "@/lib/use-chat-preferences";
-import { useIsMobile } from "@/lib/use-mobile.hook";
-import { useModelSelectorDisplay } from "@/lib/use-model-selector-display.hook";
 
 interface ArchestraPromptInputProps {
   onSubmit: (
@@ -92,7 +93,7 @@ interface ArchestraPromptInputProps {
   maxContextLength?: number | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
-  /** Agent's configured LLM API key ID - passed to ChatApiKeySelector */
+  /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
@@ -100,6 +101,8 @@ interface ArchestraPromptInputProps {
   isPlaywrightSetupVisible: boolean;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
+  /** Fallback display name when the selected agent is not yet present in the cached agent list */
+  selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Callback when model selector opens/closes */
@@ -133,6 +136,7 @@ const PromptInputContent = ({
   submitDisabled = false,
   isPlaywrightSetupVisible = false,
   selectorAgentId,
+  selectorAgentName,
   onAgentChange,
   onModelSelectorOpenChange,
   modelSource,
@@ -348,23 +352,27 @@ const PromptInputContent = ({
                       <>
                         {modelSource && (
                           <div className="flex items-center gap-1.5">
-                            <p className="text-xs font-medium text-muted-foreground">
+                            <Badge
+                              variant="secondary"
+                              className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
+                            >
                               {modelSource === "agent"
-                                ? "Agent default"
+                                ? "agent"
                                 : modelSource === "organization"
-                                  ? "Org default"
-                                  : "User override"}
-                            </p>
-                            {modelSource === "user" && onResetModelOverride && (
-                              <button
-                                type="button"
-                                onClick={onResetModelOverride}
-                                className="text-muted-foreground hover:text-foreground transition-colors"
-                                title="Reset to default"
-                              >
-                                <RotateCcwIcon className="size-3" />
-                              </button>
-                            )}
+                                  ? "org"
+                                  : "user override"}
+                              {modelSource === "user" &&
+                                onResetModelOverride && (
+                                  <button
+                                    type="button"
+                                    onClick={onResetModelOverride}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    title="Reset to default"
+                                  >
+                                    <XIcon className="size-3" />
+                                  </button>
+                                )}
+                            </Badge>
                           </div>
                         )}
                         {(conversationId || onApiKeyChange) && (
@@ -372,7 +380,7 @@ const PromptInputContent = ({
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                               Provider API Key
                             </p>
-                            <ChatApiKeySelector
+                            <LlmProviderApiKeySelector
                               conversationId={conversationId}
                               currentProvider={currentProvider}
                               currentConversationChatApiKeyId={
@@ -486,6 +494,7 @@ const PromptInputContent = ({
                 onAgentChange && (
                   <InitialAgentSelector
                     currentAgentId={selectorAgentId}
+                    currentAgentName={selectorAgentName}
                     onAgentChange={onAgentChange}
                   />
                 )}
@@ -507,7 +516,7 @@ const PromptInputContent = ({
               ) : (
                 <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
                   {(conversationId || onApiKeyChange) && (
-                    <ChatApiKeySelector
+                    <LlmProviderApiKeySelector
                       conversationId={conversationId}
                       currentProvider={currentProvider}
                       currentConversationChatApiKeyId={
@@ -546,8 +555,10 @@ const PromptInputContent = ({
                     }
                   />
                   {modelSource && (
-                    <span className="pr-2.5 pl-0.5 text-xs text-muted-foreground whitespace-nowrap inline-flex items-center gap-1">
-                      {"("}
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
+                    >
                       {modelSource === "agent"
                         ? "agent"
                         : modelSource === "organization"
@@ -557,14 +568,13 @@ const PromptInputContent = ({
                         <button
                           type="button"
                           onClick={onResetModelOverride}
-                          className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
                           title="Reset to default"
                         >
-                          <RotateCcwIcon className="size-3" />
+                          <XIcon className="size-3" />
                         </button>
                       )}
-                      {")"}
-                    </span>
+                    </Badge>
                   )}
                 </div>
               )}
@@ -620,6 +630,7 @@ const ArchestraPromptInput = ({
   submitDisabled,
   isPlaywrightSetupVisible,
   selectorAgentId,
+  selectorAgentName,
   onAgentChange,
   onModelSelectorOpenChange,
   modelSource,
@@ -650,6 +661,7 @@ const ArchestraPromptInput = ({
           submitDisabled={submitDisabled}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
+          selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
           onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}

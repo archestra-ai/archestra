@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  buildArchestraToolRefusalMetadata,
+  TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+} from "@shared";
 import type { InsertInteraction } from "@/types";
 import { randomBool, randomElement, randomInt } from "./utils";
 
@@ -576,8 +580,12 @@ export function generateMockInteraction(
   const responseMessage = shouldBlock
     ? {
         role: "assistant",
-        content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
-        refusal: `\n<archestra-tool-name>${selectedTool.name}</archestra-tool-name>\n<archestra-tool-arguments>${argsString}</archestra-tool-arguments>\n<archestra-tool-reason>Tool invocation blocked: context contains untrusted data</archestra-tool-reason>\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
+        content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`,
+        refusal: `\n${buildArchestraToolRefusalMetadata({
+          toolName: selectedTool.name,
+          toolArguments: argsString,
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        })}\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`,
       }
     : {
         role: "assistant",

@@ -3,22 +3,25 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, A2A protocol, and trigger configuration
-lastUpdated: 2026-01-25
+lastUpdated: 2026-03-27
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-![Agent Platform Swarm](/docs/platform-agents-swarm.png)
+![Agent Platform Swarm](/docs/platform-agents-swarm.webp)
 
 Agents in Archestra provide a comprehensive no-code solution for building autonomous and semi-autonomous agents that can access your data and work together in swarms. Each agent consists of a User Prompt, System Prompt, assigned tools, and sub-agents, and can be triggered via:
 
 - Archestra Chat UI
 - A2A (Agent-to-Agent) protocol
+- [Scheduled Tasks](/docs/platform-agent-triggers-schedule)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)
+
+Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
 ## A2A (Agent-to-Agent)
 
@@ -87,6 +90,8 @@ Response:
 ### Delegation Chain
 
 A2A supports nested agent-to-agent calls. When one agent invokes another, the delegation chain tracks the call path for observability. This enables multi-step agent workflows where agents can use other agents as tools.
+
+Delegated sub-agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state. If the parent agent has already crossed a sensitive-context boundary, the child starts in that same unsafe state, so downstream tool call policies continue to enforce the stricter rules instead of resetting during delegation.
 
 ### Configuration
 

@@ -124,6 +124,14 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if .Values.archestra.diagnostics.enabled }}
+- name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
+  value: "/var/diagnostics"
+{{- if gt (int .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit) 0 }}
+- name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
+  value: {{ .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit | quote }}
+{{- end }}
+{{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
 {{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
@@ -169,6 +177,13 @@ Auth secret key for the Archestra Platform
 {{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
 {{- end -}}
 {{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
+{{- end }}
+
+{{/*
+Diagnostics PVC claim name
+*/}}
+{{- define "archestra-platform.diagnosticsClaimName" -}}
+{{- default (printf "%s-diagnostics" (include "archestra-platform.fullname" .)) .Values.archestra.diagnostics.existingClaimName -}}
 {{- end }}
 
 {{/*
@@ -227,6 +242,10 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 # Ensure the pgvector extension exists in the application database.
 - name: setup-postgres-extensions
   image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}
+  {{- with .Values.archestra.initContainers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   env:
     - name: PGPASSWORD
       valueFrom:
@@ -244,7 +263,11 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
 {{- end }}
 - name: wait-for-postgres
-  image: busybox:1.36
+  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  {{- with .Values.archestra.initContainers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   env:
     {{- include "archestra-platform.env" . | nindent 4 }}
   {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
@@ -291,7 +314,7 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.extraVolumes }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -303,6 +326,11 @@ volumes:
     emptyDir:
       medium: Memory
   {{- end }}
+  {{- if .Values.archestra.diagnostics.enabled }}
+  - name: diagnostics
+    persistentVolumeClaim:
+      claimName: {{ include "archestra-platform.diagnosticsClaimName" . }}
+  {{- end }}
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
@@ -313,7 +341,7 @@ volumes:
 Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.extraVolumeMounts }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumeMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -324,6 +352,11 @@ volumeMounts:
   - name: vault-secrets
     mountPath: /vault/secrets
     readOnly: true
+  {{- end }}
+  {{- if .Values.archestra.diagnostics.enabled }}
+  - name: diagnostics
+    mountPath: /var/diagnostics
+    readOnly: false
   {{- end }}
   {{- with .Values.archestra.extraVolumeMounts }}
   {{- toYaml . | nindent 2 }}

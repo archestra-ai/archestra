@@ -1,15 +1,25 @@
+import { randomUUID } from "node:crypto";
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  getArchestraMcpCatalogName,
+  getArchestraToolFullName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
+  TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
+import OrganizationModel from "./organization";
 import TeamModel from "./team";
-import ToolModel from "./tool";
+import ToolModel, { parseArchestraBuiltInName } from "./tool";
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -419,11 +429,10 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        credentialSourceMcpServerId: null,
-        executionSourceMcpServerId: null,
+        mcpServerId: null,
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",
-        useDynamicTeamCredential: false,
+        credentialResolutionMode: "static",
       });
     });
 
@@ -625,6 +634,109 @@ describe("ToolModel", () => {
       );
 
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe("findByNameForAgent", () => {
+    test("returns tool when assigned to the agent", async ({
+      makeAgent,
+      makeTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent = await makeAgent();
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-catalog",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      const tool = await makeTool({
+        name: "my_tool",
+        description: "A test tool",
+        parameters: { type: "object", properties: {} },
+        catalogId: catalogItem.id,
+      });
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      const result = await ToolModel.findByNameForAgent("my_tool", agent.id);
+
+      expect(result).toEqual(
+        expect.objectContaining({ id: tool.id, name: "my_tool" }),
+      );
+    });
+
+    test("returns null when tool exists but is not assigned to the agent", async ({
+      makeAgent,
+      makeTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent = await makeAgent();
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-catalog",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      await makeTool({
+        name: "unassigned_tool",
+        description: "Not assigned",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+
+      const result = await ToolModel.findByNameForAgent(
+        "unassigned_tool",
+        agent.id,
+      );
+
+      expect(result).toBeNull();
+    });
+
+    test("returns null when tool does not exist", async ({ makeAgent }) => {
+      const agent = await makeAgent();
+
+      const result = await ToolModel.findByNameForAgent(
+        "nonexistent_tool",
+        agent.id,
+      );
+
+      expect(result).toBeNull();
+    });
+
+    test("scopes to the correct agent", async ({
+      makeAgent,
+      makeTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const agent1 = await makeAgent({ name: "Agent1" });
+      const agent2 = await makeAgent({ name: "Agent2" });
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-catalog",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      const tool = await makeTool({
+        name: "scoped_tool",
+        description: "Scoped tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+
+      // Assign only to agent1
+      await AgentToolModel.create(agent1.id, tool.id);
+
+      const result1 = await ToolModel.findByNameForAgent(
+        "scoped_tool",
+        agent1.id,
+      );
+      const result2 = await ToolModel.findByNameForAgent(
+        "scoped_tool",
+        agent2.id,
+      );
+
+      expect(result1).toEqual(
+        expect.objectContaining({ id: tool.id, name: "scoped_tool" }),
+      );
+      expect(result2).toBeNull();
     });
   });
 
@@ -1447,6 +1559,40 @@ describe("ToolModel", () => {
       const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
       expect(toolIds).toHaveLength(0);
     });
+
+    test("assigns white-labeled default tools by their branded names", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+      const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      const assignedTools = await ToolModel.getByIds(assignedToolIds);
+
+      expect(assignedTools.map((tool) => tool.name).sort()).toEqual(
+        (
+          [
+            TOOL_ARTIFACT_WRITE_SHORT_NAME,
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+            TOOL_TODO_WRITE_SHORT_NAME,
+          ] as const
+        )
+          .map((shortName) =>
+            getArchestraToolFullName(shortName, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+          )
+          .sort(),
+      );
+    });
   });
 
   describe("knowledge base tool visibility", () => {
@@ -1683,6 +1829,52 @@ describe("ToolModel", () => {
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    });
+
+    test("getToolsByAgent and findByCatalogId use branded knowledge-tool filtering after white-label sync", async ({
+      makeOrganization,
+      makeAgent,
+      makeKnowledgeBase,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const kb = await makeKnowledgeBase(org.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await db
+        .insert(schema.agentKnowledgeBasesTable)
+        .values({ agentId: agent.id, knowledgeBaseId: kb.id });
+      await ToolModel.assignArchestraToolsToAgent(
+        agent.id,
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
+
+      const visibleTools = await ToolModel.getToolsByAgent(agent.id);
+      const visibleMcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const catalogTools = await ToolModel.findByCatalogId(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+
+      expect(visibleTools.map((tool) => tool.name)).not.toContain(
+        brandedKbToolName,
+      );
+      expect(visibleMcpTools.map((tool) => tool.name)).toContain(
+        brandedKbToolName,
+      );
+      expect(catalogTools.map((tool) => tool.name)).not.toContain(
+        brandedKbToolName,
+      );
     });
 
     test("assignArchestraToolsToAgent always assigns query_knowledge_sources (filtered at query time)", async ({
@@ -2116,6 +2308,575 @@ describe("ToolModel", () => {
       expect(createdTool.id).toBeDefined();
       expect(createdTool.name).toBe("new-tool");
     });
+
+    test("creates new tools with meta field", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      const meta = {
+        _meta: { ui: { resourceUri: "mcp://widget/stats" } },
+        annotations: { audience: ["user"] },
+      };
+
+      const toolsToSync = [
+        {
+          name: "tool-with-meta",
+          description: "Tool with UI metadata",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+          meta,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.created).toHaveLength(1);
+      expect(result.created[0].meta).toEqual(meta);
+    });
+
+    test("updates tools when meta changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      await makeTool({
+        name: "tool-meta-update",
+        description: "Tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const newMeta = {
+        _meta: { ui: { resourceUri: "mcp://widget/new-ui" } },
+      };
+
+      const toolsToSync = [
+        {
+          name: "tool-meta-update",
+          description: "Tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+          meta: newMeta,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.unchanged).toHaveLength(0);
+      expect(result.updated[0].meta).toEqual(newMeta);
+    });
+
+    test("treats null and undefined meta as equivalent (unchanged)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+
+      // Tool created without meta (stored as null in DB)
+      await makeTool({
+        name: "tool-null-meta",
+        description: "Tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      // Sync without providing meta (undefined) — should be unchanged
+      const toolsToSync = [
+        {
+          name: "tool-null-meta",
+          description: "Tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
+
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.updated).toHaveLength(0);
+    });
+  });
+
+  describe("getMcpToolsAssignedToAgentBySuffix", () => {
+    test("returns empty array when no tools match suffix", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      await makeUser();
+      const agent = await makeAgent();
+
+      const result = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        "nonexistent-tool",
+        agent.id,
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    test("finds tool by raw name suffix", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "system-server",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      const tool = await makeTool({
+        name: `system${MCP_SERVER_TOOL_NAME_SEPARATOR}refresh-stats`,
+        description: "Refresh stats",
+        parameters: { type: "object" },
+        catalogId: catalogItem.id,
+      });
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        "refresh-stats",
+        agent.id,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].toolName).toBe(
+        `system${MCP_SERVER_TOOL_NAME_SEPARATOR}refresh-stats`,
+      );
+      expect(result[0].catalogId).toBe(catalogItem.id);
+      expect(result[0].catalogName).toBe("system-server");
+    });
+
+    test("does not match proxy-sniffed tools without catalogId", async ({
+      makeUser,
+      makeAgent,
+      makeTool,
+    }) => {
+      await makeUser();
+      const agent = await makeAgent();
+
+      // Proxy-sniffed tool has agentId set but no catalogId
+      const tool = await makeTool({
+        name: `server${MCP_SERVER_TOOL_NAME_SEPARATOR}some-tool`,
+        description: "Proxy tool",
+        parameters: {},
+        agentId: agent.id,
+      });
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        "some-tool",
+        agent.id,
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    test("returns at most one result (limit 1)", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+
+      const catalog1 = await makeInternalMcpCatalog({
+        name: "server-a",
+        serverUrl: "https://a.com/mcp/",
+      });
+      const catalog2 = await makeInternalMcpCatalog({
+        name: "server-b",
+        serverUrl: "https://b.com/mcp/",
+      });
+
+      const tool1 = await makeTool({
+        name: `server-a${MCP_SERVER_TOOL_NAME_SEPARATOR}list-items`,
+        description: "List items A",
+        parameters: {},
+        catalogId: catalog1.id,
+      });
+      const tool2 = await makeTool({
+        name: `server-b${MCP_SERVER_TOOL_NAME_SEPARATOR}list-items`,
+        description: "List items B",
+        parameters: {},
+        catalogId: catalog2.id,
+      });
+
+      await AgentToolModel.create(agent.id, tool1.id);
+      await AgentToolModel.create(agent.id, tool2.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+        "list-items",
+        agent.id,
+      );
+
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe("findToolsByUiResourceUri", () => {
+    test("returns empty array when agent has no tools", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      const result = await ToolModel.findToolsByUiResourceUri(
+        agent.id,
+        "mcp://widget/stats",
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    test("finds tools matching ui/resourceUri in meta", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "widget-server",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      const tool = await makeTool({
+        name: "widget-server__show-dashboard",
+        description: "Show dashboard",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+
+      // Update meta directly via syncToolsForCatalog to set the resourceUri
+      const resourceUri = "mcp://widget/dashboard";
+      await ToolModel.syncToolsForCatalog([
+        {
+          name: "widget-server__show-dashboard",
+          description: "Show dashboard",
+          parameters: {},
+          catalogId: catalogItem.id,
+          meta: { _meta: { ui: { resourceUri } } },
+        },
+      ]);
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      const result = await ToolModel.findToolsByUiResourceUri(
+        agent.id,
+        resourceUri,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tool.id).toBe(tool.id);
+    });
+
+    test("does not return tools with non-matching resourceUri", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "widget-server",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      const tool = await makeTool({
+        name: "widget-server__show-chart",
+        description: "Show chart",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+
+      await ToolModel.syncToolsForCatalog([
+        {
+          name: "widget-server__show-chart",
+          description: "Show chart",
+          parameters: {},
+          catalogId: catalogItem.id,
+          meta: { _meta: { ui: { resourceUri: "mcp://widget/chart" } } },
+        },
+      ]);
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      const result = await ToolModel.findToolsByUiResourceUri(
+        agent.id,
+        "mcp://widget/completely-different",
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    test("does not return tools without meta", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "plain-server",
+        serverUrl: "https://example.com/mcp/",
+      });
+
+      const tool = await makeTool({
+        name: "plain-server__plain-tool",
+        description: "No UI metadata",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+
+      await AgentToolModel.create(agent.id, tool.id);
+
+      const result = await ToolModel.findToolsByUiResourceUri(
+        agent.id,
+        "mcp://widget/any",
+      );
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("bulkCreateToolsIfNotExists", () => {
+    test("stores meta field when creating tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const meta = {
+        _meta: { ui: { resourceUri: "mcp://app/view" } },
+        annotations: { readOnlyHint: true },
+      };
+
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "bulk-tool-with-meta",
+          description: "Tool with meta",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          meta,
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].meta).toEqual(meta);
+    });
+
+    test("updates meta on existing tools when it changed", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      const originalMeta = {
+        _meta: { ui: { resourceUri: "mcp://app/original" } },
+      };
+
+      // Create the tool first
+      const [created] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "bulk-tool-existing",
+          description: "Tool",
+          parameters: {},
+          catalogId: catalog.id,
+          meta: originalMeta,
+        },
+      ]);
+
+      const updatedMeta = {
+        _meta: { ui: { resourceUri: "mcp://app/different" } },
+      };
+
+      // Call again with different meta — should update meta on existing tool
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "bulk-tool-existing",
+          description: "Tool",
+          parameters: {},
+          catalogId: catalog.id,
+          meta: updatedMeta,
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(created.id);
+      expect(result[0].meta).toEqual(updatedMeta);
+    });
+
+    test("preserves meta on existing tools when it has not changed", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      const meta = {
+        _meta: { ui: { resourceUri: "mcp://app/original" } },
+      };
+
+      // Create the tool first
+      const [created] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "bulk-tool-same-meta",
+          description: "Tool",
+          parameters: {},
+          catalogId: catalog.id,
+          meta,
+        },
+      ]);
+
+      // Call again with the same meta — should return existing tool unchanged
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "bulk-tool-same-meta",
+          description: "Tool",
+          parameters: {},
+          catalogId: catalog.id,
+          meta,
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(created.id);
+      expect(result[0].meta).toEqual(meta);
+    });
+  });
+
+  describe("parseArchestraBuiltInName", () => {
+    test("parses default built-in tool names", () => {
+      expect(parseArchestraBuiltInName("archestra__create_agent")).toEqual({
+        serverName: "archestra",
+        shortName: "create_agent",
+      });
+    });
+
+    test("parses white-labeled built-in tool names", () => {
+      expect(parseArchestraBuiltInName("acme_copilot__create_agent")).toEqual({
+        serverName: "acme_copilot",
+        shortName: "create_agent",
+      });
+    });
+
+    test("returns null shortName for non-built-in tool names", () => {
+      expect(parseArchestraBuiltInName("github__list_issues")).toEqual({
+        serverName: "github",
+        shortName: null,
+      });
+    });
+  });
+
+  describe("seedArchestraTools", () => {
+    test("creates the built-in catalog entry with current metadata", async () => {
+      const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+      const metadata = getArchestraMcpCatalogMetadata();
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [catalog] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, catalogId));
+
+      expect(catalog).toBeDefined();
+      expect(catalog?.name).toBe(metadata.name);
+      expect(catalog?.description).toBe(metadata.description);
+      expect(catalog?.docsUrl).toBe(metadata.docsUrl);
+      expect(catalog?.serverType).toBe(metadata.serverType);
+      expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
+    });
+
+    test("updates stale built-in catalog metadata on reseed", async () => {
+      const catalogId = randomUUID();
+      archestraMcpBranding.syncFromOrganization(null);
+      const metadata = getArchestraMcpCatalogMetadata();
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: catalogId,
+        name: "Old Archestra",
+        description: "Outdated description",
+        docsUrl: "https://example.com/old-docs",
+        serverType: "builtin",
+        requiresAuth: true,
+      });
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const [catalog] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, catalogId));
+
+      expect(catalog).toBeDefined();
+      expect(catalog?.name).toBe(metadata.name);
+      expect(catalog?.description).toBe(metadata.description);
+      expect(catalog?.docsUrl).toBe(metadata.docsUrl);
+      expect(catalog?.serverType).toBe(metadata.serverType);
+      expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
+    });
+
+    test("rebrands built-in catalog metadata and tool names on sync for white-labeled orgs", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, {
+        appName: "Acme Copilot",
+        iconLogo: "https://cdn.example.com/logo.png",
+      });
+
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: {
+          appName: "Acme Copilot",
+          iconLogo: "https://cdn.example.com/logo.png",
+        },
+      });
+
+      const [catalog] = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          eq(
+            schema.internalMcpCatalogTable.id,
+            "00000000-0000-4000-8000-000000000001",
+          ),
+        );
+      const [artifactTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          eq(
+            schema.toolsTable.name,
+            getArchestraToolFullName(TOOL_ARTIFACT_WRITE_SHORT_NAME, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+          ),
+        );
+
+      expect(catalog?.name).toBe(
+        getArchestraMcpCatalogName({
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        }),
+      );
+      expect(catalog?.docsUrl).toBeNull();
+      expect(catalog?.icon).toBe("https://cdn.example.com/logo.png");
+      expect(catalog?.description).not.toContain("Archestra");
+      expect(artifactTool).toBeDefined();
+    });
   });
 
   describe("findAllWithAssignments", () => {
@@ -2156,6 +2917,50 @@ describe("ToolModel", () => {
       const ids1 = result1.data.map((t) => t.id);
       const ids2 = result2.data.map((t) => t.id);
       expect(ids1).toEqual(ids2);
+    });
+
+    test("excludes the white-labeled knowledge tool from assignment listings", async ({
+      makeOrganization,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const [kbTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          eq(
+            schema.toolsTable.name,
+            getArchestraToolFullName(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+          ),
+        );
+
+      expect(kbTool).toBeDefined();
+      await makeAgentTool(agent.id, kbTool?.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        filters: {},
+      });
+
+      expect(
+        result.data.some(
+          (tool) =>
+            tool.name ===
+            getArchestraToolFullName(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME, {
+              appName: "Acme Copilot",
+              fullWhiteLabeling: true,
+            }),
+        ),
+      ).toBe(false);
     });
   });
 });

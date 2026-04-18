@@ -1,17 +1,15 @@
 "use client";
 
 import {
-  DocsPage,
   E2eTestId,
   formatSecretStorageType,
-  getDocsUrl,
+  type ResourceVisibilityScope,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   Building2,
   CheckCircle2,
-  ExternalLink,
   Loader2,
   Pencil,
   Plus,
@@ -23,16 +21,17 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import {
-  ChatApiKeyForm,
-  type ChatApiKeyFormValues,
-  type ChatApiKeyResponse,
-  PLACEHOLDER_KEY,
-  PROVIDER_CONFIG,
-} from "@/components/chat-api-key-form";
-import { CreateChatApiKeyDialog } from "@/components/create-chat-api-key-dialog";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  LLM_PROVIDER_API_KEY_PLACEHOLDER,
+  LlmProviderApiKeyForm,
+  type LlmProviderApiKeyFormValues,
+  type LlmProviderApiKeyResponse,
+  PROVIDER_CONFIG,
+} from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -54,24 +53,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useFeature } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
-  type ChatApiKeyScope,
-  useChatApiKeys,
-  useDeleteChatApiKey,
-  useUpdateChatApiKey,
-} from "@/lib/chat-settings.query";
-import { useFeature } from "@/lib/config.query";
+  useDeleteLlmProviderApiKey,
+  useLlmProviderApiKeys,
+  useUpdateLlmProviderApiKey,
+} from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useDataTableQueryParams } from "@/lib/use-data-table-query-params";
 import { useSetProviderAction } from "../layout";
 
-const SCOPE_ICONS: Record<ChatApiKeyScope, React.ReactNode> = {
+const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
   team: <Users className="h-3 w-3" />,
-  org_wide: <Building2 className="h-3 w-3" />,
+  org: <Building2 className="h-3 w-3" />,
 };
 
-const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
+const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
   provider: "anthropic",
   apiKey: null,
@@ -84,20 +83,21 @@ const DEFAULT_FORM_VALUES: ChatApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
+  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
-  const { data: allApiKeys = [] } = useChatApiKeys();
-  const { data: queriedApiKeys = [], isPending } = useChatApiKeys({
+  const { data: allApiKeys = [] } = useLlmProviderApiKeys();
+  const { data: queriedApiKeys = [], isPending } = useLlmProviderApiKeys({
     search: search || undefined,
     provider:
       providerFilter === "all"
         ? undefined
-        : (providerFilter as ChatApiKeyResponse["provider"]),
+        : (providerFilter as LlmProviderApiKeyResponse["provider"]),
   });
   const { data: organization } = useOrganization();
-  const updateMutation = useUpdateChatApiKey();
-  const deleteMutation = useDeleteChatApiKey();
+  const updateMutation = useUpdateLlmProviderApiKey();
+  const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
 
   const getKeyUsage = useCallback(
@@ -119,10 +119,10 @@ export default function ApiKeysPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] =
-    useState<ChatApiKeyResponse | null>(null);
+    useState<LlmProviderApiKeyResponse | null>(null);
 
   // Forms
-  const editForm = useForm<ChatApiKeyFormValues>({
+  const editForm = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
 
@@ -132,7 +132,7 @@ export default function ApiKeysPage() {
       editForm.reset({
         name: selectedApiKey.name,
         provider: selectedApiKey.provider,
-        apiKey: PLACEHOLDER_KEY,
+        apiKey: LLM_PROVIDER_API_KEY_PLACEHOLDER,
         baseUrl: selectedApiKey.baseUrl ?? null,
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
@@ -147,7 +147,8 @@ export default function ApiKeysPage() {
     if (!selectedApiKey) return;
 
     const apiKeyChanged =
-      values.apiKey !== PLACEHOLDER_KEY && values.apiKey !== "";
+      values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
+      values.apiKey !== "";
 
     // Detect scope/team changes
     const scopeChanged = values.scope !== selectedApiKey.scope;
@@ -197,12 +198,12 @@ export default function ApiKeysPage() {
     }
   }, [selectedApiKey, deleteMutation]);
 
-  const openEditDialog = useCallback((apiKey: ChatApiKeyResponse) => {
+  const openEditDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);
     setIsEditDialogOpen(true);
   }, []);
 
-  const openDeleteDialog = useCallback((apiKey: ChatApiKeyResponse) => {
+  const openDeleteDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);
     setIsDeleteDialogOpen(true);
   }, []);
@@ -215,7 +216,7 @@ export default function ApiKeysPage() {
   useEffect(() => {
     setProviderAction(
       <PermissionButton
-        permissions={{ llmProvider: ["create"] }}
+        permissions={{ llmProviderApiKey: ["create"] }}
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >
@@ -247,7 +248,7 @@ export default function ApiKeysPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allApiKeys]);
 
-  const columns: ColumnDef<ChatApiKeyResponse>[] = useMemo(
+  const columns: ColumnDef<LlmProviderApiKeyResponse>[] = useMemo(
     () => [
       {
         accessorKey: "name",
@@ -296,7 +297,7 @@ export default function ApiKeysPage() {
             {row.original.isSystem ? (
               <Server className="h-3 w-3" />
             ) : (
-              SCOPE_ICONS[row.original.scope]
+              SCOPE_ICONS[row.original.scope as ResourceVisibilityScope]
             )}
             <span>
               {row.original.isSystem
@@ -317,18 +318,14 @@ export default function ApiKeysPage() {
           row.original.isSystem ? (
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
-              <a
-                href={getDocsUrl(
-                  DocsPage.PlatformSupportedLlmProviders,
-                  "using-vertex-ai",
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Docs
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              {docsUrl && (
+                <ExternalDocsLink
+                  href={`${docsUrl}#using-vertex-ai`}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Docs
+                </ExternalDocsLink>
+              )}
             </span>
           ) : (
             <span className="text-sm text-muted-foreground">
@@ -370,8 +367,8 @@ export default function ApiKeysPage() {
                   icon: <Pencil className="h-4 w-4" />,
                   label: "Edit",
                   permissions: {
-                    llmProvider: ["update"],
-                    ...(row.original.scope === "org_wide"
+                    llmProviderApiKey: ["update"],
+                    ...(row.original.scope === "org"
                       ? { team: ["admin"] }
                       : {}),
                   },
@@ -385,8 +382,8 @@ export default function ApiKeysPage() {
                   label: "Delete",
                   variant: "destructive",
                   permissions: {
-                    llmProvider: ["delete"],
-                    ...(row.original.scope === "org_wide"
+                    llmProviderApiKey: ["delete"],
+                    ...(row.original.scope === "org"
                       ? { team: ["admin"] }
                       : {}),
                   },
@@ -403,7 +400,7 @@ export default function ApiKeysPage() {
         },
       },
     ],
-    [openEditDialog, openDeleteDialog, getKeyUsage],
+    [docsUrl, openEditDialog, openDeleteDialog, getKeyUsage],
   );
 
   return (
@@ -465,7 +462,7 @@ export default function ApiKeysPage() {
       </div>
 
       {/* Create Dialog */}
-      <CreateChatApiKeyDialog
+      <CreateLlmProviderApiKeyDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         title="Add API Key"
@@ -486,7 +483,7 @@ export default function ApiKeysPage() {
         >
           <DialogBody>
             {selectedApiKey && (
-              <ChatApiKeyForm
+              <LlmProviderApiKeyForm
                 mode="full"
                 showConsoleLink={false}
                 existingKey={selectedApiKey}

@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge-base.query";
+import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge/knowledge-base.query";
 import { EmbeddingRequiredPlaceholder } from "./embedding-required-placeholder";
 
 export function KnowledgePageLayout({
@@ -31,7 +31,7 @@ export function KnowledgePageLayout({
         description={description}
         actionButton={
           <PermissionButton
-            permissions={{ knowledgeBase: ["create"] }}
+            permissions={{ knowledgeSource: ["create"] }}
             onClick={onCreateClick}
             disabled={!isKnowledgeBaseConfigured}
             tooltip={

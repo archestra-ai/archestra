@@ -1,11 +1,16 @@
+import type { IncomingHttpHeaders } from "node:http";
 import { isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, {
+  McpServerConnectionTimeoutError,
+  McpServerNotReadyError,
+} from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AccountModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -13,8 +18,16 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { isMcpServerAssignableToTarget } from "@/services/agent-tool-assignment";
+import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
+import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
+import {
+  findExternalIdentityProviderById,
+  findExternalIdentityProviderByProviderId,
+} from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
+  AgentScopeSchema,
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -35,12 +48,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          assignmentScope: AgentScopeSchema.optional(),
+          assignmentTeamIds: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val.split(",") : val),
+              z.array(z.string()),
+            )
+            .optional(),
         }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
-    async ({ user, headers, query }, reply) => {
-      const { catalogId } = query;
+    async ({ user, headers, query, organizationId }, reply) => {
+      const { assignmentScope, assignmentTeamIds, catalogId } = query;
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -50,6 +70,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Filter by catalogId if provided
       if (catalogId) {
         allServers = allServers.filter((s) => s.catalogId === catalogId);
+      }
+
+      if (assignmentScope) {
+        const target = {
+          organizationId,
+          scope: assignmentScope,
+          authorId: user.id,
+          teamIds: assignmentTeamIds ?? [],
+        };
+
+        allServers = (
+          await Promise.all(
+            allServers.map(async (server) =>
+              (await isMcpServerAssignableToTarget({
+                mcpServer: {
+                  ownerId: server.ownerId,
+                  teamId: server.teamId,
+                },
+                target,
+              }))
+                ? server
+                : null,
+            ),
+          )
+        ).filter(
+          (server): server is (typeof allServers)[number] => server != null,
+        );
       }
 
       return reply.send(allServers);
@@ -255,8 +302,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For REMOTE servers: create secrets and validate connection
       if (catalogItem?.serverType === "remote") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
         // If isByosVault flag is set, use vault references from userConfigValues
-        if (isByosVault && userConfigValues && !secretId) {
+        if (isByosVault && installUserConfigValues && !secretId) {
           if (!isByosEnabled()) {
             throw new ApiError(
               400,
@@ -267,13 +322,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // userConfigValues already contains vault references in "path#key" format
           const secret = await secretManager().createSecret(
-            userConfigValues as Record<string, unknown>,
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
             `${serverData.name}-vault-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
           logger.info(
-            { keyCount: Object.keys(userConfigValues).length },
+            { keyCount: Object.keys(installUserConfigValues).length },
             "Created Readonly Vault secret with per-field references for remote server",
           );
         }
@@ -288,8 +346,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           const secret = await secretManager().createSecret(
-            { access_token: accessToken },
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${serverData.name}-token`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        if (installUserConfigValues && !secretId) {
+          const secret = await secretManager().createSecret(
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
+            `${serverData.name}-secret`,
+          );
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        } else if (
+          !secretId &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${serverData.name}-secret`,
           );
           secretId = secret.id;
           createdSecretId = secret.id;
@@ -321,6 +401,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // For LOCAL servers: validate env vars and create secrets (no connection validation, since deployment will be started later)
       if (catalogItem?.serverType === "local") {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
+
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
@@ -347,6 +435,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        if (catalogItem.userConfig) {
+          const requiredUserConfigFields = Object.entries(
+            catalogItem.userConfig,
+          ).filter(([_fieldName, fieldConfig]) => {
+            return fieldConfig.promptOnInstallation && fieldConfig.required;
+          });
+
+          const missingUserConfigFields = requiredUserConfigFields.filter(
+            ([fieldName]) => {
+              const value = userConfigValues?.[fieldName];
+              return !value?.trim();
+            },
+          );
+
+          if (missingUserConfigFields.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required connection settings: ${missingUserConfigFields
+                .map(([fieldName]) => fieldName)
+                .join(", ")}`,
+            );
+          }
+        }
+
         // If isByosVault flag is set, use vault references from environmentValues for secret env vars
         if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
           if (!isByosEnabled()) {
@@ -358,7 +470,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Collect secret env vars with vault references from environmentValues
-          const secretEnvVars: Record<string, string> = {};
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+          };
           for (const envDef of catalogItem.localConfig.environment) {
             if (envDef.type === "secret") {
               const value = envDef.promptOnInstallation
@@ -369,6 +483,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 secretEnvVars[envDef.key] = value;
               }
             }
+          }
+
+          if (installUserConfigValues) {
+            Object.assign(secretEnvVars, installUserConfigValues);
           }
 
           if (Object.keys(secretEnvVars).length > 0) {
@@ -383,16 +501,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Created Readonly Vault secret with per-field references for local server",
             );
           }
-        }
-        // Collect and store secret-type env vars
-        // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB
-        // User-prompted secrets must use Vault references via the isByosVault flow above
-        else if (!secretId && catalogItem.localConfig?.environment) {
-          const secretEnvVars: Record<string, string> = {};
+        } else if (!secretId) {
+          // Collect and store static catalog headers, prompted header values, and secret-type env vars.
+          // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB.
+          // User-prompted secrets must use Vault references via the isByosVault flow above.
+          const secretEnvVars: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+            ...(installUserConfigValues ?? {}),
+          };
           let hasPromptedSecrets = false;
 
-          // Collect all secret-type env vars (both static and prompted)
-          for (const envDef of catalogItem.localConfig.environment) {
+          // Collect all secret-type env vars (both static and prompted).
+          for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
               // Get value based on whether it's prompted or static
@@ -571,6 +691,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   name: ToolModel.slugifyName(toolNamePrefix, tool.name),
                   description: tool.description,
                   parameters: tool.inputSchema,
+                  meta: { _meta: tool._meta, annotations: tool.annotations },
                   catalogId: capturedCatalogId,
                 }));
 
@@ -578,14 +699,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-                // If agentIds were provided, create agent-tool assignments with executionSourceMcpServerId
+                // If agentIds were provided, create agent-tool assignments pinned to this installation.
                 if (agentIds && agentIds.length > 0) {
                   const toolIds = createdTools.map((t) => t.id);
                   await AgentToolModel.bulkCreateForAgentsAndTools(
                     agentIds,
                     toolIds,
                     {
-                      executionSourceMcpServerId: mcpServer.id,
+                      mcpServerId: mcpServer.id,
                     },
                   );
                 }
@@ -644,20 +765,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // For non-local servers, fetch tools synchronously during installation
-        const tools = await McpServerModel.getToolsFromServer(mcpServer);
-
         // Catalog item must exist for remote servers
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found for remote server");
         }
 
+        // For non-local servers, fetch tools synchronously during installation.
+        // If discovery fails with auth and this is a personal install, retry once
+        // with the current user's linked IdP access token.
+        const tools = await connectAndGetToolsForInstallation({
+          catalogItem,
+          mcpServerId: mcpServer.id,
+          secretId: mcpServer.secretId ?? undefined,
+          userId: user.id,
+          allowCurrentUserTokenFallback: !mcpServer.teamId,
+        });
+
         // Persist tools in the database with source='mcp_server' and mcpServerId
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
         const toolsToCreate = tools.map((tool) => ({
           name: ToolModel.slugifyName(mcpServer.name, tool.name),
-          description: tool.description,
+          description: tool.description ?? null,
           parameters: tool.inputSchema,
+          meta: { _meta: tool._meta, annotations: tool.annotations },
           catalogId: catalogItem.id,
         }));
 
@@ -665,13 +795,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-        // If agentIds were provided, create agent-tool assignments
-        // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
-        // but need credentialSourceMcpServerId to resolve credentials at call time
+        // If agentIds were provided, create agent-tool assignments pinned to this installation.
         if (agentIds && agentIds.length > 0) {
           const toolIds = createdTools.map((t) => t.id);
           await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-            credentialSourceMcpServerId: mcpServer.id,
+            mcpServerId: mcpServer.id,
           });
         }
 
@@ -759,7 +887,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
-
       // Check mcpServer create permission (required for re-authentication)
       const { success: hasMcpServerCreatePermission } = await hasPermission(
         { mcpServerInstallation: ["create"] },
@@ -827,6 +954,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const catalogItem = mcpServer.catalogId
           ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
           : null;
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem?.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem?.userConfig,
+          userConfigValues,
+        });
 
         if (accessToken) {
           // PAT token flow
@@ -837,11 +971,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
           const secret = await secretManager().createSecret(
-            { access_token: accessToken },
+            { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
           );
           newSecretId = secret.id;
-        } else if (userConfigValues) {
+        } else if (installUserConfigValues) {
           // Remote server user config fields
           if (isByosVault) {
             if (!isByosEnabled()) {
@@ -852,7 +986,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
           const secret = await secretManager().createSecret(
-            userConfigValues as Record<string, unknown>,
+            {
+              ...catalogStaticUserConfigValues,
+              ...installUserConfigValues,
+            } as Record<string, unknown>,
             isByosVault
               ? `${mcpServer.name}-vault-secret`
               : `${mcpServer.name}-secret`,
@@ -861,13 +998,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Validate connection for remote servers before committing the swap
           if (catalogItem?.serverType === "remote") {
-            const { isValid, errorMessage } =
-              await McpServerModel.validateConnection(
-                mcpServer.name,
-                mcpServer.catalogId ?? undefined,
-                newSecretId,
-              );
-            if (!isValid) {
+            try {
+              await connectAndGetToolsForInstallation({
+                catalogItem,
+                mcpServerId: "validation",
+                secretId: newSecretId,
+                userId: user.id,
+                allowCurrentUserTokenFallback: !mcpServer.teamId,
+              });
+            } catch (error) {
               // Clean up the newly created secret
               try {
                 await secretManager().deleteSecret(newSecretId);
@@ -876,13 +1015,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
               throw new ApiError(
                 400,
-                errorMessage ||
-                  "Failed to connect to MCP server with provided credentials",
+                error instanceof Error
+                  ? error.message
+                  : "Failed to connect to MCP server with provided credentials",
               );
             }
           }
-        } else if (environmentValues) {
+        } else if (
+          catalogItem?.serverType === "remote" &&
+          Object.keys(catalogStaticUserConfigValues).length > 0
+        ) {
+          const secret = await secretManager().createSecret(
+            catalogStaticUserConfigValues,
+            `${mcpServer.name}-secret`,
+          );
+          newSecretId = secret.id;
+        } else if (environmentValues || userConfigValues) {
           // Local server environment variables
+          const localInstallUserConfigValues = filterInstallUserConfigValues({
+            userConfig: catalogItem?.userConfig,
+            userConfigValues,
+          });
           if (isByosVault) {
             if (!isByosEnabled()) {
               throw new ApiError(
@@ -892,22 +1045,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
             // Vault references for secret env vars
             const secret = await secretManager().createSecret(
-              environmentValues,
+              {
+                ...catalogStaticUserConfigValues,
+                ...(environmentValues ?? {}),
+                ...(localInstallUserConfigValues ?? {}),
+              },
               `${mcpServer.name}-vault-secret`,
             );
             newSecretId = secret.id;
           } else if (catalogItem?.localConfig?.environment) {
             // Collect only secret-type env vars
-            const secretEnvVars: Record<string, string> = {};
+            const secretEnvVars: Record<string, string> = {
+              ...catalogStaticUserConfigValues,
+            };
             for (const envDef of catalogItem.localConfig.environment) {
               if (envDef.type === "secret") {
                 const value = envDef.promptOnInstallation
-                  ? environmentValues[envDef.key]
+                  ? environmentValues?.[envDef.key]
                   : (envDef.value as string | undefined);
                 if (value) {
                   secretEnvVars[envDef.key] = value;
                 }
               }
+            }
+            if (localInstallUserConfigValues) {
+              Object.assign(secretEnvVars, localInstallUserConfigValues);
             }
             if (Object.keys(secretEnvVars).length > 0) {
               const secret = await secretManager().createSecret(
@@ -916,6 +1078,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
               newSecretId = secret.id;
             }
+          } else if (
+            localInstallUserConfigValues &&
+            Object.keys(localInstallUserConfigValues).length > 0
+          ) {
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...localInstallUserConfigValues,
+              },
+              `${mcpServer.name}-secret`,
+            );
+            newSecretId = secret.id;
           }
         }
       }
@@ -947,6 +1121,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthRefreshError: null,
         oauthRefreshFailedAt: null,
       });
+
+      // Re-auth swaps the secret behind the same MCP server ID. Cached MCP clients
+      // are keyed by server ID and can otherwise keep reusing the stale auth/session.
+      await mcpClient.invalidateConnectionsForServer(id);
 
       // For local servers, trigger pod restart to pick up new credentials
       if (mcpServer.serverType === "local") {
@@ -1112,8 +1290,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1156,9 +1338,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
-      // Get the MCP server first to check if it has a catalogId
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1191,8 +1376,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.record(z.string(), z.unknown())),
       },
     },
-    async ({ params: { id }, body }, reply) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, body, user, headers }, reply) => {
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId: id,
+        userId: user.id,
+        headers,
+      });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
@@ -1226,6 +1415,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send(result as Record<string, unknown>);
       } catch (error) {
+        if (
+          error instanceof McpServerNotReadyError ||
+          error instanceof McpServerConnectionTimeoutError
+        ) {
+          logger.warn(
+            { err: error, mcpServerId: mcpServer.id, statusCode: 409 },
+            `MCP server ${mcpServer.name} is not ready for inspection`,
+          );
+          throw new ApiError(409, error.message);
+        }
+
         logger.error(
           { err: error },
           `Failed to inspect MCP server ${mcpServer.name}`,
@@ -1262,6 +1462,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           // Environment values for local servers (when new prompted env vars were added)
           environmentValues: z.record(z.string(), z.string()).optional(),
+          userConfigValues: z.record(z.string(), z.string()).optional(),
           // Whether environmentValues contains vault references in path#key format
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override
@@ -1271,7 +1472,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, headers }, reply) => {
-      const { environmentValues, isByosVault, serviceAccount } = body;
+      const {
+        environmentValues,
+        userConfigValues,
+        isByosVault,
+        serviceAccount,
+      } = body;
 
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id, user.id);
@@ -1336,12 +1542,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found for this server");
       }
 
-      // For local servers with new environment values: update/create the secret
+      // For local servers with new environment values or user-config values: update/create the secret
       if (
         mcpServer.serverType === "local" &&
-        environmentValues &&
-        Object.keys(environmentValues).length > 0
+        ((environmentValues && Object.keys(environmentValues).length > 0) ||
+          (userConfigValues && Object.keys(userConfigValues).length > 0))
       ) {
+        const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
+          catalogItem.userConfig,
+        );
+        const installUserConfigValues = filterInstallUserConfigValues({
+          userConfig: catalogItem.userConfig,
+          userConfigValues,
+        });
         // Validate required environment variables
         if (catalogItem.localConfig?.environment) {
           const requiredEnvVars = catalogItem.localConfig.environment.filter(
@@ -1349,7 +1562,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           const missingEnvVars = requiredEnvVars.filter((env) => {
-            const value = environmentValues[env.key];
+            const value = environmentValues?.[env.key];
             if (env.type === "boolean") {
               return !value;
             }
@@ -1361,6 +1574,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               400,
               `Missing required environment variables: ${missingEnvVars
                 .map((env) => env.key)
+                .join(", ")}`,
+            );
+          }
+        }
+
+        if (catalogItem.userConfig) {
+          const requiredUserConfigFields = Object.entries(
+            catalogItem.userConfig,
+          ).filter(([_fieldName, fieldConfig]) => {
+            return fieldConfig.promptOnInstallation && fieldConfig.required;
+          });
+
+          const missingUserConfigFields = requiredUserConfigFields.filter(
+            ([fieldName]) => {
+              const value = userConfigValues?.[fieldName];
+              return !value?.trim();
+            },
+          );
+
+          if (missingUserConfigFields.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required connection settings: ${missingUserConfigFields
+                .map(([fieldName]) => fieldName)
                 .join(", ")}`,
             );
           }
@@ -1378,13 +1615,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           if (mcpServer.secretId) {
-            await secretManager().updateSecret(
-              mcpServer.secretId,
-              environmentValues,
-            );
+            await secretManager().updateSecret(mcpServer.secretId, {
+              ...catalogStaticUserConfigValues,
+              ...(environmentValues ?? {}),
+              ...(installUserConfigValues ?? {}),
+            });
           } else {
             const secret = await secretManager().createSecret(
-              environmentValues,
+              {
+                ...catalogStaticUserConfigValues,
+                ...(environmentValues ?? {}),
+                ...(installUserConfigValues ?? {}),
+              },
               `${mcpServer.name}-vault-secret`,
             );
             await McpServerModel.update(id, { secretId: secret.id });
@@ -1398,7 +1640,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           const mergedSecrets = {
             ...existingSecrets,
-            ...environmentValues,
+            ...catalogStaticUserConfigValues,
+            ...(environmentValues ?? {}),
+            ...(installUserConfigValues ?? {}),
           };
 
           if (mcpServer.secretId) {
@@ -1416,7 +1660,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         logger.info(
-          { serverId: id, envVarCount: Object.keys(environmentValues).length },
+          {
+            serverId: id,
+            envVarCount: Object.keys(environmentValues ?? {}).length,
+            userConfigCount: Object.keys(installUserConfigValues ?? {}).length,
+          },
           "Updated MCP server secrets for reinstall",
         );
       }
@@ -1451,7 +1699,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // This allows the frontend to show the progress bar immediately
       setImmediate(async () => {
         try {
-          await autoReinstallServer(updatedServer, catalogItem);
+          await autoReinstallServer(updatedServer, catalogItem, {
+            getTools:
+              updatedServer.serverType === "remote"
+                ? async ({ server, catalogItem }) =>
+                    (
+                      await connectAndGetToolsForInstallation({
+                        catalogItem,
+                        mcpServerId: server.id,
+                        secretId: server.secretId ?? undefined,
+                        userId: user.id,
+                        allowCurrentUserTokenFallback: true,
+                      })
+                    ).map((tool) => ({
+                      name: tool.name,
+                      description: tool.description || `Tool: ${tool.name}`,
+                      inputSchema: tool.inputSchema,
+                      _meta: tool._meta,
+                      annotations: tool.annotations,
+                    }))
+                : undefined,
+          });
           // Set status to success when done
           await McpServerModel.update(id, {
             localInstallationStatus: "success",
@@ -1481,3 +1749,305 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default mcpServerRoutes;
+
+async function findAccessibleMcpServer(params: {
+  mcpServerId: string;
+  userId: string;
+  headers: IncomingHttpHeaders;
+}) {
+  const { success: isMcpServerAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    params.headers,
+  );
+
+  return McpServerModel.findById(
+    params.mcpServerId,
+    params.userId,
+    isMcpServerAdmin,
+  );
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+async function connectAndGetToolsForInstallation(params: {
+  catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
+  mcpServerId: string;
+  secretId?: string;
+  userId: string;
+  allowCurrentUserTokenFallback: boolean;
+}) {
+  const { catalogItem } = params;
+  if (!catalogItem) {
+    throw new Error("Catalog item not found");
+  }
+
+  const secrets = await getSecretValues(params.secretId);
+
+  try {
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets,
+      secretId: params.secretId,
+    });
+  } catch (error) {
+    if (
+      !params.allowCurrentUserTokenFallback ||
+      !isInstallDiscoveryAuthError(error)
+    ) {
+      throw error;
+    }
+
+    const accessToken = await getInstallDiscoveryAccessToken({
+      catalogItem,
+      userId: params.userId,
+    });
+    if (!accessToken || secrets.access_token === accessToken) {
+      throw error;
+    }
+
+    logger.info(
+      {
+        catalogId: catalogItem.id,
+        mcpServerId: params.mcpServerId,
+        userId: params.userId,
+      },
+      "Retrying MCP install-time tool discovery with the current user's identity-provider access token",
+    );
+
+    return await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId: params.mcpServerId,
+      secrets: {
+        ...secrets,
+        access_token: accessToken,
+      },
+      secretId: params.secretId,
+    });
+  }
+}
+
+async function getCurrentIdentityProviderAccessToken(
+  userId: string,
+): Promise<string | undefined> {
+  const account =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
+  if (!account?.accessToken) {
+    return undefined;
+  }
+
+  const isAccessTokenExpired =
+    !!account.accessTokenExpiresAt &&
+    account.accessTokenExpiresAt <= new Date();
+  if (!isAccessTokenExpired) {
+    return account.accessToken;
+  }
+
+  return await refreshLinkedIdentityProviderAccessToken({
+    account: {
+      id: account.id,
+      providerId: account.providerId,
+      refreshToken: account.refreshToken,
+      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+    },
+  });
+}
+
+async function getInstallDiscoveryAccessToken(params: {
+  catalogItem: NonNullable<
+    Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+  >;
+  userId: string;
+}): Promise<string | undefined> {
+  const account = await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(
+    params.userId,
+  );
+  if (!account?.accessToken) {
+    return undefined;
+  }
+
+  const accessToken = await getCurrentIdentityProviderAccessToken(
+    params.userId,
+  );
+  if (!accessToken) {
+    return undefined;
+  }
+
+  const enterpriseManagedConfig = params.catalogItem.enterpriseManagedConfig;
+  if (!enterpriseManagedConfig) {
+    return accessToken;
+  }
+
+  const identityProvider = enterpriseManagedConfig.identityProviderId
+    ? await findExternalIdentityProviderById(
+        enterpriseManagedConfig.identityProviderId,
+      )
+    : await findExternalIdentityProviderByProviderId(account.providerId);
+  if (!identityProvider) {
+    return accessToken;
+  }
+
+  const credential = await exchangeEnterpriseManagedCredential({
+    identityProviderId: identityProvider.id,
+    assertion: accessToken,
+    enterpriseManagedConfig,
+  });
+
+  return extractInstallDiscoveryCredentialValue({
+    credentialValue: credential.value,
+    responseFieldPath: enterpriseManagedConfig.responseFieldPath,
+  });
+}
+
+async function getSecretValues(
+  secretId?: string,
+): Promise<Record<string, unknown>> {
+  if (!secretId) {
+    return {};
+  }
+
+  const secretRecord = await secretManager().getSecret(secretId);
+  return secretRecord?.secret ?? {};
+}
+
+function isInstallDiscoveryAuthError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    (error as { code?: number }).code !== undefined
+  ) {
+    const code = (error as { code?: number }).code;
+    if (code === 401 || code === 403) {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("401") ||
+    lower.includes("403") ||
+    lower.includes("unauthorized") ||
+    lower.includes("forbidden") ||
+    lower.includes("authentication failed") ||
+    lower.includes("authentication required") ||
+    lower.includes("missing required authorization header") ||
+    lower.includes("invalid authorization header") ||
+    lower.includes("invalid token") ||
+    lower.includes("access denied") ||
+    lower.includes("invalid credentials")
+  );
+}
+
+function extractInstallDiscoveryCredentialValue(params: {
+  credentialValue: string | Record<string, unknown>;
+  responseFieldPath?: string;
+}): string {
+  if (typeof params.credentialValue === "string") {
+    return params.credentialValue;
+  }
+
+  if (!params.responseFieldPath) {
+    throw new Error(
+      "Install-time enterprise-managed discovery returned a structured credential but no responseFieldPath was configured",
+    );
+  }
+
+  const extractedValue = params.responseFieldPath
+    .split(".")
+    .filter(Boolean)
+    .reduce<unknown>((current, segment) => {
+      if (
+        segment === "__proto__" ||
+        segment === "constructor" ||
+        segment === "prototype"
+      ) {
+        return undefined;
+      }
+
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return undefined;
+      }
+
+      return (current as Record<string, unknown>)[segment];
+    }, params.credentialValue);
+
+  if (typeof extractedValue !== "string") {
+    throw new Error(
+      `Install-time enterprise-managed discovery response field '${params.responseFieldPath}' did not resolve to a string`,
+    );
+  }
+
+  return extractedValue;
+}
+
+function getCatalogStaticUserConfigValues(
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+          default?: string | number | boolean | Array<string>;
+        }
+      >
+    | null
+    | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(userConfig ?? {})
+      .filter(([_fieldName, fieldConfig]) => {
+        return (
+          fieldConfig.headerName &&
+          fieldConfig.promptOnInstallation === false &&
+          (typeof fieldConfig.default === "string" ||
+            typeof fieldConfig.default === "number" ||
+            typeof fieldConfig.default === "boolean") &&
+          String(fieldConfig.default).length > 0
+        );
+      })
+      .map(([fieldName, fieldConfig]) => [
+        fieldName,
+        String(fieldConfig.default),
+      ]),
+  );
+}
+
+function filterInstallUserConfigValues(params: {
+  userConfig:
+    | Record<
+        string,
+        {
+          headerName?: string;
+          promptOnInstallation?: boolean;
+        }
+      >
+    | null
+    | undefined;
+  userConfigValues: Record<string, string> | undefined;
+}): Record<string, string> | undefined {
+  if (!params.userConfigValues || !params.userConfig) {
+    return undefined;
+  }
+
+  const filteredEntries = Object.entries(params.userConfigValues).filter(
+    ([fieldName]) => {
+      const fieldConfig = params.userConfig?.[fieldName];
+      if (!fieldConfig) {
+        return false;
+      }
+
+      return !(
+        fieldConfig.headerName && fieldConfig.promptOnInstallation === false
+      );
+    },
+  );
+
+  if (filteredEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(filteredEntries);
+}

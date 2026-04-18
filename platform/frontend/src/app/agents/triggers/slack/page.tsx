@@ -1,8 +1,7 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage, getDocsUrl } from "@shared";
-import { AlertTriangle, ExternalLink, Info } from "lucide-react";
-import Link from "next/link";
+import type { archestraApiTypes } from "@shared";
+import { AlertTriangle, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
@@ -18,14 +17,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useChatOpsStatus } from "@/lib/chatops.query";
-import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
-import config from "@/lib/config";
-import { useConfig, usePublicBaseUrl } from "@/lib/config.query";
-import { useAppName } from "@/lib/use-app-name";
+import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
+import config from "@/lib/config/config";
+import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
+import { ExternalDocsLink } from "../_components/external-docs-link";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
@@ -38,7 +39,7 @@ function useSlackProviderConfig(): ProviderConfig {
     providerLabel: "Slack",
     providerIcon: "/icons/slack.png",
     webhookPath: "/api/webhooks/chatops/slack",
-    docsUrl: getDocsUrl(DocsPage.PlatformSlack),
+    docsUrl: getFrontendDocsUrl("platform-slack"),
     slashCommand: `/${appName.toLowerCase()}-select-agent`,
     buildDeepLink: (binding) => {
       if (binding.workspaceId) {
@@ -102,7 +103,7 @@ export default function SlackPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel="Slack"
-        docsUrl={getDocsUrl(DocsPage.PlatformSlack)}
+        docsUrl={getFrontendDocsUrl("platform-slack")}
       >
         <SetupStep
           title="Choose connection mode"
@@ -295,15 +296,12 @@ function NgrokSetupDialog({
               <DialogTitle>Enter your ngrok auth token</DialogTitle>
               <DialogDescription>
                 Get one at{" "}
-                <Link
+                <ExternalDocsLink
                   href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                  className="inline-flex text-primary"
                 >
                   ngrok.com
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
+                </ExternalDocsLink>
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-4 p-3">

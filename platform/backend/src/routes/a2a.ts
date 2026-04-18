@@ -126,7 +126,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!token) {
         throw new ApiError(
           401,
-          "Authorization header required. Use: Bearer <archestra_token>",
+          "Authorization header required. Use: Bearer <platform_token>",
         );
       }
 
@@ -230,7 +230,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           error: {
             code: -32600,
             message:
-              "Authorization header required. Use: Bearer <archestra_token>",
+              "Authorization header required. Use: Bearer <platform_token>",
           },
         });
       }

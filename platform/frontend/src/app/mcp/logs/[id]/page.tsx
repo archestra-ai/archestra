@@ -5,8 +5,8 @@ import {
 } from "@shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { getServerApiHeaders } from "@/lib/server-utils";
 import { handleApiError } from "@/lib/utils";
+import { getServerApiHeaders } from "@/lib/utils/server";
 import { McpToolCallDetailPage } from "./page.client";
 
 export default async function McpToolCallDetailPageServer({

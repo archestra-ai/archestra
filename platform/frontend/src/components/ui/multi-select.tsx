@@ -17,6 +17,7 @@ interface MultiSelectProps {
   items: Array<{ value: string; label: string }>;
   className?: string;
   disabled?: boolean;
+  searchable?: boolean;
   showSelectedBadges?: boolean;
   selectedSuffix?: string | ((count: number) => string);
   triggerTestId?: string;
@@ -29,6 +30,7 @@ export function MultiSelect({
   items,
   className,
   disabled = false,
+  searchable = true,
   showSelectedBadges = true,
   selectedSuffix = "selected",
   triggerTestId,
@@ -124,15 +126,17 @@ export function MultiSelect({
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
-        <div className="flex items-center border-b px-3 pb-2 pt-3">
-          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-          <input
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-        </div>
+        {searchable && (
+          <div className="flex items-center border-b px-3 pb-2 pt-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+            <input
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        )}
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filteredItems.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">

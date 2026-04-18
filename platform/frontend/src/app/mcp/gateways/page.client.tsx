@@ -141,6 +141,10 @@ function McpGateways({
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
+    ? ["mcp_gateway", "profile"]
+    : ["mcp_gateway"];
 
   const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
@@ -149,7 +153,7 @@ function McpGateways({
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
-    agentTypes: ["mcp_gateway", "profile"],
+    agentTypes: gatewayAgentTypes,
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,

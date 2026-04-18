@@ -58,6 +58,7 @@ export const InteractionRequestSchema = z.union([
   DeepSeek.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
+  Azure.API.ResponsesRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
@@ -79,6 +80,7 @@ export const InteractionResponseSchema = z.union([
   DeepSeek.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
+  Azure.API.ResponsesResponseSchema,
 ]);
 
 const extendedFields = {
@@ -271,6 +273,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       Azure.API.ChatCompletionRequestSchema.nullable().optional(),
     response: Azure.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["azure:responses"]),
+    request: Azure.API.ResponsesRequestSchema,
+    processedRequest: Azure.API.ResponsesRequestSchema.nullable().optional(),
+    response: Azure.API.ResponsesResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

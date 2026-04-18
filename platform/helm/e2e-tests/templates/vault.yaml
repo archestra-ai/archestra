@@ -18,6 +18,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vault
+  labels:
+    app: vault
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: vault
 spec:
   type: {{ .Values.vault.service.type }}
   selector:
@@ -37,6 +41,8 @@ metadata:
   name: vault
   labels:
     app: vault
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: vault
 spec:
   {{- if .Values.vault.k8sAuth.enabled }}
   serviceAccountName: {{ .Values.vault.k8sAuth.serviceAccountName }}
@@ -52,6 +58,8 @@ spec:
           value: "0.0.0.0:8200"
         - name: VAULT_ADDR
           value: "http://127.0.0.1:8200"
+        - name: SKIP_SETCAP
+          value: "true"
       ports:
         - containerPort: 8200
           name: vault
@@ -102,10 +110,22 @@ spec:
                 path "kv/archestra/*" {
                   capabilities = ["create", "read", "update", "delete", "list"]
                 }
+                path "kv/teams" {
+                  capabilities = ["list"]
+                }
+                path "kv/teams/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
                 path "secret/data/archestra/*" {
                   capabilities = ["create", "read", "update", "delete", "list"]
                 }
                 path "secret/metadata/archestra/*" {
+                  capabilities = ["read", "delete", "list"]
+                }
+                path "secret/data/teams/*" {
+                  capabilities = ["create", "read", "update", "delete", "list"]
+                }
+                path "secret/metadata/teams/*" {
                   capabilities = ["read", "delete", "list"]
                 }
                 POLICY
@@ -122,7 +142,12 @@ spec:
                   ttl="{{ .Values.vault.k8sAuth.ttl }}"
 
                 {{- range .Values.vault.secrets }}
-                vault write {{ .path }}{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- $path := .path }}
+                {{- if contains "/data/" $path }}
+                vault kv put -mount="{{ regexReplaceAll "/data/.*$" $path "" }}" "{{ regexReplaceAll "^.*/data/" $path "" }}"{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- else }}
+                vault write {{ $path }}{{ range $key, $value := .data }} {{ $key }}={{ $value | quote }}{{ end }}
+                {{- end }}
                 {{- end }}
       {{- end }}
 {{- end }}

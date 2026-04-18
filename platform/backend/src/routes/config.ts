@@ -24,6 +24,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.strictObject({
             disableBasicAuth: z.boolean(),
             disableInvitations: z.boolean(),
+            analytics: z.strictObject({
+              enabled: z.boolean(),
+              posthog: z.strictObject({
+                key: z.string(),
+                host: z.string(),
+              }),
+            }),
           }),
         },
       },
@@ -32,6 +39,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         disableBasicAuth: config.auth.disableBasicAuth,
         disableInvitations: config.auth.disableInvitations,
+        analytics: config.analytics,
       });
     },
   );

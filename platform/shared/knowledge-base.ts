@@ -41,6 +41,8 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   gitlab: "GitLab",
   notion: "Notion",
   sharepoint: "SharePoint",
+  gdrive: "Google Drive",
+  dropbox: "Dropbox",
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [

@@ -624,6 +624,7 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 ### Supported Azure AI Foundry APIs
 
 - Chat Completions (streaming and non-streaming)
+- Responses API (streaming and non-streaming)
 
 ### Azure AI Foundry Connection Details
 
@@ -636,6 +637,7 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 |----------|----------|-------------|
 | `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Full deployment URL: `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
 | `ARCHESTRA_AZURE_OPENAI_API_VERSION` | No | Azure OpenAI API version (default: `2024-02-01`) |
+| `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
 | `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
 
 ### Getting an Azure API Key
@@ -656,6 +658,8 @@ The same format applies when configuring a Base URL in the API key settings UI.
 
 ### Notes
 
-- **API Version**: The `api-version` query parameter is automatically appended to all requests using the configured `ARCHESTRA_AZURE_OPENAI_API_VERSION` value. You do not need to include it in the base URL.
+- **API Version**: Chat Completions and model discovery use `ARCHESTRA_AZURE_OPENAI_API_VERSION`. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. You do not need to include either query parameter in the base URL.
 - **Multiple Deployments**: To use multiple Azure deployments, create separate API key entries in Settings, each with its own deployment URL as the Base URL.
-- **OpenAI-compatible API**: Azure AI Foundry uses the OpenAI Chat Completions request/response format, making it compatible with existing OpenAI client libraries.
+- **Deployment URL configuration**: Keep using the deployment-specific base URL format shown above. Archestra derives the correct upstream endpoint automatically for both `/chat/completions` and `/responses` requests.
+- **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.
+- **OpenAI-compatible API**: Azure AI Foundry supports both Chat Completions and Responses-style request flows through Archestra.

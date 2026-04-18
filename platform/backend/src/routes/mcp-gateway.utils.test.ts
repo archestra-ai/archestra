@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+  OAUTH_TOKEN_ID_PREFIX,
+} from "@shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
@@ -44,7 +48,7 @@ describe("validateMCPGatewayToken", () => {
     test("returns null for invalid token", async () => {
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
-        "archestra_invalidtoken1234567890ab",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}invalidtoken1234567890ab`,
       );
       expect(result).toBeNull();
     });
@@ -397,19 +401,26 @@ describe("validateMCPGatewayToken", () => {
       expect(result).toBeNull();
     });
 
-    test("validateMCPGatewayToken skips OAuth validation for archestra_ prefixed tokens", async () => {
-      // archestra_ prefixed tokens should never reach validateOAuthToken
+    test("validateMCPGatewayToken skips OAuth validation for legacy prefixed tokens", async () => {
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
-        "archestra_fake_token_that_does_not_exist",
+        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}fake_token_that_does_not_exist`,
       );
-      // Returns null because the archestra_ token is invalid, but importantly
+      // Returns null because the legacy token is invalid, but importantly
       // it should NOT have tried OAuth token validation
       expect(result).toBeNull();
     });
 
-    test("validateMCPGatewayToken tries OAuth validation for non-archestra tokens", async () => {
-      // A non-archestra token should try OAuth validation path and return null
+    test("validateMCPGatewayToken skips OAuth validation for current prefixed tokens", async () => {
+      const result = await validateMCPGatewayToken(
+        crypto.randomUUID(),
+        `${ARCHESTRA_TOKEN_PREFIX}fake_token_that_does_not_exist`,
+      );
+      expect(result).toBeNull();
+    });
+
+    test("validateMCPGatewayToken tries OAuth validation for non-platform tokens", async () => {
+      // A non-platform token should try OAuth validation path and return null
       const result = await validateMCPGatewayToken(
         crypto.randomUUID(),
         "some-random-bearer-token",
@@ -1256,6 +1267,64 @@ describe("createAgentServer tools/list", () => {
     ).toBe(true);
 
     archestraMcpBranding.syncFromOrganization(null);
+  });
+
+  test("preserves user context when calling restricted Archestra tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: adminUser.id,
+    });
+    const callToolHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            content: Array<{ type: string; text: string }>;
+            isError?: boolean;
+            structuredContent?: { items?: unknown[] };
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/call");
+
+    expect(callToolHandler).toBeDefined();
+    if (!callToolHandler) {
+      throw new Error("Expected tools/call handler to be registered");
+    }
+
+    const response = await callToolHandler({
+      method: "tools/call",
+      params: {
+        name: "archestra__get_mcp_servers",
+        arguments: {},
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    expect(response.structuredContent?.items).toEqual(expect.any(Array));
+    expect(response.content[0]?.text).not.toContain(
+      "User context not available",
+    );
   });
 });
 

@@ -1,4 +1,4 @@
-import { isOktaHostname } from "@shared";
+import { isEntraHostname, isOktaHostname } from "@shared";
 import logger from "@/logging";
 import {
   type ExternalIdentityProviderConfig,
@@ -8,8 +8,9 @@ import type {
   EnterpriseManagedCredentialConfig,
   EnterpriseManagedCredentialType,
 } from "@/types";
-import { managedResourceTokenExchangeStrategy } from "./exchange-strategies/managed-resource-token-exchange";
-import { standardTokenExchangeStrategy } from "./exchange-strategies/standard-token-exchange";
+import { entraOboStrategy } from "./exchange-strategies/entra-obo-strategy";
+import { oktaManagedCredentialExchangeStrategy } from "./exchange-strategies/okta-managed-credential-exchange";
+import { rfc8693TokenExchangeStrategy } from "./exchange-strategies/rfc8693-token-exchange";
 
 export interface EnterpriseCredentialExchangeParams {
   identityProvider: ExternalIdentityProviderConfig;
@@ -48,9 +49,11 @@ export async function exchangeEnterpriseManagedCredential(params: {
       identityProviderId: identityProvider.id,
       providerId: identityProvider.providerId,
       strategy:
-        strategy === managedResourceTokenExchangeStrategy
-          ? "managed-resource-token-exchange"
-          : "standard-token-exchange",
+        strategy === entraOboStrategy
+          ? "entra-obo"
+          : strategy === oktaManagedCredentialExchangeStrategy
+            ? "okta-managed-credential-exchange"
+            : "rfc8693-token-exchange",
     },
     "Selected enterprise-managed credential exchange strategy",
   );
@@ -64,43 +67,49 @@ export async function exchangeEnterpriseManagedCredential(params: {
 function getEnterpriseCredentialExchangeStrategy(
   identityProvider: ExternalIdentityProviderConfig,
 ): EnterpriseCredentialExchangeStrategy {
-  if (supportsManagedResourceTokenExchange(identityProvider)) {
-    return managedResourceTokenExchangeStrategy;
+  if (!identityProvider.oidcConfig?.enterpriseManagedCredentials) {
+    throw new Error(
+      `Enterprise-managed credentials are not configured for identity provider ${identityProvider.providerId}`,
+    );
   }
 
-  if (supportsStandardTokenExchange(identityProvider)) {
-    return standardTokenExchangeStrategy;
+  const configuredExchangeStrategy =
+    identityProvider.oidcConfig.enterpriseManagedCredentials.exchangeStrategy;
+  if (configuredExchangeStrategy === "entra_obo") {
+    return entraOboStrategy;
   }
 
-  throw new Error(
-    `Enterprise-managed credentials are not supported for identity provider ${identityProvider.providerId}`,
-  );
+  if (configuredExchangeStrategy === "okta_managed") {
+    return oktaManagedCredentialExchangeStrategy;
+  }
+
+  if (configuredExchangeStrategy === "rfc8693") {
+    return rfc8693TokenExchangeStrategy;
+  }
+
+  if (supportsEntraObo(identityProvider)) {
+    return entraOboStrategy;
+  }
+
+  if (supportsOktaManagedCredentialExchange(identityProvider)) {
+    return oktaManagedCredentialExchangeStrategy;
+  }
+
+  return rfc8693TokenExchangeStrategy;
 }
 
-function supportsManagedResourceTokenExchange(
+function supportsEntraObo(
   identityProvider: ExternalIdentityProviderConfig,
 ): boolean {
-  const configuredProviderType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
-  if (configuredProviderType === "okta") {
-    return true;
-  }
+  const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
+  return isEntraHostname(issuerUrl?.hostname ?? "");
+}
 
+function supportsOktaManagedCredentialExchange(
+  identityProvider: ExternalIdentityProviderConfig,
+): boolean {
   const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
   return isOktaHostname(issuerUrl?.hostname ?? "");
-}
-
-function supportsStandardTokenExchange(
-  identityProvider: ExternalIdentityProviderConfig,
-): boolean {
-  const configuredProviderType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType;
-  if (configuredProviderType === "keycloak") {
-    return true;
-  }
-
-  const issuerUrl = tryParseIssuerUrl(identityProvider.issuer);
-  return issuerUrl?.pathname.includes("/realms/") ?? false;
 }
 
 export function extractProviderErrorMessage(

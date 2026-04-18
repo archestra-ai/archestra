@@ -24,8 +24,10 @@ export const IDENTITY_TRUSTED_PROVIDER_IDS =
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
+    skipDiscovery: z.boolean().optional(),
     pkce: z.boolean(),
     enableRpInitiatedLogout: z.boolean().optional(),
+    hd: z.string().optional(),
     clientId: z.string(),
     clientSecret: z.string(),
     authorizationEndpoint: z.string().optional(),
@@ -40,7 +42,9 @@ export const IdentityProviderOidcConfigSchema = z
     jwksEndpoint: z.string().optional(),
     enterpriseManagedCredentials: z
       .object({
-        providerType: z.enum(["generic_oidc", "okta", "keycloak"]).optional(),
+        exchangeStrategy: z
+          .enum(["rfc8693", "okta_managed", "entra_obo"])
+          .optional(),
         clientId: z.string().optional(),
         clientSecret: z.string().optional(),
         tokenEndpoint: z.string().optional(),
@@ -176,6 +180,14 @@ export function isOktaHostname(hostname: string): boolean {
   const hostnameParts = hostname.split(".");
   return (
     hostnameParts.length > 2 && hostnameParts.slice(-2).join(".") === "okta.com"
+  );
+}
+
+export function isEntraHostname(hostname: string): boolean {
+  return (
+    hostname === "login.microsoftonline.com" ||
+    hostname === "sts.windows.net" ||
+    hostname === "login.microsoft.com"
   );
 }
 

@@ -25,10 +25,10 @@ import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  createJsonSchemaTransformObject,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
-  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -43,6 +43,7 @@ import {
   PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
@@ -226,7 +227,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     },
     hideUntagged: true,
     transform: jsonSchemaTransform,
-    transformObject: jsonSchemaTransformObject,
+    transformObject: createJsonSchemaTransformObject({
+      zodToJsonConfig: { target: "openapi-3.0" },
+    }),
   });
 }
 
@@ -241,6 +244,34 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
   for (const route of Object.values(eeRoutes)) {
     fastify.register(route);
   }
+}
+
+/**
+ * Register only the routes needed by the worker for A2A / scheduled task execution.
+ * These routes are called via localhost by executeA2AMessage and are not exposed
+ * externally — the K8s Service only targets platform pods, not worker pods.
+ */
+export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
+  // LLM Proxy routes (all providers)
+  fastify.register(routes.anthropicProxyRoutes);
+  fastify.register(routes.openAiProxyRoutes);
+  fastify.register(routes.geminiProxyRoutes);
+  fastify.register(routes.azureProxyRoutes);
+  fastify.register(routes.bedrockProxyRoutes);
+  fastify.register(routes.cerebrasProxyRoutes);
+  fastify.register(routes.cohereProxyRoutes);
+  fastify.register(routes.deepseekProxyRoutes);
+  fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.minimaxProxyRoutes);
+  fastify.register(routes.mistralProxyRoutes);
+  fastify.register(routes.ollamaProxyRoutes);
+  fastify.register(routes.openrouterProxyRoutes);
+  fastify.register(routes.perplexityProxyRoutes);
+  fastify.register(routes.vllmProxyRoutes);
+  fastify.register(routes.xaiProxyRoutes);
+  fastify.register(routes.zhipuaiProxyRoutes);
+  // MCP Gateway (tool listing + tool calls via JSON-RPC)
+  fastify.register(routes.mcpGatewayRoutes);
 }
 
 /**
@@ -368,7 +399,7 @@ export const createFastifyInstance = () =>
  * Error: A metric with the name http_request_duration_seconds has already been registered.
  * at Registry.registerMetric (/app/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/registry.js:103:10)
  */
-const registerMetricsPlugin = async (
+export const registerMetricsPlugin = async (
   fastify: ReturnType<typeof createFastifyInstance>,
   endpointEnabled: boolean,
 ): Promise<void> => {
@@ -385,7 +416,7 @@ const registerMetricsPlugin = async (
   });
 };
 
-const addMetricsAuthenticationHook = (
+export const addMetricsAuthenticationHook = (
   fastify: FastifyInstanceWithZod,
 ): void => {
   const { secret: metricsSecret } = observability.metrics;
@@ -394,12 +425,12 @@ const addMetricsAuthenticationHook = (
     return;
   }
 
+  const metricsPath = observability.metrics.endpoint;
+
   fastify.addHook("preHandler", async (request, reply) => {
     if (
-      request.url === HEALTH_PATH ||
-      request.url === READY_PATH ||
-      request.url.startsWith(`${HEALTH_PATH}?`) ||
-      request.url.startsWith(`${READY_PATH}?`)
+      request.url !== metricsPath &&
+      !request.url.startsWith(`${metricsPath}?`)
     ) {
       return;
     }
@@ -418,7 +449,7 @@ const addMetricsAuthenticationHook = (
   });
 };
 
-const registerStandaloneMetricsEndpoint = async (params: {
+export const registerStandaloneMetricsEndpoint = async (params: {
   fastify: FastifyInstanceWithZod;
   enableDefaultMetrics: boolean;
 }): Promise<void> => {
@@ -934,6 +965,14 @@ const startWorker = async () => {
     await initializeDatabase();
     cacheManager.start();
 
+    // Sync Archestra MCP branding so the worker recognises branded tool names
+    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // Without this, isToolName() only matches the default "archestra__" prefix
+    // and builtin tools fall through to mcpClient.executeToolCall() which fails
+    // because they have credentialResolutionMode "static" with no mcpServerId.
+    const organization = await OrganizationModel.getFirst();
+    archestraMcpBranding.syncFromOrganization(organization);
+
     // Set OpenMetrics content type to enable exemplar support
     const promClient = await import("prom-client");
     // eslint-disable-next-line -- default register is typed as Registry<PrometheusContentType> but setContentType accepts both at runtime
@@ -942,7 +981,7 @@ const startWorker = async () => {
     );
 
     const labelKeys = await initializeObservabilityMetrics({
-      includeMcpMetrics: false,
+      includeMcpMetrics: true,
       includeAgentExecutionMetrics: false,
     });
 
@@ -950,7 +989,10 @@ const startWorker = async () => {
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
 
-    // Minimal worker server for Kubernetes probes and Prometheus scraping
+    // Worker server for Kubernetes probes, Prometheus scraping,
+    // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
+    // These routes handle their own auth (Bearer tokens / API keys) and are
+    // not reachable from outside the pod — the K8s Service only targets platform pods.
     const healthServer = createFastifyInstance();
 
     healthServer.get("/health", async () => ({ status: "ok" }));
@@ -961,6 +1003,15 @@ const startWorker = async () => {
       }
       return { status: "ok" };
     });
+
+    // Auth plugin decorates request.user / request.organizationId which route
+    // handlers reference. The proxy and gateway routes are skipped by the auth
+    // check (shouldSkipAuthCheck) but the decorators must exist.
+    healthServer.register(fastifyAuthPlugin);
+
+    // Register LLM Proxy and MCP Gateway routes so executeA2AMessage can call
+    // localhost instead of requiring the platform service URL.
+    await registerWorkerRoutes(healthServer);
 
     await registerStandaloneMetricsEndpoint({
       fastify: healthServer,

@@ -105,3 +105,32 @@ tests:
           content:
             name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
             value: "1"
+
+  - it: worker supports overriding the wait-for-postgres image
+    set:
+      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: registry.internal.example.com/platform/busybox:1.36
+
+  - it: worker applies shared resources to chart-managed init containers
+    set:
+      archestra.initContainers.resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

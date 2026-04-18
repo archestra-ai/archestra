@@ -8,7 +8,12 @@ import {
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
+import {
+  AgentModel,
+  ConversationModel,
+  OrganizationModel,
+  ScheduleTriggerRunModel,
+} from "@/models";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
   catchError,
@@ -148,37 +153,54 @@ const registry = defineArchestraTools([
         {
           agentId: contextAgent.id,
           contentLength: args.content.length,
+          scheduleTriggerRunId: context.scheduleTriggerRunId ?? null,
+          conversationId: context.conversationId ?? null,
+          userId: context.userId ?? null,
+          organizationId: context.organizationId ?? null,
         },
         "artifact_write tool called",
       );
 
       try {
-        if (
-          !context.conversationId ||
-          !context.userId ||
-          !context.organizationId
-        ) {
-          return errorResult(
-            "This tool requires conversation context. It can only be used within an active chat conversation.",
+        // Scheduled run context — write to the run (conversationId is a
+        // synthetic isolation key, not a real DB conversation)
+        if (context.scheduleTriggerRunId) {
+          const updated = await ScheduleTriggerRunModel.setArtifact(
+            context.scheduleTriggerRunId,
+            args.content,
           );
-        }
 
-        const updated = await ConversationModel.update(
-          context.conversationId,
-          context.userId,
-          context.organizationId,
-          { artifact: args.content },
-        );
+          if (!updated) {
+            return errorResult(
+              "Failed to update scheduled run artifact. The run may no longer exist.",
+            );
+          }
+        } else if (
+          context.conversationId &&
+          context.userId &&
+          context.organizationId
+        ) {
+          const updated = await ConversationModel.update(
+            context.conversationId,
+            context.userId,
+            context.organizationId,
+            { artifact: args.content },
+          );
 
-        if (!updated) {
+          if (!updated) {
+            return errorResult(
+              "Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
+            );
+          }
+        } else {
           return errorResult(
-            "Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
+            "This tool requires conversation context. It can only be used within an active chat conversation or scheduled run.",
           );
         }
 
         return structuredSuccessResult(
           { success: true, characterCount: args.content.length },
-          `Successfully updated conversation artifact (${args.content.length} characters)`,
+          `Successfully updated artifact (${args.content.length} characters)`,
         );
       } catch (error) {
         return catchError(error, "writing artifact");

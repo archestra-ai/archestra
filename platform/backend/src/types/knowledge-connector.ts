@@ -10,6 +10,8 @@ const GITLAB = z.literal("gitlab");
 const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
+const GDRIVE = z.literal("gdrive");
+const DROPBOX = z.literal("dropbox");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -19,6 +21,8 @@ export const ConnectorTypeSchema = z.union([
   SERVICENOW,
   NOTION,
   SHAREPOINT,
+  GDRIVE,
+  DROPBOX,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -194,7 +198,46 @@ export const SharePointCheckpointSchema = z.object({
 });
 export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
 
+// ===== Google Drive Config & Checkpoint =====
+
+export const GoogleDriveConfigSchema = z.object({
+  type: GDRIVE,
+  driveId: z.string().optional(),
+  driveIds: z.array(z.string()).optional(),
+  folderId: z.string().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().int().min(1).max(100).optional(),
+  fileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+});
+export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
+
+export const GoogleDriveCheckpointSchema = z.object({
+  type: GDRIVE,
+  lastSyncedAt: z.string().optional(),
+});
+export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
+
 // ===== Discriminated Unions =====
+
+// ===== Dropbox Config & Checkpoint =====
+
+export const DropboxConfigSchema = z.object({
+  type: DROPBOX,
+  rootPath: z.string().optional(),
+  fileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().optional(),
+});
+export type DropboxConfig = z.infer<typeof DropboxConfigSchema>;
+
+export const DropboxCheckpointSchema = z.object({
+  type: DROPBOX,
+  lastSyncedAt: z.string().optional(),
+  cursor: z.string().optional(),
+});
+export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
 
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
@@ -204,6 +247,8 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   ServiceNowConfigSchema,
   NotionConfigSchema,
   SharePointConfigSchema,
+  GoogleDriveConfigSchema,
+  DropboxConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -215,6 +260,8 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   ServiceNowCheckpointSchema,
   NotionCheckpointSchema,
   SharePointCheckpointSchema,
+  GoogleDriveCheckpointSchema,
+  DropboxCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

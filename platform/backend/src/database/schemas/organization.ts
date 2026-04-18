@@ -3,6 +3,7 @@ import type {
   OrganizationTheme,
   SupportedProvider,
 } from "@shared";
+import { DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
 import {
   boolean,
   integer,
@@ -134,8 +135,21 @@ const organizationsTable = pgTable("organization", {
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),
 
+  /** When enabled, chat shows only support text plus correlation IDs in error cards */
+  slimChatErrorUi: boolean("slim_chat_error_ui").notNull().default(false),
+
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
+
+  /**
+   * OAuth access token lifetime for MCP-native auth flows.
+   * Returned to clients via `expires_in` and used to persist token expiration.
+   */
+  mcpOauthAccessTokenLifetimeSeconds: integer(
+    "mcp_oauth_access_token_lifetime_seconds",
+  )
+    .notNull()
+    .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 });
 
 export default organizationsTable;

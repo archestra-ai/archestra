@@ -15,6 +15,7 @@ export const DocsPage = {
   PlatformAccessControl: "platform-access-control",
   PlatformAddingLlmProviders: "platform-adding-llm-providers",
   PlatformAgentTriggersEmail: "platform-agent-triggers-email",
+  PlatformAgentTriggersSchedule: "platform-agent-triggers-schedule",
   PlatformAgents: "platform-agents",
   PlatformArchestraMcpServer: "platform-archestra-mcp-server",
   PlatformApiReference: "platform-api-reference",

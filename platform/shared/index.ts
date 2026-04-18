@@ -35,6 +35,7 @@ export * from "./system-prompt-template";
 export * from "./test-mcp-server";
 export * from "./themes/theme-config";
 export * from "./themes/theme-utils";
+export * from "./tool-call-normalization";
 export * from "./tool-invocation-policy-reasons";
 export * from "./tool-refusal";
 export * from "./types";

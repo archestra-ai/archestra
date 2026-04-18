@@ -20,7 +20,11 @@ vi.mock("@/auth", () => ({
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
-  testProviderApiKey: vi.fn(),
+  testProviderApiKey: vi.fn(async (provider, _, baseUrl) => {
+    if (provider === "bedrock" && !baseUrl) {
+      throw new Error("Bedrock base URL not configured");
+    }
+  }),
 }));
 
 // Mock secrets-manager to use real DB-backed SecretModel for FK integrity
@@ -120,7 +124,9 @@ async function createApp(orgId: string, currentUser: User) {
   const { default: llmProviderApiKeyRoutes } = await import(
     "./llm-provider-api-keys"
   );
+  const { default: organizationRoutes } = await import("./organization");
   await app.register(llmProviderApiKeyRoutes);
+  await app.register(organizationRoutes);
   return app;
 }
 
@@ -402,6 +408,83 @@ describe("LLM Provider API Keys CRUD", () => {
     });
     expect(openaiResponse.statusCode).toBe(200);
   });
+
+  test("prevent creating API keys with empty base URL for providers that require it", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "bedrock",
+        apiKey: "sk-bedrock-create-empty-base-url-test",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(400);
+    expect(createResponse.json().error.message).toContain(
+      "base URL not configured",
+    );
+  });
+
+  test("prevent setting empty base URL to API keys for providers that require it", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "bedrock",
+        apiKey: "sk-bedrock-update-empty-base-url-test",
+        scope: "personal",
+        baseUrl: "https://bedrock.us-east-1.amazonaws.com",
+      },
+    });
+    const createdKey = createResponse.json();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: null,
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(400);
+    expect(updateResponse.json().error.message).toContain(
+      "base URL not configured",
+    );
+  });
+
+  test("should allow to set base URL for providers with optional API key", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "ollama",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: null,
+      },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const updateResponse2 = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+    expect(updateResponse2.statusCode).toBe(200);
+  });
 });
 
 describe("LLM Provider API Keys Available Endpoint", () => {
@@ -535,6 +618,76 @@ describe("LLM Provider API Keys Team Scope", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  test("prevents deleting an API key used for embedding", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Embedding Delete Protection Key",
+        provider: "openai",
+        apiKey: "sk-openai-embedding-delete-protection-test",
+        scope: "org",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const knowledgeResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/knowledge-settings",
+      payload: {
+        embeddingChatApiKeyId: createdKey.id,
+      },
+    });
+    expect(knowledgeResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toContain("embedding");
+    expect(deleteResponse.json().error.message).toContain(
+      "Remove it from Settings > Knowledge before deleting",
+    );
+  });
+
+  test("prevents deleting an API key used for reranking", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Reranker Delete Protection Key",
+        provider: "openai",
+        apiKey: "sk-openai-reranker-delete-protection-test",
+        scope: "org",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const knowledgeResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/knowledge-settings",
+      payload: {
+        rerankerChatApiKeyId: createdKey.id,
+      },
+    });
+    expect(knowledgeResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toContain("reranking");
+    expect(deleteResponse.json().error.message).toContain(
+      "Remove it from Settings > Knowledge before deleting",
+    );
   });
 });
 

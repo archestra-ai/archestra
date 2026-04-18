@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "@/test";
 import {
   buildAzureDeploymentsUrl,
+  buildAzureResponsesBaseUrl,
   createAzureFetchWithApiVersion,
+  extractAzureDeploymentName,
   normalizeAzureApiKey,
 } from "./azure-url";
 
@@ -55,6 +57,34 @@ describe("buildAzureDeploymentsUrl", () => {
     ).toBe(
       "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
     );
+  });
+});
+
+describe("buildAzureResponsesBaseUrl", () => {
+  it("strips the deployment segment from the configured base URL", () => {
+    expect(
+      buildAzureResponsesBaseUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat",
+      ),
+    ).toBe("https://my-resource.openai.azure.com/openai");
+  });
+
+  it("strips a trailing slash after the deployment segment", () => {
+    expect(
+      buildAzureResponsesBaseUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat/",
+      ),
+    ).toBe("https://my-resource.openai.azure.com/openai");
+  });
+
+  it("returns null for an invalid URL", () => {
+    expect(buildAzureResponsesBaseUrl("not-a-url")).toBeNull();
+  });
+
+  it("returns null when the base URL is not deployment-scoped", () => {
+    expect(
+      buildAzureResponsesBaseUrl("https://my-resource.openai.azure.com/openai"),
+    ).toBeNull();
   });
 });
 
@@ -133,5 +163,27 @@ describe("normalizeAzureApiKey", () => {
 
   it("returns undefined when the key is undefined", () => {
     expect(normalizeAzureApiKey(undefined)).toBeUndefined();
+  });
+});
+
+describe("extractAzureDeploymentName", () => {
+  it("extracts the deployment name from an Azure deployment base URL", () => {
+    expect(
+      extractAzureDeploymentName(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat",
+      ),
+    ).toBe("gpt-5.2-chat");
+  });
+
+  it("extracts the deployment name from a trailing-slash deployment URL", () => {
+    expect(
+      extractAzureDeploymentName(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat/",
+      ),
+    ).toBe("gpt-5.2-chat");
+  });
+
+  it("returns null for an invalid URL", () => {
+    expect(extractAzureDeploymentName("not-a-valid-url")).toBeNull();
   });
 });

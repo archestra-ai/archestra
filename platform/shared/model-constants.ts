@@ -43,6 +43,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
   "azure:chatCompletions",
+  "azure:responses",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);

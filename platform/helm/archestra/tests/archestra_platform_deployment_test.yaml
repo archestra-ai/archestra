@@ -276,6 +276,43 @@ tests:
           path: spec.template.spec.initContainers[1].image
           value: busybox:1.36
 
+  - it: should allow overriding the wait-for-postgres image
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: registry.internal.example.com/platform/busybox:1.36
+
+  - it: should apply shared resources to chart-managed init containers
+    documentIndex: 1
+    set:
+      postgresql.enabled: true
+      archestra.initContainers.resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources
+          value:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+
   - it: should configure init container with env vars and parse ARCHESTRA_DATABASE_URL
     documentIndex: 1
     asserts:

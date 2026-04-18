@@ -22,8 +22,10 @@ const OAUTH_INSTALLATION_COMPLETE_CATALOG_ID =
   "oauth_installation_complete_catalog_id";
 const OAUTH_SERVER_TYPE = "oauth_server_type";
 const OAUTH_ENVIRONMENT_VALUES = "oauth_environment_values";
+const OAUTH_USER_CONFIG_VALUES = "oauth_user_config_values";
 const OAUTH_PENDING_AFTER_ENV_VARS = "oauth_pending_after_env_vars";
 const OAUTH_RETURN_URL = "oauth_return_url";
+const OAUTH_REAUTH_CHAT_RESUME = "oauth_reauth_chat_resume";
 
 // Dynamic key prefix (combined with code + state to deduplicate callbacks)
 const OAUTH_PROCESSING_PREFIX = "oauth_processing_";
@@ -82,6 +84,50 @@ export function setOAuthEnvironmentValues(values: Record<string, string>) {
   sessionStorage.setItem(OAUTH_ENVIRONMENT_VALUES, JSON.stringify(values));
 }
 
+type OAuthUserConfigField = {
+  sensitive?: boolean;
+};
+
+/**
+ * Store promptable user-config values collected before OAuth redirect.
+ *
+ * In non-BYOS mode we only persist non-sensitive values across the redirect.
+ * Sensitive values must not be written into sessionStorage; they are handled
+ * server-side or re-prompted after the callback. In BYOS mode, values are
+ * vault references rather than raw secrets, so they are safe to persist.
+ */
+export function setOAuthUserConfigValues(params: {
+  values: Record<string, string>;
+  userConfig: Record<string, OAuthUserConfigField> | null | undefined;
+  isByosVault?: boolean;
+}) {
+  if (!params.userConfig) {
+    sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
+    return;
+  }
+
+  const valuesToPersist = Object.fromEntries(
+    Object.entries(params.values).filter(([fieldName]) => {
+      const fieldConfig = params.userConfig?.[fieldName];
+      if (!fieldConfig) {
+        return false;
+      }
+
+      return params.isByosVault ? true : fieldConfig.sensitive !== true;
+    }),
+  );
+
+  if (Object.keys(valuesToPersist).length === 0) {
+    sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
+    return;
+  }
+
+  sessionStorage.setItem(
+    OAUTH_USER_CONFIG_VALUES,
+    JSON.stringify(valuesToPersist),
+  );
+}
+
 /** Flag that OAuth is pending after env vars collection. */
 export function setOAuthPendingAfterEnvVars(pending: boolean) {
   if (pending) {
@@ -133,6 +179,16 @@ export function getOAuthEnvironmentValues(): Record<string, string> | null {
   }
 }
 
+export function getOAuthUserConfigValues(): Record<string, string> | null {
+  const json = sessionStorage.getItem(OAUTH_USER_CONFIG_VALUES);
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
 export function getOAuthIsFirstInstallation(): boolean {
   return sessionStorage.getItem(OAUTH_IS_FIRST_INSTALLATION) === "true";
 }
@@ -158,6 +214,58 @@ export function clearOAuthReturnUrl() {
   sessionStorage.removeItem(OAUTH_RETURN_URL);
 }
 
+export function setOAuthReauthChatResume(params: {
+  returnUrl: string;
+  serverName: string;
+}) {
+  const conversationId = extractConversationIdFromChatUrl(params.returnUrl);
+  if (!conversationId) {
+    return;
+  }
+
+  sessionStorage.setItem(
+    OAUTH_REAUTH_CHAT_RESUME,
+    JSON.stringify({
+      conversationId,
+      message: `I re-authenticated the "${params.serverName}" connection. Please retry the last failed tool call and continue from where we left off.`,
+    }),
+  );
+}
+
+export function getOAuthReauthChatResume(): {
+  conversationId: string;
+  message: string;
+} | null {
+  const json = sessionStorage.getItem(OAUTH_REAUTH_CHAT_RESUME);
+  if (!json) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(json) as {
+      conversationId?: unknown;
+      message?: unknown;
+    };
+    if (
+      typeof parsed.conversationId !== "string" ||
+      typeof parsed.message !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      conversationId: parsed.conversationId,
+      message: parsed.message,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearOAuthReauthChatResume() {
+  sessionStorage.removeItem(OAUTH_REAUTH_CHAT_RESUME);
+}
+
 // ─── Cleanup ─────────────────────────────────────────────────────────
 
 /** Remove re-authentication context. */
@@ -174,6 +282,7 @@ export function clearInstallContext() {
   sessionStorage.removeItem(OAUTH_IS_FIRST_INSTALLATION);
   sessionStorage.removeItem(OAUTH_SERVER_TYPE);
   sessionStorage.removeItem(OAUTH_ENVIRONMENT_VALUES);
+  sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
 }
 
 /** Remove the assignments-dialog flag. */
@@ -184,4 +293,14 @@ export function clearInstallationCompleteCatalogId() {
 /** Remove the "pending after env vars" flag. */
 export function clearPendingAfterEnvVars() {
   sessionStorage.removeItem(OAUTH_PENDING_AFTER_ENV_VARS);
+}
+
+function extractConversationIdFromChatUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    const match = parsedUrl.pathname.match(/^\/chat\/([^/]+)$/);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }

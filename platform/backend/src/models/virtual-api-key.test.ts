@@ -1,3 +1,7 @@
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  LEGACY_ARCHESTRA_TOKEN_PREFIXES,
+} from "@shared";
 import { describe } from "vitest";
 import { expect, test } from "@/test";
 import VirtualApiKeyModel from "./virtual-api-key";
@@ -25,7 +29,9 @@ describe("VirtualApiKeyModel", () => {
     expect(virtualKey.chatApiKeyId).toBe(chatApiKey.id);
     expect(virtualKey.name).toBe("Test Virtual Key");
     expect(virtualKey.expiresAt).toBeNull();
-    expect(value).toMatch(/^archestra_[a-f0-9]{64}$/);
+    expect(value).toMatch(
+      new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{64}$`),
+    );
     expect(virtualKey.tokenStart).toBe(value.substring(0, 14));
   });
 
@@ -258,12 +264,12 @@ describe("VirtualApiKeyModel", () => {
 
   test("validateToken: returns null for invalid token", async () => {
     const result = await VirtualApiKeyModel.validateToken(
-      "archestra_0000000000000000000000000000",
+      `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}0000000000000000000000000000`,
     );
     expect(result).toBeNull();
   });
 
-  test("validateToken: returns null for non-archestra token", async () => {
+  test("validateToken: returns null for non-platform token", async () => {
     const result = await VirtualApiKeyModel.validateToken("sk-some-random-key");
     expect(result).toBeNull();
   });

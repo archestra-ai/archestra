@@ -36,6 +36,10 @@ export default async function McpGatewaysPageServer() {
 
     const headers = await getServerApiHeaders();
     const canReadTeams = await serverHasPermissions({ team: ["read"] });
+    const canReadAgents = await serverHasPermissions({ agent: ["read"] });
+    const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
+      ? ["mcp_gateway", "profile"]
+      : ["mcp_gateway"];
     const emptyTeamsResponse = {
       data: { data: [] },
       error: undefined,
@@ -48,7 +52,7 @@ export default async function McpGatewaysPageServer() {
           offset: 0,
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
-          agentTypes: ["mcp_gateway", "profile"],
+          agentTypes: gatewayAgentTypes,
         },
       }),
       canReadTeams

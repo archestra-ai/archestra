@@ -24,6 +24,8 @@ export interface ArchestraContext {
    * E.g., "agentA:agentB" means agentA delegated to agentB.
    */
   delegationChain?: string;
+  /** Schedule trigger run ID — when set, artifact_write targets the run instead of a conversation */
+  scheduleTriggerRunId?: string;
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /** Whether the current caller context is still trusted/safe */

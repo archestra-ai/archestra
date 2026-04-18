@@ -66,6 +66,8 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
+  /** Schedule trigger run ID — enables artifact_write to target the run */
+  scheduleTriggerRunId?: string;
 }
 
 export interface A2AExecuteResult {
@@ -97,6 +99,7 @@ export async function executeA2AMessage(
     abortSignal,
     attachments,
     parentContextIsTrusted,
+    scheduleTriggerRunId,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -170,13 +173,13 @@ export async function executeA2AMessage(
       agentName: agent.name,
       agentId: agent.id,
       userId,
-      userIsAgentAdmin: true, // A2A agents have full access
       organizationId,
       sessionId,
       delegationChain,
       conversationId: isolationKey,
       abortSignal,
       blockOnApprovalRequired: true, // A2A/autonomous: block tools that require human approval
+      scheduleTriggerRunId,
     });
 
     logger.info(
@@ -436,7 +439,6 @@ async function cleanupBrowserTab(params: {
       await browserStreamFeature.closeTab(agentId, isolationKey, {
         userId,
         organizationId,
-        userIsAgentAdmin: true,
       });
     }
   } catch (error) {

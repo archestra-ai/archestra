@@ -8,7 +8,11 @@ import {
   OpenAIErrorTypes,
 } from "@shared";
 import { describe, expect, it } from "@/test";
-import { mapProviderError, ProviderError } from "./errors";
+import {
+  mapProviderError,
+  ProviderError,
+  sanitizeChatErrorForFrontend,
+} from "./errors";
 
 // =============================================================================
 // OpenAI Error Tests
@@ -1314,5 +1318,30 @@ describe("ProviderError", () => {
     // Compare: if we had incorrectly re-mapped with gemini
     const wrongMapping = mapProviderError(subagentError, "gemini");
     expect(wrongMapping.originalError?.provider).toBe("gemini"); // Wrong provider!
+  });
+
+  it("strips provider internals from the frontend error payload", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.ServerError,
+        message: ChatErrorMessages[ChatErrorCode.ServerError],
+        isRetryable: true,
+        sessionId: "session-123",
+        traceId: "trace-123",
+        spanId: "span-123",
+        originalError: {
+          provider: "anthropic",
+          status: 500,
+          message: "Sensitive provider detail",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.ServerError,
+      message: ChatErrorMessages[ChatErrorCode.ServerError],
+      isRetryable: true,
+      sessionId: "session-123",
+      traceId: "trace-123",
+      spanId: "span-123",
+    });
   });
 });

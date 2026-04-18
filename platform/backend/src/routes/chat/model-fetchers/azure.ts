@@ -1,5 +1,6 @@
 import {
   buildAzureDeploymentsUrl,
+  extractAzureDeploymentName,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import config from "@/config";
@@ -19,6 +20,7 @@ export async function fetchAzureModels(
     apiVersion: config.llm.azure.apiVersion,
     baseUrl,
   });
+  const deploymentName = extractAzureDeploymentName(baseUrl);
   if (!url) {
     logger.warn({ baseUrl }, "Could not extract Azure endpoint from baseUrl");
     return [];
@@ -38,17 +40,36 @@ export async function fetchAzureModels(
         { status: response.status, error: errorText },
         "Failed to fetch Azure deployments",
       );
-      return [];
+      return fallbackToConfiguredDeployment(deploymentName);
     }
 
     const data = (await response.json()) as { data?: { id: string }[] };
-    return (data.data ?? []).map((dep) => ({
+    const models = (data.data ?? []).map((dep) => ({
       id: dep.id,
       displayName: dep.id,
       provider: "azure" as const,
     }));
+    return models.length > 0
+      ? models
+      : fallbackToConfiguredDeployment(deploymentName);
   } catch (error) {
     logger.error({ error }, "Error fetching Azure deployments");
+    return fallbackToConfiguredDeployment(deploymentName);
+  }
+}
+
+function fallbackToConfiguredDeployment(
+  deploymentName: string | null,
+): ModelInfo[] {
+  if (!deploymentName) {
     return [];
   }
+
+  return [
+    {
+      id: deploymentName,
+      displayName: deploymentName,
+      provider: "azure",
+    },
+  ];
 }

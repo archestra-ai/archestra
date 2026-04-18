@@ -35,12 +35,12 @@ import {
   AgentToolFilterSchema,
   AgentToolSortBy,
   ApiError,
+  AssignedToolSchema,
   BulkAgentToolAssignmentSchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   SelectAgentToolSchema,
-  SelectToolSchema,
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
@@ -490,23 +490,37 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.array(SelectToolSchema)),
+        response: constructResponseSchema(z.array(AssignedToolSchema)),
       },
     },
     async ({ params: { agentId }, user, organizationId }, reply) => {
-      // Validate that agent exists
-      const agent = await AgentModel.findById(agentId);
+      // Fetch the resource first so we can enforce type- and scope-aware access.
+      const agent = await AgentModel.findById(agentId, user.id, true);
       if (!agent) {
         throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
 
-      // Check agent-type-specific read permission
-      await requireAgentTypePermission({
+      const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
-        agentType: agent.agentType,
-        action: "read",
       });
+
+      try {
+        checker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      if (!checker.isAdmin(agent.agentType)) {
+        const filteredAgent = await AgentModel.findById(
+          agentId,
+          user.id,
+          false,
+        );
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
 
       const tools = await ToolModel.getToolsByAgent(agentId);
 

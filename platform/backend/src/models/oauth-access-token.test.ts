@@ -171,4 +171,40 @@ describe("OAuthAccessTokenModel", () => {
       expect(found?.refreshTokenRevoked).toEqual(revokedAt);
     });
   });
+
+  describe("updateExpiresAtByTokenHash", () => {
+    test("should update access token expiry by hash", async ({
+      makeUser,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+    }) => {
+      const user = await makeUser();
+      const client = await makeOAuthClient({ userId: user.id });
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: "update-expiry-token-hash",
+      });
+      const expiresAt = new Date("2030-01-01T00:00:00.000Z");
+
+      const updated = await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+        tokenHash: "update-expiry-token-hash",
+        expiresAt,
+      });
+
+      expect(updated?.expiresAt).toEqual(expiresAt);
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "update-expiry-token-hash",
+      );
+      expect(found?.expiresAt).toEqual(expiresAt);
+    });
+
+    test("should return null when hash does not match", async () => {
+      const updated = await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+        tokenHash: "missing-token-hash",
+        expiresAt: new Date(),
+      });
+
+      expect(updated).toBeNull();
+    });
+  });
 });

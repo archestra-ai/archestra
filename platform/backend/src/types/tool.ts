@@ -20,6 +20,11 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
 });
 
+export const AssignedToolSchema = SelectToolSchema.extend({
+  mcpServerId: z.string().uuid().nullable(),
+  credentialResolutionMode: CredentialResolutionModeSchema,
+});
+
 export const ExtendedSelectToolSchema = SelectToolSchema.omit({
   agentId: true,
 }).extend({
@@ -47,6 +52,7 @@ export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;
+export type AssignedTool = z.infer<typeof AssignedToolSchema>;
 export type ExtendedTool = z.infer<typeof ExtendedSelectToolSchema>;
 export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;

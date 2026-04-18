@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.4" # x-release-please-version
+  imageTag: "1.2.18" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -225,6 +225,14 @@ archestra:
       entrypoint: /docker-entrypoint.sh
       # Each entry: envVar (env var name), path (Vault API path after /v1/), key (key within secret data)
       secrets: []
+
+    # Image used by the wait-for-postgres init container.
+    # Override to pull from a private registry when Docker Hub is inaccessible.
+    busyboxImage: "busybox:1.36"
+
+    # Resource requests/limits applied to ALL init containers.
+    # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
+    resources: {}
 
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
@@ -488,14 +496,16 @@ archestra:
     spec: {}
 
   # HorizontalPodAutoscaler configuration
-  # Automatically scales the number of pod replicas based on observed metrics
+  # Automatically scales the number of replicas for the main archestra-platform Deployment
+  # based on observed metrics. This does not apply to the separate worker Deployment.
   # See: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
   horizontalPodAutoscaler:
     # Enable or disable HorizontalPodAutoscaler creation
     enabled: false
 
     # Minimum number of replicas the autoscaler can scale down to
-    minReplicas: 1
+    # Default keeps two web pods available when autoscaling is enabled.
+    minReplicas: 2
 
     # Maximum number of replicas the autoscaler can scale up to
     maxReplicas: 10
@@ -510,7 +520,15 @@ archestra:
     #         target:
     #           type: Utilization
     #           averageUtilization: 80
-    metrics: []
+    # Default uses memory utilization because the chart already defines memory
+    # requests by default, while CPU requests are optional.
+    metrics:
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 70
 
     # Scaling behavior configuration for scale up and scale down
     # Allows fine-grained control over scaling speed and stabilization
@@ -528,7 +546,27 @@ archestra:
     #         - type: Percent
     #           value: 100
     #           periodSeconds: 15
-    behavior: {}
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        selectPolicy: Max
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 60
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        selectPolicy: Min
+        policies:
+          - type: Percent
+            value: 25
+            periodSeconds: 60
+          - type: Pods
+            value: 1
+            periodSeconds: 60
 
   # PodDisruptionBudget configuration
   # Limits the number of pods that can be down simultaneously during voluntary disruptions

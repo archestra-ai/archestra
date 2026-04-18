@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { handleApiError } from "./utils";
+import { getApiErrorMessage, handleApiError } from "./utils";
 
 const {
   assignToolToAgent,
@@ -135,10 +135,13 @@ export function useAssignTool() {
             }
           : null;
 
-      const { data } = await assignToolToAgent({
+      const { data, error } = await assignToolToAgent({
         path: { agentId, toolId },
         body,
       });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
     onSuccess: (result) => {
@@ -240,9 +243,12 @@ export function useUnassignTool() {
       toolId: string;
       skipInvalidation?: boolean;
     }) => {
-      const { data } = await unassignToolFromAgent({
+      const { data, error } = await unassignToolFromAgent({
         path: { agentId, toolId },
       });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
       return { success: data?.success ?? false, agentId, skipInvalidation };
     },
     onSuccess: (result) => {
@@ -285,7 +291,7 @@ export function useProfileToolPatchMutation() {
         path: { id: updatedProfileTool.id },
       });
       if (result.error) {
-        handleApiError(result.error);
+        throw new Error(getApiErrorMessage(result.error));
       }
       return { data: result.data ?? null, skipInvalidation };
     },

@@ -11,6 +11,19 @@ export const RouteId = {
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
+  // Schedule Trigger Routes
+  GetScheduleTriggers: "getScheduleTriggers",
+  CreateScheduleTrigger: "createScheduleTrigger",
+  GetScheduleTrigger: "getScheduleTrigger",
+  UpdateScheduleTrigger: "updateScheduleTrigger",
+  DeleteScheduleTrigger: "deleteScheduleTrigger",
+  EnableScheduleTrigger: "enableScheduleTrigger",
+  DisableScheduleTrigger: "disableScheduleTrigger",
+  RunScheduleTriggerNow: "runScheduleTriggerNow",
+  GetScheduleTriggerRuns: "getScheduleTriggerRuns",
+  GetScheduleTriggerRun: "getScheduleTriggerRun",
+  CreateScheduleTriggerRunConversation: "createScheduleTriggerRunConversation",
+
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
@@ -221,6 +234,8 @@ export const RouteId = {
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
+  AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
+  AzureResponsesWithAgent: "azureResponsesWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",
@@ -298,6 +313,9 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+
+  // MCP Settings Routes (organization-level)
+  UpdateMcpSettings: "updateMcpSettings",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",

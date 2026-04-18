@@ -404,13 +404,15 @@ export type BetterAuth = typeof auth;
  * Archestra admins are explicitly configuring their own IdPs, so we widen
  * origin trust only for provider registration instead of requiring per-IdP
  * allowlisting. Better Auth also invokes this callback with `request`
- * undefined during internal `auth.api` calls, which is the registration path
- * used by `IdentityProviderModel.create()`.
+ * undefined during internal `auth.api` calls, which is one registration path
+ * used by `IdentityProviderModel.create()`. In practice, the same flow can
+ * also inherit the outer `/api/identity-providers` request, so that route
+ * needs the same treatment during provider creation.
  */
 async function getTrustedOriginsForAuthRequest(request?: Request) {
   const trustedOrigins = [...staticTrustedOrigins];
 
-  if (!shouldTrustAllOriginsForSsoRegistration(request)) {
+  if (!shouldTrustAllOriginsForIdentityProviderRegistration(request)) {
     return trustedOrigins;
   }
 
@@ -439,16 +441,23 @@ async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
 }
 
 /**
- * Keep the wildcard expansion scoped to SSO provider registration so every
- * other auth request still uses the configured trusted origins unchanged.
+ * Keep the wildcard expansion scoped to identity-provider registration so
+ * every other auth request still uses the configured trusted origins
+ * unchanged.
  */
-function shouldTrustAllOriginsForSsoRegistration(request?: Request) {
+function shouldTrustAllOriginsForIdentityProviderRegistration(
+  request?: Request,
+) {
   if (!request) {
     return true;
   }
 
   try {
-    return new URL(request.url).pathname.endsWith("/sso/register");
+    const { pathname } = new URL(request.url);
+    return (
+      pathname.endsWith("/sso/register") ||
+      pathname === "/api/identity-providers"
+    );
   } catch {
     return false;
   }

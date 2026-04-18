@@ -8,10 +8,16 @@ import {
   type McpLogsErrorMessage,
   type McpLogsMessage,
 } from "@shared";
-import { ArrowDown, Copy, RefreshCw, Terminal } from "lucide-react";
+import {
+  ArrowDown,
+  Check,
+  ChevronsUpDown,
+  Copy,
+  RefreshCw,
+  Terminal,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -26,7 +37,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
 import {
@@ -149,6 +159,13 @@ export function McpLogsContent({
 
   // State for selected installation
   const [serverId, setServerId] = useState<string | null>(null);
+
+  // Reset when dialog closes so the next open picks up a fresh initialServerId
+  useEffect(() => {
+    if (!isActive) {
+      setServerId(null);
+    }
+  }, [isActive]);
 
   // Default to initialServerId or first installation when dialog opens
   useEffect(() => {
@@ -427,101 +444,14 @@ export function McpLogsContent({
         </DialogHeader>
       )}
 
-      {/* Pod selector cards */}
+      {/* Pod selector */}
       {!hideInstallationSelector && installs.length >= 1 && (
-        <div className="grid grid-cols-3 gap-3 pb-1 flex-shrink-0">
-          {installs.map((install) => {
-            const status = deploymentStatuses[install.id];
-            const isSelected = serverId === install.id;
-            const isFailed = status?.state === "failed";
-            const isRunning =
-              status?.state === "running" || status?.state === "succeeded";
-
-            return (
-              <button
-                key={install.id}
-                type="button"
-                onClick={() => {
-                  if (serverId !== install.id) setServerId(install.id);
-                }}
-                className={`relative min-w-0 rounded-lg border p-3 text-left transition-colors cursor-pointer ${
-                  isSelected
-                    ? isFailed
-                      ? "border-destructive/50 bg-destructive/5 ring-1 ring-destructive/30"
-                      : "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <TruncatedTooltip content={install.name}>
-                    <span className="flex items-center gap-1.5 text-sm font-medium truncate">
-                      <DeploymentStatusDot
-                        state={
-                          (status?.state === "not_created" ||
-                          status?.state === "succeeded"
-                            ? "running"
-                            : (status?.state ?? "pending")) as DeploymentState
-                        }
-                      />
-                      <span className="truncate">{install.name}</span>
-                    </span>
-                  </TruncatedTooltip>
-                  {status && status.state !== "not_created" && (
-                    <span
-                      className={`text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${
-                        isFailed
-                          ? "text-destructive border-destructive/30 bg-destructive/10"
-                          : isRunning
-                            ? "text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-700 dark:bg-green-950"
-                            : "text-yellow-700 border-yellow-300 bg-yellow-50 dark:text-yellow-400 dark:border-yellow-700 dark:bg-yellow-950"
-                      }`}
-                    >
-                      {getDeploymentLabel(
-                        (status.state === "succeeded"
-                          ? "running"
-                          : status.state) as DeploymentState,
-                      )}
-                    </span>
-                  )}
-                </div>
-                {(install.teamDetails || install.ownerEmail) && (
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5 truncate">
-                      <Avatar className="size-4 flex-shrink-0">
-                        <AvatarFallback
-                          className={`text-[8px] font-medium ${install.teamDetails ? "bg-accent" : ""}`}
-                        >
-                          {install.teamDetails
-                            ? install.teamDetails.name.slice(0, 2).toUpperCase()
-                            : install.ownerEmail?.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="truncate">
-                        {install.teamDetails
-                          ? install.teamDetails.name
-                          : install.ownerEmail}
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {(status?.restartCount !== undefined || status?.podAge) && (
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    {status?.restartCount !== undefined && (
-                      <span className="flex-shrink-0">
-                        Restarts: {status.restartCount}
-                      </span>
-                    )}
-                    {status?.podAge && (
-                      <span className="flex-shrink-0">
-                        Age: {status.podAge}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <InstanceSelector
+          installs={installs}
+          deploymentStatuses={deploymentStatuses}
+          serverId={serverId}
+          setServerId={setServerId}
+        />
       )}
 
       <Tabs
@@ -750,5 +680,225 @@ export function McpLogsContent({
         </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+interface InstanceSelectorProps {
+  installs: McpLogsContentProps["installs"];
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+  serverId: string | null;
+  setServerId: (id: string) => void;
+}
+
+function InstanceSelector({
+  installs,
+  deploymentStatuses,
+  serverId,
+  setServerId,
+}: InstanceSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const selected = installs.find((i) => i.id === serverId);
+  const selectedStatus = serverId ? deploymentStatuses[serverId] : undefined;
+  const dotState = (
+    selectedStatus?.state === "not_created" ||
+    selectedStatus?.state === "succeeded"
+      ? "running"
+      : (selectedStatus?.state ?? "pending")
+  ) as DeploymentState;
+  const isFailed = selectedStatus?.state === "failed";
+  const isRunning =
+    selectedStatus?.state === "running" ||
+    selectedStatus?.state === "succeeded";
+  const stateLabel =
+    selectedStatus && selectedStatus.state !== "not_created"
+      ? getDeploymentLabel(
+          (selectedStatus.state === "succeeded"
+            ? "running"
+            : selectedStatus.state) as DeploymentState,
+        )
+      : null;
+  const owner = selected?.teamDetails?.name ?? selected?.ownerEmail;
+  const ownerInitials = (
+    selected?.teamDetails?.name ||
+    selected?.ownerEmail ||
+    ""
+  )
+    .slice(0, 2)
+    .toUpperCase();
+
+  const accent = isFailed
+    ? "bg-destructive"
+    : isRunning
+      ? "bg-emerald-500"
+      : "bg-amber-500";
+
+  const hasMultiple = installs.length > 1;
+
+  const card = (
+    <div
+      className={`group relative w-full rounded-lg border transition-all duration-200 ${
+        isFailed
+          ? "border-destructive/30 bg-destructive/[0.02]"
+          : "border-border/60 bg-card"
+      } ${
+        hasMultiple
+          ? "cursor-pointer hover:border-border hover:shadow-sm data-[state=open]:border-foreground/30 data-[state=open]:shadow-md"
+          : ""
+      }`}
+      data-state={open ? "open" : "closed"}
+    >
+      {/* Hairline accent, top */}
+      <span
+        className={`absolute left-4 right-4 top-0 h-px ${accent} opacity-60`}
+      />
+
+      <div className="flex items-stretch">
+        {/* Identity block */}
+        <div className="flex items-center gap-3 min-w-0 flex-1 pl-4 pr-3 py-3">
+          <DeploymentStatusDot state={dotState} />
+          <div className="flex flex-col min-w-0">
+            <span className="font-mono text-sm font-medium truncate leading-tight">
+              {selected?.name ?? "—"}
+            </span>
+            {stateLabel && (
+              <span
+                className={`text-[10px] tracking-[0.08em] leading-tight mt-0.5 ${
+                  isFailed
+                    ? "text-destructive"
+                    : isRunning
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                {stateLabel}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Stats — separated by hairlines */}
+        {owner && (
+          <div className="hidden md:flex items-center gap-2 px-4 py-3 border-l border-border/40">
+            <span
+              className={`flex items-center justify-center size-6 rounded-full text-[10px] font-medium ${
+                selected?.teamDetails
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {ownerInitials}
+            </span>
+            <span className="text-xs text-foreground/80 max-w-[140px] truncate">
+              {owner}
+            </span>
+          </div>
+        )}
+
+        {selectedStatus?.restartCount !== undefined && (
+          <div className="hidden lg:flex flex-col justify-center px-4 py-3 border-l border-border/40 min-w-[72px]">
+            <span className="text-[9px] tracking-[0.08em] text-muted-foreground/60 leading-none">
+              Restarts
+            </span>
+            <span className="font-mono text-sm tabular-nums mt-1 leading-none">
+              {selectedStatus.restartCount}
+            </span>
+          </div>
+        )}
+
+        {selectedStatus?.podAge && (
+          <div className="hidden lg:flex flex-col justify-center px-4 py-3 border-l border-border/40 min-w-[72px]">
+            <span className="text-[9px] tracking-[0.08em] text-muted-foreground/60 leading-none">
+              Age
+            </span>
+            <span className="font-mono text-sm tabular-nums mt-1 leading-none">
+              {selectedStatus.podAge}
+            </span>
+          </div>
+        )}
+
+        {/* Chevron */}
+        {hasMultiple && (
+          <div className="flex items-center justify-center px-3 border-l border-border/40 text-muted-foreground/50 group-hover:text-foreground group-data-[state=open]:text-foreground transition-colors">
+            <ChevronsUpDown className="h-3.5 w-3.5" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (!hasMultiple) {
+    return <div className="flex-shrink-0">{card}</div>;
+  }
+
+  return (
+    <div className="flex-shrink-0">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+            aria-label="Switch instance"
+          >
+            {card}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="p-0 w-[var(--radix-popover-trigger-width)] max-h-[320px] overflow-hidden"
+        >
+          <div className="px-3 py-2 border-b border-border/60 bg-muted/30 flex items-center justify-between">
+            <span className="text-[10px] tracking-[0.08em] text-muted-foreground">
+              Instances
+            </span>
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {installs.length}
+            </span>
+          </div>
+          <div className="overflow-y-auto max-h-[280px] p-1">
+            {installs.map((install) => {
+              const s = deploymentStatuses[install.id];
+              const d = (
+                s?.state === "not_created" || s?.state === "succeeded"
+                  ? "running"
+                  : (s?.state ?? "pending")
+              ) as DeploymentState;
+              const io = install.teamDetails?.name ?? install.ownerEmail;
+              const age = s?.podAge;
+              const isActive = install.id === serverId;
+
+              return (
+                <button
+                  key={install.id}
+                  type="button"
+                  onClick={() => {
+                    setServerId(install.id);
+                    setOpen(false);
+                  }}
+                  className={`group/item relative w-full text-left rounded-md px-2.5 py-2 flex items-center gap-2.5 transition-colors ${
+                    isActive ? "bg-muted/60" : "hover:bg-muted/40"
+                  }`}
+                >
+                  <DeploymentStatusDot state={d} />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="font-mono text-xs font-medium truncate">
+                      {install.name}
+                    </span>
+                    {(io || age) && (
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        {[io, age].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                  {isActive && (
+                    <Check className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }

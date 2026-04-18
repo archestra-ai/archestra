@@ -101,6 +101,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByText("Confluence")).toBeInTheDocument();
       expect(screen.getByText("GitHub")).toBeInTheDocument();
       expect(screen.getByText("GitLab")).toBeInTheDocument();
+      expect(screen.getByText("Asana")).toBeInTheDocument();
     });
 
     it("renders all required fields after selecting a connector type", async () => {
@@ -277,6 +278,135 @@ describe("CreateConnectorDialog", () => {
           schedule: "0 */6 * * *",
         }),
       );
+    });
+  });
+
+  /**
+   * Asana has a non-standard connector form: no URL field, no email field,
+   * `workspaceGid` as the required primary config field instead. These tests
+   * ensure that shape is preserved.
+   */
+  describe("Asana-specific flow", () => {
+    async function renderAsanaConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("Asana"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("shows Workspace GID field and hides URL/Email fields", async () => {
+      await renderAsanaConfigureStep();
+
+      expect(screen.getByLabelText(/^Workspace GID$/)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Personal Access Token$/),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^URL$/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Email$/)).not.toBeInTheDocument();
+    });
+
+    it("shows validation error when Workspace GID is empty", async () => {
+      const { user } = await renderAsanaConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "My Asana" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Personal Access Token$/), {
+        target: { value: "pat-123" },
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Workspace GID is required"),
+        ).toBeInTheDocument();
+      });
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("submits with Asana-shaped config (workspaceGid, no URL/email)", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderAsanaConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Engineering Asana" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Workspace GID$/), {
+        target: { value: "1234567890" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Personal Access Token$/), {
+        target: { value: "pat-abc" },
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      const payload = call[0];
+
+      expect(payload).toMatchObject({
+        name: "Engineering Asana",
+        connectorType: "asana",
+        credentials: { apiToken: "pat-abc" },
+      });
+      expect(payload.config).toMatchObject({
+        type: "asana",
+        workspaceGid: "1234567890",
+      });
+      // Asana credentials must NOT include an email (email field is Jira/Confluence-only)
+      expect(payload.credentials).not.toHaveProperty("email");
+    });
+
+    it("submits optional projectGids and tagsToSkip as arrays", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderAsanaConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Engineering Asana" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Workspace GID$/), {
+        target: { value: "1234567890" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Personal Access Token$/), {
+        target: { value: "pat-abc" },
+      });
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Project GIDs/)).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByLabelText(/Project GIDs/), {
+        target: { value: "111, 222" },
+      });
+      fireEvent.change(screen.getByLabelText(/Tags to Skip/), {
+        target: { value: "internal, draft" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      expect(call[0].config).toMatchObject({
+        type: "asana",
+        workspaceGid: "1234567890",
+        projectGids: ["111", "222"],
+        tagsToSkip: ["internal", "draft"],
+      });
     });
   });
 });

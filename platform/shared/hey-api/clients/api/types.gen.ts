@@ -26649,7 +26649,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27097,7 +27097,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
     };
     url: '/api/connectors';
 };
@@ -27173,7 +27173,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27250,6 +27250,11 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
                 recursive?: boolean;
                 maxDepth?: number;
+            } | {
+                type: 'asana';
+                workspaceGid: string;
+                projectGids?: Array<string>;
+                tagsToSkip?: Array<string>;
             };
             secretId: string | null;
             schedule: string;
@@ -27287,7 +27292,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27364,6 +27369,11 @@ export type CreateConnectorData = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         };
         credentials: {
             email?: string;
@@ -27448,7 +27458,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27525,6 +27535,11 @@ export type CreateConnectorResponses = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -27700,7 +27715,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27777,6 +27792,11 @@ export type GetConnectorResponses = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -27877,6 +27897,11 @@ export type UpdateConnectorData = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         };
         credentials?: {
             email?: string;
@@ -27962,7 +27987,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28039,6 +28064,11 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         };
         secretId: string | null;
         schedule: string;

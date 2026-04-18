@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
+import { AsanaConfigFields } from "./asana-config-fields";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { DropboxConfigFields } from "./dropbox-config-fields";
@@ -479,6 +480,7 @@ export function EditConnectorDialog({
               {connectorType === "dropbox" && (
                 <DropboxConfigFields control={form.control} />
               )}
+              {connectorType === "asana" && <AsanaConfigFields form={form} />}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -555,6 +557,8 @@ function getEditUrlConfig(type: ConnectorType): {
       return { typeLabel: "Notion", urlFields: null };
     case "gdrive":
       return { typeLabel: "Google Drive", urlFields: null };
+    case "asana":
+      return { typeLabel: "Asana", urlFields: null };
     case "sharepoint":
       return {
         typeLabel: "SharePoint",

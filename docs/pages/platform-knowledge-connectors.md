@@ -190,6 +190,32 @@ Authentication uses a Dropbox access token. Generate one from the [Dropbox App C
 
 Incremental sync uses the `list_folder/continue` cursor API. After the first full sync, only changed files are fetched using the cursor saved from the previous run.
 
+## Slack
+
+Ingests public channel messages and thread replies from a Slack workspace. Messages are fully attributed to their authors, and threads are collapsed into single contextual documents for improved search quality.
+
+| Field | Description |
+| --- | --- |
+| Channel IDs | Comma-separated channel IDs to sync (optional — leave blank to sync all public channels the bot has been added to) |
+| Skip Bot Messages | Toggle to exclude messages from other bots and app integrations (default: on) |
+| Include Thread Replies | Toggle to fetch thread replies and append them to the parent message (default: on) |
+
+Authentication uses a **Bot User OAuth Token** (starts with `xoxb-`). To configure:
+
+1. Create a [Slack App](https://api.slack.com/apps) in your workspace
+2. Add the following **Bot Token Scopes** under "OAuth & Permissions":
+   - `channels:history`
+   - `channels:read`
+   - `groups:history`
+   - `groups:read`
+   - `users:read`
+   - `users:read.email`
+   - `pins:read`
+3. Install the app to your workspace and copy the Bot User OAuth Token into the API Token field
+4. **Important**: You must explicitly `/invite` your bot to any channel you want it to index
+
+Incremental sync stores a separate timezone-aware cursor (`lastSyncedTs`) for each channel to ensure no messages are missed even if one channel has high activity.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

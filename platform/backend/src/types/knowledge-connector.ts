@@ -11,6 +11,7 @@ const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
+const DROPBOX = z.literal("dropbox");
 const LINEAR = z.literal("linear");
 
 export const ConnectorTypeSchema = z.union([
@@ -22,6 +23,7 @@ export const ConnectorTypeSchema = z.union([
   NOTION,
   SHAREPOINT,
   GDRIVE,
+  DROPBOX,
   LINEAR,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
@@ -257,6 +259,25 @@ export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
 
 // ===== Discriminated Unions =====
 
+// ===== Dropbox Config & Checkpoint =====
+
+export const DropboxConfigSchema = z.object({
+  type: DROPBOX,
+  rootPath: z.string().optional(),
+  fileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().optional(),
+});
+export type DropboxConfig = z.infer<typeof DropboxConfigSchema>;
+
+export const DropboxCheckpointSchema = z.object({
+  type: DROPBOX,
+  lastSyncedAt: z.string().optional(),
+  cursor: z.string().optional(),
+});
+export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
+
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
@@ -266,6 +287,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   NotionConfigSchema,
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
+  DropboxConfigSchema,
   LinearConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
@@ -279,6 +301,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   NotionCheckpointSchema,
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
+  DropboxCheckpointSchema,
   LinearCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;

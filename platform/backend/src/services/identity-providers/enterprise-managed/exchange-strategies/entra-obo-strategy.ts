@@ -1,3 +1,5 @@
+import { createPrivateKey, randomUUID } from "node:crypto";
+import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import {
@@ -7,13 +9,12 @@ import {
   extractProviderErrorMessage,
 } from "../exchange";
 
-const TOKEN_EXCHANGE_GRANT_TYPE =
-  "urn:ietf:params:oauth:grant-type:token-exchange";
+const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+const CLIENT_ASSERTION_TYPE =
+  "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 
-class StandardTokenExchangeStrategy
-  implements EnterpriseCredentialExchangeStrategy
-{
+class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
   async exchangeCredential(
     params: EnterpriseCredentialExchangeParams,
   ): Promise<EnterpriseManagedCredentialResult> {
@@ -30,7 +31,7 @@ class StandardTokenExchangeStrategy
       params.identityProvider.oidcConfig?.tokenEndpoint ??
       (await discoverOidcTokenEndpoint(params.identityProvider.issuer));
     if (!tokenEndpoint) {
-      throw new Error("Unable to determine standard token exchange endpoint");
+      throw new Error("Unable to determine Entra OBO token endpoint");
     }
 
     const clientId =
@@ -43,39 +44,25 @@ class StandardTokenExchangeStrategy
 
     const requestBody = new URLSearchParams({
       client_id: clientId,
-      grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
-      requested_token_type: ACCESS_TOKEN_TYPE,
-      subject_token: params.assertion,
-      subject_token_type:
-        enterpriseConfig.subjectTokenType ?? ACCESS_TOKEN_TYPE,
+      grant_type: JWT_BEARER_GRANT_TYPE,
+      requested_token_use: "on_behalf_of",
+      assertion: params.assertion,
     });
+    requestBody.set("scope", resolveScope(params.enterpriseManagedConfig));
 
-    const targetAudience =
-      params.enterpriseManagedConfig.audience ??
-      params.enterpriseManagedConfig.resourceIdentifier;
-    if (targetAudience) {
-      requestBody.set("audience", targetAudience);
-    }
-
-    if (params.enterpriseManagedConfig.requestedIssuer) {
-      requestBody.set(
-        "requested_issuer",
-        params.enterpriseManagedConfig.requestedIssuer,
-      );
-    }
-
-    if (params.enterpriseManagedConfig.scopes?.length) {
-      requestBody.set("scope", params.enterpriseManagedConfig.scopes.join(" "));
-    }
-
-    const headers = buildAuthenticatedHeaders({
+    const headers = await buildAuthenticatedHeaders({
       clientId,
       clientSecret:
         enterpriseConfig.clientSecret ??
         params.identityProvider.oidcConfig?.clientSecret,
+      tokenEndpoint,
       tokenEndpointAuthentication:
         enterpriseConfig.tokenEndpointAuthentication ?? "client_secret_post",
       requestBody,
+      privateKeyId: enterpriseConfig.privateKeyId,
+      privateKeyPem: enterpriseConfig.privateKeyPem,
+      clientAssertionAudience:
+        enterpriseConfig.clientAssertionAudience ?? tokenEndpoint,
     });
 
     const response = await fetch(tokenEndpoint, {
@@ -96,7 +83,7 @@ class StandardTokenExchangeStrategy
           body: responseBody,
           identityProviderId: params.identityProvider.id,
         },
-        "Enterprise-managed standard token exchange failed",
+        "Enterprise-managed Entra OBO exchange failed",
       );
       throw new Error(
         extractProviderErrorMessage(responseBody) ??
@@ -106,7 +93,7 @@ class StandardTokenExchangeStrategy
 
     const accessToken = responseBody.access_token;
     if (typeof accessToken !== "string" || accessToken.length === 0) {
-      throw new Error("Standard token exchange did not return an access token");
+      throw new Error("Entra OBO exchange did not return an access token");
     }
 
     return {
@@ -124,18 +111,21 @@ class StandardTokenExchangeStrategy
   }
 }
 
-export const standardTokenExchangeStrategy =
-  new StandardTokenExchangeStrategy();
+export const entraOboStrategy = new EntraOboStrategy();
 
-function buildAuthenticatedHeaders(params: {
+async function buildAuthenticatedHeaders(params: {
+  clientAssertionAudience: string;
   clientId: string;
   clientSecret?: string;
+  privateKeyId?: string;
+  privateKeyPem?: string;
+  requestBody: URLSearchParams;
+  tokenEndpoint: string;
   tokenEndpointAuthentication:
     | "client_secret_post"
     | "client_secret_basic"
     | "private_key_jwt";
-  requestBody: URLSearchParams;
-}): Headers {
+}): Promise<Headers> {
   const headers = new Headers({
     "Content-Type": "application/x-www-form-urlencoded",
   });
@@ -163,7 +153,70 @@ function buildAuthenticatedHeaders(params: {
     return headers;
   }
 
-  throw new Error(
-    "Standard token exchange does not support private_key_jwt in this implementation",
+  if (params.tokenEndpointAuthentication !== "private_key_jwt") {
+    throw new Error(
+      `Unsupported enterprise-managed token endpoint auth method: ${params.tokenEndpointAuthentication}`,
+    );
+  }
+
+  if (!params.privateKeyPem) {
+    throw new Error(
+      "Enterprise-managed credential exchange private key is missing",
+    );
+  }
+
+  const algorithm = inferPrivateKeyAlgorithm(params.privateKeyPem);
+
+  params.requestBody.set("client_assertion_type", CLIENT_ASSERTION_TYPE);
+  params.requestBody.set(
+    "client_assertion",
+    await new SignJWT({})
+      .setProtectedHeader({
+        alg: algorithm,
+        ...(params.privateKeyId ? { kid: params.privateKeyId } : {}),
+      })
+      .setIssuer(params.clientId)
+      .setSubject(params.clientId)
+      .setAudience(params.clientAssertionAudience)
+      .setIssuedAt()
+      .setJti(randomUUID())
+      .setExpirationTime("5m")
+      .sign(await importPKCS8(params.privateKeyPem, algorithm)),
   );
+
+  return headers;
+}
+
+function resolveScope(
+  enterpriseManagedConfig: EnterpriseCredentialExchangeParams["enterpriseManagedConfig"],
+): string {
+  if (enterpriseManagedConfig.scopes?.length) {
+    return enterpriseManagedConfig.scopes.join(" ");
+  }
+
+  const resource =
+    enterpriseManagedConfig.resourceIdentifier ??
+    enterpriseManagedConfig.audience;
+  if (!resource) {
+    throw new Error(
+      "Entra OBO exchange requires scopes or a resourceIdentifier/audience",
+    );
+  }
+
+  // resourceIdentifier/audience are treated as Entra resource identifiers here,
+  // not literal scope strings. Callers that need custom scopes must set scopes.
+  if (resource.endsWith("/.default")) {
+    return resource;
+  }
+
+  return `${resource.replace(/\/$/, "")}/.default`;
+}
+
+function inferPrivateKeyAlgorithm(privateKeyPem: string): "RS256" | "ES256" {
+  const keyObject = createPrivateKey(privateKeyPem);
+  if (keyObject.asymmetricKeyType === "rsa") {
+    return "RS256";
+  }
+
+  return "ES256";
 }

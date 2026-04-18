@@ -24823,11 +24823,13 @@ export type GetInternalMcpCatalogResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -24958,11 +24960,13 @@ export type CreateInternalMcpCatalogItemData = {
         oauthConfig?: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25152,11 +25156,13 @@ export type CreateInternalMcpCatalogItemResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25437,11 +25443,13 @@ export type GetInternalMcpCatalogItemResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25571,11 +25579,13 @@ export type UpdateInternalMcpCatalogItemData = {
         oauthConfig?: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -25767,11 +25777,13 @@ export type UpdateInternalMcpCatalogItemResponses = {
         oauthConfig: {
             name: string;
             server_url: string;
+            grant_type?: 'authorization_code' | 'client_credentials';
             auth_server_url?: string;
             authorization_endpoint?: string;
             resource_metadata_url?: string;
             client_id: string;
             client_secret?: string;
+            audience?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -26637,7 +26649,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27085,7 +27097,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
     };
     url: '/api/connectors';
 };
@@ -27161,7 +27173,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27232,6 +27244,13 @@ export type GetConnectorsResponses = {
                 fileTypes?: Array<string>;
                 batchSize?: number;
             } | {
+                type: 'dropbox';
+                rootPath?: string;
+                fileTypes?: Array<string>;
+                batchSize?: number;
+                recursive?: boolean;
+                maxDepth?: number;
+            } | {
                 type: 'linear';
                 linearApiUrl: unknown;
                 teamIds?: Array<string>;
@@ -27278,7 +27297,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27348,6 +27367,13 @@ export type CreateConnectorData = {
             maxDepth?: number;
             fileTypes?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'dropbox';
+            rootPath?: string;
+            fileTypes?: Array<string>;
+            batchSize?: number;
+            recursive?: boolean;
+            maxDepth?: number;
         } | {
             type: 'linear';
             linearApiUrl?: string;
@@ -27442,7 +27468,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27512,6 +27538,13 @@ export type CreateConnectorResponses = {
             maxDepth?: number;
             fileTypes?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'dropbox';
+            rootPath?: string;
+            fileTypes?: Array<string>;
+            batchSize?: number;
+            recursive?: boolean;
+            maxDepth?: number;
         } | {
             type: 'linear';
             linearApiUrl: unknown;
@@ -27697,7 +27730,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27767,6 +27800,13 @@ export type GetConnectorResponses = {
             maxDepth?: number;
             fileTypes?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'dropbox';
+            rootPath?: string;
+            fileTypes?: Array<string>;
+            batchSize?: number;
+            recursive?: boolean;
+            maxDepth?: number;
         } | {
             type: 'linear';
             linearApiUrl: unknown;
@@ -27871,6 +27911,13 @@ export type UpdateConnectorData = {
             fileTypes?: Array<string>;
             batchSize?: number;
         } | {
+            type: 'dropbox';
+            rootPath?: string;
+            fileTypes?: Array<string>;
+            batchSize?: number;
+            recursive?: boolean;
+            maxDepth?: number;
+        } | {
             type: 'linear';
             linearApiUrl?: string;
             teamIds?: Array<string>;
@@ -27965,7 +28012,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28035,6 +28082,13 @@ export type UpdateConnectorResponses = {
             maxDepth?: number;
             fileTypes?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'dropbox';
+            rootPath?: string;
+            fileTypes?: Array<string>;
+            batchSize?: number;
+            recursive?: boolean;
+            maxDepth?: number;
         } | {
             type: 'linear';
             linearApiUrl: unknown;
@@ -30348,11 +30402,13 @@ export type GetMcpServerInstallationRequestsResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30445,11 +30501,13 @@ export type CreateMcpServerInstallationRequestData = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30596,11 +30654,13 @@ export type CreateMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30846,11 +30906,13 @@ export type GetMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -30943,11 +31005,13 @@ export type UpdateMcpServerInstallationRequestData = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31106,11 +31170,13 @@ export type UpdateMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31279,11 +31345,13 @@ export type ApproveMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31452,11 +31520,13 @@ export type DeclineMcpServerInstallationRequestResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -31625,11 +31695,13 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             oauthConfig?: {
                 name: string;
                 server_url: string;
+                grant_type?: 'authorization_code' | 'client_credentials';
                 auth_server_url?: string;
                 authorization_endpoint?: string;
                 resource_metadata_url?: string;
                 client_id: string;
                 client_secret?: string;
+                audience?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -41493,7 +41565,7 @@ export type GetIdentityProvidersResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -41622,7 +41694,7 @@ export type CreateIdentityProviderData = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -41814,7 +41886,7 @@ export type CreateIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -42171,7 +42243,7 @@ export type GetIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -42300,7 +42372,7 @@ export type UpdateIdentityProviderData = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;
@@ -42493,7 +42565,7 @@ export type UpdateIdentityProviderResponses = {
             tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
             jwksEndpoint?: string;
             enterpriseManagedCredentials?: {
-                providerType?: 'generic_oidc' | 'okta' | 'keycloak';
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
                 clientId?: string;
                 clientSecret?: string;
                 tokenEndpoint?: string;

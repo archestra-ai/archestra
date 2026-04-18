@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 export type EnterpriseManagedConfigInput = {
   resourceIdentifier?: string;
@@ -43,6 +44,7 @@ export function EnterpriseManagedCredentialFields({
   value,
   onChange,
 }: EnterpriseManagedCredentialFieldsProps) {
+  const appName = useAppName();
   const config = value ?? DEFAULT_CONFIG;
 
   return (
@@ -147,7 +149,7 @@ export function EnterpriseManagedCredentialFields({
           placeholder="token"
         />
         <p className="text-[11px] text-muted-foreground">
-          Required when the provider returns a structured secret and Archestra
+          Required when the provider returns a structured secret and {appName}
           needs to extract one field, for example <code>token</code>.
         </p>
       </div>

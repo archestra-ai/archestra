@@ -16,6 +16,10 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import {
+  type FolderTraversalAdapter,
+  traverseFolders,
+} from "../folder-traversal";
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
@@ -432,44 +436,24 @@ export class GoogleDriveConnector extends BaseConnector {
       maxDepth,
     } = params;
 
-    // BFS queue: each entry is [folderId, depth]
-    const queue: Array<[string, number]> = [[folderId, 0]];
+    const adapter: FolderTraversalAdapter = {
+      listDirectSubfolders: (parentId: string) =>
+        this.listDirectSubfolders(drive, parentId, config),
+    };
 
-    while (queue.length > 0) {
-      const entry = queue.shift();
-      if (!entry) break;
-      const [currentFolderId, depth] = entry;
+    const folderGen = traverseFolders(
+      adapter,
+      { rootFolderId: folderId, recursive, maxDepth },
+      this.log,
+    );
 
-      // If recursive, discover direct subfolders and enqueue them
-      if (recursive && depth < maxDepth) {
-        try {
-          const childFolders = await this.listDirectSubfolders(
-            drive,
-            currentFolderId,
-            config,
-          );
-          for (const childId of childFolders) {
-            queue.push([childId, depth + 1]);
-          }
-        } catch (error) {
-          // Log and skip this branch — don't abort the entire sync
-          this.log.warn(
-            {
-              folderId: currentFolderId,
-              depth,
-              error: extractErrorMessage(error),
-            },
-            "Failed to list subfolders, skipping branch",
-          );
-        }
-      } else if (recursive && depth >= maxDepth) {
-        this.log.debug(
-          { folderId: currentFolderId, depth, maxDepth },
-          "Max depth reached, not descending further",
-        );
-      }
+    let next = await folderGen.next();
 
-      // Yield file batches from this folder
+    while (!next.done) {
+      const currentFolderId = next.value;
+      next = await folderGen.next();
+      const hasMoreFolders = !next.done;
+
       yield* this.syncFilesInFolder({
         drive,
         folderId: currentFolderId,
@@ -478,7 +462,7 @@ export class GoogleDriveConnector extends BaseConnector {
         syncFrom,
         batchSize,
         supportsImages,
-        hasMoreFolders: queue.length > 0,
+        hasMoreFolders,
       });
     }
   }
@@ -605,10 +589,6 @@ export class GoogleDriveConnector extends BaseConnector {
     }
   }
 
-  /**
-   * List only the direct child folders of a parent folder (single level).
-   * The BFS loop in syncFolder handles the recursion.
-   */
   private async listDirectSubfolders(
     drive: drive_v3.Drive,
     parentId: string,

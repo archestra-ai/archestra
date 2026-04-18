@@ -204,38 +204,6 @@ Optional configuration:
 - **PKCE**: Enable if your provider requires it
 - **Enable RP-Initiated Logout**: Sends the `post_logout_redirect_uri` parameter during sign-out. This is enabled by default and can be turned off for providers that reject RP-initiated logout requests
 
-### Enterprise-Managed Credential Settings
-
-OIDC providers include an optional **Enterprise-Managed Credentials** section. Use it when your identity provider can issue or broker downstream credentials on behalf of the signed-in user.
-
-The key fields are:
-
-- **Exchange Client ID** and **Exchange Client Secret**: The client Archestra uses when calling the IdP's token exchange endpoint
-- **Exchange Token Endpoint**: The token exchange endpoint
-- **Exchange Client Authentication**: The client authentication method the IdP expects
-- **User Token To Exchange**: Which signed-in user token Archestra should exchange
-- **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
-
-These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
-
-Provider defaults:
-
-- **Okta managed credentials** default to private key JWT and ID token exchange
-- **RFC 8693 token exchange** defaults to client secret POST and access token exchange
-- **Microsoft Entra OBO** defaults to client secret POST and access token exchange
-
-#### Using Enterprise-Managed Credentials for Downstream MCP Calls
-
-To use this with an MCP server, you need to configure three places:
-
-1. **Identity Provider**: In **Settings > Identity Providers**, open the OIDC provider and complete the **Enterprise-Managed Credentials** section. The main fields are **Exchange Client ID**, **Exchange Client Secret**, **Exchange Token Endpoint**, **Exchange Client Authentication**, and **User Token To Exchange**.
-2. **MCP catalog item**: In the server's multitenant authorization settings, choose **Identity Provider Token Exchange**. Then set the **Requested Credential**, **Injection Mode**, and the **Managed Resource Identifier** or scopes for the downstream API.
-3. **Tool assignment**: Assign the tool with **Resolve at call time** so Archestra resolves the downstream credential for the caller when the tool runs.
-
-This works with any gateway auth method that lets Archestra resolve a specific user and a usable IdP token for that user. In practice, **JWKS** and **ID-JAG** are the clearest options, **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP, and personal user bearer tokens can work when they map to a specific user with a linked IdP session. Team and organization bearer tokens do not carry enough user identity for per-user downstream token exchange.
-
-For local MCP servers, this requires HTTP transport. Local `stdio` servers do not support per-request token exchange and injection. See [MCP Authentication - Upstream Identity Provider Token Exchange](/docs/mcp-authentication#upstream-identity-provider-token-exchange) for the downstream credential flow.
-
 ### Generic SAML
 
 Archestra supports SAML 2.0 for enterprise identity providers that don't support OIDC.
@@ -262,6 +230,38 @@ Optional configuration:
 - The NameID format should be set to `emailAddress` in your IdP
 - User attributes (email, firstName, lastName) should be included in the SAML assertion
 - See your IdP's documentation for specific configuration steps
+
+## Enterprise-Managed Credentials
+
+OIDC providers include an optional **Enterprise-Managed Credentials** section. Use it when your identity provider can issue or broker downstream credentials on behalf of the signed-in user.
+
+The key fields are:
+
+- **Exchange Client ID** and **Exchange Client Secret**: The client Archestra uses when calling the IdP's token exchange endpoint
+- **Exchange Token Endpoint**: The token exchange endpoint
+- **Exchange Client Authentication**: The client authentication method the IdP expects
+- **User Token To Exchange**: Which signed-in user token Archestra should exchange
+- **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
+
+These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
+
+Provider defaults:
+
+- **Okta managed credentials** default to private key JWT and ID token exchange
+- **RFC 8693 token exchange** defaults to client secret POST and access token exchange
+- **Microsoft Entra OBO** defaults to client secret POST and access token exchange
+
+### Using Enterprise-Managed Credentials for Downstream MCP Calls
+
+To use this with an MCP server, you need to configure three places:
+
+1. **Identity Provider**: In **Settings > Identity Providers**, open the OIDC provider and complete the **Enterprise-Managed Credentials** section. The main fields are **Exchange Client ID**, **Exchange Client Secret**, **Exchange Token Endpoint**, **Exchange Client Authentication**, and **User Token To Exchange**.
+2. **MCP catalog item**: In the server's multitenant authorization settings, choose **Identity Provider Token Exchange**. Then set the **Requested Credential**, **Injection Mode**, and the **Managed Resource Identifier** or scopes for the downstream API.
+3. **Tool assignment**: Assign the tool with **Resolve at call time** so Archestra resolves the downstream credential for the caller when the tool runs.
+
+This works with any gateway auth method that lets Archestra resolve a specific user and a usable IdP token for that user. In practice, **JWKS** and **ID-JAG** are the clearest options, **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP, and personal user bearer tokens can work when they map to a specific user with a linked IdP session. Team and organization bearer tokens do not carry enough user identity for per-user downstream token exchange.
+
+For local MCP servers, this requires HTTP transport. Local `stdio` servers do not support per-request token exchange and injection. See [MCP Authentication - Upstream Identity Provider Token Exchange](/docs/mcp-authentication#upstream-identity-provider-token-exchange) for the downstream credential flow.
 
 ## Role Mapping
 

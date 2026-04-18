@@ -69,3 +69,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sundaram2021
 - @SaikiranSurapalli17
 - @Aditya-bishtt-ji
+- @haritash13

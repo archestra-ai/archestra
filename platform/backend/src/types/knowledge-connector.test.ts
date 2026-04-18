@@ -5,6 +5,7 @@ import {
   GithubConfigSchema,
   GitlabConfigSchema,
   JiraConfigSchema,
+  SlackConfigSchema,
 } from "./knowledge-connector";
 
 describe("knowledge-connector schemas", () => {
@@ -227,6 +228,47 @@ describe("knowledge-connector schemas", () => {
       if (result.type === "confluence") {
         expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
       }
+    });
+
+    test("normalizes slack schema directly without url", () => {
+      const result = ConnectorConfigSchema.parse({
+        type: "slack",
+        channelIds: ["C12345"],
+        skipBotMessages: false,
+      });
+      expect(result.type).toBe("slack");
+      if (result.type === "slack") {
+        expect(result.channelIds).toEqual(["C12345"]);
+        expect(result.skipBotMessages).toBe(false);
+      }
+    });
+  });
+
+  describe("SlackConfigSchema mapping rules", () => {
+    test("allows omitting all optional fields", () => {
+      const result = SlackConfigSchema.parse({
+        type: "slack",
+      });
+      expect(result.type).toBe("slack");
+      expect(result.channelIds).toBeUndefined();
+      expect(result.batchSize).toBeUndefined();
+    });
+
+    test("parses all Slack configuration fields", () => {
+      const result = SlackConfigSchema.parse({
+        type: "slack",
+        channelIds: ["C123", "G456"],
+        skipBotMessages: true,
+        includeThreadReplies: false,
+        includePinnedItems: true,
+        batchSize: 50,
+      });
+      expect(result.type).toBe("slack");
+      expect(result.channelIds).toEqual(["C123", "G456"]);
+      expect(result.skipBotMessages).toBe(true);
+      expect(result.includeThreadReplies).toBe(false);
+      expect(result.includePinnedItems).toBe(true);
+      expect(result.batchSize).toBe(50);
     });
   });
 });

@@ -8,6 +8,7 @@ import { JiraConnector } from "./jira/jira-connector";
 import { NotionConnector } from "./notion/notion-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
 import { SharePointConnector } from "./sharepoint/sharepoint-connector";
+import { SlackConnector } from "./slack/slack-connector";
 
 const connectorRegistry: Record<ConnectorType, () => Connector> = {
   jira: () => new JiraConnector(),
@@ -19,6 +20,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   sharepoint: () => new SharePointConnector(),
   gdrive: () => new GoogleDriveConnector(),
   dropbox: () => new DropboxConnector(),
+  slack: () => new SlackConnector(),
 };
 
 export function getConnector(type: string): Connector {

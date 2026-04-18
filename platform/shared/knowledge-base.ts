@@ -43,6 +43,7 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   sharepoint: "SharePoint",
   gdrive: "Google Drive",
   dropbox: "Dropbox",
+  slack: "Slack",
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [

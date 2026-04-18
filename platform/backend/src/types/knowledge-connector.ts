@@ -12,6 +12,7 @@ const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
 const DROPBOX = z.literal("dropbox");
+const SLACK = z.literal("slack");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -23,6 +24,7 @@ export const ConnectorTypeSchema = z.union([
   SHAREPOINT,
   GDRIVE,
   DROPBOX,
+  SLACK,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -239,6 +241,26 @@ export const DropboxCheckpointSchema = z.object({
 });
 export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
 
+// ===== Slack Config & Checkpoint =====
+
+export const SlackConfigSchema = z.object({
+  type: SLACK,
+  channelIds: z.array(z.string()).optional(),
+  skipBotMessages: z.boolean().optional(),
+  includeThreadReplies: z.boolean().optional(),
+  includePinnedItems: z.boolean().optional(),
+  batchSize: z.number().optional(),
+});
+export type SlackConfig = z.infer<typeof SlackConfigSchema>;
+
+export const SlackCheckpointSchema = z.object({
+  type: SLACK,
+  /** Per-channel high-water mark: maps channelId → last synced message ts. */
+  channelCursors: z.record(z.string(), z.string()).optional(),
+  lastSyncedAt: z.string().optional(),
+});
+export type SlackCheckpoint = z.infer<typeof SlackCheckpointSchema>;
+
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
@@ -249,6 +271,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
   DropboxConfigSchema,
+  SlackConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -262,6 +285,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
   DropboxCheckpointSchema,
+  SlackCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

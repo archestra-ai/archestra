@@ -1,18 +1,19 @@
-import type { ModelInputModality } from "@shared";
-import { z } from "zod";
+import type { ModelInputModality } from '@shared';
+import { z } from 'zod';
 
 // ===== Connector Type =====
 
-const JIRA = z.literal("jira");
-const CONFLUENCE = z.literal("confluence");
-const GITHUB = z.literal("github");
-const GITLAB = z.literal("gitlab");
-const SERVICENOW = z.literal("servicenow");
-const NOTION = z.literal("notion");
-const SHAREPOINT = z.literal("sharepoint");
-const GDRIVE = z.literal("gdrive");
-const DROPBOX = z.literal("dropbox");
-const OUTLINE = z.literal("outline");
+const JIRA = z.literal('jira');
+const CONFLUENCE = z.literal('confluence');
+const GITHUB = z.literal('github');
+const GITLAB = z.literal('gitlab');
+const SERVICENOW = z.literal('servicenow');
+const NOTION = z.literal('notion');
+const SHAREPOINT = z.literal('sharepoint');
+const GDRIVE = z.literal('gdrive');
+const DROPBOX = z.literal('dropbox');
+const ASANA = z.literal('asana');
+const OUTLINE = z.literal('outline');
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -24,6 +25,7 @@ export const ConnectorTypeSchema = z.union([
   SHAREPOINT,
   GDRIVE,
   DROPBOX,
+  ASANA,
   OUTLINE,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
@@ -31,11 +33,11 @@ export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 // ===== Connector Sync Status =====
 
 export const ConnectorSyncStatusSchema = z.enum([
-  "running",
-  "success",
-  "completed_with_errors",
-  "failed",
-  "partial",
+  'running',
+  'success',
+  'completed_with_errors',
+  'failed',
+  'partial',
 ]);
 export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
 
@@ -220,6 +222,22 @@ export const GoogleDriveCheckpointSchema = z.object({
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 
+// ===== Asana Config & Checkpoint =====
+
+export const AsanaConfigSchema = z.object({
+  type: ASANA,
+  workspaceGid: z.string().min(1),
+  projectGids: z.array(z.string()).optional(),
+  tagsToSkip: z.array(z.string()).optional(),
+});
+export type AsanaConfig = z.infer<typeof AsanaConfigSchema>;
+
+export const AsanaCheckpointSchema = z.object({
+  type: ASANA,
+  lastSyncedAt: z.string().optional(),
+});
+export type AsanaCheckpoint = z.infer<typeof AsanaCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 // ===== Dropbox Config & Checkpoint =====
@@ -257,7 +275,7 @@ export const OutlineCheckpointSchema = z.object({
 });
 export type OutlineCheckpoint = z.infer<typeof OutlineCheckpointSchema>;
 
-export const ConnectorConfigSchema = z.discriminatedUnion("type", [
+export const ConnectorConfigSchema = z.discriminatedUnion('type', [
   JiraConfigSchema,
   ConfluenceConfigSchema,
   GithubConfigSchema,
@@ -267,11 +285,12 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
   DropboxConfigSchema,
+  AsanaConfigSchema,
   OutlineConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
-export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
+export const ConnectorCheckpointSchema = z.discriminatedUnion('type', [
   JiraCheckpointSchema,
   ConfluenceCheckpointSchema,
   GithubCheckpointSchema,
@@ -281,6 +300,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
   DropboxCheckpointSchema,
+  AsanaCheckpointSchema,
   OutlineCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
@@ -334,7 +354,7 @@ function ensureProtocol(url: string): string {
 }
 
 function stripTrailingSlashes(url: string): string {
-  return url.replace(/\/+$/, "");
+  return url.replace(/\/+$/, '');
 }
 
 export interface Connector {

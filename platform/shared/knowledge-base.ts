@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const EmbeddingModelSchema = z.string().min(1);
 export type EmbeddingModel = string;
@@ -26,7 +26,7 @@ export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
  * - 768  → "embedding_768"
  */
 export function getEmbeddingColumnName(dimensions: number): string {
-  if (dimensions === 1536) return "embedding";
+  if (dimensions === 1536) return 'embedding';
   return `embedding_${dimensions}`;
 }
 
@@ -35,26 +35,27 @@ export function getEmbeddingColumnName(dimensions: number): string {
  * Used in UI placeholders and titles.
  */
 export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
-  jira: "Jira",
-  confluence: "Confluence",
-  github: "GitHub",
-  gitlab: "GitLab",
-  notion: "Notion",
-  sharepoint: "SharePoint",
-  gdrive: "Google Drive",
-  dropbox: "Dropbox",
-  outline: "Outline",
+  jira: 'Jira',
+  confluence: 'Confluence',
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  notion: 'Notion',
+  sharepoint: 'SharePoint',
+  gdrive: 'Google Drive',
+  dropbox: 'Dropbox',
+  asana: 'Asana',
+  outline: 'Outline',
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
-  "Engineering",
-  "Finance",
-  "Marketing",
-  "Sales",
-  "Product",
-  "Design",
-  "Operations",
-  "Support",
+  'Engineering',
+  'Finance',
+  'Marketing',
+  'Sales',
+  'Product',
+  'Design',
+  'Operations',
+  'Support',
 ];
 
 /**
@@ -78,10 +79,10 @@ export const RERANKER_MIN_RELEVANCE_SCORE = 3;
  * Documents should use "search_document: " and queries should use "search_query: ".
  * See: https://huggingface.co/nomic-ai/nomic-embed-text-v1.5
  */
-type NomicTaskType = "search_document" | "search_query";
+type NomicTaskType = 'search_document' | 'search_query';
 
 export function isNomicModel(model: string): boolean {
-  return model.startsWith("nomic");
+  return model.startsWith('nomic');
 }
 
 /**

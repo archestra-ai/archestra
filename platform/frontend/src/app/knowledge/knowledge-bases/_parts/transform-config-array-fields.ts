@@ -7,6 +7,7 @@ export function transformConfigArrayFields(
   // String array fields: split by comma, trim, filter empty
   const stringArrayFields = [
     "repos",
+    "teamIds",
     "spaceKeys",
     "pageIds",
     "databaseIds",
@@ -29,13 +30,20 @@ export function transformConfigArrayFields(
     }
   }
 
-  // Number array fields: split, trim, parse, filter NaN
   if (typeof result.projectIds === "string") {
     const value = result.projectIds as string;
-    result.projectIds = value
-      .split(",")
-      .map((s) => Number(s.trim()))
-      .filter((n) => !Number.isNaN(n));
+
+    if (result.type === "gitlab") {
+      result.projectIds = value
+        .split(",")
+        .map((s) => Number(s.trim()))
+        .filter((n) => !Number.isNaN(n));
+    } else {
+      result.projectIds = value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
   }
 
   return result;

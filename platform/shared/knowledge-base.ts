@@ -44,6 +44,7 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   gdrive: "Google Drive",
   dropbox: "Dropbox",
   asana: "Asana",
+  linear: "Linear",
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [

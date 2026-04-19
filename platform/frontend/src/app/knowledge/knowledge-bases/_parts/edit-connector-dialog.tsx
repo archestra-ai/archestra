@@ -38,6 +38,7 @@ import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
@@ -467,6 +468,7 @@ export function EditConnectorDialog({
               {connectorType === "gitlab" && (
                 <GitlabConfigFields form={form} hideUrl />
               )}
+              {connectorType === "linear" && <LinearConfigFields form={form} />}
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
@@ -551,6 +553,16 @@ function getEditUrlConfig(type: ConnectorType): {
           label: "Instance URL",
           placeholder: "https://your-instance.service-now.com",
           description: "Your ServiceNow instance URL.",
+        },
+      };
+    case "linear":
+      return {
+        typeLabel: "Linear",
+        urlFields: {
+          fieldName: "config.linearApiUrl",
+          label: "Linear API URL",
+          placeholder: "https://api.linear.app",
+          description: "Linear GraphQL API base URL.",
         },
       };
     case "notion":

@@ -48,6 +48,7 @@ import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
@@ -81,6 +82,11 @@ const CONNECTOR_OPTIONS: {
     type: "gitlab",
     label: CONNECTOR_TYPE_LABELS.gitlab,
     description: "Sync issues and merge requests from GitLab",
+  },
+  {
+    type: "linear",
+    label: CONNECTOR_TYPE_LABELS.linear,
+    description: "Sync issues, projects, and cycles from Linear",
   },
   {
     type: "servicenow",
@@ -167,6 +173,13 @@ export function CreateConnectorDialog({
       confluence: { type, isCloud: true },
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
+      linear: {
+        type,
+        linearApiUrl: "https://api.linear.app",
+        includeComments: true,
+        includeProjects: false,
+        includeCycles: false,
+      },
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
       sharepoint: { type, includePages: true },
@@ -695,6 +708,9 @@ export function CreateConnectorDialog({
                     {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
                     )}
+                    {connectorType === "linear" && (
+                      <LinearConfigFields form={form} />
+                    )}
                     {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
                     )}
@@ -777,6 +793,13 @@ function getUrlConfig(type: ConnectorType): {
         label: "Instance URL",
         placeholder: "https://your-instance.service-now.com",
         description: "Your ServiceNow instance URL.",
+      };
+    case "linear":
+      return {
+        fieldName: "config.linearApiUrl",
+        label: "Linear API URL",
+        placeholder: "https://api.linear.app",
+        description: "Linear GraphQL API base URL.",
       };
     case "notion":
       return null;

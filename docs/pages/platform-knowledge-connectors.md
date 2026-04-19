@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-04-05
+lastUpdated: 2026-04-14
 ---
 
 <!--
@@ -203,6 +203,48 @@ The `recursive` and `maxDepth` fields are available via the API for programmatic
 Authentication uses a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with `files.content.read` permission.
 
 Incremental sync uses the `list_folder/continue` cursor API. After the first full sync, only changed files are fetched using the cursor saved from the previous run.
+
+## Linear
+
+Ingests Linear issues by default, with optional project and cycle sync in advanced settings. Content includes issue descriptions, optional comment threads, project content/updates, and cycle summaries.
+
+| Field            | Description                                                               |
+| ---------------- | ------------------------------------------------------------------------- |
+| Linear API URL   | GraphQL API base URL (default: `https://api.linear.app`)                 |
+| Team IDs         | Comma-separated team IDs to scope sync (optional)                        |
+| Project IDs      | Comma-separated project IDs to scope sync (optional)                     |
+| Issue States     | Comma-separated issue state names (e.g. `Todo, In Progress, Done`)       |
+| Include Comments | Include issue comments in indexed content (default: on)                  |
+| Include Projects | Sync projects and recent project updates as documents (default: off)     |
+| Include Cycles   | Sync cycles as documents (default: off)                                  |
+| Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
+
+Authentication uses a Linear personal API key passed as a bearer token in connector credentials.
+
+To create credentials:
+
+1. Open Linear.
+2. Go to **Settings -> Security & access -> Personal API keys**.
+3. Create a key for Archestra.
+4. Store it securely and paste it into the connector **Personal Access Token** field in Archestra.
+
+To collect filter IDs (optional):
+
+- Team IDs: open a team page in Linear and copy the team ID from GraphQL/API tooling or workspace admin views.
+- Project IDs: open a project and copy the project ID from GraphQL/API tooling.
+- States: use exact workflow state names as they appear in the team workflow (for example `Todo`, `In Progress`, `Done`).
+
+Incremental behavior:
+
+- Issue sync runs with `updatedAt`-based incremental filtering and preserves a stable lower bound during pagination.
+- Project/cycle sync (when enabled) also uses `updatedAt` incremental checkpoints.
+- First run performs an initial backfill for selected scope; subsequent runs only ingest changed resources.
+
+Operational notes:
+
+- Keep `Batch Size` moderate if your workspace has high activity to reduce GraphQL rate-limit pressure.
+- If both project and cycle toggles are enabled, connector runs issue sync first, then projects, then cycles.
+- Updating connector config resets checkpoint and triggers a full resync on the next run.
 
 ## Managing Connectors
 

@@ -98111,6 +98111,12 @@
                                       "enum": [
                                         "dropbox"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "asana"
+                                      ]
                                     }
                                   ]
                                 }
@@ -99936,6 +99942,12 @@
                   "enum": [
                     "dropbox"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "asana"
+                  ]
                 }
               ]
             },
@@ -100039,6 +100051,12 @@
                                 "type": "string",
                                 "enum": [
                                   "dropbox"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "asana"
                                 ]
                               }
                             ]
@@ -100405,6 +100423,38 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "asana"
+                                    ]
+                                  },
+                                  "workspaceGid": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "projectGids": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "tagsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "workspaceGid"
                                 ],
                                 "additionalProperties": false
                               }
@@ -100887,6 +100937,12 @@
                         "enum": [
                           "dropbox"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "asana"
+                        ]
                       }
                     ]
                   },
@@ -101257,6 +101313,37 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "asana"
+                            ]
+                          },
+                          "workspaceGid": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "projectGids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tagsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "workspaceGid"
+                        ]
                       }
                     ]
                   },
@@ -101387,6 +101474,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "asana"
                           ]
                         }
                       ]
@@ -101753,6 +101846,38 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            "workspaceGid": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "projectGids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "tagsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "workspaceGid"
                           ],
                           "additionalProperties": false
                         }
@@ -102183,6 +102308,12 @@
                           "enum": [
                             "dropbox"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "asana"
+                          ]
                         }
                       ]
                     },
@@ -102548,6 +102679,38 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            "workspaceGid": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "projectGids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "tagsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "workspaceGid"
                           ],
                           "additionalProperties": false
                         }
@@ -103274,6 +103437,37 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "asana"
+                            ]
+                          },
+                          "workspaceGid": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "projectGids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tagsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "workspaceGid"
+                        ]
                       }
                     ]
                   },
@@ -103402,6 +103596,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "asana"
                           ]
                         }
                       ]
@@ -103768,6 +103968,38 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            "workspaceGid": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "projectGids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "tagsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "workspaceGid"
                           ],
                           "additionalProperties": false
                         }

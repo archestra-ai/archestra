@@ -85,6 +85,20 @@ Ingests issues, merge requests, and their comments from GitLab.com or self-hoste
 
 Authentication uses a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/) (PAT). System-generated notes (assignment changes, label updates, etc.) are automatically filtered out. Incremental sync uses the `updated_after` parameter.
 
+## Asana
+
+Ingests tasks and their user comments from selected Asana projects. The connector syncs tasks returned by each project's task list; it does not separately traverse subtasks as child resources.
+
+| Field         | Description                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| Workspace GID | Your Asana workspace GID (found in the URL when viewing your workspace)                       |
+| Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
+| Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
+
+Authentication uses a [personal access token](https://developers.asana.com/docs/personal-access-token) (PAT). Task descriptions and user comments are indexed from the rich-text HTML fields (`html_notes`, `html_text`) so @-mentions and formatting are preserved; empty @-mention anchors are rendered as `[@asana:<gid>]` markers so references are not silently lost. System-generated stories are filtered out -- only user comments are indexed. Incremental sync filters tasks client-side by their `modified_at` field against the last run's checkpoint, and rate-limited (429) responses are retried with `Retry-After` honored.
+
+When explicit `Project GIDs` are provided, each project's workspace is verified to match `Workspace GID` — mismatched projects fail fast rather than silently syncing from another workspace the token can see.
+
 ## ServiceNow
 
 Ingests records from ServiceNow instances via the Table API. HTML descriptions are converted to plain text. Multiple entity types can be enabled via toggles.

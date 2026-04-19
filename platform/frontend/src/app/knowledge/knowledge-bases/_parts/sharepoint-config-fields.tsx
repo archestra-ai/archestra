@@ -60,10 +60,31 @@ export function SharePointConfigFields({
               />
             </FormControl>
             <FormDescription>
-              Restrict sync to a specific folder path within each drive. Nested
-              subfolders under that path are not traversed recursively.
+              Restrict sync to a specific folder path within each drive.
             </FormDescription>
             <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name={`${prefix}.recursive`}
+        render={({ field }) => (
+          <FormItem className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <FormLabel>Recursive</FormLabel>
+              <FormDescription>
+                Traverse subfolders and include files from all nested
+                directories.
+              </FormDescription>
+            </div>
+            <FormControl>
+              <Switch
+                checked={field.value ?? true}
+                onCheckedChange={field.onChange}
+              />
+            </FormControl>
           </FormItem>
         )}
       />

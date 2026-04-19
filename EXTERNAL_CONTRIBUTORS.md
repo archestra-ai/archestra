@@ -70,3 +70,7 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @SaikiranSurapalli17
 - @Aditya-bishtt-ji
 - @haritash13
+- @webhop123
+- @alanbarret
+- @Labreo
+- @vortexdispatch01-spec

@@ -116,6 +116,7 @@ export function ConversationArtifactPanel({
               paddingTop: needsTopPadding ? "2.5rem" : "1rem",
               paddingRight: needsTopPadding ? "1rem" : "2.5rem",
             }}
+            contentClassName="[&_*]:!bg-transparent"
           >
             <CodeBlockCopyButton />
           </CodeBlock>

@@ -17,6 +17,8 @@ export function transformConfigArrayFields(
     "assignmentGroups",
     "driveIds",
     "fileTypes",
+    "projectGids",
+    "tagsToSkip",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

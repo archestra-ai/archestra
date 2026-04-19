@@ -26649,7 +26649,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27097,7 +27097,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
     };
     url: '/api/connectors';
 };
@@ -27173,7 +27173,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27251,6 +27251,11 @@ export type GetConnectorsResponses = {
                 recursive?: boolean;
                 maxDepth?: number;
             } | {
+                type: 'asana';
+                workspaceGid: string;
+                projectGids?: Array<string>;
+                tagsToSkip?: Array<string>;
+            } | {
                 type: 'linear';
                 linearApiUrl: unknown;
                 teamIds?: Array<string>;
@@ -27297,7 +27302,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27374,6 +27379,11 @@ export type CreateConnectorData = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         } | {
             type: 'linear';
             linearApiUrl?: string;
@@ -27468,7 +27478,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27545,6 +27555,11 @@ export type CreateConnectorResponses = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         } | {
             type: 'linear';
             linearApiUrl: unknown;
@@ -27730,7 +27745,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27807,6 +27822,11 @@ export type GetConnectorResponses = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         } | {
             type: 'linear';
             linearApiUrl: unknown;
@@ -27918,6 +27938,11 @@ export type UpdateConnectorData = {
             recursive?: boolean;
             maxDepth?: number;
         } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
+        } | {
             type: 'linear';
             linearApiUrl?: string;
             teamIds?: Array<string>;
@@ -28012,7 +28037,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28089,6 +28114,11 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
             recursive?: boolean;
             maxDepth?: number;
+        } | {
+            type: 'asana';
+            workspaceGid: string;
+            projectGids?: Array<string>;
+            tagsToSkip?: Array<string>;
         } | {
             type: 'linear';
             linearApiUrl: unknown;

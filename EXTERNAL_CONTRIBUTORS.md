@@ -66,3 +66,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ezhil56x
 - @omjeem
 - @elskow
+- @sundaram2021
+- @SaikiranSurapalli17
+- @Aditya-bishtt-ji
+- @haritash13
+- @webhop123
+- @alanbarret

@@ -25,6 +25,8 @@ describe("transformConfigArrayFields", () => {
       commentEmailBlacklist: "bot@test.com, noreply@test.com",
       states: "open, closed",
       assignmentGroups: "group1, group2",
+      projectGids: "111, 222",
+      tagsToSkip: "wip, archived",
     };
 
     const result = transformConfigArrayFields(config);
@@ -41,6 +43,8 @@ describe("transformConfigArrayFields", () => {
     ]);
     expect(result.states).toEqual(["open", "closed"]);
     expect(result.assignmentGroups).toEqual(["group1", "group2"]);
+    expect(result.projectGids).toEqual(["111", "222"]);
+    expect(result.tagsToSkip).toEqual(["wip", "archived"]);
   });
 
   it("converts GitLab projectIds to number array", () => {

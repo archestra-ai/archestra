@@ -71,3 +71,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Aditya-bishtt-ji
 - @haritash13
 - @webhop123
+- @alanbarret

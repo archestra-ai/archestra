@@ -111,16 +111,11 @@ export function ConversationArtifactPanel({
         return (
           <CodeBlock
             code={code}
-            language="text"
-            className="!bg-muted dark:!bg-[#0e0e18]"
+            language={language}
             contentStyle={{
               paddingTop: needsTopPadding ? "2.5rem" : "1rem",
               paddingRight: needsTopPadding ? "1rem" : "2.5rem",
-              background: "transparent",
-              color: "hsl(var(--foreground))",
-              textShadow: "none",
             }}
-            contentClassName="[&_*]:!text-foreground [&_*]:![text-shadow:none] [&_*]:!bg-transparent"
           >
             <CodeBlockCopyButton />
           </CodeBlock>

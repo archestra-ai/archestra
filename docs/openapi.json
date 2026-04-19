@@ -100516,7 +100516,9 @@
                                     "type": "boolean"
                                   },
                                   "batchSize": {
-                                    "type": "number"
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
                                   }
                                 },
                                 "required": [
@@ -101458,7 +101460,9 @@
                             "type": "boolean"
                           },
                           "batchSize": {
-                            "type": "number"
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -102047,7 +102051,9 @@
                               "type": "boolean"
                             },
                             "batchSize": {
-                              "type": "number"
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
@@ -102935,7 +102941,9 @@
                               "type": "boolean"
                             },
                             "batchSize": {
-                              "type": "number"
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
@@ -103739,7 +103747,9 @@
                             "type": "boolean"
                           },
                           "batchSize": {
-                            "type": "number"
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -104326,7 +104336,9 @@
                               "type": "boolean"
                             },
                             "batchSize": {
-                              "type": "number"
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": [

@@ -249,7 +249,7 @@ export const LinearConfigSchema = z.object({
   includeComments: z.boolean().optional(),
   includeProjects: z.boolean().optional(),
   includeCycles: z.boolean().optional(),
-  batchSize: z.number().optional(),
+  batchSize: z.number().int().positive().optional(),
 });
 export type LinearConfig = z.infer<typeof LinearConfigSchema>;
 

@@ -509,10 +509,11 @@ describe("LinearConnector", () => {
 
         // Must be anchored to T1 (minus buffer), NOT to T3 or later
         expect(projectsUpdatedAfter).toBeDefined();
-        expect(new Date(projectsUpdatedAfter!).getTime()).toBeLessThanOrEqual(
-          new Date(T1_minus_buffer).getTime(),
-        );
-        expect(new Date(projectsUpdatedAfter!).getTime()).toBeLessThan(
+        const safeProjectsUpdatedAfter = projectsUpdatedAfter as string;
+        expect(
+          new Date(safeProjectsUpdatedAfter).getTime(),
+        ).toBeLessThanOrEqual(new Date(T1_minus_buffer).getTime());
+        expect(new Date(safeProjectsUpdatedAfter).getTime()).toBeLessThan(
           new Date(T2).getTime(),
         );
       });
@@ -542,10 +543,11 @@ describe("LinearConnector", () => {
         const cyclesUpdatedAfter = captureUpdatedAfter(1);
 
         expect(cyclesUpdatedAfter).toBeDefined();
-        expect(new Date(cyclesUpdatedAfter!).getTime()).toBeLessThanOrEqual(
+        const safeCyclesUpdatedAfter = cyclesUpdatedAfter as string;
+        expect(new Date(safeCyclesUpdatedAfter).getTime()).toBeLessThanOrEqual(
           new Date(T1_minus_buffer).getTime(),
         );
-        expect(new Date(cyclesUpdatedAfter!).getTime()).toBeLessThan(
+        expect(new Date(safeCyclesUpdatedAfter).getTime()).toBeLessThan(
           new Date(T4).getTime(),
         );
       });

@@ -50,6 +50,9 @@ const ISSUES_QUERY = `
           }
         }
         comments(first: 50) {
+          pageInfo {
+            hasNextPage
+          }
           nodes {
             body
             createdAt
@@ -114,6 +117,9 @@ const PROJECTS_QUERY = `
         updatedAt
         state
         projectUpdates(first: 15) {
+          pageInfo {
+            hasNextPage
+          }
           nodes {
             body
             createdAt
@@ -173,7 +179,7 @@ type LinearIssueNode = {
   team?: { key?: string; name?: string };
   project?: { id?: string; name?: string } | null;
   labels?: { nodes?: LinearLabelNode[] };
-  comments?: { nodes?: LinearIssueCommentNode[] };
+  comments?: { pageInfo?: LinearPageInfo; nodes?: LinearIssueCommentNode[] };
 };
 type LinearProjectUpdateNode = {
   body?: string;
@@ -189,7 +195,10 @@ type LinearProjectNode = {
   url?: string;
   updatedAt?: string;
   state?: string;
-  projectUpdates?: { nodes?: LinearProjectUpdateNode[] };
+  projectUpdates?: {
+    pageInfo?: LinearPageInfo;
+    nodes?: LinearProjectUpdateNode[];
+  };
 };
 type LinearCycleNode = {
   id: string;
@@ -437,6 +446,12 @@ export class LinearConnector extends BaseConnector {
       const documents: ConnectorDocument[] = [];
       const batchFailures: ConnectorItemFailure[] = [];
       for (const issue of issues) {
+        if (issue.comments?.pageInfo?.hasNextPage) {
+          this.log.warn(
+            { issueId: issue.id },
+            "Linear issue has more than 50 comments; truncating.",
+          );
+        }
         try {
           const doc = issueNodeToDocument(issue, config);
           documents.push(doc);
@@ -566,6 +581,12 @@ export class LinearConnector extends BaseConnector {
       const documents: ConnectorDocument[] = [];
       const batchFailures: ConnectorItemFailure[] = [];
       for (const project of projects) {
+        if (project.projectUpdates?.pageInfo?.hasNextPage) {
+          this.log.warn(
+            { projectId: project.id },
+            "Linear project has more than 15 updates; truncating.",
+          );
+        }
         try {
           documents.push(projectNodeToDocument(project));
           maxProjectUpdated = maxIsoString(
@@ -1010,7 +1031,8 @@ function buildProjectFilterForSweep(params: {
 
   if (config.projectIds?.length) {
     filter.id = { in: config.projectIds };
-  } else if (config.teamIds?.length) {
+  }
+  if (config.teamIds?.length) {
     filter.accessibleTeams = { id: { in: config.teamIds } };
   }
 

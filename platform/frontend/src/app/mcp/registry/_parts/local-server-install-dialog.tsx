@@ -127,22 +127,32 @@ export function LocalServerInstallDialog({
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
     catalogItem?.localConfig?.environment?.filter(
-      (env) => env.promptOnInstallation === true,
+      (env) => env.promptOnInstallation !== false,
     ) || [];
 
   // Separate secret vs non-secret env vars
   // Secret env vars can be loaded from vault, non-secret must be entered manually
   // Note: 'mounted' field is added in schema but types may not be regenerated yet
   const secretEnvVars = promptedEnvVars.filter(
-    (env) => env.type === "secret" && !(env as { mounted?: boolean }).mounted,
+    (env) =>
+      env.type === "secret" &&
+      env.promptOnInstallation !== false &&
+      !(env as { mounted?: boolean }).mounted,
   );
   const secretFileVars = promptedEnvVars.filter(
     (env) =>
-      env.type === "secret" && (env as { mounted?: boolean }).mounted === true,
+      env.type === "secret" &&
+      env.promptOnInstallation !== false &&
+      (env as { mounted?: boolean }).mounted === true,
   );
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",
   );
+  const hasPromptedSecretFields =
+    secretEnvVars.length > 0 || secretFileVars.length > 0;
+  const hasPromptedSensitiveUserConfig = Object.values(
+    promptableUserConfig,
+  ).some((field) => field.sensitive && field.promptOnInstallation !== false);
 
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
@@ -205,8 +215,9 @@ export function LocalServerInstallDialog({
     setUserConfigVaultSecrets({});
   };
 
-  // Show vault selector when BYOS is enabled (for both personal and team installations)
-  const useVaultSecrets = byosEnabled;
+  // Show vault selector when BYOS is enabled and any prompt-time sensitive input needs Vault.
+  const useVaultSecrets =
+    byosEnabled && (hasPromptedSecretFields || hasPromptedSensitiveUserConfig);
 
   // Helper to update vault secret for a specific field
   const updateVaultSecret = (
@@ -303,7 +314,7 @@ export function LocalServerInstallDialog({
         useVaultSecrets &&
         (secretEnvVars.length > 0 ||
           secretFileVars.length > 0 ||
-          Object.values(promptableUserConfig).some((field) => field.sensitive)),
+          hasPromptedSensitiveUserConfig),
       serviceAccount: serviceAccount || undefined,
     });
 

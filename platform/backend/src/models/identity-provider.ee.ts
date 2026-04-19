@@ -919,8 +919,11 @@ async function discoverOidcConfig(
       throw new ApiError(400, validationError);
     }
 
+    const discoveredIssuer = discoveryDocument.issuer as string;
+
     return {
       ...oidcConfig,
+      issuer: oidcConfig.issuer.trim() || discoveredIssuer,
       skipDiscovery: true,
       authorizationEndpoint: discoveryDocument.authorization_endpoint,
       tokenEndpoint: discoveryDocument.token_endpoint,
@@ -965,7 +968,10 @@ function getOidcDiscoveryValidationError(
     return "OIDC discovery document is missing one or more required endpoints.";
   }
 
-  if (normalizeIssuer(document.issuer) !== normalizeIssuer(configuredIssuer)) {
+  if (
+    configuredIssuer.trim().length > 0 &&
+    normalizeIssuer(document.issuer) !== normalizeIssuer(configuredIssuer)
+  ) {
     return `OIDC discovery issuer "${document.issuer}" did not match configured issuer "${configuredIssuer}".`;
   }
 
@@ -1005,12 +1011,19 @@ function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
     );
   }
 
-  if (!config.test.enableE2eTestEndpoints && parsedUrl.protocol !== "https:") {
+  const allowLocalDevelopmentDiscovery = !config.production;
+
+  if (
+    !config.test.enableE2eTestEndpoints &&
+    !allowLocalDevelopmentDiscovery &&
+    parsedUrl.protocol !== "https:"
+  ) {
     throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
   }
 
   if (
     !config.test.enableE2eTestEndpoints &&
+    !allowLocalDevelopmentDiscovery &&
     isPrivateOrLoopbackHostname(parsedUrl.hostname)
   ) {
     throw new ApiError(

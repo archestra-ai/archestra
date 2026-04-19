@@ -1,9 +1,9 @@
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
-import { standardTokenExchangeStrategy } from "./standard-token-exchange";
+import { rfc8693TokenExchangeStrategy } from "./rfc8693-token-exchange";
 
-describe("standardTokenExchangeStrategy", () => {
+describe("rfc8693TokenExchangeStrategy", () => {
   test("builds a standard token exchange request and returns a bearer token", async () => {
     const identityProvider = makeIdentityProvider({
       issuer: "http://localhost:30081/realms/archestra",
@@ -34,7 +34,7 @@ describe("standardTokenExchangeStrategy", () => {
       ),
     );
 
-    const result = await standardTokenExchangeStrategy.exchangeCredential({
+    const result = await rfc8693TokenExchangeStrategy.exchangeCredential({
       identityProvider,
       assertion: "user-access-token",
       enterpriseManagedConfig: {
@@ -109,7 +109,7 @@ describe("standardTokenExchangeStrategy", () => {
       ),
     );
 
-    const result = await standardTokenExchangeStrategy.exchangeCredential({
+    const result = await rfc8693TokenExchangeStrategy.exchangeCredential({
       identityProvider,
       assertion: "user-access-token",
       enterpriseManagedConfig: {

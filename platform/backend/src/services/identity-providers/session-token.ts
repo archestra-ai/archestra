@@ -102,7 +102,7 @@ function resolveSubjectTokenPreference(identityProvider: {
   oidcConfig?: {
     enterpriseManagedCredentials?: {
       subjectTokenType?: string;
-      providerType?: string;
+      exchangeStrategy?: string;
     };
   } | null;
 }): "access_token" | "id_token" {
@@ -113,8 +113,10 @@ function resolveSubjectTokenPreference(identityProvider: {
   }
 
   if (
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.providerType ===
-    "keycloak"
+    identityProvider.oidcConfig?.enterpriseManagedCredentials
+      ?.exchangeStrategy === "rfc8693" ||
+    identityProvider.oidcConfig?.enterpriseManagedCredentials
+      ?.exchangeStrategy === "entra_obo"
   ) {
     return "access_token";
   }

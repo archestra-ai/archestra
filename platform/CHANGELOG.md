@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.2.18](https://github.com/archestra-ai/archestra/compare/platform-v1.2.17...platform-v1.2.18) (2026-04-17)
+
+
+### Features
+
+* add Entra OBO support for downstream token exchange ([#3911](https://github.com/archestra-ai/archestra/issues/3911)) ([7229c95](https://github.com/archestra-ai/archestra/commit/7229c9528346713b435daa60f13842b64afea78c))
+
+
+### Bug Fixes
+
+* remote MCP OAuth client credentials install payload ([#3916](https://github.com/archestra-ai/archestra/issues/3916)) ([7395a35](https://github.com/archestra-ai/archestra/commit/7395a35408635a6b5fb6eb9fd8a26d4d0e70febe))
+
+## [1.2.17](https://github.com/archestra-ai/archestra/compare/platform-v1.2.16...platform-v1.2.17) (2026-04-17)
+
+
+### Features
+
+* dropbox knowledge connector ([#3780](https://github.com/archestra-ai/archestra/issues/3780)) ([b6dc00f](https://github.com/archestra-ai/archestra/commit/b6dc00f2685bf504d461c09558bdf95099ef9d22))
+
+
+### Bug Fixes
+
+* incorrect Vault selector dialog for self-hosted MCP server installation ([#3817](https://github.com/archestra-ai/archestra/issues/3817)) ([a3a139d](https://github.com/archestra-ai/archestra/commit/a3a139d1e9f6f7a175e29dc4bce14a957b137a11))
+
 ## [1.2.16](https://github.com/archestra-ai/archestra/compare/platform-v1.2.15...platform-v1.2.16) (2026-04-17)
 
 

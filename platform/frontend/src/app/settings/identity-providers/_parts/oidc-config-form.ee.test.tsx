@@ -19,6 +19,10 @@ vi.mock("./team-sync-config-form.ee", () => ({
   TeamSyncConfigForm: () => <div>Team Sync</div>,
 }));
 
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Archestra",
+}));
+
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}

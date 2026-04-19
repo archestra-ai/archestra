@@ -301,48 +301,66 @@ export class LinearConnector extends BaseConnector {
       ...(params.checkpoint as LinearCheckpoint | null),
     };
 
+    // Capture the lastSyncedAt value from the start of this run before any
+    // phase advances it. Projects and cycles use this as their fallback lower
+    // bound so that they are not inadvertently anchored to the watermark that
+    // the issues phase writes during the current run.
+    const initialLastSyncedAt = cp.lastSyncedAt;
+
     const includeProjects = parsed.includeProjects === true;
     const includeCycles = parsed.includeCycles === true;
 
-    let phase: LinearSyncPhase = cp.linearSyncPhase ?? "issues";
+    // Determine the starting phase while applying current feature-flag state.
+    // This must be done once here and re-applied after each phase completes so
+    // that a checkpoint left at "projects" while includeProjects is now off
+    // does not permanently block subsequent phases.
+    let phase: LinearSyncPhase = applyFeatureFlags(
+      cp.linearSyncPhase ?? "issues",
+      includeProjects,
+      includeCycles,
+    );
 
     if (phase === "issues") {
       yield* this.syncIssuesPhase({
         config: parsed,
         credentials: params.credentials,
-        startTime: params.startTime,
+        initialLastSyncedAt,
         getCheckpoint: () => cp,
         setCheckpoint: (next) => {
           cp = next;
         },
       });
+      // Re-derive phase from the updated checkpoint, then re-apply feature flags.
+      phase = applyFeatureFlags(
+        cp.linearSyncPhase ?? "issues",
+        includeProjects,
+        includeCycles,
+      );
     }
 
-    phase = cp.linearSyncPhase ?? "issues";
-
-    if (phase === "projects" && !includeProjects) {
-      phase = includeCycles ? "cycles" : "issues";
-    }
-
-    if (phase === "projects" && includeProjects) {
+    if (phase === "projects") {
       yield* this.syncProjectsPhase({
         config: parsed,
         credentials: params.credentials,
-        startTime: params.startTime,
+        initialLastSyncedAt,
         getCheckpoint: () => cp,
         setCheckpoint: (next) => {
           cp = next;
         },
       });
+      // Re-derive phase from the updated checkpoint, then re-apply feature flags.
+      phase = applyFeatureFlags(
+        cp.linearSyncPhase ?? phase,
+        includeProjects,
+        includeCycles,
+      );
     }
 
-    phase = cp.linearSyncPhase ?? phase;
-
-    if (phase === "cycles" && includeCycles) {
+    if (phase === "cycles") {
       yield* this.syncCyclesPhase({
         config: parsed,
         credentials: params.credentials,
-        startTime: params.startTime,
+        initialLastSyncedAt,
         getCheckpoint: () => cp,
         setCheckpoint: (next) => {
           cp = next;
@@ -354,12 +372,17 @@ export class LinearConnector extends BaseConnector {
   private async *syncIssuesPhase(params: {
     config: LinearConfig;
     credentials: ConnectorCredentials;
-    startTime?: Date;
+    initialLastSyncedAt: string | undefined;
     getCheckpoint: () => LinearCheckpoint;
     setCheckpoint: (cp: LinearCheckpoint) => void;
   }): AsyncGenerator<ConnectorSyncBatch> {
-    const { config, credentials, startTime, getCheckpoint, setCheckpoint } =
-      params;
+    const {
+      config,
+      credentials,
+      initialLastSyncedAt,
+      getCheckpoint,
+      setCheckpoint,
+    } = params;
 
     const client = createLinearClient(
       credentials.apiToken,
@@ -372,7 +395,10 @@ export class LinearConnector extends BaseConnector {
         : ISSUES_QUERY;
 
     let prev = getCheckpoint();
-    const issueUpdatedAfter = resolveIssueSweepLowerBound(prev, startTime);
+    const issueUpdatedAfter = resolveIssueSweepLowerBound(
+      prev,
+      initialLastSyncedAt,
+    );
     let cursor: string | null | undefined = prev.issuePageCursor;
     let hasMoreIssues = true;
     let maxIssueUpdated: string | undefined = prev.lastRawUpdatedAt;
@@ -479,12 +505,17 @@ export class LinearConnector extends BaseConnector {
   private async *syncProjectsPhase(params: {
     config: LinearConfig;
     credentials: ConnectorCredentials;
-    startTime?: Date;
+    initialLastSyncedAt: string | undefined;
     getCheckpoint: () => LinearCheckpoint;
     setCheckpoint: (cp: LinearCheckpoint) => void;
   }): AsyncGenerator<ConnectorSyncBatch> {
-    const { config, credentials, startTime, getCheckpoint, setCheckpoint } =
-      params;
+    const {
+      config,
+      credentials,
+      initialLastSyncedAt,
+      getCheckpoint,
+      setCheckpoint,
+    } = params;
 
     const client = createLinearClient(
       credentials.apiToken,
@@ -493,7 +524,10 @@ export class LinearConnector extends BaseConnector {
     const batchSize = config.batchSize ?? 50;
 
     let prev = getCheckpoint();
-    const projectUpdatedAfter = resolveProjectSweepLowerBound(prev, startTime);
+    const projectUpdatedAfter = resolveProjectSweepLowerBound(
+      prev,
+      initialLastSyncedAt,
+    );
     let cursor: string | null | undefined = prev.projectPageCursor;
     let hasMore = true;
     let maxProjectUpdated: string | undefined = prev.projectLastRawUpdatedAt;
@@ -601,12 +635,17 @@ export class LinearConnector extends BaseConnector {
   private async *syncCyclesPhase(params: {
     config: LinearConfig;
     credentials: ConnectorCredentials;
-    startTime?: Date;
+    initialLastSyncedAt: string | undefined;
     getCheckpoint: () => LinearCheckpoint;
     setCheckpoint: (cp: LinearCheckpoint) => void;
   }): AsyncGenerator<ConnectorSyncBatch> {
-    const { config, credentials, startTime, getCheckpoint, setCheckpoint } =
-      params;
+    const {
+      config,
+      credentials,
+      initialLastSyncedAt,
+      getCheckpoint,
+      setCheckpoint,
+    } = params;
 
     const client = createLinearClient(
       credentials.apiToken,
@@ -615,7 +654,10 @@ export class LinearConnector extends BaseConnector {
     const batchSize = config.batchSize ?? 50;
 
     let prev = getCheckpoint();
-    const cycleUpdatedAfter = resolveCycleSweepLowerBound(prev, startTime);
+    const cycleUpdatedAfter = resolveCycleSweepLowerBound(
+      prev,
+      initialLastSyncedAt,
+    );
     let cursor: string | null | undefined = prev.cyclePageCursor;
     let hasMore = true;
     let maxCycleUpdated: string | undefined = prev.cycleLastRawUpdatedAt;
@@ -826,9 +868,37 @@ function includeProjectsOrCycles(config: LinearConfig): LinearSyncPhase {
   return "issues";
 }
 
+/**
+ * Re-map a checkpoint phase to account for feature flags that may have been
+ * toggled since the checkpoint was written. Prevents a stale "projects" phase
+ * from blocking cycles when includeProjects has since been disabled.
+ */
+function applyFeatureFlags(
+  phase: LinearSyncPhase,
+  includeProjects: boolean,
+  includeCycles: boolean,
+): LinearSyncPhase {
+  if (phase === "projects" && !includeProjects) {
+    return includeCycles ? "cycles" : "issues";
+  }
+  if (phase === "cycles" && !includeCycles) {
+    return "issues";
+  }
+  return phase;
+}
+
+/**
+ * Resolve the lower-bound timestamp for the issues sweep.
+ *
+ * Priority:
+ *  1. Cursor + stored lower-bound from a mid-page resume.
+ *  2. The issues-specific raw watermark from the previous completed run.
+ *  3. The lastSyncedAt captured at the start of the current run (before any
+ *     phase updates it), minus the safety buffer.
+ */
 function resolveIssueSweepLowerBound(
   cp: LinearCheckpoint,
-  startTime?: Date,
+  initialLastSyncedAt: string | undefined,
 ): string | undefined {
   if (cp.issuePageCursor && cp.issueUpdatedAfter) {
     return cp.issueUpdatedAfter;
@@ -836,16 +906,30 @@ function resolveIssueSweepLowerBound(
   if (cp.lastRawUpdatedAt) {
     return cp.lastRawUpdatedAt;
   }
-  const iso = cp.lastSyncedAt ?? startTime?.toISOString();
-  if (!iso) return undefined;
-  const d = new Date(iso);
+  if (!initialLastSyncedAt) return undefined;
+  const d = new Date(initialLastSyncedAt);
   d.setTime(d.getTime() - INCREMENTAL_SAFETY_BUFFER_MS);
   return d.toISOString();
 }
 
+/**
+ * Resolve the lower-bound timestamp for the projects sweep.
+ *
+ * Priority:
+ *  1. Cursor + stored lower-bound from a mid-page resume.
+ *  2. The projects-specific raw watermark from the previous completed run.
+ *  3. The lastSyncedAt captured at the start of the current run (before any
+ *     phase updates it), minus the safety buffer.
+ *
+ * Using initialLastSyncedAt rather than the live cp.lastSyncedAt is critical:
+ * by the time this function is called, the issues phase has already advanced
+ * cp.lastSyncedAt to the newest issue seen. Falling back to that value would
+ * cause projects updated between the old watermark and the newest issue to be
+ * silently skipped.
+ */
 function resolveProjectSweepLowerBound(
   cp: LinearCheckpoint,
-  startTime?: Date,
+  initialLastSyncedAt: string | undefined,
 ): string | undefined {
   if (cp.projectPageCursor && cp.projectUpdatedAfter) {
     return cp.projectUpdatedAfter;
@@ -853,16 +937,22 @@ function resolveProjectSweepLowerBound(
   if (cp.projectLastRawUpdatedAt) {
     return cp.projectLastRawUpdatedAt;
   }
-  const iso = cp.lastSyncedAt ?? startTime?.toISOString();
-  if (!iso) return undefined;
-  const d = new Date(iso);
+  if (!initialLastSyncedAt) return undefined;
+  const d = new Date(initialLastSyncedAt);
   d.setTime(d.getTime() - INCREMENTAL_SAFETY_BUFFER_MS);
   return d.toISOString();
 }
 
+/**
+ * Resolve the lower-bound timestamp for the cycles sweep.
+ *
+ * Same rationale as resolveProjectSweepLowerBound: uses initialLastSyncedAt
+ * rather than the live cp.lastSyncedAt to avoid skipping cycles that updated
+ * during the window covered by the issues phase.
+ */
 function resolveCycleSweepLowerBound(
   cp: LinearCheckpoint,
-  startTime?: Date,
+  initialLastSyncedAt: string | undefined,
 ): string | undefined {
   if (cp.cyclePageCursor && cp.cycleUpdatedAfter) {
     return cp.cycleUpdatedAfter;
@@ -870,9 +960,8 @@ function resolveCycleSweepLowerBound(
   if (cp.cycleLastRawUpdatedAt) {
     return cp.cycleLastRawUpdatedAt;
   }
-  const iso = cp.lastSyncedAt ?? startTime?.toISOString();
-  if (!iso) return undefined;
-  const d = new Date(iso);
+  if (!initialLastSyncedAt) return undefined;
+  const d = new Date(initialLastSyncedAt);
   d.setTime(d.getTime() - INCREMENTAL_SAFETY_BUFFER_MS);
   return d.toISOString();
 }

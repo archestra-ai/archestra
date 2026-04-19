@@ -73,3 +73,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @webhop123
 - @alanbarret
 - @Labreo
+- @vortexdispatch01-spec

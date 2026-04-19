@@ -1,35 +1,3 @@
-/**
- * E2E integration tests for the Unified Responses API proxy endpoint.
- *
- * These tests hit the REAL running Archestra server with REAL provider API keys.
- * No WireMock, no mocks — if the endpoint is broken, these fail.
- *
- * Coverage:
- *   POST /v1/unified/responses          — agentless (default profile agent)
- *   POST /v1/unified/:agentId/responses — scoped to a specific LLM Proxy agent
- *   GET  /v1/unified/models             — model listing (credential verification)
- *   GET  /v1/unified/:agentId/models    — agent-scoped model listing
- *
- * Input format variations tested (all must produce a valid Responses API response):
- *   - Plain string:  { input: "hello" }
- *   - n8n format:    { input: [{ role: "user", content: "hello" }] }
- *   - Responses API: { input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }] }
- *   - Streaming:     { stream: true }
- *   - With tools:    { tools: [...] }
- *   - System prompt: { instructions: "...", input: "..." }
- *
- * Error cases:
- *   - Unknown model  → 404
- *   - No auth        → 401
- *   - Bad agentId    → 400 or 404
- *   - Empty messages → 400 (no longer possible after fix)
- *
- * Env vars required:
- *   E2E_API_BASE_URL   — Archestra backend (default: http://localhost:9000)
- *   E2E_GROQ_API_KEY   — Real Groq API key (required)
- *   E2E_AGENT_ID       — Optional: specific LLM Proxy agent UUID to test scoped routes
- */
-
 import { expect, test } from "@playwright/test";
 import { API_BASE_URL } from "../../consts";
 

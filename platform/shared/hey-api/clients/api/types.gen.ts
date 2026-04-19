@@ -15209,7 +15209,7 @@ export type AzureResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -15366,7 +15366,7 @@ export type AzureResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -22772,7 +22772,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -22805,7 +22805,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -24537,7 +24537,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -24570,7 +24570,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -39981,6 +39981,564 @@ export type DeleteToolResponses = {
 };
 
 export type DeleteToolResponse = DeleteToolResponses[keyof DeleteToolResponses];
+
+export type UnifiedListModelsData = {
+    body?: never;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified/models';
+};
+
+export type UnifiedListModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type UnifiedListModelsResponse = UnifiedListModelsResponses[keyof UnifiedListModelsResponses];
+
+export type UnifiedListModelsWithAgentData = {
+    body?: never;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified/{agentId}/models';
+};
+
+export type UnifiedListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type UnifiedListModelsWithAgentResponse = UnifiedListModelsWithAgentResponses[keyof UnifiedListModelsWithAgentResponses];
+
+export type UnifiedChatCompletionsWithDefaultAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified/chat/completions';
+};
+
+export type UnifiedChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnifiedChatCompletionsWithDefaultAgentError = UnifiedChatCompletionsWithDefaultAgentErrors[keyof UnifiedChatCompletionsWithDefaultAgentErrors];
+
+export type UnifiedChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type UnifiedChatCompletionsWithDefaultAgentResponse = UnifiedChatCompletionsWithDefaultAgentResponses[keyof UnifiedChatCompletionsWithDefaultAgentResponses];
+
+export type UnifiedChatCompletionsWithAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified/{agentId}/chat/completions';
+};
+
+export type UnifiedChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnifiedChatCompletionsWithAgentError = UnifiedChatCompletionsWithAgentErrors[keyof UnifiedChatCompletionsWithAgentErrors];
+
+export type UnifiedChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type UnifiedChatCompletionsWithAgentResponse = UnifiedChatCompletionsWithAgentResponses[keyof UnifiedChatCompletionsWithAgentResponses];
+
+export type UnifiedResponsesWithDefaultAgentData = {
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        max_output_tokens?: number | null;
+        metadata?: {
+            [key: string]: string;
+        } | null;
+        previous_response_id?: string | null;
+        stream?: boolean | null;
+        temperature?: number | null;
+        text?: unknown;
+        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            name: string;
+            description?: string | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            strict?: boolean | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_p?: number | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified/responses';
+};
+
+export type UnifiedResponsesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnifiedResponsesWithDefaultAgentError = UnifiedResponsesWithDefaultAgentErrors[keyof UnifiedResponsesWithDefaultAgentErrors];
+
+export type UnifiedResponsesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        status: string;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type UnifiedResponsesWithDefaultAgentResponse = UnifiedResponsesWithDefaultAgentResponses[keyof UnifiedResponsesWithDefaultAgentResponses];
+
+export type UnifiedResponsesWithAgentData = {
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        max_output_tokens?: number | null;
+        metadata?: {
+            [key: string]: string;
+        } | null;
+        previous_response_id?: string | null;
+        stream?: boolean | null;
+        temperature?: number | null;
+        text?: unknown;
+        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            name: string;
+            description?: string | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            strict?: boolean | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_p?: number | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified/{agentId}/responses';
+};
+
+export type UnifiedResponsesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnifiedResponsesWithAgentError = UnifiedResponsesWithAgentErrors[keyof UnifiedResponsesWithAgentErrors];
+
+export type UnifiedResponsesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        status: string;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type UnifiedResponsesWithAgentResponse = UnifiedResponsesWithAgentResponses[keyof UnifiedResponsesWithAgentResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

@@ -945,7 +945,7 @@ describe("SlackConnector", () => {
       // First batch: failure from C001
       expect(batches[0].documents).toHaveLength(0);
       expect(batches[0].failures).toHaveLength(1);
-      expect(batches[0].failures![0].itemId).toBe("C001");
+      expect(batches[0].failures?.[0].itemId).toBe("C001");
       expect(batches[0].hasMore).toBe(true);
 
       // Second batch: success from C002

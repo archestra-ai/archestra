@@ -300,8 +300,10 @@ export class SlackConnector extends BaseConnector {
             documents.push(doc);
           }
 
-          // Update per-channel cursor
-          channelCursors[channelId] = maxTs;
+          // Update per-channel cursor after the channel is fully paginated
+          if (!hasMoreMessages) {
+            channelCursors[channelId] = maxTs;
+          }
 
           const hasMore = hasMoreMessages || !isLastChannel;
 
@@ -417,37 +419,49 @@ export class SlackConnector extends BaseConnector {
     userNameCache: QuickLRU<string, string>,
   ): Promise<string> {
     const replies: string[] = [];
+    let cursor: string | undefined;
+    let hasMore = true;
+    let isFirstPage = true;
 
     try {
-      await this.rateLimit();
+      while (hasMore) {
+        await this.rateLimit();
 
-      const result = await client.conversations.replies({
-        channel: channelId,
-        ts: threadTs,
-        limit: 100,
-      });
+        const result = await client.conversations.replies({
+          channel: channelId,
+          ts: threadTs,
+          limit: 100,
+          cursor,
+        });
 
-      if (!result.ok || !result.messages) return "";
+        if (!result.ok || !result.messages) break;
 
-      // Skip the first message (it's the parent, already processed)
-      const replyMessages = result.messages.slice(1);
-
-      for (const reply of replyMessages) {
-        if (!reply.text) continue;
-        // biome-ignore lint/suspicious/noExplicitAny: Slack SDK MessageElement type doesn't expose subtype/bot_id on all union members
-        const replyAny = reply as any;
-        if (
-          skipBotMessages &&
-          (replyAny.bot_id || replyAny.subtype === "bot_message")
-        ) {
-          continue;
+        // Skip the first message (it's the parent, already processed) only on the first page
+        let replyMessages = result.messages;
+        if (isFirstPage && replyMessages.length > 0) {
+          replyMessages = replyMessages.slice(1);
+          isFirstPage = false;
         }
 
-        const replyAuthor = reply.user
-          ? await this.resolveUserName(client, reply.user, userNameCache)
-          : "Unknown";
+        for (const reply of replyMessages) {
+          if (!reply.text) continue;
+          const replyData = reply as { bot_id?: string; subtype?: string };
+          if (
+            skipBotMessages &&
+            (replyData.bot_id || replyData.subtype === "bot_message")
+          ) {
+            continue;
+          }
 
-        replies.push(`**${replyAuthor}:** ${reply.text}`);
+          const replyAuthor = reply.user
+            ? await this.resolveUserName(client, reply.user, userNameCache)
+            : "Unknown";
+
+          replies.push(`**${replyAuthor}:** ${reply.text}`);
+        }
+
+        cursor = result.response_metadata?.next_cursor || undefined;
+        hasMore = result.has_more === true && !!cursor;
       }
     } catch (error) {
       this.log.warn(

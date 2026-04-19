@@ -394,6 +394,8 @@ Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-
 | Notion       | `backend/src/knowledge-base/connectors/notion/notion-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/notion-config-fields.tsx`                               |
 | SharePoint   | `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/sharepoint-config-fields.tsx`                   |
 | Google Drive | `backend/src/knowledge-base/connectors/gdrive/gdrive-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gdrive-config-fields.tsx`                               |
+| Asana        | `backend/src/knowledge-base/connectors/asana/asana-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/asana-config-fields.tsx`                                 |
+| Dropbox      | `backend/src/knowledge-base/connectors/dropbox/dropbox-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/dropbox-config-fields.tsx`                             |
 
 The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering. The ServiceNow connector demonstrates using raw `fetch` calls against the ServiceNow Table API with offset-based pagination. The Google Drive connector demonstrates using the official `googleapis` SDK with service account / OAuth2 auth, recursive folder traversal, and Google Workspace file exports.
-| Dropbox      | `backend/src/knowledge-base/connectors/dropbox/dropbox-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/dropbox-config-fields.tsx`                             |
+

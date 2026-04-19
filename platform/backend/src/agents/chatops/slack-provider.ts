@@ -2,7 +2,6 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
-import { slackifyMarkdown } from "slackify-markdown";
 import {
   type AllowedCacheKey,
   CacheKey,
@@ -298,46 +297,13 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
-    const mrkdwn = slackifyMarkdown(options.text);
-
-    // Slack section blocks have a 3000-char limit; split long responses
-    // into multiple blocks to avoid silent truncation.
+    // Slack's native markdown block preserves standard markdown from LLMs
+    // better than converting to mrkdwn first.
     // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-    const blocks: any[] = [];
-    const SECTION_LIMIT = 3000;
-    if (mrkdwn.length <= SECTION_LIMIT) {
-      blocks.push({
-        type: "section",
-        text: { type: "mrkdwn", text: mrkdwn },
-      });
-    } else {
-      // Split on double-newline boundaries to keep paragraphs intact
-      let remaining = mrkdwn;
-      while (remaining.length > 0) {
-        if (remaining.length <= SECTION_LIMIT) {
-          blocks.push({
-            type: "section",
-            text: { type: "mrkdwn", text: remaining },
-          });
-          break;
-        }
-        // Find last double-newline within the limit
-        let splitAt = remaining.lastIndexOf("\n\n", SECTION_LIMIT);
-        if (splitAt <= 0) {
-          // Fall back to last single newline
-          splitAt = remaining.lastIndexOf("\n", SECTION_LIMIT);
-        }
-        if (splitAt <= 0) {
-          // No good break point — hard split
-          splitAt = SECTION_LIMIT;
-        }
-        blocks.push({
-          type: "section",
-          text: { type: "mrkdwn", text: remaining.slice(0, splitAt) },
-        });
-        remaining = remaining.slice(splitAt).trim();
-      }
-    }
+    const blocks: any[] = splitSlackMarkdownText(options.text).map((text) => ({
+      type: "markdown",
+      text,
+    }));
 
     if (options.footer) {
       blocks.push({
@@ -354,7 +320,9 @@ class SlackProvider implements ChatOpsProvider {
 
     const result = await this.client.chat.postMessage({
       channel: options.originalMessage.channelId,
-      text: mrkdwn,
+      text: options.footer
+        ? `${options.text}\n\n${options.footer}`
+        : options.text,
       blocks,
       thread_ts: options.originalMessage.threadId,
     });
@@ -1430,6 +1398,37 @@ function decodeSlackEntities(text: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&lt;/g, "<")
     .replace(/&amp;/g, "&");
+}
+
+function splitSlackMarkdownText(text: string): string[] {
+  const MARKDOWN_BLOCK_LIMIT = 12_000;
+
+  if (text.length <= MARKDOWN_BLOCK_LIMIT) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= MARKDOWN_BLOCK_LIMIT) {
+      chunks.push(remaining);
+      break;
+    }
+
+    let splitAt = remaining.lastIndexOf("\n\n", MARKDOWN_BLOCK_LIMIT);
+    if (splitAt <= 0) {
+      splitAt = remaining.lastIndexOf("\n", MARKDOWN_BLOCK_LIMIT);
+    }
+    if (splitAt <= 0) {
+      splitAt = MARKDOWN_BLOCK_LIMIT;
+    }
+
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trim();
+  }
+
+  return chunks;
 }
 
 /**

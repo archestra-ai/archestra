@@ -23,6 +23,7 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   gdrive: { kind: "img", src: "/icons/gdrive.png" },
   dropbox: { kind: "img", src: "/icons/dropbox.png" },
   slack: { kind: "img", src: "/icons/slack.png" },
+  asana: { kind: "img", src: "/icons/asana.png" },
 };
 
 export function hasConnectorIcon(type: string): boolean {

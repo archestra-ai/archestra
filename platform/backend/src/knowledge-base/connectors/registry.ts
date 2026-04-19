@@ -1,4 +1,5 @@
 import type { Connector, ConnectorType } from "@/types";
+import { AsanaConnector } from "./asana/asana-connector";
 import { ConfluenceConnector } from "./confluence/confluence-connector";
 import { DropboxConnector } from "./dropbox/dropbox-connector";
 import { GoogleDriveConnector } from "./gdrive/gdrive-connector";
@@ -21,6 +22,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   gdrive: () => new GoogleDriveConnector(),
   dropbox: () => new DropboxConnector(),
   slack: () => new SlackConnector(),
+  asana: () => new AsanaConnector(),
 };
 
 export function getConnector(type: string): Connector {

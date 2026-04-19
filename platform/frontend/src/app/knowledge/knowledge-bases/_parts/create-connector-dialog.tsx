@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
+import { AsanaConfigFields } from "./asana-config-fields";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { DropboxConfigFields } from "./dropbox-config-fields";
@@ -108,6 +109,11 @@ const CONNECTOR_OPTIONS: {
     description: "Sync files and folders from Dropbox",
   },
   {
+    type: "asana",
+    label: CONNECTOR_TYPE_LABELS.asana,
+    description: "Sync tasks and comments from Asana",
+  },
+  {
     type: "slack",
     label: CONNECTOR_TYPE_LABELS.slack,
     description: "Sync public channel messages from Slack",
@@ -172,6 +178,7 @@ export function CreateConnectorDialog({
       sharepoint: { type, includePages: true },
       gdrive: { type, recursive: true },
       dropbox: { type, rootPath: "" },
+      asana: { type },
       slack: { type, skipBotMessages: true, includeThreadReplies: true },
     };
     form.setValue("config", defaultConfigs[type]);
@@ -449,6 +456,32 @@ export function CreateConnectorDialog({
                   />
                 )}
 
+                {connectorType === "asana" && (
+                  <FormField
+                    control={form.control}
+                    name="config.workspaceGid"
+                    rules={{ required: "Workspace GID is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Workspace GID</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1234567890"
+                            {...field}
+                            value={(field.value as string) ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Your Asana workspace GID. Syncs top-level tasks only
+                          &mdash; subtasks aren&apos;t supported in the initial
+                          version.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 {needsEmail && (
                   <FormField
                     control={form.control}
@@ -696,6 +729,9 @@ export function CreateConnectorDialog({
                     {connectorType === "dropbox" && (
                       <DropboxConfigFields control={form.control} />
                     )}
+                    {connectorType === "asana" && (
+                      <AsanaConfigFields form={form} hideWorkspaceGid />
+                    )}
                     {connectorType === "slack" && (
                       <SlackConfigFields control={form.control} />
                     )}
@@ -766,6 +802,7 @@ function getUrlConfig(type: ConnectorType): {
       };
     case "notion":
     case "gdrive":
+    case "asana":
     case "dropbox":
     case "slack":
       return null;

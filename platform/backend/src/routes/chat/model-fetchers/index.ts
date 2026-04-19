@@ -36,4 +36,5 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   vllm: fetchVllmModels,
   xai: fetchXaiModels,
   zhipuai: fetchZhipuaiModels,
+  unified: async () => [],
 };

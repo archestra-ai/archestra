@@ -111,6 +111,7 @@ describe("config routes", () => {
       "openai",
       "openrouter",
       "perplexity",
+      "unified",
       "vllm",
       "xai",
       "zhipuai",

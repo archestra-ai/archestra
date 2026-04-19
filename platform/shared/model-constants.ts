@@ -21,6 +21,7 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "azure",
+  "unified",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -80,6 +81,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   azure: "Azure AI Foundry",
+  unified: "Unified",
 };
 
 /**
@@ -130,6 +132,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   azure: "https://<resource>.openai.azure.com/openai/deployments/<deployment>",
+  unified: "",
 };
 
 /**
@@ -231,6 +234,10 @@ export const MODEL_MARKER_PATTERNS: Record<
     fastest: ["nova-lite", "nova-micro", "haiku"],
     best: ["nova-pro", "sonnet", "opus"],
   },
+  unified: {
+    fastest: [],
+    best: [],
+  },
 };
 
 /**
@@ -258,6 +265,7 @@ export const FAST_MODELS: Record<SupportedProvider, string> = {
   groq: "llama-3.1-8b-instant", // Groq's fast model
   xai: "grok-code-fast-1", // xAI's fast model
   azure: "gpt-4o-mini",
+  unified: "",
 };
 
 /**
@@ -282,4 +290,5 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   bedrock: "anthropic.claude-opus-4-1-20250805-v1:0",
   minimax: "MiniMax-M2.5",
   azure: "gpt-4o",
+  unified: "",
 };

@@ -214,6 +214,16 @@ const PROVIDER_CONFIG: Record<
     description:
       "Set Base URL to: https://<resource>.openai.azure.com/openai/deployments/<deployment>",
   },
+  unified: {
+    name: "Unified",
+    icon: "/icons/openai.png",
+    placeholder: "sk-...",
+    enabled: false, // Unified routes to the resolved provider — configure that provider's key instead
+    consoleUrl: "https://docs.archestra.ai",
+    consoleName: "Archestra Docs",
+    description:
+      "The Unified endpoint routes to the configured provider. Add an API key for that provider instead.",
+  },
 } as const;
 
 export { PROVIDER_CONFIG };

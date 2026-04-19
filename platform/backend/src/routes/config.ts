@@ -132,6 +132,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
+          unified: null,
         },
       });
     },

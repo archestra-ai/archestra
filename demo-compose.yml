@@ -1,0 +1,56 @@
+services:
+  # PostgreSQL with pgvector extension — required by Archestra migrations
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: archestra
+      POSTGRES_PASSWORD: archestra
+      POSTGRES_DB: archestra
+    ports:
+      - "5432:5432"
+    volumes:
+      - archestra_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U archestra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Archestra LLM Proxy (pre-built public image)
+  archestra:
+    image: archestra/platform:latest
+    ports:
+      - "9000:9000"
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://archestra:archestra@db:5432/archestra
+      ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra@db:5432/archestra
+      ARCHESTRA_AUTH_SECRET: "demo-secret-for-n8n-bounty-video-32chars!"
+      ARCHESTRA_LOGGING_LEVEL: info
+      ARCHESTRA_ANALYTICS: disabled
+      # Groq — real free API
+      ARCHESTRA_GROQ_BASE_URL: https://api.groq.com/openai/v1
+      # Other real providers (leave base URLs default)
+      ARCHESTRA_OPENAI_BASE_URL: https://api.openai.com/v1
+      ARCHESTRA_ANTHROPIC_BASE_URL: https://api.anthropic.com
+      ARCHESTRA_GEMINI_BASE_URL: https://generativelanguage.googleapis.com
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # n8n workflow automation
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_PORT: 5678
+      GENERIC_TIMEZONE: Asia/Kolkata
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  archestra_pg:
+  n8n_data:

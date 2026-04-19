@@ -28,7 +28,8 @@ export const ChatCompletionResponseSchema =
 
 const ResponsesInputItemSchema = z
   .object({
-    type: z.string(),
+    // The spec requires type but some clients omit it for plain message objects.
+    type: z.string().optional(),
   })
   .passthrough();
 

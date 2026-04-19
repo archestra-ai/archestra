@@ -687,6 +687,9 @@ const config = {
     azure: {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
+    unified: {
+      apiKey: "",
+    },
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
     defaultProvider: ((): SupportedProvider => {

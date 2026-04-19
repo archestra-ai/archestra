@@ -451,6 +451,12 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
   },
 
+  unified: {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: undefined,
+  },
+
   azure: {
     createModel: ({
       apiKey,

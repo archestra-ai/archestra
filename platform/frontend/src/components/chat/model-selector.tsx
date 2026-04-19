@@ -118,6 +118,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  unified: "", // No dedicated models.dev logo — resolves to the actual provider at request time
 };
 
 /**

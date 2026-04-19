@@ -70,6 +70,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     deepseek: "deepseek",
     minimax: "minimax",
     azure: "azure",
+    unified: "",
   } as const;
 
   return logoNames[provider];

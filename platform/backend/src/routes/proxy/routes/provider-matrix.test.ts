@@ -59,6 +59,7 @@ import ollamaProxyRoutes from "./ollama";
 import openAiProxyRoutes from "./openai";
 import openrouterProxyRoutes from "./openrouter";
 import perplexityProxyRoutes from "./perplexity";
+import unifiedProxyRoutes from "./unified";
 import vllmProxyRoutes from "./vllm";
 import xaiProxyRoutes from "./xai";
 import zhipuaiProxyRoutes from "./zhipuai";
@@ -1468,6 +1469,32 @@ function makeAzureResponsesBuilder(defaultModel: string): RequestBuilder {
   };
 }
 
+function makeUnifiedResponsesBuilder(defaultModel: string): RequestBuilder {
+  return {
+    buildTextRequest: ({ model, content }) => ({
+      model: model || defaultModel,
+      input: content,
+    }),
+    buildToolRequest: ({ model, content, tools, stream = false }) => ({
+      model: model || defaultModel,
+      stream,
+      input: content,
+      tools: tools.map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      })),
+    }),
+    buildCompressionRequest: ({ model }) => ({
+      // TOON compression is intentionally a no-op for the Responses API path
+      // (same behaviour as azure-responses). Send a minimal valid request.
+      model: model || defaultModel,
+      input: "What files are in the current directory?",
+    }),
+  };
+}
+
 function makeCohereBuilder(defaultModel: string): RequestBuilder {
   return {
     buildTextRequest: ({ model, content }) => ({
@@ -1872,7 +1899,7 @@ const providerConfigsByProvider = {
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
-} satisfies Record<SupportedProvider, ProviderTestConfig>;
+} satisfies Omit<Record<SupportedProvider, ProviderTestConfig>, "unified">;
 
 const azureResponsesConfig = makeConfig({
   providerName: "Azure Responses",
@@ -2171,4 +2198,487 @@ describe("LLM proxy provider matrix", () => {
       });
     });
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Unified Chat Completions (/v1/unified/:agentId/chat/completions)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("Unified Chat Completions", () => {
+    const CC_MODEL = "llama-3.3-70b-versatile";
+    const CC_OPTIMIZED_MODEL = "llama-3.1-8b-instant";
+    const CC_ENDPOINT = (agentId: string) =>
+      `/v1/unified/${agentId}/chat/completions`;
+    const CC_HEADERS = {
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    };
+    const CC_REQUEST_BUILDER = makeOpenAiCompatibleBuilder(CC_MODEL);
+
+    /**
+     * Seeds the model registry (groq entry) so resolveProviderAdapter resolves
+     * to groqAdapterFactory without a real DB round-trip to an external service.
+     */
+    async function setupChatRoute(
+      _agent: Agent,
+      harnessOptions: HarnessOptions = {},
+    ) {
+      app = createFastifyApp();
+
+      // Register the groq model so ModelModel.findByModelIdOnly returns it.
+      await ModelModel.upsert({
+        externalId: `groq/${CC_MODEL}`,
+        provider: "groq",
+        modelId: CC_MODEL,
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "1000.00",
+        customPricePerMillionOutput: "1000.00",
+        lastSyncedAt: new Date(),
+      });
+
+      const harness = createOpenAiLikeHarness({
+        model: CC_MODEL,
+        ...harnessOptions,
+      });
+      vi.spyOn(groqAdapterFactory, "createClient").mockImplementation(
+        () => harness.client as never,
+      );
+      await app.register(unifiedProxyRoutes);
+      return harness;
+    }
+
+    test("persists declared tools from LLM proxy requests", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        agentType: "llm_proxy",
+        name: "Unified chat tool persistence",
+      });
+      await setupChatRoute(agent, {
+        nonStreamingToolCall: {
+          name: READ_FILE_TOOL.name,
+          arguments: '{"file_path":"/tmp/test.txt"}',
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildToolRequest({
+          model: CC_MODEL,
+          content: "Read a file",
+          tools: [READ_FILE_TOOL],
+        }),
+      });
+      expect(response.statusCode).toBe(200);
+
+      const secondResponse = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildToolRequest({
+          model: CC_MODEL,
+          content: "Read a file again",
+          tools: [READ_FILE_TOOL],
+        }),
+      });
+      expect(secondResponse.statusCode).toBe(200);
+
+      const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
+      expect(storedTool).not.toBeNull();
+      expect(await ToolModel.countByName(READ_FILE_TOOL.name)).toBe(1);
+    });
+
+    test("stores execution IDs on interactions", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        name: "Unified chat execution ID",
+      });
+      await ModelModel.upsert({
+        externalId: `groq/${CC_MODEL}`,
+        provider: "groq",
+        modelId: CC_MODEL,
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "20000.00",
+        customPricePerMillionOutput: "30000.00",
+        lastSyncedAt: new Date(),
+      });
+      await setupChatRoute(agent);
+
+      const executionId = randomUUID();
+      const response = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: { ...CC_HEADERS, "x-archestra-execution-id": executionId },
+        payload: CC_REQUEST_BUILDER.buildTextRequest({
+          model: CC_MODEL,
+          content: "Hello from execution metrics",
+        }),
+      });
+      expect(response.statusCode).toBe(200);
+
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interactions.some((i) => i.executionId === executionId)).toBe(
+        true,
+      );
+    });
+
+    test("streams tool calls through the proxy", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        name: "Unified chat streaming",
+      });
+      await setupChatRoute(agent, {
+        streamingToolCall: {
+          name: READ_FILE_TOOL.name,
+          arguments: '{"file_path":"/tmp/test.txt"}',
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildToolRequest({
+          model: CC_MODEL,
+          content: "Stream a tool call",
+          tools: [READ_FILE_TOOL],
+          stream: true,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/event-stream");
+      expect(response.body).toContain("data:");
+      expect(response.body).toContain(READ_FILE_TOOL.name);
+    });
+
+    test("applies optimized models before provider execution", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Unified chat optimization",
+      });
+      const optimizedModelSpy = vi
+        .spyOn(proxyUtils.costOptimization, "getOptimizedModel")
+        .mockResolvedValue(CC_OPTIMIZED_MODEL);
+
+      const harness = await setupChatRoute(agent);
+
+      const response = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildTextRequest({
+          model: CC_MODEL,
+          content: "x".repeat(1100),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(optimizedModelSpy).toHaveBeenCalled();
+      expect(JSON.stringify(harness.requests.at(-1))).toContain(
+        CC_OPTIMIZED_MODEL,
+      );
+    });
+
+    test("toggles TOON compression before provider execution", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Unified chat compression",
+      });
+      vi.spyOn(proxyUtils.toonConversion, "shouldApplyToonCompression")
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+
+      const enabledHarness = await setupChatRoute(agent);
+      const enabledResponse = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildCompressionRequest({
+          model: CC_MODEL,
+        }),
+      });
+
+      expect(enabledResponse.statusCode).toBe(200);
+      expect(JSON.stringify(enabledHarness.requests.at(-1))).toMatch(
+        /files\[5\]/,
+      );
+
+      await app.close();
+      const disabledHarness = await setupChatRoute(agent);
+      const disabledResponse = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildCompressionRequest({
+          model: CC_MODEL,
+        }),
+      });
+
+      expect(disabledResponse.statusCode).toBe(200);
+      expect(JSON.stringify(disabledHarness.requests.at(-1))).toContain(
+        "README.md",
+      );
+    });
+
+    test("blocks requests when token cost limits are exceeded", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Unified chat limits",
+      });
+      vi.spyOn(
+        LimitValidationService,
+        "checkLimitsBeforeRequest",
+      ).mockResolvedValue([
+        "Refusal",
+        "The token cost limit has been exceeded.",
+      ]);
+      await setupChatRoute(agent);
+
+      const blockedResponse = await app.inject({
+        method: "POST",
+        url: CC_ENDPOINT(agent.id),
+        headers: CC_HEADERS,
+        payload: CC_REQUEST_BUILDER.buildTextRequest({
+          model: CC_MODEL,
+          content: "Will this get blocked?",
+        }),
+      });
+
+      expect(blockedResponse.statusCode).toBe(429);
+      expect(blockedResponse.json()).toMatchObject({
+        error: { code: "token_cost_limit_exceeded" },
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Unified Responses (/v1/unified/:agentId/responses)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("Unified Responses", () => {
+    const UNIFIED_MODEL = "llama-3.3-70b-versatile";
+    const UNIFIED_OPTIMIZED_MODEL = "llama-3.1-8b-instant";
+    const UNIFIED_ENDPOINT = (agentId: string) =>
+      `/v1/unified/${agentId}/responses`;
+    const UNIFIED_HEADERS = {
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    };
+    const UNIFIED_REQUEST_BUILDER = makeUnifiedResponsesBuilder(UNIFIED_MODEL);
+
+    /**
+     * Seeds the model registry so that resolveProviderAdapter can find the
+     * model and pick the Groq inner adapter. Mocks the Groq SDK client so
+     * no real network calls are made.
+     */
+    async function setupUnifiedRoute(
+      _agent: Agent,
+      harnessOptions: HarnessOptions = {},
+    ) {
+      app = createFastifyApp();
+
+      // Insert the model so ModelModel.findByModelIdOnly resolves to groq.
+      await ModelModel.upsert({
+        externalId: `groq/${UNIFIED_MODEL}`,
+        provider: "groq",
+        modelId: UNIFIED_MODEL,
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "1000.00",
+        customPricePerMillionOutput: "1000.00",
+        lastSyncedAt: new Date(),
+      });
+
+      const harness = createOpenAiLikeHarness({
+        model: UNIFIED_MODEL,
+        ...harnessOptions,
+      });
+      vi.spyOn(groqAdapterFactory, "createClient").mockImplementation(
+        () => harness.client as never,
+      );
+      await app.register(unifiedProxyRoutes);
+      return harness;
+    }
+
+    test("persists declared tools from LLM proxy requests", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        agentType: "llm_proxy",
+        name: "Unified Responses tool persistence",
+      });
+      await setupUnifiedRoute(agent, {
+        nonStreamingToolCall: {
+          name: READ_FILE_TOOL.name,
+          arguments: '{"file_path":"/tmp/test.txt"}',
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: UNIFIED_ENDPOINT(agent.id),
+        headers: UNIFIED_HEADERS,
+        payload: UNIFIED_REQUEST_BUILDER.buildToolRequest({
+          model: UNIFIED_MODEL,
+          content: "Read a file",
+          tools: [READ_FILE_TOOL],
+        }),
+      });
+      expect(response.statusCode).toBe(200);
+
+      const secondResponse = await app.inject({
+        method: "POST",
+        url: UNIFIED_ENDPOINT(agent.id),
+        headers: UNIFIED_HEADERS,
+        payload: UNIFIED_REQUEST_BUILDER.buildToolRequest({
+          model: UNIFIED_MODEL,
+          content: "Read a file again",
+          tools: [READ_FILE_TOOL],
+        }),
+      });
+      expect(secondResponse.statusCode).toBe(200);
+
+      const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
+      expect(storedTool).not.toBeNull();
+      expect(await ToolModel.countByName(READ_FILE_TOOL.name)).toBe(1);
+    });
+
+    test("stores execution IDs on interactions", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        name: "Unified Responses execution ID",
+      });
+      // Also upsert with cost data so cost-tracking code does not blow up.
+      await ModelModel.upsert({
+        externalId: `groq/${UNIFIED_MODEL}`,
+        provider: "groq",
+        modelId: UNIFIED_MODEL,
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "20000.00",
+        customPricePerMillionOutput: "30000.00",
+        lastSyncedAt: new Date(),
+      });
+      await setupUnifiedRoute(agent);
+
+      const executionId = randomUUID();
+      const response = await app.inject({
+        method: "POST",
+        url: UNIFIED_ENDPOINT(agent.id),
+        headers: {
+          ...UNIFIED_HEADERS,
+          "x-archestra-execution-id": executionId,
+        },
+        payload: UNIFIED_REQUEST_BUILDER.buildTextRequest({
+          model: UNIFIED_MODEL,
+          content: "Hello from execution metrics",
+        }),
+      });
+      expect(response.statusCode).toBe(200);
+
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interactions.some((i) => i.executionId === executionId)).toBe(
+        true,
+      );
+    });
+
+    test("streams tool calls through the proxy", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        name: "Unified Responses streaming",
+      });
+      await setupUnifiedRoute(agent, {
+        streamingToolCall: {
+          name: READ_FILE_TOOL.name,
+          arguments: '{"file_path":"/tmp/test.txt"}',
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: UNIFIED_ENDPOINT(agent.id),
+        headers: UNIFIED_HEADERS,
+        payload: UNIFIED_REQUEST_BUILDER.buildToolRequest({
+          model: UNIFIED_MODEL,
+          content: "Stream a tool call",
+          tools: [READ_FILE_TOOL],
+          stream: true,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/event-stream");
+      // Our stream adapter synthesises a response.completed event with the
+      // full response body once the usage chunk arrives.
+      expect(response.body).toContain("response.completed");
+      expect(response.body).toContain(READ_FILE_TOOL.name);
+    });
+
+    test("applies optimized models before provider execution", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Unified Responses optimization",
+      });
+      const optimizedModelSpy = vi
+        .spyOn(proxyUtils.costOptimization, "getOptimizedModel")
+        .mockResolvedValue(UNIFIED_OPTIMIZED_MODEL);
+
+      const harness = await setupUnifiedRoute(agent);
+
+      const response = await app.inject({
+        method: "POST",
+        url: UNIFIED_ENDPOINT(agent.id),
+        headers: UNIFIED_HEADERS,
+        payload: UNIFIED_REQUEST_BUILDER.buildTextRequest({
+          model: UNIFIED_MODEL,
+          content: "x".repeat(1100),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(optimizedModelSpy).toHaveBeenCalled();
+      // The optimized model name must appear in the request forwarded to
+      // the chat completions layer (translated from Responses API).
+      expect(JSON.stringify(harness.requests.at(-1))).toContain(
+        UNIFIED_OPTIMIZED_MODEL,
+      );
+    });
+
+    test("blocks requests when token cost limits are exceeded", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Unified Responses limits",
+      });
+      vi.spyOn(
+        LimitValidationService,
+        "checkLimitsBeforeRequest",
+      ).mockResolvedValue([
+        "Refusal",
+        "The token cost limit has been exceeded.",
+      ]);
+      await setupUnifiedRoute(agent);
+
+      const blockedResponse = await app.inject({
+        method: "POST",
+        url: UNIFIED_ENDPOINT(agent.id),
+        headers: UNIFIED_HEADERS,
+        payload: UNIFIED_REQUEST_BUILDER.buildTextRequest({
+          model: UNIFIED_MODEL,
+          content: "Will this get blocked?",
+        }),
+      });
+
+      expect(blockedResponse.statusCode).toBe(429);
+      expect(blockedResponse.json()).toMatchObject({
+        error: { code: "token_cost_limit_exceeded" },
+      });
+    });
+  });
 });

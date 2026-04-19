@@ -292,6 +292,7 @@ class OptimizationRuleModel {
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
         azure: [], // Azure optimization rules are deployment-specific, no defaults
+        unified: [],
       };
 
     // Filter by provider if specified, otherwise get providers from interactions

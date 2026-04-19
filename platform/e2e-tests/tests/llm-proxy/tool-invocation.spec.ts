@@ -772,6 +772,7 @@ const testConfigsMap = {
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling
   azure: azureConfig,
+  unified: null, // Unified routes to the resolved provider — covered by each provider's config above
 } satisfies Record<SupportedProvider, ToolInvocationTestConfig | null>;
 
 const testConfigs = [

@@ -24,6 +24,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  unified: "", // No dedicated logo — resolves to actual provider at request time
 };
 
 export type LlmModelSelectOption = {

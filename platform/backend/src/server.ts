@@ -254,19 +254,20 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
 export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   // LLM Proxy routes (all providers)
   fastify.register(routes.anthropicProxyRoutes);
-  fastify.register(routes.openAiProxyRoutes);
-  fastify.register(routes.geminiProxyRoutes);
   fastify.register(routes.azureProxyRoutes);
   fastify.register(routes.bedrockProxyRoutes);
   fastify.register(routes.cerebrasProxyRoutes);
   fastify.register(routes.cohereProxyRoutes);
   fastify.register(routes.deepseekProxyRoutes);
+  fastify.register(routes.geminiProxyRoutes);
   fastify.register(routes.groqProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
   fastify.register(routes.mistralProxyRoutes);
   fastify.register(routes.ollamaProxyRoutes);
+  fastify.register(routes.openAiProxyRoutes);
   fastify.register(routes.openrouterProxyRoutes);
   fastify.register(routes.perplexityProxyRoutes);
+  fastify.register(routes.unifiedProxyRoutes);
   fastify.register(routes.vllmProxyRoutes);
   fastify.register(routes.xaiProxyRoutes);
   fastify.register(routes.zhipuaiProxyRoutes);

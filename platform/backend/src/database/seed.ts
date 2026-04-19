@@ -447,6 +447,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
     azure: "Azure AI Foundry",
+    unified: "Unified",
   };
   return displayNames[provider];
 }

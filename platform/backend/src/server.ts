@@ -79,6 +79,10 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import {
+  UserConfigFieldDefaultSchema,
+  UserConfigFieldSchema,
+} from "./types/mcp-catalog";
+import {
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
@@ -202,6 +206,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Xai.API.ChatCompletionResponseSchema, {
     id: "XaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(UserConfigFieldDefaultSchema, {
+    id: "UserConfigFieldDefault",
+  });
+  z.globalRegistry.add(UserConfigFieldSchema, {
+    id: "UserConfigField",
   });
 }
 

@@ -2,8 +2,8 @@
 
 import type { SupportedProvider } from "@shared";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -15,9 +15,11 @@ import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { ClientGrid } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
+import { resolveEffectiveId } from "./connection-flow.utils";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import { StepCard, type StepState } from "./step-card";
+import { useUpdateUrlParams } from "./use-update-url-params";
 
 type OpenKey = "client" | "mcp" | "proxy";
 
@@ -46,30 +48,8 @@ export function ConnectionFlow({
   const urlClientId = searchParams.get("clientId");
   const from = searchParams.get("from");
   const fromTable = from === "table";
-  const router = useRouter();
-  const pathname = usePathname();
 
-  const updateUrlParams = useCallback(
-    (
-      updates: Partial<
-        Record<
-          "gatewayId" | "proxyId" | "clientId" | "providerId",
-          string | null
-        >
-      >,
-    ) => {
-      const params = new URLSearchParams(searchParams.toString());
-      for (const [key, value] of Object.entries(updates)) {
-        if (value) params.set(key, value);
-        else params.delete(key);
-      }
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
-      });
-    },
-    [pathname, router, searchParams],
-  );
+  const updateUrlParams = useUpdateUrlParams();
 
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
@@ -149,28 +129,26 @@ export function ConnectionFlow({
     updateUrlParams({ proxyId: id });
   };
 
-  // When arriving from the LLM Proxy table (only proxyId pinned), skip the
-  // admin-default MCP gateway — let it fall through to the system default.
-  // Symmetric when arriving from the MCP Gateway table.
-  const effectiveMcpId =
-    selectedMcpId ??
-    urlGatewayId ??
-    (fromTable && urlProxyId && !urlGatewayId
-      ? null
-      : (adminDefaultMcpGatewayId ?? null)) ??
-    defaultMcpGatewayId ??
-    mcpGateways?.[0]?.id ??
-    null;
+  // When arriving from the opposite slot's table (only that slot's ID is
+  // pinned in the URL), skip this slot's admin default so it doesn't override
+  // the user's intent — fall through to the system default instead.
+  const effectiveMcpId = resolveEffectiveId({
+    selected: selectedMcpId,
+    fromUrl: urlGatewayId,
+    adminDefault: adminDefaultMcpGatewayId,
+    systemDefault: defaultMcpGatewayId,
+    firstAvailable: mcpGateways?.[0]?.id,
+    skipAdminDefault: fromTable && !!urlProxyId && !urlGatewayId,
+  });
 
-  const effectiveProxyId =
-    selectedProxyId ??
-    urlProxyId ??
-    (fromTable && urlGatewayId && !urlProxyId
-      ? null
-      : (adminDefaultLlmProxyId ?? null)) ??
-    defaultLlmProxyId ??
-    llmProxies?.[0]?.id ??
-    null;
+  const effectiveProxyId = resolveEffectiveId({
+    selected: selectedProxyId,
+    fromUrl: urlProxyId,
+    adminDefault: adminDefaultLlmProxyId,
+    systemDefault: defaultLlmProxyId,
+    firstAvailable: llmProxies?.[0]?.id,
+    skipAdminDefault: fromTable && !!urlGatewayId && !urlProxyId,
+  });
 
   const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
 

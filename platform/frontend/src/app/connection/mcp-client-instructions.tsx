@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useFetchTeamTokenValue,
   useTokens,
@@ -34,6 +35,7 @@ import type {
   McpBuildParams,
   McpSupportedAuth,
 } from "./clients";
+import { toMcpServerSlug } from "./connection-flow.utils";
 import { TerminalBlock } from "./terminal-block";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
@@ -64,6 +66,7 @@ export function McpClientInstructions({
     client.mcp.kind === "unsupported" ? "both" : client.mcp.supportedAuth;
   const tabs = authTabs(supportedAuth);
   const [authMethod, setAuthMethod] = useState<AuthMethod>(tabs[0]);
+  const appName = useAppName();
 
   // If the selected tab isn't supported by a newly-switched client, snap back.
   useEffect(() => {
@@ -75,7 +78,7 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = "archestra";
+  const serverName = toMcpServerSlug(appName);
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   return (

@@ -7,6 +7,7 @@ import {
 } from "@shared";
 import { useEffect, useState } from "react";
 import { CONNECT_CLIENTS } from "@/app/connection/clients";
+import { getShownProviders } from "@/app/connection/connection-flow.utils";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -62,10 +63,7 @@ export default function ConnectionSettingsPage() {
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
     setProxyId(organization.connectionDefaultLlmProxyId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
-    setShownProviders(
-      (organization.connectionShownProviders as SupportedProvider[] | null) ??
-        ALL_PROVIDER_IDS,
-    );
+    setShownProviders(getShownProviders(organization) ?? ALL_PROVIDER_IDS);
   }, [organization]);
 
   const updateMutation = useUpdateConnectionSettings(
@@ -81,8 +79,7 @@ export default function ConnectionSettingsPage() {
     .slice()
     .sort();
   const serverShownProviders = (
-    (organization?.connectionShownProviders as SupportedProvider[] | null) ??
-    ALL_PROVIDER_IDS
+    getShownProviders(organization) ?? ALL_PROVIDER_IDS
   )
     .slice()
     .sort();

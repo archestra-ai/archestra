@@ -145,7 +145,53 @@ describe("PATCH /api/organization/connection-settings", () => {
       },
     });
 
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("rejects a proxy that belongs to another organization", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const otherUser = await makeUser();
+    const foreignProxy = await makeAgent({
+      organizationId: otherOrg.id,
+      authorId: otherUser.id,
+      agentType: "llm_proxy",
+      name: "Foreign Proxy",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionDefaultLlmProxyId: foreignProxy.id,
+      },
+    });
+
     expect(response.statusCode).toBe(404);
+  });
+
+  test("rejects a wrong-type agent for the proxy slot", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType: "mcp_gateway",
+      name: "Not a proxy",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionDefaultLlmProxyId: gateway.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   test("allows clearing defaults with null", async ({ makeAgent }) => {

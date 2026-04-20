@@ -1,6 +1,5 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
 import { useSearchParams } from "next/navigation";
 import {
   useDefaultLlmProxy,
@@ -9,6 +8,7 @@ import {
 } from "@/lib/agent.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectionFlow } from "./connection-flow";
+import { getShownProviders } from "./connection-flow.utils";
 import { ConnectionHero } from "./connection-hero";
 import { ExposedServersSummary } from "./exposed-servers-summary";
 
@@ -46,11 +46,7 @@ export default function ConnectionPage() {
         adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
         adminDefaultLlmProxyId={adminDefaultLlmProxyId}
         shownClientIds={organization?.connectionShownClientIds ?? null}
-        shownProviders={
-          (organization?.connectionShownProviders as
-            | SupportedProvider[]
-            | null) ?? null
-        }
+        shownProviders={getShownProviders(organization)}
       />
     </div>
   );

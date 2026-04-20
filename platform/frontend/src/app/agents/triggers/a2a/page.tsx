@@ -20,8 +20,7 @@ export default function A2APage() {
   const { data: canCreateAgent } = useHasPermissions({ agent: ["create"] });
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const effectiveAgentId =
-    selectedAgentId ?? internalAgents?.[0]?.id ?? null;
+  const effectiveAgentId = selectedAgentId ?? internalAgents?.[0]?.id ?? null;
   const selectedAgent = internalAgents?.find((a) => a.id === effectiveAgentId);
 
   if (internalAgents && internalAgents.length === 0) {

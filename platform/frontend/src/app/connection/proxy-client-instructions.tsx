@@ -6,7 +6,7 @@ import {
   type SupportedProvider,
 } from "@shared";
 import { AlertTriangle, Search } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
 import { Eyebrow, UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
+import { useUpdateUrlParams } from "./use-update-url-params";
 
 const { externalProxyUrls, internalProxyUrl } = config.api;
 
@@ -87,36 +88,39 @@ export function ProxyClientInstructions({
     () => (shownProviders ? new Set(shownProviders) : null),
     [shownProviders],
   );
-  const isShown = (p: SupportedProvider) => !shownSet || shownSet.has(p);
+  const isShown = useCallback(
+    (p: SupportedProvider) => !shownSet || shownSet.has(p),
+    [shownSet],
+  );
   const [baseUrl, setBaseUrl] = useState<string>(
     externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
   );
 
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
   const urlProvider = searchParams.get("providerId");
+  const updateUrlParams = useUpdateUrlParams();
   const updateProviderInUrl = useCallback(
-    (value: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) params.set("providerId", value);
-      else params.delete("providerId");
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
-      });
-    },
-    [pathname, router, searchParams],
+    (value: string | null) => updateUrlParams({ providerId: value }),
+    [updateUrlParams],
   );
 
-  const rawSupportedProviders =
-    client.proxy.kind === "custom"
-      ? client.proxy.supportedProviders
-      : client.proxy.kind === "generic"
-        ? ALL_PROVIDERS
-        : [];
-  const supportedProviders = rawSupportedProviders.filter(isShown);
-  const visibleAllProviders = ALL_PROVIDERS.filter(isShown);
+  const rawSupportedProviders = useMemo(
+    () =>
+      client.proxy.kind === "custom"
+        ? client.proxy.supportedProviders
+        : client.proxy.kind === "generic"
+          ? ALL_PROVIDERS
+          : [],
+    [client.proxy],
+  );
+  const supportedProviders = useMemo(
+    () => rawSupportedProviders.filter(isShown),
+    [rawSupportedProviders, isShown],
+  );
+  const visibleAllProviders = useMemo(
+    () => ALL_PROVIDERS.filter(isShown),
+    [isShown],
+  );
 
   // Drive selection off the URL so client switches (which clear providerId in
   // the URL) immediately reset the picker without stale local state.

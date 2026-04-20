@@ -210,12 +210,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const agent = await AgentModel.findById(
           body.connectionDefaultMcpGatewayId,
         );
-        if (
-          !agent ||
-          agent.organizationId !== organizationId ||
-          (agent.agentType !== "mcp_gateway" && agent.agentType !== "profile")
-        ) {
+        if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "MCP gateway not found");
+        }
+        if (
+          agent.agentType !== "mcp_gateway" &&
+          agent.agentType !== "profile"
+        ) {
+          throw new ApiError(400, "Agent is not an MCP gateway");
         }
       }
 
@@ -223,12 +225,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const agent = await AgentModel.findById(
           body.connectionDefaultLlmProxyId,
         );
-        if (
-          !agent ||
-          agent.organizationId !== organizationId ||
-          (agent.agentType !== "llm_proxy" && agent.agentType !== "profile")
-        ) {
+        if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "LLM proxy not found");
+        }
+        if (agent.agentType !== "llm_proxy" && agent.agentType !== "profile") {
+          throw new ApiError(400, "Agent is not an LLM proxy");
         }
       }
 

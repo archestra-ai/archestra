@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
 import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   DocsPage,
   getConnectorNamePlaceholder,
-} from '@shared';
-import { ArrowLeft, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { KnowledgeSourceVisibilitySelector } from '@/app/knowledge/_parts/knowledge-source-visibility-selector';
-import { ExternalDocsLink } from '@/components/external-docs-link';
-import { Button } from '@/components/ui/button';
+} from "@shared";
+import { ArrowLeft, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogBody,
@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogStickyFooter,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -35,29 +35,29 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { getFrontendDocsUrl } from '@/lib/docs/docs';
-import { useCreateConnector } from '@/lib/knowledge/connector.query';
-import { AsanaConfigFields } from './asana-config-fields';
-import { ConfluenceConfigFields } from './confluence-config-fields';
-import { ConnectorTypeIcon } from './connector-icons';
-import { DropboxConfigFields } from './dropbox-config-fields';
-import { GoogleDriveConfigFields } from './gdrive-config-fields';
-import { GithubConfigFields } from './github-config-fields';
-import { GitlabConfigFields } from './gitlab-config-fields';
-import { JiraConfigFields } from './jira-config-fields';
-import { LinearConfigFields } from './linear-config-fields';
-import { NotionConfigFields } from './notion-config-fields';
-import { OutlineConfigFields } from './outline-config-fields';
-import { SchedulePicker } from './schedule-picker';
-import { ServiceNowConfigFields } from './servicenow-config-fields';
-import { SharePointConfigFields } from './sharepoint-config-fields';
-import { transformConfigArrayFields } from './transform-config-array-fields';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useCreateConnector } from "@/lib/knowledge/connector.query";
+import { AsanaConfigFields } from "./asana-config-fields";
+import { ConfluenceConfigFields } from "./confluence-config-fields";
+import { ConnectorTypeIcon } from "./connector-icons";
+import { DropboxConfigFields } from "./dropbox-config-fields";
+import { GoogleDriveConfigFields } from "./gdrive-config-fields";
+import { GithubConfigFields } from "./github-config-fields";
+import { GitlabConfigFields } from "./gitlab-config-fields";
+import { JiraConfigFields } from "./jira-config-fields";
+import { LinearConfigFields } from "./linear-config-fields";
+import { NotionConfigFields } from "./notion-config-fields";
+import { OutlineConfigFields } from "./outline-config-fields";
+import { SchedulePicker } from "./schedule-picker";
+import { ServiceNowConfigFields } from "./servicenow-config-fields";
+import { SharePointConfigFields } from "./sharepoint-config-fields";
+import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorType =
-  archestraApiTypes.CreateConnectorData['body']['connectorType'];
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
 const CONNECTOR_OPTIONS: {
   type: ConnectorType;
@@ -65,64 +65,64 @@ const CONNECTOR_OPTIONS: {
   description: string;
 }[] = [
   {
-    type: 'jira',
+    type: "jira",
     label: CONNECTOR_TYPE_LABELS.jira,
-    description: 'Sync issues and projects from Jira',
+    description: "Sync issues and projects from Jira",
   },
   {
-    type: 'confluence',
+    type: "confluence",
     label: CONNECTOR_TYPE_LABELS.confluence,
-    description: 'Sync pages and spaces from Confluence',
+    description: "Sync pages and spaces from Confluence",
   },
   {
-    type: 'github',
+    type: "github",
     label: CONNECTOR_TYPE_LABELS.github,
-    description: 'Sync issues and pull requests from GitHub',
+    description: "Sync issues and pull requests from GitHub",
   },
   {
-    type: 'gitlab',
+    type: "gitlab",
     label: CONNECTOR_TYPE_LABELS.gitlab,
-    description: 'Sync issues and merge requests from GitLab',
+    description: "Sync issues and merge requests from GitLab",
   },
   {
-    type: 'linear',
+    type: "linear",
     label: CONNECTOR_TYPE_LABELS.linear,
-    description: 'Sync issues, projects, and cycles from Linear',
+    description: "Sync issues, projects, and cycles from Linear",
   },
   {
-    type: 'servicenow',
-    label: 'ServiceNow',
-    description: 'Sync incidents from ServiceNow',
+    type: "servicenow",
+    label: "ServiceNow",
+    description: "Sync incidents from ServiceNow",
   },
   {
-    type: 'notion',
+    type: "notion",
     label: CONNECTOR_TYPE_LABELS.notion,
-    description: 'Sync pages and databases from Notion',
+    description: "Sync pages and databases from Notion",
   },
   {
-    type: 'sharepoint',
+    type: "sharepoint",
     label: CONNECTOR_TYPE_LABELS.sharepoint,
-    description: 'Sync documents and pages from SharePoint',
+    description: "Sync documents and pages from SharePoint",
   },
   {
-    type: 'gdrive',
+    type: "gdrive",
     label: CONNECTOR_TYPE_LABELS.gdrive,
-    description: 'Sync files and documents from Google Drive',
+    description: "Sync files and documents from Google Drive",
   },
   {
-    type: 'dropbox',
-    label: 'Dropbox',
-    description: 'Sync files and folders from Dropbox',
+    type: "dropbox",
+    label: "Dropbox",
+    description: "Sync files and folders from Dropbox",
   },
   {
-    type: 'asana',
+    type: "asana",
     label: CONNECTOR_TYPE_LABELS.asana,
-    description: 'Sync tasks and comments from Asana',
+    description: "Sync tasks and comments from Asana",
   },
   {
-    type: 'outline',
+    type: "outline",
     label: CONNECTOR_TYPE_LABELS.outline,
-    description: 'Sync documents from Outline',
+    description: "Sync documents from Outline",
   },
 ];
 
@@ -137,7 +137,7 @@ interface CreateConnectorFormValues {
 }
 
 type ConnectorVisibility = NonNullable<
-  archestraApiTypes.CreateConnectorData['body']['visibility']
+  archestraApiTypes.CreateConnectorData["body"]["visibility"]
 >;
 
 export function CreateConnectorDialog({
@@ -152,36 +152,36 @@ export function CreateConnectorDialog({
   onBack?: () => void;
 }) {
   const createConnector = useCreateConnector();
-  const [step, setStep] = useState<'select' | 'configure'>('select');
+  const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
-  const [visibility, setVisibility] = useState<ConnectorVisibility>('org-wide');
+  const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const form = useForm<CreateConnectorFormValues>({
     defaultValues: {
-      name: '',
-      description: '',
-      connectorType: 'jira',
-      config: { type: 'jira', isCloud: true },
-      email: '',
-      apiToken: '',
-      schedule: '0 */6 * * *',
+      name: "",
+      description: "",
+      connectorType: "jira",
+      config: { type: "jira", isCloud: true },
+      email: "",
+      apiToken: "",
+      schedule: "0 */6 * * *",
     },
   });
 
-  const connectorType = form.watch('connectorType');
+  const connectorType = form.watch("connectorType");
 
   const handleSelectType = (type: ConnectorType) => {
     setSelectedType(type);
-    form.setValue('connectorType', type);
+    form.setValue("connectorType", type);
     const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
       jira: { type, isCloud: true },
       confluence: { type, isCloud: true },
-      github: { type, githubUrl: 'https://api.github.com' },
-      gitlab: { type, gitlabUrl: 'https://gitlab.com' },
+      github: { type, githubUrl: "https://api.github.com" },
+      gitlab: { type, gitlabUrl: "https://gitlab.com" },
       linear: {
         type,
-        linearApiUrl: 'https://api.linear.app',
+        linearApiUrl: "https://api.linear.app",
         includeComments: true,
         includeProjects: false,
         includeCycles: false,
@@ -190,21 +190,21 @@ export function CreateConnectorDialog({
       notion: { type },
       sharepoint: { type, includePages: true },
       gdrive: { type, recursive: true },
-      dropbox: { type, rootPath: '' },
+      dropbox: { type, rootPath: "" },
       asana: { type },
-      outline: { type, outlineUrl: 'https://app.getoutline.com' },
+      outline: { type, outlineUrl: "https://app.getoutline.com" },
     };
-    form.setValue('config', defaultConfigs[type]);
-    setStep('configure');
+    form.setValue("config", defaultConfigs[type]);
+    setStep("configure");
   };
 
   const handleBack = () => {
-    setStep('select');
+    setStep("select");
   };
 
   const handleBackToChooser = () => {
     form.reset();
-    setStep('select');
+    setStep("select");
     setSelectedType(null);
     onBack?.();
   };
@@ -215,9 +215,9 @@ export function CreateConnectorDialog({
       name: values.name,
       description: values.description || null,
       visibility,
-      teamIds: visibility === 'team-scoped' ? teamIds : [],
+      teamIds: visibility === "team-scoped" ? teamIds : [],
       connectorType: values.connectorType,
-      config: config as archestraApiTypes.CreateConnectorData['body']['config'],
+      config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
       credentials: {
         ...(values.email && { email: values.email }),
         apiToken: values.apiToken,
@@ -227,9 +227,9 @@ export function CreateConnectorDialog({
     });
     if (result) {
       form.reset();
-      setStep('select');
+      setStep("select");
       setSelectedType(null);
-      setVisibility('org-wide');
+      setVisibility("org-wide");
       setTeamIds([]);
       onOpenChange(false);
     }
@@ -238,17 +238,17 @@ export function CreateConnectorDialog({
   const handleClose = (isOpen: boolean) => {
     if (!isOpen) {
       form.reset();
-      setStep('select');
+      setStep("select");
       setSelectedType(null);
-      setVisibility('org-wide');
+      setVisibility("org-wide");
       setTeamIds([]);
     }
     onOpenChange(isOpen);
   };
 
   const urlConfig = getUrlConfig(connectorType);
-  const isCloud = form.watch('config.isCloud') as boolean | undefined;
-  const needsEmail = connectorType === 'jira' || connectorType === 'confluence';
+  const isCloud = form.watch("config.isCloud") as boolean | undefined;
+  const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const emailRequired = needsEmail && isCloud !== false;
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
@@ -257,7 +257,7 @@ export function CreateConnectorDialog({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-        {step === 'select' ? (
+        {step === "select" ? (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -319,20 +319,20 @@ export function CreateConnectorDialog({
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  Configure{' '}
+                  Configure{" "}
                   {
                     CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
                       ?.label
-                  }{' '}
+                  }{" "}
                   Connector
                 </DialogTitle>
                 <DialogDescription>
-                  Enter the connection details for your{' '}
+                  Enter the connection details for your{" "}
                   {
                     CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
                       ?.label
-                  }{' '}
-                  instance.{' '}
+                  }{" "}
+                  instance.{" "}
                   <ExternalDocsLink
                     href={connectorDocsUrl}
                     className="underline"
@@ -347,7 +347,7 @@ export function CreateConnectorDialog({
                 <FormField
                   control={form.control}
                   name="name"
-                  rules={{ required: 'Name is required' }}
+                  rules={{ required: "Name is required" }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Name</FormLabel>
@@ -356,7 +356,7 @@ export function CreateConnectorDialog({
                           placeholder={
                             selectedType
                               ? getConnectorNamePlaceholder(selectedType)
-                              : ''
+                              : ""
                           }
                           {...field}
                         />
@@ -372,7 +372,7 @@ export function CreateConnectorDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Description{' '}
+                        Description{" "}
                         <span className="text-muted-foreground font-normal">
                           (optional)
                         </span>
@@ -409,7 +409,7 @@ export function CreateConnectorDialog({
                           <Input
                             placeholder={urlConfig.placeholder}
                             {...field}
-                            value={(field.value as string) ?? ''}
+                            value={(field.value as string) ?? ""}
                           />
                         </FormControl>
                         <FormDescription>
@@ -421,8 +421,8 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {(connectorType === 'jira' ||
-                  connectorType === 'confluence') && (
+                {(connectorType === "jira" ||
+                  connectorType === "confluence") && (
                   <FormField
                     control={form.control}
                     name="config.isCloud"
@@ -445,11 +445,11 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {connectorType === 'github' && (
+                {connectorType === "github" && (
                   <FormField
                     control={form.control}
                     name="config.owner"
-                    rules={{ required: 'Owner is required' }}
+                    rules={{ required: "Owner is required" }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Owner</FormLabel>
@@ -457,7 +457,7 @@ export function CreateConnectorDialog({
                           <Input
                             placeholder="my-org"
                             {...field}
-                            value={(field.value as string) ?? ''}
+                            value={(field.value as string) ?? ""}
                           />
                         </FormControl>
                         <FormDescription>
@@ -469,11 +469,11 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {connectorType === 'asana' && (
+                {connectorType === "asana" && (
                   <FormField
                     control={form.control}
                     name="config.workspaceGid"
-                    rules={{ required: 'Workspace GID is required' }}
+                    rules={{ required: "Workspace GID is required" }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Workspace GID</FormLabel>
@@ -481,7 +481,7 @@ export function CreateConnectorDialog({
                           <Input
                             placeholder="1234567890"
                             {...field}
-                            value={(field.value as string) ?? ''}
+                            value={(field.value as string) ?? ""}
                           />
                         </FormControl>
                         <FormDescription>
@@ -501,24 +501,24 @@ export function CreateConnectorDialog({
                     name="email"
                     rules={{
                       validate: (value) => {
-                        const currentIsCloud = form.getValues('config.isCloud');
+                        const currentIsCloud = form.getValues("config.isCloud");
                         if (currentIsCloud !== false && !value)
-                          return 'Email is required';
+                          return "Email is required";
                         return true;
                       },
                     }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Email{!emailRequired && ' (optional)'}
+                          Email{!emailRequired && " (optional)"}
                         </FormLabel>
                         <FormControl>
                           <Input
                             type="email"
                             placeholder={
                               emailRequired
-                                ? 'user@example.com'
-                                : 'Required for basic auth, leave empty for PAT'
+                                ? "user@example.com"
+                                : "Required for basic auth, leave empty for PAT"
                             }
                             {...field}
                           />
@@ -535,11 +535,11 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {connectorType === 'servicenow' && (
+                {connectorType === "servicenow" && (
                   <FormField
                     control={form.control}
                     name="email"
-                    rules={{ required: 'Username is required' }}
+                    rules={{ required: "Username is required" }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Username</FormLabel>
@@ -555,11 +555,11 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {connectorType === 'sharepoint' && (
+                {connectorType === "sharepoint" && (
                   <FormField
                     control={form.control}
                     name="config.tenantId"
-                    rules={{ required: 'Tenant ID is required' }}
+                    rules={{ required: "Tenant ID is required" }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tenant ID</FormLabel>
@@ -567,7 +567,7 @@ export function CreateConnectorDialog({
                           <Input
                             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                             {...field}
-                            value={(field.value as string) ?? ''}
+                            value={(field.value as string) ?? ""}
                           />
                         </FormControl>
                         <FormDescription>
@@ -579,11 +579,11 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {connectorType === 'sharepoint' && (
+                {connectorType === "sharepoint" && (
                   <FormField
                     control={form.control}
                     name="email"
-                    rules={{ required: 'Client ID is required' }}
+                    rules={{ required: "Client ID is required" }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Client ID</FormLabel>
@@ -608,99 +608,99 @@ export function CreateConnectorDialog({
                   rules={{
                     required: needsEmail
                       ? emailRequired
-                        ? 'API token is required'
-                        : 'API token or personal access token is required'
-                      : connectorType === 'servicenow'
-                        ? 'Password is required'
-                        : connectorType === 'notion'
-                          ? 'Integration token is required'
-                          : connectorType === 'sharepoint'
-                            ? 'Client secret is required'
-                            : connectorType === 'gdrive'
-                              ? 'Service account key or OAuth token is required'
-                              : connectorType === 'dropbox'
-                                ? 'Access token is required'
-                                : connectorType === 'outline'
-                                  ? 'API key is required'
-                                  : 'Personal access token is required',
+                        ? "API token is required"
+                        : "API token or personal access token is required"
+                      : connectorType === "servicenow"
+                        ? "Password is required"
+                        : connectorType === "notion"
+                          ? "Integration token is required"
+                          : connectorType === "sharepoint"
+                            ? "Client secret is required"
+                            : connectorType === "gdrive"
+                              ? "Service account key or OAuth token is required"
+                              : connectorType === "dropbox"
+                                ? "Access token is required"
+                                : connectorType === "outline"
+                                  ? "API key is required"
+                                  : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {connectorType === 'servicenow'
-                          ? 'Password'
-                          : connectorType === 'notion'
-                            ? 'Integration Token'
-                            : connectorType === 'sharepoint'
-                              ? 'Client Secret'
-                              : connectorType === 'gdrive'
-                                ? 'Service Account Key / OAuth Token'
-                                : connectorType === 'dropbox'
-                                  ? 'Access Token'
-                                  : connectorType === 'outline'
-                                    ? 'API Key'
+                        {connectorType === "servicenow"
+                          ? "Password"
+                          : connectorType === "notion"
+                            ? "Integration Token"
+                            : connectorType === "sharepoint"
+                              ? "Client Secret"
+                              : connectorType === "gdrive"
+                                ? "Service Account Key / OAuth Token"
+                                : connectorType === "dropbox"
+                                  ? "Access Token"
+                                  : connectorType === "outline"
+                                    ? "API Key"
                                     : needsEmail
                                       ? emailRequired
-                                        ? 'API Token'
-                                        : 'API Token / Personal Access Token'
-                                      : 'Personal Access Token'}
+                                        ? "API Token"
+                                        : "API Token / Personal Access Token"
+                                      : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           placeholder={
-                            connectorType === 'servicenow'
-                              ? 'Your ServiceNow password'
-                              : connectorType === 'notion'
-                                ? 'secret_...'
-                                : connectorType === 'sharepoint'
-                                  ? 'Your Azure AD client secret'
-                                  : connectorType === 'gdrive'
-                                    ? 'Paste service account JSON key or OAuth access token'
-                                    : connectorType === 'dropbox'
-                                      ? 'Your Dropbox access token'
-                                      : connectorType === 'outline'
-                                        ? 'Your Outline API key (starts with ol_api_)'
+                            connectorType === "servicenow"
+                              ? "Your ServiceNow password"
+                              : connectorType === "notion"
+                                ? "secret_..."
+                                : connectorType === "sharepoint"
+                                  ? "Your Azure AD client secret"
+                                  : connectorType === "gdrive"
+                                    ? "Paste service account JSON key or OAuth access token"
+                                    : connectorType === "dropbox"
+                                      ? "Your Dropbox access token"
+                                      : connectorType === "outline"
+                                        ? "Your Outline API key (starts with ol_api_)"
                                         : needsEmail
                                           ? emailRequired
-                                            ? 'Your API token'
-                                            : 'Your API token or personal access token'
-                                          : 'Your personal access token'
+                                            ? "Your API token"
+                                            : "Your API token or personal access token"
+                                          : "Your personal access token"
                           }
                           {...field}
                         />
                       </FormControl>
-                      {connectorType === 'notion' && (
+                      {connectorType === "notion" && (
                         <p className="text-[0.8rem] text-muted-foreground">
-                          Your Notion integration token (starts with{' '}
+                          Your Notion integration token (starts with{" "}
                           <code>secret_</code>). Create one at
                           notion.so/my-integrations.
                         </p>
                       )}
-                      {connectorType === 'sharepoint' && (
+                      {connectorType === "sharepoint" && (
                         <p className="text-[0.8rem] text-muted-foreground">
-                          The Azure AD app registration requires the{' '}
+                          The Azure AD app registration requires the{" "}
                           <code>Sites.Read.All</code> permission on Microsoft
                           Graph.
                         </p>
                       )}
-                      {connectorType === 'dropbox' && (
+                      {connectorType === "dropbox" && (
                         <p className="text-[0.8rem] text-muted-foreground">
                           Your Dropbox access token. Generate one in your
                           Dropbox App Console.
                         </p>
                       )}
-                      {connectorType === 'outline' && (
+                      {connectorType === "outline" && (
                         <p className="text-[0.8rem] text-muted-foreground">
-                          Your Outline API key. Create one under{' '}
+                          Your Outline API key. Create one under{" "}
                           <strong>Settings &rarr; API &amp; Apps</strong>. Keys
                           start with <code>ol_api_</code>.
                         </p>
                       )}
-                      {connectorType === 'gdrive' && (
+                      {connectorType === "gdrive" && (
                         <p className="text-[0.8rem] text-muted-foreground">
                           Paste a service account JSON key (entire file content)
-                          or an OAuth2 access token with{' '}
+                          or an OAuth2 access token with{" "}
                           <code>drive.readonly</code> scope.
                         </p>
                       )}
@@ -716,40 +716,40 @@ export function CreateConnectorDialog({
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-4 space-y-4">
                     <SchedulePicker form={form} name="schedule" />
-                    {connectorType === 'jira' && (
+                    {connectorType === "jira" && (
                       <JiraConfigFields form={form} hideUrl hideIsCloud />
                     )}
-                    {connectorType === 'confluence' && (
+                    {connectorType === "confluence" && (
                       <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
                     )}
-                    {connectorType === 'github' && (
+                    {connectorType === "github" && (
                       <GithubConfigFields form={form} hideUrl />
                     )}
-                    {connectorType === 'gitlab' && (
+                    {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
                     )}
-                    {connectorType === 'linear' && (
+                    {connectorType === "linear" && (
                       <LinearConfigFields form={form} />
                     )}
-                    {connectorType === 'servicenow' && (
+                    {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
                     )}
-                    {connectorType === 'notion' && (
+                    {connectorType === "notion" && (
                       <NotionConfigFields form={form} />
                     )}
-                    {connectorType === 'sharepoint' && (
+                    {connectorType === "sharepoint" && (
                       <SharePointConfigFields form={form} />
                     )}
-                    {connectorType === 'gdrive' && (
+                    {connectorType === "gdrive" && (
                       <GoogleDriveConfigFields form={form} />
                     )}
-                    {connectorType === 'dropbox' && (
+                    {connectorType === "dropbox" && (
                       <DropboxConfigFields control={form.control} />
                     )}
-                    {connectorType === 'asana' && (
+                    {connectorType === "asana" && (
                       <AsanaConfigFields form={form} hideWorkspaceGid />
                     )}
-                    {connectorType === 'outline' && (
+                    {connectorType === "outline" && (
                       <OutlineConfigFields form={form} />
                     )}
                   </CollapsibleContent>
@@ -762,8 +762,8 @@ export function CreateConnectorDialog({
                 </Button>
                 <Button type="submit" disabled={createConnector.isPending}>
                   {createConnector.isPending
-                    ? 'Creating...'
-                    : 'Create Connector'}
+                    ? "Creating..."
+                    : "Create Connector"}
                 </Button>
               </DialogStickyFooter>
             </DialogForm>
@@ -781,69 +781,69 @@ function getUrlConfig(type: ConnectorType): {
   description: string;
 } | null {
   switch (type) {
-    case 'jira':
+    case "jira":
       return {
-        fieldName: 'config.jiraBaseUrl',
-        label: 'URL',
-        placeholder: 'https://your-domain.atlassian.net',
-        description: 'Your Jira instance URL.',
+        fieldName: "config.jiraBaseUrl",
+        label: "URL",
+        placeholder: "https://your-domain.atlassian.net",
+        description: "Your Jira instance URL.",
       };
-    case 'confluence':
+    case "confluence":
       return {
-        fieldName: 'config.confluenceUrl',
-        label: 'URL',
-        placeholder: 'https://your-domain.atlassian.net/wiki',
-        description: 'Your Confluence instance URL.',
+        fieldName: "config.confluenceUrl",
+        label: "URL",
+        placeholder: "https://your-domain.atlassian.net/wiki",
+        description: "Your Confluence instance URL.",
       };
-    case 'github':
+    case "github":
       return {
-        fieldName: 'config.githubUrl',
-        label: 'GitHub API URL',
-        placeholder: 'https://api.github.com',
+        fieldName: "config.githubUrl",
+        label: "GitHub API URL",
+        placeholder: "https://api.github.com",
         description:
-          'Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.',
+          "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
       };
-    case 'gitlab':
+    case "gitlab":
       return {
-        fieldName: 'config.gitlabUrl',
-        label: 'GitLab URL',
-        placeholder: 'https://gitlab.com',
-        description: 'Use https://gitlab.com or your self-hosted GitLab URL.',
+        fieldName: "config.gitlabUrl",
+        label: "GitLab URL",
+        placeholder: "https://gitlab.com",
+        description: "Use https://gitlab.com or your self-hosted GitLab URL.",
       };
-    case 'servicenow':
+    case "servicenow":
       return {
-        fieldName: 'config.instanceUrl',
-        label: 'Instance URL',
-        placeholder: 'https://your-instance.service-now.com',
-        description: 'Your ServiceNow instance URL.',
+        fieldName: "config.instanceUrl",
+        label: "Instance URL",
+        placeholder: "https://your-instance.service-now.com",
+        description: "Your ServiceNow instance URL.",
       };
-    case 'linear':
+    case "linear":
       return {
-        fieldName: 'config.linearApiUrl',
-        label: 'Linear API URL',
-        placeholder: 'https://api.linear.app',
-        description: 'Linear GraphQL API base URL.',
+        fieldName: "config.linearApiUrl",
+        label: "Linear API URL",
+        placeholder: "https://api.linear.app",
+        description: "Linear GraphQL API base URL.",
       };
-    case 'notion':
+    case "notion":
       return null;
-    case 'gdrive':
+    case "gdrive":
       return null;
-    case 'asana':
+    case "asana":
       return null;
-    case 'sharepoint':
+    case "sharepoint":
       return {
-        fieldName: 'config.siteUrl',
-        label: 'Site URL',
-        placeholder: 'https://your-tenant.sharepoint.com/sites/your-site',
-        description: 'Your SharePoint site URL.',
+        fieldName: "config.siteUrl",
+        label: "Site URL",
+        placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
+        description: "Your SharePoint site URL.",
       };
-    case 'outline':
+    case "outline":
       return {
-        fieldName: 'config.outlineUrl',
-        label: 'Instance URL',
-        placeholder: 'https://app.getoutline.com',
+        fieldName: "config.outlineUrl",
+        label: "Instance URL",
+        placeholder: "https://app.getoutline.com",
         description:
-          'Your Outline instance URL. Use https://app.getoutline.com for the cloud version, or your self-hosted URL.',
+          "Your Outline instance URL. Use https://app.getoutline.com for the cloud version, or your self-hosted URL.",
       };
     default:
       return null;

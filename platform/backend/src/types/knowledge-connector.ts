@@ -1,20 +1,20 @@
-import type { ModelInputModality } from '@shared';
-import { z } from 'zod';
+import type { ModelInputModality } from "@shared";
+import { z } from "zod";
 
 // ===== Connector Type =====
 
-const JIRA = z.literal('jira');
-const CONFLUENCE = z.literal('confluence');
-const GITHUB = z.literal('github');
-const GITLAB = z.literal('gitlab');
-const SERVICENOW = z.literal('servicenow');
-const NOTION = z.literal('notion');
-const SHAREPOINT = z.literal('sharepoint');
-const GDRIVE = z.literal('gdrive');
-const DROPBOX = z.literal('dropbox');
-const ASANA = z.literal('asana');
-const OUTLINE = z.literal('outline');
-const LINEAR = z.literal('linear');
+const JIRA = z.literal("jira");
+const CONFLUENCE = z.literal("confluence");
+const GITHUB = z.literal("github");
+const GITLAB = z.literal("gitlab");
+const SERVICENOW = z.literal("servicenow");
+const NOTION = z.literal("notion");
+const SHAREPOINT = z.literal("sharepoint");
+const GDRIVE = z.literal("gdrive");
+const DROPBOX = z.literal("dropbox");
+const ASANA = z.literal("asana");
+const OUTLINE = z.literal("outline");
+const LINEAR = z.literal("linear");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -35,11 +35,11 @@ export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 // ===== Connector Sync Status =====
 
 export const ConnectorSyncStatusSchema = z.enum([
-  'running',
-  'success',
-  'completed_with_errors',
-  'failed',
-  'partial',
+  "running",
+  "success",
+  "completed_with_errors",
+  "failed",
+  "partial",
 ]);
 export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
 
@@ -244,7 +244,7 @@ export type AsanaCheckpoint = z.infer<typeof AsanaCheckpointSchema>;
 
 export const LinearConfigSchema = z.object({
   type: LINEAR,
-  linearApiUrl: connectorUrlSchema.optional().default('https://api.linear.app'),
+  linearApiUrl: connectorUrlSchema.optional().default("https://api.linear.app"),
   teamIds: z.array(z.string()).optional(),
   projectIds: z.array(z.string()).optional(),
   states: z.array(z.string()).optional(),
@@ -261,7 +261,7 @@ export const LinearCheckpointSchema = z.object({
   /** High-water `updatedAt` (ISO) after a completed issues sweep; drives the next incremental issues lower bound. */
   lastRawUpdatedAt: z.string().optional(),
   /** Active sync phase for multi-entity runs (resume across batches). */
-  linearSyncPhase: z.enum(['issues', 'projects', 'cycles']).optional(),
+  linearSyncPhase: z.enum(["issues", "projects", "cycles"]).optional(),
   issuePageCursor: z.string().optional(),
   /**
    * `updatedAt: { gt }` lower bound for the in-flight issues sweep.
@@ -314,7 +314,7 @@ export const OutlineCheckpointSchema = z.object({
 });
 export type OutlineCheckpoint = z.infer<typeof OutlineCheckpointSchema>;
 
-export const ConnectorConfigSchema = z.discriminatedUnion('type', [
+export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
   GithubConfigSchema,
@@ -330,7 +330,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion('type', [
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
-export const ConnectorCheckpointSchema = z.discriminatedUnion('type', [
+export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   JiraCheckpointSchema,
   ConfluenceCheckpointSchema,
   GithubCheckpointSchema,
@@ -395,7 +395,7 @@ function ensureProtocol(url: string): string {
 }
 
 function stripTrailingSlashes(url: string): string {
-  return url.replace(/\/+$/, '');
+  return url.replace(/\/+$/, "");
 }
 
 export interface Connector {

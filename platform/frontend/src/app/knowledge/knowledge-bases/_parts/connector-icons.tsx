@@ -1,30 +1,30 @@
-import type { archestraApiTypes } from '@shared';
-import { Github } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { archestraApiTypes } from "@shared";
+import { Github } from "lucide-react";
+import type { ReactNode } from "react";
 
 type ConnectorType =
-  archestraApiTypes.CreateConnectorData['body']['connectorType'];
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
 type ConnectorIcon =
-  | { kind: 'img'; src: string }
-  | { kind: 'element'; render: (className?: string) => ReactNode };
+  | { kind: "img"; src: string }
+  | { kind: "element"; render: (className?: string) => ReactNode };
 
 const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
-  jira: { kind: 'img', src: '/icons/jira.png' },
-  confluence: { kind: 'img', src: '/icons/confluence.png' },
+  jira: { kind: "img", src: "/icons/jira.png" },
+  confluence: { kind: "img", src: "/icons/confluence.png" },
   github: {
-    kind: 'element',
+    kind: "element",
     render: (className) => <Github className={className} />,
   },
-  gitlab: { kind: 'img', src: '/icons/gitlab.png' },
-  servicenow: { kind: 'img', src: '/icons/servicenow.png' },
-  notion: { kind: 'img', src: '/icons/notion.png' },
-  sharepoint: { kind: 'img', src: '/icons/sharepoint.png' },
-  gdrive: { kind: 'img', src: '/icons/gdrive.png' },
-  linear: { kind: 'img', src: '/icons/linear.png' },
-  dropbox: { kind: 'img', src: '/icons/dropbox.png' },
-  asana: { kind: 'img', src: '/icons/asana.png' },
-  outline: { kind: 'img', src: '/icons/getoutline.png' },
+  gitlab: { kind: "img", src: "/icons/gitlab.png" },
+  servicenow: { kind: "img", src: "/icons/servicenow.png" },
+  notion: { kind: "img", src: "/icons/notion.png" },
+  sharepoint: { kind: "img", src: "/icons/sharepoint.png" },
+  gdrive: { kind: "img", src: "/icons/gdrive.png" },
+  linear: { kind: "img", src: "/icons/linear.png" },
+  dropbox: { kind: "img", src: "/icons/dropbox.png" },
+  asana: { kind: "img", src: "/icons/asana.png" },
+  outline: { kind: "img", src: "/icons/getoutline.png" },
 };
 
 export function hasConnectorIcon(type: string): boolean {
@@ -41,7 +41,7 @@ export function ConnectorTypeIcon({
   const icon = CONNECTOR_ICON_MAP[type as ConnectorType];
   if (!icon) return null;
 
-  if (icon.kind === 'element') {
+  if (icon.kind === "element") {
     return <>{icon.render(className)}</>;
   }
 

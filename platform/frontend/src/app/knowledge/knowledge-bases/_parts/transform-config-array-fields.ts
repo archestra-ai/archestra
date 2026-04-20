@@ -6,42 +6,42 @@ export function transformConfigArrayFields(
 
   // String array fields: split by comma, trim, filter empty
   const stringArrayFields = [
-    'repos',
-    'teamIds',
-    'spaceKeys',
-    'pageIds',
-    'databaseIds',
-    'labelsToSkip',
-    'commentEmailBlacklist',
-    'states',
-    'assignmentGroups',
-    'driveIds',
-    'fileTypes',
-    'projectGids',
-    'tagsToSkip',
-    'collectionIds',
+    "repos",
+    "teamIds",
+    "spaceKeys",
+    "pageIds",
+    "databaseIds",
+    "labelsToSkip",
+    "commentEmailBlacklist",
+    "states",
+    "assignmentGroups",
+    "driveIds",
+    "fileTypes",
+    "projectGids",
+    "tagsToSkip",
+    "collectionIds",
   ];
   for (const key of stringArrayFields) {
-    if (typeof result[key] === 'string') {
+    if (typeof result[key] === "string") {
       const value = result[key] as string;
       result[key] = value
-        .split(',')
+        .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
     }
   }
 
-  if (typeof result.projectIds === 'string') {
+  if (typeof result.projectIds === "string") {
     const value = result.projectIds as string;
 
-    if (result.type === 'gitlab') {
+    if (result.type === "gitlab") {
       result.projectIds = value
-        .split(',')
+        .split(",")
         .map((s) => Number(s.trim()))
         .filter((n) => !Number.isNaN(n));
     } else {
       result.projectIds = value
-        .split(',')
+        .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
     }

@@ -3,7 +3,7 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
-import { MemberModel, TeamModel } from "@/models";
+import { MemberModel, SessionModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Create a hoisted ref to control disableInvitations in tests
@@ -552,6 +552,80 @@ describe("handleAfterHook", () => {
       });
 
       await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
+    });
+
+    test("should reject SSO login when user email does not match provider domain", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeIdentityProvider,
+      makeSession,
+    }) => {
+      const user = await makeUser({ email: "person@other.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      await makeIdentityProvider(org.id, {
+        providerId: "google-workspace",
+        domain: "example.com",
+      });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/google-workspace",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: session.id, activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).rejects.toMatchObject({
+        status: "FORBIDDEN",
+        body: {
+          message:
+            "Your email domain is not allowed for this identity provider.",
+        },
+      });
+      expect(await SessionModel.getById(session.id)).toHaveLength(0);
+    });
+
+    test("should allow SSO login when user email matches provider domain", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeIdentityProvider,
+      makeSession,
+    }) => {
+      const user = await makeUser({ email: "person@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      await makeIdentityProvider(org.id, {
+        providerId: "google-workspace-allowed",
+        domain: "example.com",
+      });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/google-workspace-allowed",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: session.id, activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
+      expect(await SessionModel.getById(session.id)).toHaveLength(1);
     });
 
     test("should handle user without any memberships", async ({ makeUser }) => {

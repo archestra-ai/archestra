@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-04-17
+lastUpdated: 2026-04-20
 ---
 
 <!--
@@ -35,7 +35,8 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 1. Admin configures an Identity Provider in **Settings > Identity Providers**
 2. SSO buttons appear on the sign-in page for enabled providers
 3. Users click the SSO button and authenticate with their identity provider
-4. After successful authentication, users are automatically provisioned and logged in
+4. Archestra verifies the authenticated email belongs to the provider's configured domain
+5. After successful authentication, users are automatically provisioned and logged in
 
 ![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.webp)
 
@@ -122,7 +123,7 @@ Google OAuth allows users to sign in with their Google accounts.
 
 - Users must have a Google Workspace or personal Google account
 - The discovery endpoint is automatically configured
-- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer or restrict account selection to a specific Google Workspace domain (for example `example.com`)
+- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer account selection for a specific Google Workspace domain (for example `example.com`). Archestra still enforces the configured provider domain after Google returns the authenticated email.
 
 ### GitHub
 

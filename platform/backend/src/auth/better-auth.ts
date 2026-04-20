@@ -775,6 +775,21 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         "[auth:afterHook] Processing sign-in/SSO callback",
       );
 
+      const providerIdHint = path.startsWith("/sso/callback")
+        ? getSsoCallbackProviderId({
+            path,
+            requestUrl: request?.url,
+          })
+        : undefined;
+
+      if (providerIdHint) {
+        await assertSsoEmailDomainAllowed({
+          providerId: providerIdHint,
+          userEmail: user.email,
+          sessionId,
+        });
+      }
+
       // Auto-accept any pending invitations for this user's email
       try {
         const pendingInvitation = await InvitationModel.findPendingByEmail(
@@ -849,11 +864,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
-        const providerIdHint = getSsoCallbackProviderId({
-          path,
-          requestUrl: request?.url,
-        });
-
         logger.debug(
           { userId, email: user.email, providerIdHint },
           "[auth:afterHook] Processing SSO role and team sync",
@@ -902,4 +912,60 @@ function getSsoCallbackProviderId(params: {
   }
 
   return providerId || undefined;
+}
+
+async function assertSsoEmailDomainAllowed(params: {
+  providerId: string;
+  userEmail: string;
+  sessionId: string;
+}) {
+  if (!config.enterpriseFeatures.core) {
+    return;
+  }
+
+  const { default: IdentityProviderModel } = await import(
+    // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+    "@/models/identity-provider.ee"
+  );
+  const provider = await IdentityProviderModel.findByProviderId(
+    params.providerId,
+  );
+
+  if (!provider?.domain) {
+    return;
+  }
+
+  if (emailMatchesIdentityProviderDomain(params.userEmail, provider.domain)) {
+    return;
+  }
+
+  await SessionModel.deleteById(params.sessionId);
+  logger.warn(
+    {
+      providerId: params.providerId,
+      userEmail: params.userEmail,
+      providerDomain: provider.domain,
+    },
+    "[auth:afterHook] SSO login denied because user email domain does not match identity provider domain",
+  );
+
+  throw new APIError("FORBIDDEN", {
+    message: "Your email domain is not allowed for this identity provider.",
+  });
+}
+
+function emailMatchesIdentityProviderDomain(
+  email: string,
+  providerDomain: string,
+) {
+  const emailDomain = email.split("@")[1]?.trim().toLowerCase();
+  if (!emailDomain) {
+    return false;
+  }
+
+  return providerDomain
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean)
+    .some((domain) => emailDomain === domain);
 }

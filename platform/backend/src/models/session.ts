@@ -80,6 +80,18 @@ class SessionModel {
   }
 
   /**
+   * Delete a session by ID
+   */
+  static async deleteById(id: string) {
+    logger.debug({ id }, "SessionModel.deleteById: deleting session");
+    const result = await db
+      .delete(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.id, id));
+    logger.debug({ id }, "SessionModel.deleteById: completed");
+    return result;
+  }
+
+  /**
    * Delete all sessions for a user
    */
   static async deleteAllByUserId(userId: string) {

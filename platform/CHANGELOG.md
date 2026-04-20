@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.20](https://github.com/archestra-ai/archestra/compare/platform-v1.2.19...platform-v1.2.20) (2026-04-20)
+
+
+### Features
+
+* **openapi:** name UserConfigField + UserConfigFieldDefault schemas ([#3969](https://github.com/archestra-ai/archestra/issues/3969)) ([759f667](https://github.com/archestra-ai/archestra/commit/759f667394d6d7f58790415f6f3fecc50aabcd4d))
+
+
+### Bug Fixes
+
+* sanitize Bedrock document names ([#3978](https://github.com/archestra-ai/archestra/issues/3978)) ([7ba8316](https://github.com/archestra-ai/archestra/commit/7ba83166e23b21cfe5f05dfafaa109cb7244f9e1))
+
 ## [1.2.19](https://github.com/archestra-ai/archestra/compare/platform-v1.2.18...platform-v1.2.19) (2026-04-20)
 
 

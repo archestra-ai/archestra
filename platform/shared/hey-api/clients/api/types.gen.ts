@@ -5242,6 +5242,22 @@ export type XaiChatCompletionResponseInput = {
     [key: string]: unknown;
 };
 
+export type UserConfigFieldDefaultInput = string | number | boolean | Array<string>;
+
+export type UserConfigFieldInput = {
+    type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+    title: string;
+    description: string;
+    promptOnInstallation?: boolean;
+    required?: boolean;
+    default?: UserConfigFieldDefaultInput;
+    multiple?: boolean;
+    sensitive?: boolean;
+    min?: number;
+    max?: number;
+    headerName?: string;
+};
+
 export type OpenAiChatCompletionRequest = {
     model: string;
     /**
@@ -10478,6 +10494,22 @@ export type XaiChatCompletionResponse = {
         prompt_tokens_details?: unknown;
     };
     [key: string]: unknown;
+};
+
+export type UserConfigFieldDefault = string | number | boolean | Array<string>;
+
+export type UserConfigField = {
+    type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+    title: string;
+    description: string;
+    promptOnInstallation?: boolean;
+    required?: boolean;
+    default?: UserConfigFieldDefault;
+    multiple?: boolean;
+    sensitive?: boolean;
+    min?: number;
+    max?: number;
+    headerName?: string;
 };
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
@@ -24806,19 +24838,7 @@ export type GetInternalMcpCatalogResponses = {
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
-            [key: string]: {
-                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-                title: string;
-                description: string;
-                promptOnInstallation?: boolean;
-                required?: boolean;
-                default?: string | number | boolean | Array<string>;
-                multiple?: boolean;
-                sensitive?: boolean;
-                min?: number;
-                max?: number;
-                headerName?: string;
-            };
+            [key: string]: UserConfigField;
         } | null;
         oauthConfig: {
             name: string;
@@ -24943,19 +24963,7 @@ export type CreateInternalMcpCatalogItemData = {
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
-            [key: string]: {
-                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-                title: string;
-                description: string;
-                promptOnInstallation?: boolean;
-                required?: boolean;
-                default?: string | number | boolean | Array<string>;
-                multiple?: boolean;
-                sensitive?: boolean;
-                min?: number;
-                max?: number;
-                headerName?: string;
-            };
+            [key: string]: UserConfigFieldInput;
         } | null;
         oauthConfig?: {
             name: string;
@@ -25139,19 +25147,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
-            [key: string]: {
-                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-                title: string;
-                description: string;
-                promptOnInstallation?: boolean;
-                required?: boolean;
-                default?: string | number | boolean | Array<string>;
-                multiple?: boolean;
-                sensitive?: boolean;
-                min?: number;
-                max?: number;
-                headerName?: string;
-            };
+            [key: string]: UserConfigField;
         } | null;
         oauthConfig: {
             name: string;
@@ -25426,19 +25422,7 @@ export type GetInternalMcpCatalogItemResponses = {
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
-            [key: string]: {
-                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-                title: string;
-                description: string;
-                promptOnInstallation?: boolean;
-                required?: boolean;
-                default?: string | number | boolean | Array<string>;
-                multiple?: boolean;
-                sensitive?: boolean;
-                min?: number;
-                max?: number;
-                headerName?: string;
-            };
+            [key: string]: UserConfigField;
         } | null;
         oauthConfig: {
             name: string;
@@ -25562,19 +25546,7 @@ export type UpdateInternalMcpCatalogItemData = {
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
-            [key: string]: {
-                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-                title: string;
-                description: string;
-                promptOnInstallation?: boolean;
-                required?: boolean;
-                default?: string | number | boolean | Array<string>;
-                multiple?: boolean;
-                sensitive?: boolean;
-                min?: number;
-                max?: number;
-                headerName?: string;
-            };
+            [key: string]: UserConfigFieldInput;
         } | null;
         oauthConfig?: {
             name: string;
@@ -25760,19 +25732,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
-            [key: string]: {
-                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-                title: string;
-                description: string;
-                promptOnInstallation?: boolean;
-                required?: boolean;
-                default?: string | number | boolean | Array<string>;
-                multiple?: boolean;
-                sensitive?: boolean;
-                min?: number;
-                max?: number;
-                headerName?: string;
-            };
+            [key: string]: UserConfigField;
         } | null;
         oauthConfig: {
             name: string;

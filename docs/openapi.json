@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.18"
+    "version": "1.2.19"
   },
   "components": {
     "schemas": {
@@ -100118,6 +100118,14 @@
                                   "folderPath": {
                                     "type": "string"
                                   },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
                                   "includePages": {
                                     "type": "boolean"
                                   },
@@ -101066,6 +101074,14 @@
                           "folderPath": {
                             "type": "string"
                           },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "includePages": {
                             "type": "boolean"
                           },
@@ -101652,6 +101668,14 @@
                             },
                             "folderPath": {
                               "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "includePages": {
                               "type": "boolean"
@@ -102543,6 +102567,14 @@
                             "folderPath": {
                               "type": "string"
                             },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
                             "includePages": {
                               "type": "boolean"
                             },
@@ -103353,6 +103385,14 @@
                           "folderPath": {
                             "type": "string"
                           },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "includePages": {
                             "type": "boolean"
                           },
@@ -103937,6 +103977,14 @@
                             },
                             "folderPath": {
                               "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "includePages": {
                               "type": "boolean"

@@ -21,7 +21,7 @@ A registry entry is a reusable template. An installation is the actual connectio
 
 An MCP server usually moves through this lifecycle:
 
-1. An admin adds a registry entry or approves an installation request.
+1. An admin adds a registry entry.
 2. A user or team installs the entry and provides any required credentials.
 3. Archestra discovers the server's tools and stores the installation.
 4. An Agent or MCP Gateway is assigned tools from that installation.
@@ -65,12 +65,6 @@ Installations can be personal or team-scoped.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
 When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time lets Archestra choose the best credential for the current caller, which is the usual pattern for per-user credentials.
-
-## Requests And Governance
-
-Members can request new MCP servers from the external catalog or request a custom server. Admins review these requests from **MCP Registry > Installation Requests** and can approve or decline them with a response.
-
-Requests keep registry changes controlled without blocking users from asking for new tools. Once approved, the server becomes available through the internal registry and follows the same installation, credential, and tool assignment flow as any other entry.
 
 ## Labels
 

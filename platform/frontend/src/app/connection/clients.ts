@@ -208,7 +208,7 @@ claude`,
         steps: [
           {
             title: "Open Cursor Settings",
-            body: "Cursor → Settings (Cmd ⌘ + ,). In the left sidebar switch to Models.",
+            body: "Cursor → Settings → Cursor Settings. In the left sidebar switch to Models.",
           },
           {
             title: "Open the OpenAI API Key panel",

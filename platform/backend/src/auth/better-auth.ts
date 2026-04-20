@@ -6,6 +6,8 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
   DEFAULT_APP_NAME,
+  emailMatchesAllowedIdentityProviderDomains,
+  getEmailDomain,
   IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
@@ -939,7 +941,12 @@ async function assertSsoEmailDomainAllowed(params: {
     return;
   }
 
-  if (emailMatchesIdentityProviderDomain(params.userEmail, provider.domain)) {
+  if (
+    emailMatchesAllowedIdentityProviderDomains(
+      params.userEmail,
+      provider.domain,
+    )
+  ) {
     return;
   }
 
@@ -952,7 +959,7 @@ async function assertSsoEmailDomainAllowed(params: {
   logger.warn(
     {
       providerId: params.providerId,
-      userEmail: params.userEmail,
+      emailDomain: getEmailDomain(params.userEmail),
       providerDomain: provider.domain,
     },
     "[auth:afterHook] SSO login denied because user email domain does not match identity provider domain",
@@ -969,42 +976,28 @@ async function cleanupRejectedSsoLogin(params: {
   userId: string;
   sessionId: string;
 }) {
-  await SessionModel.deleteById(params.sessionId);
-  await AccountModel.deleteByUserIdAndProviderId({
-    userId: params.userId,
-    providerId: params.providerId,
+  await db.transaction(async (tx) => {
+    await SessionModel.deleteById(params.sessionId, tx);
+    await AccountModel.deleteByUserIdAndProviderId({
+      userId: params.userId,
+      providerId: params.providerId,
+      tx,
+    });
+
+    const accounts = await AccountModel.getAllByUserId(params.userId, tx);
+
+    if (accounts.length === 0 && params.organizationId) {
+      await MemberModel.deleteByMemberOrUserId(
+        params.userId,
+        params.organizationId,
+        tx,
+      );
+    }
+
+    const hasMembership = await MemberModel.hasAnyMembership(params.userId, tx);
+
+    if (accounts.length === 0 && !hasMembership) {
+      await UserModel.delete(params.userId, tx);
+    }
   });
-
-  const accounts = await AccountModel.getAllByUserId(params.userId);
-
-  if (accounts.length === 0 && params.organizationId) {
-    await MemberModel.deleteByMemberOrUserId(
-      params.userId,
-      params.organizationId,
-    );
-  }
-
-  const hasMembership = await MemberModel.hasAnyMembership(params.userId);
-
-  if (accounts.length === 0 && !hasMembership) {
-    await UserModel.delete(params.userId);
-  }
-}
-
-function emailMatchesIdentityProviderDomain(
-  email: string,
-  providerDomain: string,
-) {
-  const emailDomain = email.split("@")[1]?.trim().toLowerCase();
-  if (!emailDomain) {
-    return false;
-  }
-
-  return providerDomain
-    .split(",")
-    .map((domain) => domain.trim().toLowerCase())
-    .filter(Boolean)
-    .some(
-      (domain) => emailDomain === domain || emailDomain.endsWith(`.${domain}`),
-    );
 }

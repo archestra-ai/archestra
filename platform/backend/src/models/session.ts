@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { InsertSession, UpdateSession } from "@/types";
 
@@ -82,9 +82,10 @@ class SessionModel {
   /**
    * Delete a session by ID
    */
-  static async deleteById(id: string) {
+  static async deleteById(id: string, tx?: Transaction) {
     logger.debug({ id }, "SessionModel.deleteById: deleting session");
-    const result = await db
+    const dbOrTx = tx ?? db;
+    const result = await dbOrTx
       .delete(schema.sessionsTable)
       .where(eq(schema.sessionsTable.id, id));
     logger.debug({ id }, "SessionModel.deleteById: completed");

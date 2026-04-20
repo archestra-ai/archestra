@@ -24,12 +24,13 @@ class AccountModel {
    * Get all accounts for a user ordered by updatedAt DESC (most recent first)
    * Used to find the most recently used SSO account for team sync
    */
-  static async getAllByUserId(userId: string) {
+  static async getAllByUserId(userId: string, tx?: Transaction) {
     logger.debug(
       { userId },
       "AccountModel.getAllByUserId: fetching all accounts",
     );
-    const accounts = await db
+    const dbOrTx = tx ?? db;
+    const accounts = await dbOrTx
       .select()
       .from(schema.accountsTable)
       .where(eq(schema.accountsTable.userId, userId))
@@ -140,12 +141,18 @@ class AccountModel {
   static async deleteByUserIdAndProviderId(params: {
     userId: string;
     providerId: string;
+    tx?: Transaction;
   }) {
+    const logContext = {
+      userId: params.userId,
+      providerId: params.providerId,
+    };
     logger.debug(
-      params,
+      logContext,
       "AccountModel.deleteByUserIdAndProviderId: deleting account",
     );
-    const deleted = await db
+    const dbOrTx = params.tx ?? db;
+    const deleted = await dbOrTx
       .delete(schema.accountsTable)
       .where(
         and(
@@ -155,7 +162,7 @@ class AccountModel {
       )
       .returning({ id: schema.accountsTable.id });
     logger.debug(
-      { ...params, count: deleted.length },
+      { ...logContext, count: deleted.length },
       "AccountModel.deleteByUserIdAndProviderId: completed",
     );
     return deleted.length;

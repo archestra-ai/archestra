@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  emailMatchesAllowedIdentityProviderDomains,
   IdentityProviderFormSchema,
   IdentityProviderOidcConfigSchema,
 } from "./identity-provider";
@@ -113,5 +114,52 @@ describe("IdentityProviderFormSchema", () => {
     expect(result.error?.issues[0]?.message).toBe(
       "Enter valid comma-separated domains, for example company.com, subsidiary.com",
     );
+  });
+});
+
+describe("emailMatchesAllowedIdentityProviderDomains", () => {
+  it("matches exact allowed domains", () => {
+    expect(
+      emailMatchesAllowedIdentityProviderDomains(
+        "user@example.com",
+        "example.com",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches subdomains of allowed domains", () => {
+    expect(
+      emailMatchesAllowedIdentityProviderDomains(
+        "user@engineering.example.com",
+        "example.com",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches comma-separated allowed domains", () => {
+    expect(
+      emailMatchesAllowedIdentityProviderDomains(
+        "user@subsidiary.com",
+        "example.com, subsidiary.com",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects unrelated domains", () => {
+    expect(
+      emailMatchesAllowedIdentityProviderDomains(
+        "user@other.com",
+        "example.com",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not match sibling suffixes", () => {
+    expect(
+      emailMatchesAllowedIdentityProviderDomains(
+        "user@badexample.com",
+        "example.com",
+      ),
+    ).toBe(false);
   });
 });

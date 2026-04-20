@@ -22,6 +22,31 @@ export type IdentityProviderId =
 export const IDENTITY_TRUSTED_PROVIDER_IDS =
   Object.values(IDENTITY_PROVIDER_ID);
 
+export function emailMatchesAllowedIdentityProviderDomains(
+  email: string,
+  allowedDomains: string,
+) {
+  const emailDomain = getEmailDomain(email);
+  if (!emailDomain) {
+    return false;
+  }
+
+  return parseAllowedIdentityProviderDomains(allowedDomains).some(
+    (domain) => emailDomain === domain || emailDomain.endsWith(`.${domain}`),
+  );
+}
+
+export function parseAllowedIdentityProviderDomains(allowedDomains: string) {
+  return allowedDomains
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function getEmailDomain(email: string) {
+  return email.split("@")[1]?.trim().toLowerCase() ?? null;
+}
+
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
@@ -207,11 +232,13 @@ export const IdentityProviderFormSchema = z
       .string()
       .min(1, "Allowed email domains are required")
       .refine(
-        (value) =>
-          value
-            .split(",")
-            .map((domain) => domain.trim())
-            .every((domain) => DOMAIN_VALIDATION_REGEX.test(domain)),
+        (value) => {
+          const domains = parseAllowedIdentityProviderDomains(value);
+          return (
+            domains.length > 0 &&
+            domains.every((domain) => DOMAIN_VALIDATION_REGEX.test(domain))
+          );
+        },
         {
           message:
             "Enter valid comma-separated domains, for example company.com, subsidiary.com",

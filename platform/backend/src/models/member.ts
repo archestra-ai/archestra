@@ -1,6 +1,6 @@
 import type { AnyRoleName } from "@shared";
 import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 
@@ -101,9 +101,13 @@ class MemberModel {
    * Count memberships for a user across all organizations
    * Used to check if user should be deleted after member removal
    */
-  static async countByUserId(userId: string): Promise<number> {
+  static async countByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
     logger.debug({ userId }, "MemberModel.countByUserId: counting memberships");
-    const [result] = await db
+    const dbOrTx = tx ?? db;
+    const [result] = await dbOrTx
       .select({ count: count() })
       .from(schema.membersTable)
       .where(eq(schema.membersTable.userId, userId));
@@ -118,12 +122,15 @@ class MemberModel {
   /**
    * Check if a user has any memberships remaining
    */
-  static async hasAnyMembership(userId: string): Promise<boolean> {
+  static async hasAnyMembership(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<boolean> {
     logger.debug(
       { userId },
       "MemberModel.hasAnyMembership: checking for memberships",
     );
-    const memberCount = await MemberModel.countByUserId(userId);
+    const memberCount = await MemberModel.countByUserId(userId, tx);
     const hasMembership = memberCount > 0;
     logger.debug(
       { userId, hasMembership },
@@ -312,20 +319,22 @@ class MemberModel {
   static async deleteByMemberOrUserId(
     memberIdOrUserId: string,
     organizationId: string,
+    tx?: Transaction,
   ) {
     logger.debug(
       { memberIdOrUserId, organizationId },
       "MemberModel.deleteByMemberOrUserId: deleting member",
     );
+    const dbOrTx = tx ?? db;
     // Try to delete by member ID first
-    let deleted = await db
+    let deleted = await dbOrTx
       .delete(schema.membersTable)
       .where(eq(schema.membersTable.id, memberIdOrUserId))
       .returning();
 
     // If not found, try by user ID + organization ID
     if (!deleted[0] && organizationId) {
-      deleted = await db
+      deleted = await dbOrTx
         .delete(schema.membersTable)
         .where(
           and(

@@ -191,6 +191,8 @@ export const SharePointConfigSchema = z.object({
   siteUrl: connectorUrlSchema,
   driveIds: z.array(z.string()).optional(),
   folderPath: z.string().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().int().min(1).max(100).optional(),
   includePages: z.boolean().optional(),
   batchSize: z.number().optional(),
 });

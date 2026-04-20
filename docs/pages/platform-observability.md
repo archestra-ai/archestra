@@ -24,9 +24,7 @@ When the separate worker deployment is enabled (`ARCHESTRA_PROCESS_TYPE=worker`,
 
 Combined, these endpoints expose metrics including:
 
-### Generative AI Metrics
-
-#### LLM Metrics
+### LLM Metrics
 
 - `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and status code
 - `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and type (input/output)
@@ -37,13 +35,13 @@ Combined, these endpoints expose metrics including:
 
 > **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 
-#### MCP Metrics
+### MCP Metrics
 
 - `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
 - `mcp_tool_call_duration_seconds` - MCP tool call execution duration by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status
 - `mcp_server_deployment_status` - Current deployment state of self-hosted MCP servers by server_name and state (not_created/pending/running/failed/succeeded). Value is 1 for the active state. Use `count(mcp_server_deployment_status{state="running"} == 1)` to count running deployments.
 
-#### RAG & Knowledge Base Metrics
+### RAG & Knowledge Base Metrics
 
 - `rag_connector_syncs_total` - Total connector syncs by connector_type and status (success/failed/partial)
 - `rag_connector_sync_duration_seconds` - Connector sync duration by connector_type and status
@@ -58,7 +56,7 @@ Combined, these endpoints expose metrics including:
 
 > **Note:** Knowledge Base embedding and reranking LLM calls also emit standard LLM metrics (`llm_request_duration_seconds`, `llm_tokens_total`, `llm_cost_total`) with `source="knowledge:embedding"` or `source="knowledge:reranker"` and `agent_name="Knowledge Base"`. These appear in the GenAI Observability dashboard and can be filtered by source.
 
-#### Task Queue Metrics
+### Task Queue Metrics
 
 - `task_queue_tasks_enqueued_total` - Total tasks enqueued by task_type (connector_sync, batch_embedding, check_due_connectors)
 - `task_queue_tasks_completed_total` - Total tasks completed successfully by task_type

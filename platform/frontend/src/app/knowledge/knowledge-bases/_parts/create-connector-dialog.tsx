@@ -182,7 +182,7 @@ export function CreateConnectorDialog({
       },
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
-      sharepoint: { type, includePages: true },
+      sharepoint: { type, includePages: true, recursive: true },
       gdrive: { type, recursive: true },
       dropbox: { type, rootPath: "" },
       asana: { type },

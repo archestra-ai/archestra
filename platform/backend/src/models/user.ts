@@ -7,7 +7,7 @@ import {
 import { eq, getTableColumns } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
 import MemberModel from "./member";
@@ -176,9 +176,10 @@ class UserModel {
   /**
    * Delete a user by ID
    */
-  static async delete(userId: string): Promise<boolean> {
+  static async delete(userId: string, tx?: Transaction): Promise<boolean> {
     logger.debug("UserModel.delete: deleting user");
-    const result = await db
+    const dbOrTx = tx ?? db;
+    const result = await dbOrTx
       .delete(schema.usersTable)
       .where(eq(schema.usersTable.id, userId))
       .returning();

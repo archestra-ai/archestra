@@ -140,17 +140,61 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
           */}
           <AuthViewWithErrorHandling
             path={path}
-            callbackURL={
-              invitationId
-                ? `${
-                    path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
-                  }?invitationId=${invitationId}`
-                : getValidatedRedirectPath(redirectTo)
-            }
+            callbackURL={getAuthCallbackURL({
+              invitationId,
+              path,
+              redirectTo,
+              searchParams,
+            })}
           />
           {isSignInOrSignUp && <CommunityLinks />}
         </div>
       </main>
     </BackendConnectivityStatus>
   );
+}
+
+const OAUTH_AUTHORIZE_REQUIRED_PARAMS = [
+  "response_type",
+  "client_id",
+  "redirect_uri",
+  "scope",
+  "state",
+] as const;
+
+function getAuthCallbackURL(params: {
+  invitationId: string | null;
+  path: string;
+  redirectTo: string | null;
+  searchParams: ReturnType<typeof useSearchParams>;
+}) {
+  const { invitationId, path, redirectTo, searchParams } = params;
+
+  if (invitationId) {
+    return `${
+      path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
+    }?invitationId=${invitationId}`;
+  }
+
+  const oauthAuthorizeCallbackURL = getOAuthAuthorizeCallbackURL(searchParams);
+  if (oauthAuthorizeCallbackURL) {
+    return oauthAuthorizeCallbackURL;
+  }
+
+  return getValidatedRedirectPath(redirectTo);
+}
+
+function getOAuthAuthorizeCallbackURL(
+  searchParams: ReturnType<typeof useSearchParams>,
+) {
+  const hasOAuthAuthorizeParams = OAUTH_AUTHORIZE_REQUIRED_PARAMS.every(
+    (param) => searchParams.get(param) !== null,
+  );
+
+  if (!hasOAuthAuthorizeParams) {
+    return null;
+  }
+
+  const queryString = searchParams.toString();
+  return queryString ? `/api/auth/oauth2/authorize?${queryString}` : null;
 }

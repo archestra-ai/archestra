@@ -55,18 +55,3 @@ jobs:
     uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
-
-  dominik-claude-code:
-    if: |
-      (github.event_name == 'issue_comment' && github.event.comment.user.login == 'brojd') ||
-      (github.event_name == 'pull_request_review_comment' && github.event.comment.user.login == 'brojd') ||
-      (github.event_name == 'pull_request_review' && github.event.review.user.login == 'brojd')
-    permissions:
-      contents: write # Required for Claude to push follow-up commits when explicitly instructed.
-      pull-requests: write # Required for Claude to leave and update PR comments.
-      issues: write # Required for Claude to reply on issue threads.
-      id-token: write # Required by the Claude action's GitHub-backed auth flow.
-      actions: read # Required for Claude to read CI results on PRs.
-    uses: ./.github/workflows/claude-coreteam-mentions-shared.yml
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.DOMINIK_CLAUDE_CODE_OAUTH_TOKEN }}

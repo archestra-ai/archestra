@@ -217,6 +217,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        // countFilesInFolder("root") runs first (for-await natural order)
         .mockResolvedValueOnce({
           value: [
             makeDriveItem("item-1", "file1.txt", {
@@ -225,15 +226,23 @@ describe("SharePointConnector", () => {
             makeDriveItem("item-2", "old.txt", {
               lastModified: "2024-01-01T00:00:00.000Z",
             }),
+          ],
+        })
+        // listDirectSubfolders("root") → returns item-3 (called after root body)
+        .mockResolvedValueOnce({
+          value: [
             {
-              ...makeDriveItem("item-3", "folder", {
-                lastModified: "2024-01-20T00:00:00.000Z",
-              }),
-              file: undefined,
+              id: "item-3",
               folder: { childCount: 1 },
+              file: undefined,
             },
           ],
         })
+        // countFilesInFolder("item-3") → empty
+        .mockResolvedValueOnce({ value: [] })
+        // listDirectSubfolders("item-3") → no nested subfolders
+        .mockResolvedValueOnce({ value: [] })
+        // countSitePages
         .mockResolvedValueOnce({
           value: [
             makeSitePage("page-1", "Included page", {
@@ -270,6 +279,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" }) // resolveSiteId
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] }) // listDriveIds
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [
             makeDriveItem("item-1", "readme.md"),
@@ -307,6 +317,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [
             makeDriveItem("item-1", "doc.txt"),
@@ -349,6 +360,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [makeDriveItem("item-1", "file1.txt")],
           "@odata.nextLink": nextLinkUrl,
@@ -387,10 +399,9 @@ describe("SharePointConnector", () => {
 
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
-        .mockResolvedValueOnce({
-          value: [],
-        })
-        .mockResolvedValueOnce({ value: [] });
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root") with folderPath
+        .mockResolvedValueOnce({ value: [] }) // syncFilesInFolder("root")
+        .mockResolvedValueOnce({ value: [] }); // sitePages
 
       for await (const _batch of connector.sync({
         config: {
@@ -423,6 +434,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [
             // older than checkpoint — should be skipped
@@ -465,6 +477,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [
             makeDriveItem("item-1", "same-moment.txt", {
@@ -501,6 +514,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [
             makeDriveItem("item-1", "good.txt"),
@@ -537,7 +551,8 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
-        .mockRejectedValueOnce(new Error("Forbidden")); // driveItems
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
+        .mockRejectedValueOnce(new Error("Forbidden")); // syncFilesInFolder
 
       const generator = connector.sync({
         config: {
@@ -639,6 +654,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         // No listDriveIds call since driveIds provided
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [makeDriveItem("item-1", "file.txt")],
         })
@@ -683,6 +699,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" }) // resolveSiteId
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] }) // listDriveIds
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [makeDriveItem("item-1", "diagram.png")],
         }) // driveItems
@@ -720,6 +737,7 @@ describe("SharePointConnector", () => {
       mockGet
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
         .mockResolvedValueOnce({
           value: [
             makeDriveItem("item-1", "doc.txt"),
@@ -771,7 +789,247 @@ describe("SharePointConnector", () => {
     });
   });
 
+  describe("sync — recursive traversal", () => {
+    function makeFolderItem(id: string, name: string) {
+      return {
+        id,
+        name,
+        webUrl: `https://tenant.sharepoint.com/sites/test/${name}`,
+        lastModifiedDateTime: "2024-01-15T10:00:00.000Z",
+        createdDateTime: "2024-01-01T00:00:00.000Z",
+        size: 0,
+        file: undefined,
+        folder: { childCount: 1 },
+        parentReference: { path: "/drives/drive-1/root:" },
+      };
+    }
+
+    it("traverses subfolders recursively by default", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet, mockApi } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" }) // resolveSite
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] }) // listDriveIds
+        // listDirectSubfolders("root") → returns folder-1
+        .mockResolvedValueOnce({
+          value: [makeFolderItem("folder-1", "Subfolder")],
+        })
+        // syncFilesInFolder("root") → one file
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("root-file", "root.txt")],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Root content")) // root.txt download
+        // listDirectSubfolders("folder-1") → no subfolders
+        .mockResolvedValueOnce({ value: [] })
+        // syncFilesInFolder("folder-1") → one file
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("sub-file", "sub.txt")],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Sub content")) // sub.txt download
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs.map((d) => d.title)).toContain("root.txt");
+      expect(allDocs.map((d) => d.title)).toContain("sub.txt");
+
+      // Verify subfolder children URL was called (listDirectSubfolders or syncFilesInFolder)
+      const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
+      expect(
+        apiCalls.some((u) =>
+          u.includes("/drives/drive-1/items/folder-1/children"),
+        ),
+      ).toBe(true);
+    });
+
+    it("does not traverse subfolders when recursive is false", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet, mockApi } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        // syncFilesInFolder("root") — no listDirectSubfolders called when recursive=false
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("root-file", "root.txt")],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Root content")) // root.txt
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          recursive: false,
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs.map((d) => d.title)).toContain("root.txt");
+      expect(allDocs.map((d) => d.title)).not.toContain("sub.txt");
+
+      // Neither listDirectSubfolders nor syncFilesInFolder for folder-1
+      const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
+      expect(apiCalls.some((u) => u.includes("/items/folder-1/children"))).toBe(
+        false,
+      );
+    });
+
+    it("respects maxDepth and stops at the configured depth limit", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet, mockApi } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        // listDirectSubfolders("root") → returns folder-1
+        .mockResolvedValueOnce({
+          value: [makeFolderItem("folder-1", "Level1")],
+        })
+        // syncFilesInFolder("root") → one file
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("file-0", "level0.txt")],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Level 0 content"))
+        // listDirectSubfolders("folder-1") NOT called: depth(1) >= maxDepth(1)
+        // syncFilesInFolder("folder-1") → one file + one nested folder (folder filtered out)
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-1", "level1.txt"),
+            makeFolderItem("folder-2", "Level2"),
+          ],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Level 1 content"))
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+          recursive: true,
+          maxDepth: 1,
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
+      // syncFilesInFolder("folder-1") was called — has /items/folder-1/children
+      expect(apiCalls.some((u) => u.includes("/items/folder-1/children"))).toBe(
+        true,
+      );
+      // folder-2 never reached: listDirectSubfolders("folder-1") not called, syncFilesInFolder("folder-2") not called
+      expect(apiCalls.some((u) => u.includes("/items/folder-2/children"))).toBe(
+        false,
+      );
+
+      const allDocs = batches.flatMap((b) => b.documents);
+      expect(allDocs.map((d) => d.title)).toContain("level0.txt");
+      expect(allDocs.map((d) => d.title)).toContain("level1.txt");
+    });
+  });
+
   describe("checkpoint monotonicity", () => {
+    it("keeps previous checkpoint on intermediate batches so resumed run re-visits unprocessed folders", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      const previousCheckpoint = "2024-01-01T00:00:00.000Z";
+      const page1Timestamp = "2024-05-01T00:00:00.000Z";
+      const page2Timestamp = "2024-06-01T00:00:00.000Z";
+      const nextLinkUrl =
+        "https://graph.microsoft.com/v1.0/drives/drive-1/root/children?$skiptoken=abc";
+
+      mockGet
+        // resolveSiteId
+        .mockResolvedValueOnce({ id: "site-1" })
+        // listDriveIds
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        // listDirectSubfolders("root") → no subfolders
+        .mockResolvedValueOnce({ value: [] })
+        // syncFilesInFolder("root") page 1 — has nextLink (more pages)
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-1", "page1.txt", {
+              lastModified: page1Timestamp,
+            }),
+          ],
+          "@odata.nextLink": nextLinkUrl,
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Page 1 content"))
+        // syncFilesInFolder("root") page 2 — final page
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-2", "page2.txt", {
+              lastModified: page2Timestamp,
+            }),
+          ],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Page 2 content"))
+        // sitePages
+        .mockResolvedValueOnce({ value: [] });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: {
+          type: "sharepoint",
+          lastSyncedAt: previousCheckpoint,
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      // At least 2 drive batches (page1, page2) + optional pages batch
+      expect(batches.length).toBeGreaterThanOrEqual(2);
+
+      // First batch (page 1, hasMore=true due to nextLink): checkpoint must NOT
+      // advance — keeps previousCheckpoint so resumed run starts before any
+      // not-yet-visited content (e.g. subfolders with older file timestamps).
+      const firstBatch = batches[0];
+      expect(firstBatch.hasMore).toBe(true);
+      const firstCheckpoint = firstBatch.checkpoint as { lastSyncedAt: string };
+      expect(firstCheckpoint.lastSyncedAt).toBe(
+        new Date(previousCheckpoint).toISOString(),
+      );
+
+      // Final drive batch (page 2, hasMore=false): checkpoint advances to max seen
+      const lastDriveBatch = batches.find(
+        (b) => !b.hasMore && b.documents.some((d) => d.title === "page2.txt"),
+      );
+      expect(lastDriveBatch).toBeDefined();
+      const finalCheckpoint = lastDriveBatch?.checkpoint as {
+        lastSyncedAt: string;
+      };
+      expect(finalCheckpoint.lastSyncedAt).toBe(
+        new Date(page2Timestamp).toISOString(),
+      );
+    });
+
     it("does not regress checkpoint when pages have older timestamps than drive items", async () => {
       const connector = new SharePointConnector();
       const { mockGet } = setupMockClient(connector);
@@ -784,6 +1042,8 @@ describe("SharePointConnector", () => {
         .mockResolvedValueOnce({ id: "site-1" })
         // listDriveIds
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        // listDirectSubfolders("root")
+        .mockResolvedValueOnce({ value: [] })
         // drive items — newer timestamp
         .mockResolvedValueOnce({
           value: [

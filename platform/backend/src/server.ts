@@ -83,6 +83,10 @@ import {
   MCP_GATEWAY_PREFIX,
   READY_PATH,
 } from "./routes/route-paths";
+import {
+  UserConfigFieldDefaultSchema,
+  UserConfigFieldSchema,
+} from "./types/mcp-catalog";
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
@@ -202,6 +206,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Xai.API.ChatCompletionResponseSchema, {
     id: "XaiChatCompletionResponse",
+  });
+  z.globalRegistry.add(UserConfigFieldDefaultSchema, {
+    id: "UserConfigFieldDefault",
+  });
+  z.globalRegistry.add(UserConfigFieldSchema, {
+    id: "UserConfigField",
   });
 }
 

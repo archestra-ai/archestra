@@ -28,15 +28,20 @@ const AuthFieldSchema = z.object({
   description: z.string().optional(),
 });
 
-const UserConfigFieldSchema = z.object({
+export const UserConfigFieldDefaultSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+
+export const UserConfigFieldSchema = z.object({
   type: z.enum(["string", "number", "boolean", "directory", "file"]),
   title: z.string(),
   description: z.string(),
   promptOnInstallation: z.boolean().optional(),
   required: z.boolean().optional(),
-  default: z
-    .union([z.string(), z.number(), z.boolean(), z.array(z.string())])
-    .optional(),
+  default: UserConfigFieldDefaultSchema.optional(),
   multiple: z.boolean().optional(),
   sensitive: z.boolean().optional(),
   min: z.number().optional(),

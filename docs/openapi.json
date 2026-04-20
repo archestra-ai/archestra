@@ -16749,6 +16749,79 @@
         ],
         "additionalProperties": {}
       },
+      "UserConfigFieldDefaultInput": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "UserConfigFieldInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "directory",
+              "file"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "promptOnInstallation": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
+              }
+            ]
+          },
+          "multiple": {
+            "type": "boolean"
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "headerName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "description"
+        ]
+      },
       "OpenAiChatCompletionRequest": {
         "type": "object",
         "properties": {
@@ -34258,6 +34331,80 @@
           "object"
         ],
         "additionalProperties": {}
+      },
+      "UserConfigFieldDefault": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "UserConfigField": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "directory",
+              "file"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "promptOnInstallation": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserConfigFieldDefault"
+              }
+            ]
+          },
+          "multiple": {
+            "type": "boolean"
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "headerName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "description"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -90884,71 +91031,7 @@
                         "nullable": true,
                         "type": "object",
                         "additionalProperties": {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "enum": [
-                                "string",
-                                "number",
-                                "boolean",
-                                "directory",
-                                "file"
-                              ]
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "description": {
-                              "type": "string"
-                            },
-                            "promptOnInstallation": {
-                              "type": "boolean"
-                            },
-                            "required": {
-                              "type": "boolean"
-                            },
-                            "default": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
-                                },
-                                {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                }
-                              ]
-                            },
-                            "multiple": {
-                              "type": "boolean"
-                            },
-                            "sensitive": {
-                              "type": "boolean"
-                            },
-                            "min": {
-                              "type": "number"
-                            },
-                            "max": {
-                              "type": "number"
-                            },
-                            "headerName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "title",
-                            "description"
-                          ],
-                          "additionalProperties": false
+                          "$ref": "#/components/schemas/UserConfigField"
                         }
                       },
                       "oauthConfig": {
@@ -91757,70 +91840,7 @@
                     "nullable": true,
                     "type": "object",
                     "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "string",
-                            "number",
-                            "boolean",
-                            "directory",
-                            "file"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "promptOnInstallation": {
-                          "type": "boolean"
-                        },
-                        "required": {
-                          "type": "boolean"
-                        },
-                        "default": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          ]
-                        },
-                        "multiple": {
-                          "type": "boolean"
-                        },
-                        "sensitive": {
-                          "type": "boolean"
-                        },
-                        "min": {
-                          "type": "number"
-                        },
-                        "max": {
-                          "type": "number"
-                        },
-                        "headerName": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "description"
-                      ]
+                      "$ref": "#/components/schemas/UserConfigFieldInput"
                     }
                   },
                   "oauthConfig": {
@@ -92361,71 +92381,7 @@
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "directory",
-                              "file"
-                            ]
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "promptOnInstallation": {
-                            "type": "boolean"
-                          },
-                          "required": {
-                            "type": "boolean"
-                          },
-                          "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            ]
-                          },
-                          "multiple": {
-                            "type": "boolean"
-                          },
-                          "sensitive": {
-                            "type": "boolean"
-                          },
-                          "min": {
-                            "type": "number"
-                          },
-                          "max": {
-                            "type": "number"
-                          },
-                          "headerName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "title",
-                          "description"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/UserConfigField"
                       }
                     },
                     "oauthConfig": {
@@ -93257,71 +93213,7 @@
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "directory",
-                              "file"
-                            ]
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "promptOnInstallation": {
-                            "type": "boolean"
-                          },
-                          "required": {
-                            "type": "boolean"
-                          },
-                          "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            ]
-                          },
-                          "multiple": {
-                            "type": "boolean"
-                          },
-                          "sensitive": {
-                            "type": "boolean"
-                          },
-                          "min": {
-                            "type": "number"
-                          },
-                          "max": {
-                            "type": "number"
-                          },
-                          "headerName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "title",
-                          "description"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/UserConfigField"
                       }
                     },
                     "oauthConfig": {
@@ -94124,70 +94016,7 @@
                     "nullable": true,
                     "type": "object",
                     "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "string",
-                            "number",
-                            "boolean",
-                            "directory",
-                            "file"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "promptOnInstallation": {
-                          "type": "boolean"
-                        },
-                        "required": {
-                          "type": "boolean"
-                        },
-                        "default": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          ]
-                        },
-                        "multiple": {
-                          "type": "boolean"
-                        },
-                        "sensitive": {
-                          "type": "boolean"
-                        },
-                        "min": {
-                          "type": "number"
-                        },
-                        "max": {
-                          "type": "number"
-                        },
-                        "headerName": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "description"
-                      ]
+                      "$ref": "#/components/schemas/UserConfigFieldInput"
                     }
                   },
                   "oauthConfig": {
@@ -94736,71 +94565,7 @@
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "directory",
-                              "file"
-                            ]
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "promptOnInstallation": {
-                            "type": "boolean"
-                          },
-                          "required": {
-                            "type": "boolean"
-                          },
-                          "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            ]
-                          },
-                          "multiple": {
-                            "type": "boolean"
-                          },
-                          "sensitive": {
-                            "type": "boolean"
-                          },
-                          "min": {
-                            "type": "number"
-                          },
-                          "max": {
-                            "type": "number"
-                          },
-                          "headerName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "title",
-                          "description"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/UserConfigField"
                       }
                     },
                     "oauthConfig": {

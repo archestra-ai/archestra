@@ -142,8 +142,8 @@ Credentials are configured when you install a server from the [MCP Catalog](/doc
 - **Static secrets**: API keys or personal access tokens that are set once at install time and used for all requests.
 - **OAuth tokens**: Obtained by running an OAuth flow against the upstream provider during installation. Archestra stores both the access token and refresh token.
 - **OAuth client credentials**: Shared client credentials stored on the MCP connection and exchanged for a short-lived bearer token when a tool call runs.
-- **Upstream Identity Provider Token Exchange**: Retrieved at tool-call time by exchanging the caller's IdP token for the downstream credential the MCP server needs.
-- **Upstream Identity Provider JWT / JWKS**: Retrieved at tool-call time by forwarding the caller's IdP JWT to the upstream MCP server for direct JWKS-based validation.
+- **Identity Provider Token Exchange**: Retrieved at tool-call time by exchanging the caller's IdP token for the downstream credential the MCP server needs.
+- **Identity Provider JWT / JWKS**: Retrieved at tool-call time by forwarding the caller's IdP JWT to the upstream MCP server for direct JWKS-based validation.
 
 How credentials are delivered to the upstream server depends on the server type. For **passthrough** (remote) servers, Archestra sends the credential over HTTP. The primary auth header defaults to `Authorization`, but you can configure a different header name such as `x-api-key` when the upstream server expects the token outside the standard authorization header. Additional headers are available for tenant IDs and other non-auth upstream requirements, and non-sensitive static values are stored directly in the catalog item. For **hosted** (local) servers running in Kubernetes, the gateway connects via stdio transport within the cluster and no auth headers are needed.
 
@@ -254,7 +254,7 @@ For MCP Gateways, this token exchange uses the caller identity that was establis
 
 For external MCP clients such as Cursor, **ID-JAG** and **JWKS** are usually the clearest options when you want per-user access to upstream systems like GitHub or Jira.
 
-#### Upstream Identity Provider Token Exchange
+#### Identity Provider Token Exchange
 
 When Archestra is configured to exchange the caller's IdP token at tool-call time, it uses one of three exchange strategies.
 
@@ -289,25 +289,25 @@ When you choose **Identity Provider Token Exchange** on the MCP catalog item, th
 
 ##### When To Use It
 
-With upstream **Identity Provider Token Exchange**, Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential the MCP server needs.
+With **Identity Provider Token Exchange**, Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential the MCP server needs.
 
 Use this mode when the upstream system or credential broker expects Archestra to exchange the caller's enterprise identity for a different downstream token.
 
 This is different from using ID-JAG to authenticate to the MCP Gateway:
 
 - **ID-JAG at the MCP Gateway** exchanges an enterprise assertion for an Archestra-issued MCP access token
-- **Upstream Identity Provider Token Exchange** obtains the credential used for the downstream MCP tool call itself
+- **Identity Provider Token Exchange** obtains the credential used for the downstream MCP tool call itself
 
-#### Upstream Identity Provider JWT / JWKS
+#### Identity Provider JWT / JWKS
 
-With upstream **Identity Provider JWT / JWKS**, Archestra resolves the caller's enterprise assertion and forwards that JWT to the upstream MCP server as `Authorization: Bearer <jwt>`, so the upstream server can validate it against the IdP's JWKS directly.
+With **Identity Provider JWT / JWKS**, Archestra resolves the caller's enterprise assertion and forwards that JWT to the upstream MCP server as `Authorization: Bearer <jwt>`, so the upstream server can validate it against the IdP's JWKS directly.
 
 Use this mode when the upstream MCP server already understands the enterprise IdP's JWTs and should make its own authorization decisions from those claims.
 
 This is different from using JWKS to authenticate to the MCP Gateway:
 
 - **JWKS at the MCP Gateway** authenticates the caller to Archestra
-- **Upstream Identity Provider JWT / JWKS** provides the credential used for the downstream MCP tool call itself
+- **Identity Provider JWT / JWKS** provides the credential used for the downstream MCP tool call itself
 
 ## MCP Gateway Example: Cursor with GitHub and Jira
 
@@ -386,8 +386,8 @@ This section summarizes the authentication patterns Archestra supports for MCP s
 | No auth                                   | Internal tools with no external API dependencies                     | Hosted in K8s, gateway connects via stdio or streamable-http                                        |
 | Static credentials                        | Shared API key, PAT, or service account                              | User provides credentials at install time, Archestra stores and injects them                        |
 | OAuth 2.1                                 | Per-user access to a SaaS API                                        | Full OAuth flow at install, automatic token refresh by Archestra                                    |
-| Upstream Identity Provider JWT / JWKS     | The upstream server should validate the caller's enterprise JWT      | Archestra forwards the caller's IdP JWT and the upstream server validates it against the JWKS       |
-| Upstream Identity Provider Token Exchange | Archestra should exchange enterprise identity for a downstream token | Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential |
+| Identity Provider JWT / JWKS             | The upstream server should validate the caller's enterprise JWT      | Archestra forwards the caller's IdP JWT and the upstream server validates it against the JWKS       |
+| Identity Provider Token Exchange         | Archestra should exchange enterprise identity for a downstream token | Archestra resolves the caller's enterprise assertion and exchanges it for the downstream credential |
 
 ### No Auth (Hosted)
 

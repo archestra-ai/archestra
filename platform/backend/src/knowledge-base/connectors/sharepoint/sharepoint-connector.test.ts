@@ -950,6 +950,86 @@ describe("SharePointConnector", () => {
   });
 
   describe("checkpoint monotonicity", () => {
+    it("keeps previous checkpoint on intermediate batches so resumed run re-visits unprocessed folders", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      const previousCheckpoint = "2024-01-01T00:00:00.000Z";
+      const page1Timestamp = "2024-05-01T00:00:00.000Z";
+      const page2Timestamp = "2024-06-01T00:00:00.000Z";
+      const nextLinkUrl =
+        "https://graph.microsoft.com/v1.0/drives/drive-1/root/children?$skiptoken=abc";
+
+      mockGet
+        // resolveSiteId
+        .mockResolvedValueOnce({ id: "site-1" })
+        // listDriveIds
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        // listDirectSubfolders("root") → no subfolders
+        .mockResolvedValueOnce({ value: [] })
+        // syncFilesInFolder("root") page 1 — has nextLink (more pages)
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-1", "page1.txt", {
+              lastModified: page1Timestamp,
+            }),
+          ],
+          "@odata.nextLink": nextLinkUrl,
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Page 1 content"))
+        // syncFilesInFolder("root") page 2 — final page
+        .mockResolvedValueOnce({
+          value: [
+            makeDriveItem("file-2", "page2.txt", {
+              lastModified: page2Timestamp,
+            }),
+          ],
+        })
+        .mockResolvedValueOnce(makeFileBuffer("Page 2 content"))
+        // sitePages
+        .mockResolvedValueOnce({ value: [] });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: {
+          type: "sharepoint",
+          lastSyncedAt: previousCheckpoint,
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      // At least 2 drive batches (page1, page2) + optional pages batch
+      expect(batches.length).toBeGreaterThanOrEqual(2);
+
+      // First batch (page 1, hasMore=true due to nextLink): checkpoint must NOT
+      // advance — keeps previousCheckpoint so resumed run starts before any
+      // not-yet-visited content (e.g. subfolders with older file timestamps).
+      const firstBatch = batches[0];
+      expect(firstBatch.hasMore).toBe(true);
+      const firstCheckpoint = firstBatch.checkpoint as { lastSyncedAt: string };
+      expect(firstCheckpoint.lastSyncedAt).toBe(
+        new Date(previousCheckpoint).toISOString(),
+      );
+
+      // Final drive batch (page 2, hasMore=false): checkpoint advances to max seen
+      const lastDriveBatch = batches.find(
+        (b) => !b.hasMore && b.documents.some((d) => d.title === "page2.txt"),
+      );
+      expect(lastDriveBatch).toBeDefined();
+      const finalCheckpoint = lastDriveBatch?.checkpoint as {
+        lastSyncedAt: string;
+      };
+      expect(finalCheckpoint.lastSyncedAt).toBe(
+        new Date(page2Timestamp).toISOString(),
+      );
+    });
+
     it("does not regress checkpoint when pages have older timestamps than drive items", async () => {
       const connector = new SharePointConnector();
       const { mockGet } = setupMockClient(connector);

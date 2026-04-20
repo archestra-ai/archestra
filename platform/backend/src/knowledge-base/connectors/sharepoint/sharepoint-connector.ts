@@ -212,8 +212,13 @@ export class SharePointConnector extends BaseConnector {
     // Track the highest lastModifiedDateTime seen across all phases (drives + pages)
     // so the checkpoint only advances monotonically and a later phase with older
     // timestamps cannot regress progress from an earlier phase.
+    // safeLastSyncedAt is the original checkpoint value and never changes — it is
+    // emitted on intermediate batches (hasMore=true) so a resumed run always
+    // re-visits any not-yet-processed folders/drives rather than skipping them
+    // because the checkpoint advanced past their file timestamps.
     const progress = {
       maxLastModified: checkpoint.lastSyncedAt as string | undefined,
+      safeLastSyncedAt: checkpoint.lastSyncedAt as string | undefined,
     };
 
     const recursive = parsed.recursive ?? true;
@@ -319,7 +324,10 @@ export class SharePointConnector extends BaseConnector {
     config: SharePointConfig;
     recursive: boolean;
     maxDepth: number | undefined;
-    progress: { maxLastModified: string | undefined };
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
     supportsImages: boolean;
@@ -383,7 +391,10 @@ export class SharePointConnector extends BaseConnector {
     folderPath: string | undefined;
     recursive: boolean;
     maxDepth: number | undefined;
-    progress: { maxLastModified: string | undefined };
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreDrives: boolean;
@@ -443,7 +454,10 @@ export class SharePointConnector extends BaseConnector {
     driveId: string;
     folderId: string;
     rootFolderPath: string | undefined;
-    progress: { maxLastModified: string | undefined };
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreFolders: boolean;
@@ -537,6 +551,13 @@ export class SharePointConnector extends BaseConnector {
 
       const hasMore = hasMorePages || hasMoreFolders;
 
+      // Only advance the checkpoint on the final batch. Intermediate batches
+      // (hasMore=true) keep the original checkpoint so a resumed run re-visits
+      // not-yet-processed folders whose files may have older timestamps.
+      const checkpointAt = hasMore
+        ? progress.safeLastSyncedAt
+        : progress.maxLastModified;
+
       batchIndex++;
       this.log.debug(
         {
@@ -555,10 +576,8 @@ export class SharePointConnector extends BaseConnector {
         failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
-          itemUpdatedAt: progress.maxLastModified
-            ? new Date(progress.maxLastModified)
-            : undefined,
-          previousLastSyncedAt: progress.maxLastModified,
+          itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
+          previousLastSyncedAt: checkpointAt,
         }),
         hasMore,
       };
@@ -660,7 +679,10 @@ export class SharePointConnector extends BaseConnector {
   private async *syncSitePages(params: {
     client: Client;
     siteId: string;
-    progress: { maxLastModified: string | undefined };
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
   }): AsyncGenerator<ConnectorSyncBatch> {
@@ -727,6 +749,10 @@ export class SharePointConnector extends BaseConnector {
         progress.maxLastModified = lastModified;
       }
 
+      const checkpointAt = hasMore
+        ? progress.safeLastSyncedAt
+        : progress.maxLastModified;
+
       batchIndex++;
       this.log.debug(
         {
@@ -743,10 +769,8 @@ export class SharePointConnector extends BaseConnector {
         failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
-          itemUpdatedAt: progress.maxLastModified
-            ? new Date(progress.maxLastModified)
-            : undefined,
-          previousLastSyncedAt: progress.maxLastModified,
+          itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
+          previousLastSyncedAt: checkpointAt,
         }),
         hasMore,
       };

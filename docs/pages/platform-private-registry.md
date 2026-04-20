@@ -44,7 +44,7 @@ Self-hosted servers support two transports:
 
 ## Credentials
 
-The registry entry defines what credential model an installation uses. The installation stores the actual secret or OAuth token.
+The registry entry defines what credential model an installation uses. The installation stores the actual secret, OAuth token, or enterprise credential configuration.
 
 Common patterns are:
 
@@ -54,6 +54,10 @@ Common patterns are:
 - **OAuth client credentials** for shared machine-to-machine access.
 - **Enterprise IdP token exchange** when Archestra should exchange the caller's enterprise identity for a downstream credential.
 - **Enterprise JWT / JWKS passthrough** when the upstream MCP server validates the caller's IdP JWT itself.
+
+Static credential fields can be prompted during installation or stored once on the catalog item. The primary credential can be injected as `Authorization`, `Authorization: Bearer`, or a custom header such as `x-api-key`, depending on what the upstream MCP server expects.
+
+Registry entries can also define **Additional Headers** for non-auth values that should be sent on every downstream request, such as tenant IDs, API version headers, or feature flags. These headers are attached by Archestra when it calls the upstream MCP server. They are different from gateway header passthrough, which forwards selected headers from the incoming MCP client request.
 
 See [MCP Authentication](/docs/mcp-authentication) for the full gateway and upstream credential model.
 
@@ -71,6 +75,12 @@ When assigning tools to an Agent or MCP Gateway, you can pin a specific installa
 Labels are key-value pairs that you can assign to MCP servers in the registry to organize and categorize them. For example, you might label servers by category (`database`, `ai`, `communication`), environment (`production`, `staging`), or team ownership.
 
 Labels are useful for filtering the registry and keeping large catalogs understandable. They do not grant access by themselves; access comes from registry visibility, installation scope, team assignment, and RBAC.
+
+## Tool Discovery
+
+After an MCP server is installed, Archestra discovers the tools exposed by that installed connection. Those tools can then be assigned to Agents or MCP Gateways.
+
+Tool discovery is installation-specific. If the same registry entry is installed twice with different credentials or scopes, Archestra can discover and assign tools from each installed connection separately.
 
 ## From Registry To Gateway
 

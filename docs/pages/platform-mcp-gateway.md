@@ -19,56 +19,19 @@ MCP Gateways are the MCP endpoints you expose to clients such as Cursor, Claude 
 
 Use separate gateways when different clients, teams, or environments need different tool sets or authentication rules. For example, one gateway might expose developer tools to an engineering team, while another exposes support tools to a customer operations agent.
 
-## Overview
+## Gateway Model
 
-A gateway sits between MCP clients and the MCP servers installed in Archestra. The gateway handles client authentication, enforces access control, exposes only assigned tools, and routes each tool call to the right upstream server.
+A gateway is a named MCP surface. It has its own visibility, authentication settings, and assigned tools. The same installed MCP server can appear behind multiple gateways, but each gateway decides which clients can reach it and which tools are exposed.
 
-```mermaid
-graph TB
-    subgraph Clients
-        direction LR
-        A1["AI Agent 1"]
-        A2["AI Agent 2"]
-        A3["AI Application"]
-    end
+Create or edit gateways from **MCPs > Gateways**. A usable gateway needs:
 
-    subgraph Gateway["Archestra"]
-        direction LR
-        GW["Gateway<br/>/v1/mcp"]
-        Orch["MCP Orchestrator"]
+- at least one assigned tool
+- a supported client authentication path
+- visibility that matches the users or teams that should call it
 
-        GW --> Orch
-    end
+Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Resolve-at-call-time is useful when the same gateway should use the caller's own GitHub, Jira, or other upstream credential instead of a shared connection.
 
-    subgraph Remote["Remote MCP Servers"]
-        direction LR
-        R1["GitHub MCP"]
-    end
-
-    subgraph SelfHosted["Self-hosted MCP Servers"]
-        direction LR
-        S1["Jira MCP"]
-        S2["ServiceNow MCP"]
-        S3["Custom MCP"]
-    end
-
-    A1 --> GW
-    A2 --> GW
-    A3 --> GW
-
-    GW --> R1
-
-    Orch --> S1
-    Orch --> S2
-    Orch --> S3
-
-    style GW fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style Orch fill:#fff,stroke:#0066cc,stroke-width:1px
-```
-
-Create or edit gateways from **MCPs > Gateways**. A usable gateway needs assigned tools and a supported authentication path. Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**, which lets Archestra choose the upstream credential based on the caller.
-
-After the gateway is configured, use **Connect** to copy the client-specific connection details.
+After the gateway is configured, use **Connect** to copy connection details for supported clients.
 
 ## Authentication
 
@@ -130,3 +93,13 @@ Gateway access depends on both the caller and the gateway configuration. A user 
 If a gateway is scoped to one team, members outside that team cannot use it even if the underlying MCP server exists in the registry. This lets admins approve MCP servers centrally while still exposing different tool sets to different teams or clients.
 
 See [Access Control](/docs/platform-access-control) for the permission model.
+
+## Custom Headers
+
+MCP Gateways can forward selected client request headers to downstream HTTP-based MCP servers. Use this for request-specific context such as correlation IDs, tenant IDs, or other application headers that need to reach the server handling the tool call.
+
+Configure the allowlist in the gateway's **Advanced** section. Only headers on the allowlist are forwarded; all others are dropped. Header names are case-insensitive and stored in lowercase.
+
+Gateway header passthrough does not override credentials managed by Archestra. If a forwarded header conflicts with an upstream credential header such as `Authorization`, the credential resolved by Archestra takes precedence.
+
+Header passthrough applies to remote MCP servers and local MCP servers using streamable-http transport. Stdio-based servers do not support HTTP headers.

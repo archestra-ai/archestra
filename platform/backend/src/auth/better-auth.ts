@@ -1004,5 +1004,7 @@ function emailMatchesIdentityProviderDomain(
     .split(",")
     .map((domain) => domain.trim().toLowerCase())
     .filter(Boolean)
-    .some((domain) => emailDomain === domain);
+    .some(
+      (domain) => emailDomain === domain || emailDomain.endsWith(`.${domain}`),
+    );
 }

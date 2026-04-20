@@ -1,8 +1,11 @@
-import { describe, expect, test } from "vitest";
-import { IdentityProviderOidcConfigSchema } from "./identity-provider";
+import { describe, expect, it } from "vitest";
+import {
+  IdentityProviderFormSchema,
+  IdentityProviderOidcConfigSchema,
+} from "./identity-provider";
 
 describe("IdentityProviderOidcConfigSchema", () => {
-  test("accepts skipDiscovery with explicit endpoints", () => {
+  it("accepts skipDiscovery with explicit endpoints", () => {
     const result = IdentityProviderOidcConfigSchema.parse({
       issuer: "http://id-jag.example.com/demo-idp",
       skipDiscovery: true,
@@ -20,5 +23,47 @@ describe("IdentityProviderOidcConfigSchema", () => {
     expect(result.skipDiscovery).toBe(true);
     expect(result.hd).toBe("example.com");
     expect(result.tokenEndpoint).toBe("http://id-jag.example.com/token");
+  });
+});
+
+describe("IdentityProviderFormSchema", () => {
+  const validBase = {
+    providerId: "Google",
+    issuer: "https://accounts.google.com",
+    providerType: "oidc" as const,
+    oidcConfig: {
+      issuer: "https://accounts.google.com",
+      pkce: true,
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      discoveryEndpoint:
+        "https://accounts.google.com/.well-known/openid-configuration",
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  };
+
+  it("accepts comma-separated allowed email domains", () => {
+    const result = IdentityProviderFormSchema.safeParse({
+      ...validBase,
+      domain: "example.com, subsidiary.example.com",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid allowed email domains", () => {
+    const result = IdentityProviderFormSchema.safeParse({
+      ...validBase,
+      domain: "example.com, https://evil.com/path",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      "Enter valid comma-separated domains, for example company.com, subsidiary.com",
+    );
   });
 });

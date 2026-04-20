@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOMAIN_VALIDATION_REGEX } from "./incoming-email";
 
 /**
  * Identity provider IDs - these are the canonical built-in provider identifiers used for:
@@ -195,7 +196,20 @@ export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
-    domain: z.string().min(1, "Domain is required"),
+    domain: z
+      .string()
+      .min(1, "Allowed email domains are required")
+      .refine(
+        (value) =>
+          value
+            .split(",")
+            .map((domain) => domain.trim())
+            .every((domain) => DOMAIN_VALIDATION_REGEX.test(domain)),
+        {
+          message:
+            "Enter valid comma-separated domains, for example company.com, subsidiary.com",
+        },
+      ),
     providerType: z.enum(["oidc", "saml"]),
     oidcConfig: IdentityProviderOidcConfigSchema.optional(),
     samlConfig: IdentityProviderSamlConfigSchema.optional(),

@@ -53,7 +53,6 @@
     "@uidotdev/usehooks": "^2.4.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "@xyflow/react": "^12.10.1",
     "ai": "^6.0.82",
     "better-auth": "1.5.5",
     "class-variance-authority": "^0.7.1",

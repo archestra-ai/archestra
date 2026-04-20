@@ -14,13 +14,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -122,7 +116,6 @@ export default function ConnectionSettingsPage() {
     <SettingsSectionStack>
       <SettingsBlock
         title="Default MCP Gateway"
-        description="Pre-selected on the Connection page unless specified in the URL."
         control={
           <WithPermissions
             permissions={{ organizationSettings: ["update"] }}
@@ -156,7 +149,6 @@ export default function ConnectionSettingsPage() {
       />
       <SettingsBlock
         title="Default LLM Proxy"
-        description="Pre-selected on the Connection page unless specified in the URL."
         control={
           <WithPermissions
             permissions={{ organizationSettings: ["update"] }}
@@ -197,10 +189,6 @@ export default function ConnectionSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Visible clients</CardTitle>
-                <CardDescription>
-                  Only the selected clients appear on the Connection page. "Any
-                  client" is always visible.
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ComboboxPicker
@@ -219,9 +207,6 @@ export default function ConnectionSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Visible providers</CardTitle>
-                <CardDescription>
-                  Only the selected providers appear in the LLM Proxy step.
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ComboboxPicker

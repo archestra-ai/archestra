@@ -41,7 +41,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/settings/connection": {
     title: "Connection",
     description:
-      "Control defaults and visible clients/providers on the Connection page.",
+      'Control what other users see when getting connection instructions on the "Connect" page.',
   },
   "/settings/organization": {
     title: "Organization",

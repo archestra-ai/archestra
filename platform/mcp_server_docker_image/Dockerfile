@@ -37,7 +37,16 @@ RUN uv pip sync \
 FROM ${NODE_IMAGE} AS node-builder
 
 # Upgrade npm to a version whose bundled dependencies already include the tar/minimatch fixes
-RUN npm install -g npm@11.12.0
+# Upgrade bundled picomatch to patch CVE-2026-33671 (ReDoS) after installing npm.
+# npm ships tinyglobby with picomatch 4.0.3 pinned in its bundle; overwriting with
+# 4.0.4 is safe since the API is compatible.
+RUN npm install -g npm@11.12.1 && \
+    cd /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules && \
+    rm -rf picomatch && \
+    npm pack picomatch@4.0.4 && \
+    tar -xzf picomatch-4.0.4.tgz && \
+    mv package picomatch && \
+    rm picomatch-4.0.4.tgz
 
 WORKDIR /opt/node-deps
 
@@ -81,7 +90,8 @@ RUN apk add --no-cache \
    # CVE-2025-61732: Go vulnerability fixed in 1.25.7-r0
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
-   apk upgrade --no-cache nodejs bind openssl go zlib expat
+   # CVE-2026-40200: musl vulnerability fixed in 1.2.5-r23
+   apk upgrade --no-cache nodejs bind openssl go zlib expat musl
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm

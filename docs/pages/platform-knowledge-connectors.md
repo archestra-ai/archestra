@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-04-14
+lastUpdated: 2026-04-21
 ---
 
 <!--
@@ -257,7 +257,7 @@ The Outline connector syncs published documents from an [Outline](https://www.ge
 
 Authentication uses an Outline API key. Create one under **Settings → API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
 
-Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs. Page size for the `documents.list` API defaults to 25 and is not user-configurable; it can be adjusted via the connector config API if needed for rate-limit tuning.
+Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs. The UI uses the default page size of 25 for the `documents.list` API; connectors created via the API may override `batchSize` for rate-limit tuning.
 
 ## Managing Connectors
 

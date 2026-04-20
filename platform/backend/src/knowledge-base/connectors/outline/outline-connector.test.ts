@@ -361,8 +361,9 @@ describe("OutlineConnector", () => {
       expect(call2Body.collectionId).toBe("col-2");
     });
 
-    it("keeps the newest checkpoint when a later collection returns no docs", async () => {
+    it("advances the high-water mark only after all collections are swept", async () => {
       const connector = new OutlineConnector();
+      const oldCheckpoint = "2024-06-01T00:00:00.000Z";
       const col1Docs = [
         makeDocument("doc-1", "Recent Col1 Doc", {
           collectionId: "col-1",
@@ -382,66 +383,70 @@ describe("OutlineConnector", () => {
       for await (const batch of connector.sync({
         config: { ...baseConfig, collectionIds: ["col-1", "col-2"] },
         credentials,
-        checkpoint: {
-          type: "outline" as const,
-          lastSyncedAt: "2024-06-01T00:00:00.000Z",
-        },
+        checkpoint: { type: "outline" as const, lastSyncedAt: oldCheckpoint },
       })) {
         batches.push(batch);
       }
 
-      // Every yielded checkpoint must be >= the max updatedAt seen so far, so
-      // that the sync runner persisting any batch cannot regress the high-water
-      // mark.
+      // No intermediate batch may advance the persisted checkpoint past the
+      // previous value, because the sync runner persists every batch and may
+      // stop before later collections are visited. Only the terminal batch
+      // (after the full sweep) carries the advanced high-water mark.
+      expect(batches[0].checkpoint.lastSyncedAt).toBe(oldCheckpoint);
+      expect(batches.at(-1)?.checkpoint.lastSyncedAt).toBe(
+        "2024-07-01T00:00:00.000Z",
+      );
+      // No batch regresses below the input checkpoint.
       for (const batch of batches) {
-        expect(batch.checkpoint.lastSyncedAt).toBe("2024-07-01T00:00:00.000Z");
+        const lastSyncedAt = (batch.checkpoint as { lastSyncedAt?: string })
+          .lastSyncedAt;
+        expect(lastSyncedAt).toBeDefined();
+        expect((lastSyncedAt ?? "") >= oldCheckpoint).toBe(true);
       }
     });
 
-    it("keeps the newest checkpoint when a later collection returns only older docs", async () => {
+    it("does not skip a later collection when stopped after the first batch", async () => {
+      // Regression: col-1 yields a newer doc with hasMore=true; if the sync
+      // runner persists the first batch's checkpoint and then stops (time
+      // budget), col-2's doc — older than col-1's max but newer than the old
+      // checkpoint — must not be filtered out on resume.
       const connector = new OutlineConnector();
-      const col1Docs = [
-        makeDocument("doc-1", "Recent Col1 Doc", {
+      const oldCheckpoint = "2024-06-01T00:00:00.000Z";
+      const col1Page1 = [
+        makeDocument("col1-newer", "Col1 Newer", {
           collectionId: "col-1",
           updatedAt: "2024-07-01T00:00:00.000Z",
         }),
       ];
-      const col2Docs = [
-        makeDocument("doc-2", "Older Col2 Doc", {
-          collectionId: "col-2",
-          updatedAt: "2024-06-15T00:00:00.000Z",
-        }),
-      ];
 
-      vi.spyOn(connector as unknown as SpyTarget, "fetchWithRetry")
-        .mockResolvedValueOnce(makeListResponse(col1Docs))
-        .mockResolvedValueOnce(makeListResponse(col2Docs));
+      const fetchSpy = vi
+        .spyOn(connector as unknown as SpyTarget, "fetchWithRetry")
+        .mockResolvedValueOnce(
+          makeListResponse(col1Page1, { hasNextPath: true }),
+        );
       vi.spyOn(
         connector as unknown as SpyTarget,
         "rateLimit",
       ).mockResolvedValue(undefined);
 
-      const batches: ConnectorSyncBatch[] = [];
-      for await (const batch of connector.sync({
+      const generator = connector.sync({
         config: { ...baseConfig, collectionIds: ["col-1", "col-2"] },
         credentials,
-        checkpoint: {
-          type: "outline" as const,
-          lastSyncedAt: "2024-06-01T00:00:00.000Z",
-        },
-      })) {
-        batches.push(batch);
-      }
+        checkpoint: { type: "outline" as const, lastSyncedAt: oldCheckpoint },
+      });
 
-      // Once collection 1 has raised the high-water mark to 2024-07-01, no
-      // subsequent batch (including col-2's older doc) may regress it.
-      const lastBatch = batches.at(-1);
-      expect(lastBatch?.checkpoint.lastSyncedAt).toBe(
-        "2024-07-01T00:00:00.000Z",
-      );
-      for (const batch of batches.slice(1)) {
-        expect(batch.checkpoint.lastSyncedAt).toBe("2024-07-01T00:00:00.000Z");
-      }
+      const first = await generator.next();
+      expect(first.done).toBe(false);
+      const firstBatch = first.value as ConnectorSyncBatch;
+
+      // The runner would persist this checkpoint and then stop. It MUST still
+      // be the old value — advancing to 2024-07-01 would cause col-2's
+      // 2024-06-15 doc to be filtered out on the follow-up run's syncFrom.
+      expect(firstBatch.checkpoint.lastSyncedAt).toBe(oldCheckpoint);
+      // hasMore must reflect the full sweep, not just this collection.
+      expect(firstBatch.hasMore).toBe(true);
+      // Only col-1 was fetched before we stopped.
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
     it("uses checkpoint lastSyncedAt in subsequent syncs", async () => {

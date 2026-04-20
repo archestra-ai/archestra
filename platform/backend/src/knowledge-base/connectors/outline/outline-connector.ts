@@ -157,11 +157,18 @@ export class OutlineConnector extends BaseConnector {
     );
 
     if (parsed.collectionIds && parsed.collectionIds.length > 0) {
-      // Track the max lastSyncedAt across collections so a later collection
-      // with no or older docs cannot regress the persisted high-water mark.
+      // Track the max lastSyncedAt across collections so we can only persist
+      // the advanced high-water mark after every collection has been swept.
+      // Intermediate batches must preserve the previous checkpoint: the sync
+      // runner persists every yielded checkpoint immediately, and may stop
+      // between batches (time budget). If we advanced mid-sweep, resuming
+      // would filter out documents in still-unvisited collections whose
+      // updatedAt is older than the advanced checkpoint (minus safety buffer).
       let maxLastSyncedAt: string | undefined = checkpoint.lastSyncedAt;
       let yieldedAny = false;
-      for (const collectionId of parsed.collectionIds) {
+      for (let i = 0; i < parsed.collectionIds.length; i++) {
+        const collectionId = parsed.collectionIds[i];
+        const isLastCollection = i === parsed.collectionIds.length - 1;
         const batchGen = this.syncCollection({
           config: parsed,
           credentials: params.credentials,
@@ -180,13 +187,23 @@ export class OutlineConnector extends BaseConnector {
           ) {
             maxLastSyncedAt = batchLastSyncedAt;
           }
+          // Only the terminal batch of the final collection advances the
+          // persisted checkpoint; all earlier batches preserve the previous
+          // value so a mid-sweep stop cannot skip later collections.
+          const isFinalBatch = isLastCollection && !batch.hasMore;
+          const checkpointToPersist = isFinalBatch
+            ? maxLastSyncedAt
+            : checkpoint.lastSyncedAt;
+          // hasMore across the full sweep, not just within this collection.
+          const hasMore = batch.hasMore || !isLastCollection;
           yield {
             ...batch,
             checkpoint: buildCheckpoint({
               type: "outline",
-              itemUpdatedAt: maxLastSyncedAt,
+              itemUpdatedAt: checkpointToPersist,
               previousLastSyncedAt: checkpoint.lastSyncedAt,
             }),
+            hasMore,
           };
         }
       }

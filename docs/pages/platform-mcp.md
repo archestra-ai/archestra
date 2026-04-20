@@ -17,7 +17,7 @@ MCP is Archestra's tool layer. It lets agents and external MCP clients use tools
 The main pieces are:
 
 - **[Private MCP Registry](/docs/platform-private-registry)**: the catalog where teams define which MCP servers can be installed, how they are configured, and which credentials they require.
-- **[MCP Gateway](/docs/platform-mcp-gateway)**: the client-facing endpoint for Cursor, Claude Desktop, Open WebUI, custom agents, and other MCP clients. A gateway exposes a selected set of tools at `POST /v1/mcp/<gateway-id>`.
+- **[MCP Gateway](/docs/platform-mcp-gateway)**: the client-facing endpoint for Cursor, Claude Desktop, Open WebUI, custom agents, and other MCP clients.
 - **[MCP Orchestrator](/docs/platform-orchestrator)**: the runtime for self-hosted MCP servers. It creates isolated Kubernetes deployments, manages server lifecycle, and routes gateway traffic to local servers.
 - **[MCP Authentication](/docs/mcp-authentication)**: the gateway and upstream credential model. Clients authenticate to Archestra, then Archestra resolves the credential needed by each upstream MCP server at tool-call time.
 - **[Archestra MCP Server](/docs/platform-archestra-mcp-server)**: built-in tools for managing platform resources such as agents, MCP gateways, registry entries, policies, and limits.

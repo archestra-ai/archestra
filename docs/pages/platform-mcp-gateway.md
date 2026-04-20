@@ -121,4 +121,4 @@ MCP Gateways support four client authentication paths:
 
 Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
 
-See [MCP Authentication](/docs/mcp-authentication) for gateway auth flows, upstream credential resolution, OAuth refresh, and enterprise IdP token exchange.
+See [MCP Authentication](/docs/mcp-authentication) for more details.

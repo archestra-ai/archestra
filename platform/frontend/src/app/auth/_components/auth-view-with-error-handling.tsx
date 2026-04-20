@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { consumeSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import config from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -120,6 +121,12 @@ const SSO_ERROR_MESSAGES: Record<string, { title: string; message: string }> = {
   },
 };
 
+const GENERIC_SSO_SIGN_IN_FAILED = {
+  title: "Sign-In Failed",
+  message:
+    "Single sign-on could not be completed. Please try again or contact your administrator.",
+};
+
 interface AuthViewWithErrorHandlingProps {
   path: string;
   callbackURL?: string;
@@ -176,8 +183,13 @@ export function AuthViewWithErrorHandling({
             : `An error occurred during sign-in: ${decodeURIComponent(errorParam)}. Please try again or contact your administrator.`,
         });
       }
+      return;
     }
-  }, [searchParams]);
+
+    if (path === "sign-in" && consumeSsoSignInAttempt(callbackURL)) {
+      setSsoError(GENERIC_SSO_SIGN_IN_FAILED);
+    }
+  }, [callbackURL, path, searchParams]);
 
   useEffect(() => {
     // Intercept fetch to detect 500 errors from auth endpoints

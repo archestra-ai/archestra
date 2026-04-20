@@ -27232,6 +27232,8 @@ export type GetConnectorsResponses = {
                 siteUrl: unknown;
                 driveIds?: Array<string>;
                 folderPath?: string;
+                recursive?: boolean;
+                maxDepth?: number;
                 includePages?: boolean;
                 batchSize?: number;
             } | {
@@ -27361,6 +27363,8 @@ export type CreateConnectorData = {
             siteUrl: string;
             driveIds?: Array<string>;
             folderPath?: string;
+            recursive?: boolean;
+            maxDepth?: number;
             includePages?: boolean;
             batchSize?: number;
         } | {
@@ -27537,6 +27541,8 @@ export type CreateConnectorResponses = {
             siteUrl: unknown;
             driveIds?: Array<string>;
             folderPath?: string;
+            recursive?: boolean;
+            maxDepth?: number;
             includePages?: boolean;
             batchSize?: number;
         } | {
@@ -27804,6 +27810,8 @@ export type GetConnectorResponses = {
             siteUrl: unknown;
             driveIds?: Array<string>;
             folderPath?: string;
+            recursive?: boolean;
+            maxDepth?: number;
             includePages?: boolean;
             batchSize?: number;
         } | {
@@ -27919,6 +27927,8 @@ export type UpdateConnectorData = {
             siteUrl: string;
             driveIds?: Array<string>;
             folderPath?: string;
+            recursive?: boolean;
+            maxDepth?: number;
             includePages?: boolean;
             batchSize?: number;
         } | {
@@ -28096,6 +28106,8 @@ export type UpdateConnectorResponses = {
             siteUrl: unknown;
             driveIds?: Array<string>;
             folderPath?: string;
+            recursive?: boolean;
+            maxDepth?: number;
             includePages?: boolean;
             batchSize?: number;
         } | {

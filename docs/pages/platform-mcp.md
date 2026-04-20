@@ -22,24 +22,24 @@ The main pieces are:
 - **[MCP Authentication](/docs/mcp-authentication)**: the gateway and upstream credential model. Clients authenticate to Archestra, then Archestra resolves the credential needed by each upstream MCP server at tool-call time.
 - **[Archestra MCP Server](/docs/platform-archestra-mcp-server)**: built-in tools for managing platform resources such as agents, MCP gateways, registry entries, policies, and limits.
 
-## Request Flow
+## How Tools Are Reached
 
 ```mermaid
 graph LR
     Client["MCP Client<br/>Cursor, Claude, app"] --> Gateway["MCP Gateway"]
-    Gateway --> Policies["Tool Policies<br/>and Access Control"]
-    Policies --> Remote["Remote MCP Server"]
-    Policies --> Orchestrator["MCP Orchestrator"]
+    Gateway --> Auth["Gateway Auth<br/>and Tool Assignment"]
+    Auth --> Remote["Remote MCP Server"]
+    Auth --> Orchestrator["MCP Orchestrator"]
     Orchestrator --> Local["Self-hosted MCP Server"]
-    Policies --> BuiltIn["Archestra MCP Server"]
+    Auth --> BuiltIn["Archestra MCP Server"]
 
     style Gateway fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style Policies fill:#fff2cc,stroke:#d6b656,stroke-width:1px
+    style Auth fill:#fff2cc,stroke:#d6b656,stroke-width:1px
 ```
 
 The gateway is the stable endpoint clients connect to. The registry and orchestrator decide where tools come from. Authentication decides who can call the gateway and which upstream credential should be used when a tool runs.
 
-## Remote And Self-Hosted Servers
+## Server Runtimes
 
 Remote MCP servers run outside Archestra and are reached over HTTP. Use them when the server is already hosted by a provider or another internal team.
 
@@ -47,11 +47,11 @@ Self-hosted MCP servers run inside your Kubernetes cluster through the MCP Orche
 
 Both types can be assigned to Agents and MCP Gateways. The client does not need to know which runtime backs each tool.
 
-## Security Model
+## Authentication And Access
 
 MCP access has two layers:
 
 - **Gateway authentication** controls whether the client can call the MCP Gateway. Supported paths include OAuth 2.1, ID-JAG, external IdP JWT validation through JWKS, and static Archestra bearer tokens.
 - **Upstream MCP server authentication** controls how Archestra authenticates to the MCP server or external SaaS API behind the tool. Credentials can be static, OAuth-based, dynamically resolved per caller, exchanged through an enterprise IdP, or forwarded as a JWT for upstream JWKS validation.
 
-Team scope, RBAC, tool assignments, tool invocation policies, trusted data policies, logs, metrics, and traces all apply around this flow. See [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), [Access Control](/docs/platform-access-control), and [Observability](/docs/platform-observability) for the related controls.
+Team scope, RBAC, tool assignments, logs, metrics, and traces all apply around this flow. See [Access Control](/docs/platform-access-control), [MCP Authentication](/docs/mcp-authentication), and [Observability](/docs/platform-observability) for the related controls.

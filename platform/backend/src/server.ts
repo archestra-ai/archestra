@@ -79,14 +79,14 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import {
-  UserConfigFieldDefaultSchema,
-  UserConfigFieldSchema,
-} from "./types/mcp-catalog";
-import {
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
 } from "./routes/route-paths";
+import {
+  UserConfigFieldDefaultSchema,
+  UserConfigFieldSchema,
+} from "./types/mcp-catalog";
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;

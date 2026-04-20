@@ -76,3 +76,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @vortexdispatch01-spec
 - @ayushgoyal-lsn
 - @Lesedi37
+- @vincemtnz

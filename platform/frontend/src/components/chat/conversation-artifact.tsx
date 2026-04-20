@@ -7,6 +7,10 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -80,6 +84,10 @@ export function ConversationArtifactPanel({
 
   // Custom components for ReactMarkdown to handle Mermaid diagrams
   const markdownComponents: Components = {
+    // Drop ReactMarkdown's default <pre>; CodeBlock renders its own wrapper for fenced code.
+    pre({ children }) {
+      return <>{children}</>;
+    },
     code({ node, className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
@@ -93,7 +101,29 @@ export function ConversationArtifactPanel({
         );
       }
 
-      // Default code block rendering
+      if (language) {
+        const code = String(children).replace(/\n$/, "");
+        // Only reserve a top strip for the copy button when the first line is long
+        // enough that it would collide with the button in the top-right corner.
+        const FIRST_LINE_OVERLAP_THRESHOLD = 30;
+        const firstLineLength = code.split("\n")[0].length;
+        const needsTopPadding = firstLineLength > FIRST_LINE_OVERLAP_THRESHOLD;
+        return (
+          <CodeBlock
+            code={code}
+            language={language}
+            contentStyle={{
+              paddingTop: needsTopPadding ? "2.5rem" : "1rem",
+              paddingRight: needsTopPadding ? "1rem" : "2.5rem",
+            }}
+            contentClassName="[&_*]:!bg-transparent"
+          >
+            <CodeBlockCopyButton />
+          </CodeBlock>
+        );
+      }
+
+      // Inline code
       return (
         <code className={className} {...props}>
           {children}

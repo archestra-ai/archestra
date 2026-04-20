@@ -100371,6 +100371,14 @@
                                   "folderPath": {
                                     "type": "string"
                                   },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
                                   "includePages": {
                                     "type": "boolean"
                                   },
@@ -101351,6 +101359,14 @@
                           "folderPath": {
                             "type": "string"
                           },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "includePages": {
                             "type": "boolean"
                           },
@@ -101970,6 +101986,14 @@
                             },
                             "folderPath": {
                               "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "includePages": {
                               "type": "boolean"
@@ -102893,6 +102917,14 @@
                             "folderPath": {
                               "type": "string"
                             },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
                             "includePages": {
                               "type": "boolean"
                             },
@@ -103729,6 +103761,14 @@
                           "folderPath": {
                             "type": "string"
                           },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "includePages": {
                             "type": "boolean"
                           },
@@ -104346,6 +104386,14 @@
                             },
                             "folderPath": {
                               "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "includePages": {
                               "type": "boolean"

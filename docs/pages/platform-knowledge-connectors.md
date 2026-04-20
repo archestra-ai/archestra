@@ -254,11 +254,10 @@ The Outline connector syncs published documents from an [Outline](https://www.ge
 | Instance URL   | The base URL of your Outline workspace (e.g. `https://app.getoutline.com` or your self-hosted URL).    |
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
-| Batch Size     | Number of documents per API request (default: 25). Adjust for rate-limit tuning via the API.           |
 
 Authentication uses an Outline API key. Create one under **Settings → API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
 
-Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs.
+Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs. Page size for the `documents.list` API defaults to 25 and is not user-configurable; it can be adjusted via the connector config API if needed for rate-limit tuning.
 
 ## Managing Connectors
 

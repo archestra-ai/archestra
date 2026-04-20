@@ -157,8 +157,10 @@ export class OutlineConnector extends BaseConnector {
     );
 
     if (parsed.collectionIds && parsed.collectionIds.length > 0) {
-      // Sync each collection separately so we can filter server-side.
-      let lastUpdatedAt: string | undefined;
+      // Track the max lastSyncedAt across collections so a later collection
+      // with no or older docs cannot regress the persisted high-water mark.
+      let maxLastSyncedAt: string | undefined = checkpoint.lastSyncedAt;
+      let yieldedAny = false;
       for (const collectionId of parsed.collectionIds) {
         const batchGen = this.syncCollection({
           config: parsed,
@@ -169,21 +171,31 @@ export class OutlineConnector extends BaseConnector {
           checkpoint,
         });
         for await (const batch of batchGen) {
-          // Track the latest updatedAt across all collections.
-          const lastDoc = batch.documents.at(0);
-          if (lastDoc?.updatedAt) {
-            lastUpdatedAt = lastDoc.updatedAt.toISOString();
+          yieldedAny = true;
+          const batchLastSyncedAt = (batch.checkpoint as OutlineCheckpoint)
+            .lastSyncedAt;
+          if (
+            batchLastSyncedAt &&
+            (!maxLastSyncedAt || batchLastSyncedAt > maxLastSyncedAt)
+          ) {
+            maxLastSyncedAt = batchLastSyncedAt;
           }
-          yield batch;
+          yield {
+            ...batch,
+            checkpoint: buildCheckpoint({
+              type: "outline",
+              itemUpdatedAt: maxLastSyncedAt,
+              previousLastSyncedAt: checkpoint.lastSyncedAt,
+            }),
+          };
         }
       }
-      // Emit a final checkpoint if we didn't yield any documents.
-      if (lastUpdatedAt === undefined) {
+      if (!yieldedAny) {
         yield {
           documents: [],
           checkpoint: buildCheckpoint({
             type: "outline",
-            itemUpdatedAt: undefined,
+            itemUpdatedAt: maxLastSyncedAt,
             previousLastSyncedAt: checkpoint.lastSyncedAt,
           }),
           failures: this.flushFailures(),

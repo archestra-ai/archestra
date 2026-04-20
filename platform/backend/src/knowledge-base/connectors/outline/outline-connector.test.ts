@@ -361,6 +361,89 @@ describe("OutlineConnector", () => {
       expect(call2Body.collectionId).toBe("col-2");
     });
 
+    it("keeps the newest checkpoint when a later collection returns no docs", async () => {
+      const connector = new OutlineConnector();
+      const col1Docs = [
+        makeDocument("doc-1", "Recent Col1 Doc", {
+          collectionId: "col-1",
+          updatedAt: "2024-07-01T00:00:00.000Z",
+        }),
+      ];
+
+      vi.spyOn(connector as unknown as SpyTarget, "fetchWithRetry")
+        .mockResolvedValueOnce(makeListResponse(col1Docs))
+        .mockResolvedValueOnce(makeListResponse([]));
+      vi.spyOn(
+        connector as unknown as SpyTarget,
+        "rateLimit",
+      ).mockResolvedValue(undefined);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...baseConfig, collectionIds: ["col-1", "col-2"] },
+        credentials,
+        checkpoint: {
+          type: "outline" as const,
+          lastSyncedAt: "2024-06-01T00:00:00.000Z",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      // Every yielded checkpoint must be >= the max updatedAt seen so far, so
+      // that the sync runner persisting any batch cannot regress the high-water
+      // mark.
+      for (const batch of batches) {
+        expect(batch.checkpoint.lastSyncedAt).toBe("2024-07-01T00:00:00.000Z");
+      }
+    });
+
+    it("keeps the newest checkpoint when a later collection returns only older docs", async () => {
+      const connector = new OutlineConnector();
+      const col1Docs = [
+        makeDocument("doc-1", "Recent Col1 Doc", {
+          collectionId: "col-1",
+          updatedAt: "2024-07-01T00:00:00.000Z",
+        }),
+      ];
+      const col2Docs = [
+        makeDocument("doc-2", "Older Col2 Doc", {
+          collectionId: "col-2",
+          updatedAt: "2024-06-15T00:00:00.000Z",
+        }),
+      ];
+
+      vi.spyOn(connector as unknown as SpyTarget, "fetchWithRetry")
+        .mockResolvedValueOnce(makeListResponse(col1Docs))
+        .mockResolvedValueOnce(makeListResponse(col2Docs));
+      vi.spyOn(
+        connector as unknown as SpyTarget,
+        "rateLimit",
+      ).mockResolvedValue(undefined);
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...baseConfig, collectionIds: ["col-1", "col-2"] },
+        credentials,
+        checkpoint: {
+          type: "outline" as const,
+          lastSyncedAt: "2024-06-01T00:00:00.000Z",
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      // Once collection 1 has raised the high-water mark to 2024-07-01, no
+      // subsequent batch (including col-2's older doc) may regress it.
+      const lastBatch = batches.at(-1);
+      expect(lastBatch?.checkpoint.lastSyncedAt).toBe(
+        "2024-07-01T00:00:00.000Z",
+      );
+      for (const batch of batches.slice(1)) {
+        expect(batch.checkpoint.lastSyncedAt).toBe("2024-07-01T00:00:00.000Z");
+      }
+    });
+
     it("uses checkpoint lastSyncedAt in subsequent syncs", async () => {
       const connector = new OutlineConnector();
       const checkpoint = {

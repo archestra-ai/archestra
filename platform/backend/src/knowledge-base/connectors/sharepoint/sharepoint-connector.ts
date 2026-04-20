@@ -404,7 +404,12 @@ export class SharePointConnector extends BaseConnector {
 
     const adapter: FolderTraversalAdapter = {
       listDirectSubfolders: (parentId) =>
-        this.listDirectSubfolders({ client, driveId, parentId, rootFolderPath: folderPath }),
+        this.listDirectSubfolders({
+          client,
+          driveId,
+          parentId,
+          rootFolderPath: folderPath,
+        }),
     };
 
     const folderGen = traverseFolders(
@@ -794,7 +799,12 @@ export class SharePointConnector extends BaseConnector {
 
     const adapter: FolderTraversalAdapter = {
       listDirectSubfolders: (parentId) =>
-        this.listDirectSubfolders({ client, driveId, parentId, rootFolderPath: folderPath }),
+        this.listDirectSubfolders({
+          client,
+          driveId,
+          parentId,
+          rootFolderPath: folderPath,
+        }),
     };
 
     let count = 0;

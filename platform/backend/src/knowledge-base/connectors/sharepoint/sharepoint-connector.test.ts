@@ -816,12 +816,16 @@ describe("SharePointConnector", () => {
           value: [makeFolderItem("folder-1", "Subfolder")],
         })
         // syncFilesInFolder("root") → one file
-        .mockResolvedValueOnce({ value: [makeDriveItem("root-file", "root.txt")] })
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("root-file", "root.txt")],
+        })
         .mockResolvedValueOnce(makeFileBuffer("Root content")) // root.txt download
         // listDirectSubfolders("folder-1") → no subfolders
         .mockResolvedValueOnce({ value: [] })
         // syncFilesInFolder("folder-1") → one file
-        .mockResolvedValueOnce({ value: [makeDriveItem("sub-file", "sub.txt")] })
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("sub-file", "sub.txt")],
+        })
         .mockResolvedValueOnce(makeFileBuffer("Sub content")) // sub.txt download
         .mockResolvedValueOnce({ value: [] }); // sitePages
 
@@ -844,7 +848,9 @@ describe("SharePointConnector", () => {
       // Verify subfolder children URL was called (listDirectSubfolders or syncFilesInFolder)
       const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
       expect(
-        apiCalls.some((u) => u.includes("/drives/drive-1/items/folder-1/children")),
+        apiCalls.some((u) =>
+          u.includes("/drives/drive-1/items/folder-1/children"),
+        ),
       ).toBe(true);
     });
 
@@ -856,7 +862,9 @@ describe("SharePointConnector", () => {
         .mockResolvedValueOnce({ id: "site-123" })
         .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
         // syncFilesInFolder("root") — no listDirectSubfolders called when recursive=false
-        .mockResolvedValueOnce({ value: [makeDriveItem("root-file", "root.txt")] })
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("root-file", "root.txt")],
+        })
         .mockResolvedValueOnce(makeFileBuffer("Root content")) // root.txt
         .mockResolvedValueOnce({ value: [] }); // sitePages
 
@@ -879,9 +887,9 @@ describe("SharePointConnector", () => {
 
       // Neither listDirectSubfolders nor syncFilesInFolder for folder-1
       const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
-      expect(
-        apiCalls.some((u) => u.includes("/items/folder-1/children")),
-      ).toBe(false);
+      expect(apiCalls.some((u) => u.includes("/items/folder-1/children"))).toBe(
+        false,
+      );
     });
 
     it("respects maxDepth and stops at the configured depth limit", async () => {
@@ -896,7 +904,9 @@ describe("SharePointConnector", () => {
           value: [makeFolderItem("folder-1", "Level1")],
         })
         // syncFilesInFolder("root") → one file
-        .mockResolvedValueOnce({ value: [makeDriveItem("file-0", "level0.txt")] })
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("file-0", "level0.txt")],
+        })
         .mockResolvedValueOnce(makeFileBuffer("Level 0 content"))
         // listDirectSubfolders("folder-1") NOT called: depth(1) >= maxDepth(1)
         // syncFilesInFolder("folder-1") → one file + one nested folder (folder filtered out)
@@ -925,9 +935,13 @@ describe("SharePointConnector", () => {
 
       const apiCalls = mockApi.mock.calls.map((c) => c[0] as string);
       // syncFilesInFolder("folder-1") was called — has /items/folder-1/children
-      expect(apiCalls.some((u) => u.includes("/items/folder-1/children"))).toBe(true);
+      expect(apiCalls.some((u) => u.includes("/items/folder-1/children"))).toBe(
+        true,
+      );
       // folder-2 never reached: listDirectSubfolders("folder-1") not called, syncFilesInFolder("folder-2") not called
-      expect(apiCalls.some((u) => u.includes("/items/folder-2/children"))).toBe(false);
+      expect(apiCalls.some((u) => u.includes("/items/folder-2/children"))).toBe(
+        false,
+      );
 
       const allDocs = batches.flatMap((b) => b.documents);
       expect(allDocs.map((d) => d.title)).toContain("level0.txt");

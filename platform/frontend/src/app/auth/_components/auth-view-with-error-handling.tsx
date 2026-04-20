@@ -191,6 +191,7 @@ export function AuthViewWithErrorHandling({
 
     if (path === "sign-in" && hasSsoSignInAttempt()) {
       setSsoError(GENERIC_SSO_SIGN_IN_FAILED);
+      clearSsoSignInAttempt();
     }
   }, [path, searchParams]);
 

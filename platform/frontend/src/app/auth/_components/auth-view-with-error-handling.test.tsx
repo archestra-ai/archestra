@@ -2,7 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { useSearchParams } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { recordSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+import {
+  hasSsoSignInAttempt,
+  recordSsoSignInAttempt,
+} from "@/lib/auth/sso-sign-in-attempt";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { AuthViewWithErrorHandling } from "./auth-view-with-error-handling";
 
@@ -79,6 +82,7 @@ describe("AuthViewWithErrorHandling", () => {
         "Single sign-on could not be completed. Please try again or contact your administrator.",
       ),
     ).toBeInTheDocument();
+    expect(hasSsoSignInAttempt()).toBe(false);
   });
 
   it("shows the failed SSO message when Better Auth regenerates exp and sig", async () => {

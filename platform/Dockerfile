@@ -68,6 +68,21 @@ COPY patches/ patches/
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
+# CVE-2026-33671: Next.js bundles picomatch 4.0.3 at dist/compiled/picomatch/.
+# pnpm overrides cannot reach this vendored copy; upstream has not re-vendored
+# yet (tracked at vercel/next.js#92950). Replace it with the 4.0.4 package tree.
+# The path resolves through the symlink frontend/node_modules/next → .pnpm/next@.../node_modules/next,
+# so overwriting once updates every reference.
+RUN set -eux; \
+    cd /tmp; \
+    wget -q -O picomatch-4.0.4.tgz https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz; \
+    echo "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c  picomatch-4.0.4.tgz" | sha256sum -c -; \
+    target=/app/frontend/node_modules/next/dist/compiled/picomatch; \
+    rm -rf "$target"/*; \
+    tar -xzf picomatch-4.0.4.tgz --strip-components=1 -C "$target"; \
+    rm -f picomatch-4.0.4.tgz; \
+    grep -q '"version": "4.0.4"' "$target/package.json"
+
 # <----- Builder stage ----->
 FROM base AS builder
 WORKDIR /app
@@ -205,6 +220,18 @@ COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # Install production dependencies for both workspaces
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
+
+# CVE-2026-33671: replace Next's bundled picomatch 4.0.3 with 4.0.4 (same as deps stage).
+# Production install refetches next so the patched copy from the builder is not inherited.
+RUN set -eux; \
+    cd /tmp; \
+    wget -q -O picomatch-4.0.4.tgz https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz; \
+    echo "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c  picomatch-4.0.4.tgz" | sha256sum -c -; \
+    target=/app/frontend/node_modules/next/dist/compiled/picomatch; \
+    rm -rf "$target"/*; \
+    tar -xzf picomatch-4.0.4.tgz --strip-components=1 -C "$target"; \
+    rm -f picomatch-4.0.4.tgz; \
+    grep -q '"version": "4.0.4"' "$target/package.json"
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist

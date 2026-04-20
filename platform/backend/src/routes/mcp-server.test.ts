@@ -926,7 +926,7 @@ describe("mcp server inspect route", () => {
           "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
         tokenEndpointAuthentication: "client_secret_post",
         enterpriseManagedCredentials: {
-          providerType: "keycloak",
+          exchangeStrategy: "rfc8693",
           subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
         },
       },

@@ -30,12 +30,15 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
+import { AsanaConfigFields } from "./asana-config-fields";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { DropboxConfigFields } from "./dropbox-config-fields";
 import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
@@ -258,7 +261,7 @@ export function EditConnectorDialog({
           {urlConfig && (
             <FormField
               control={form.control}
-              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector-specific URL
+              // biome-ignore lint/suspicious/noExplicitAny: form field name requires dynamic typing
               name={urlConfig.fieldName as any}
               rules={{ required: `${urlConfig.label} is required` }}
               render={({ field }) => (
@@ -281,7 +284,7 @@ export function EditConnectorDialog({
           {(connectorType === "jira" || connectorType === "confluence") && (
             <FormField
               control={form.control}
-              // biome-ignore lint/suspicious/noExplicitAny: dynamic field name for connector config
+              // biome-ignore lint/suspicious/noExplicitAny: form field name requires dynamic typing
               name={"config.isCloud" as any}
               render={({ field }) => (
                 <FormItem className="flex items-center justify-between rounded-lg border p-3">
@@ -407,11 +410,13 @@ export function EditConnectorDialog({
                         ? "Client Secret"
                         : connectorType === "gdrive"
                           ? "Service Account Key / OAuth Token"
-                          : needsEmail
-                            ? emailRequired
-                              ? "API Token"
-                              : "API Token / Personal Access Token"
-                            : "Personal Access Token"}
+                          : connectorType === "dropbox"
+                            ? "Access Token"
+                            : needsEmail
+                              ? emailRequired
+                                ? "API Token"
+                                : "API Token / Personal Access Token"
+                              : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -463,6 +468,7 @@ export function EditConnectorDialog({
               {connectorType === "gitlab" && (
                 <GitlabConfigFields form={form} hideUrl />
               )}
+              {connectorType === "linear" && <LinearConfigFields form={form} />}
               {connectorType === "servicenow" && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
@@ -473,6 +479,10 @@ export function EditConnectorDialog({
               {connectorType === "gdrive" && (
                 <GoogleDriveConfigFields form={form} />
               )}
+              {connectorType === "dropbox" && (
+                <DropboxConfigFields control={form.control} />
+              )}
+              {connectorType === "asana" && <AsanaConfigFields form={form} />}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -545,10 +555,22 @@ function getEditUrlConfig(type: ConnectorType): {
           description: "Your ServiceNow instance URL.",
         },
       };
+    case "linear":
+      return {
+        typeLabel: "Linear",
+        urlFields: {
+          fieldName: "config.linearApiUrl",
+          label: "Linear API URL",
+          placeholder: "https://api.linear.app",
+          description: "Linear GraphQL API base URL.",
+        },
+      };
     case "notion":
       return { typeLabel: "Notion", urlFields: null };
     case "gdrive":
       return { typeLabel: "Google Drive", urlFields: null };
+    case "asana":
+      return { typeLabel: "Asana", urlFields: null };
     case "sharepoint":
       return {
         typeLabel: "SharePoint",
@@ -559,6 +581,8 @@ function getEditUrlConfig(type: ConnectorType): {
           description: "Your SharePoint site URL.",
         },
       };
+    case "dropbox":
+      return { typeLabel: "Dropbox", urlFields: null };
     default:
       return {
         typeLabel: type,

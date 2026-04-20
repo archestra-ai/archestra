@@ -72,12 +72,6 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_MERGE_EXTERNAL_CONTRIBUTORS_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_MERGE_EXTERNAL_CONTRIBUTORS_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Add label
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr edit "$PR_NUMBER" --add-label "contributor-onboard"
-
       - name: Update PR branch
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}

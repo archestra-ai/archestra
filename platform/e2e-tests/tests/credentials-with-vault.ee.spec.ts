@@ -20,8 +20,10 @@ import {
   clickButton,
   expandTablePagination,
   goToMcpRegistry,
+  installMcpServer,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
+  waitForInstallDialog,
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
@@ -395,6 +397,58 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       headers: {
         "X-Vault-Token": DEFAULT_VAULT_TOKEN,
       },
+    });
+  });
+
+  test("Install dialog does not show vault folder selector when no prompt-on-install secret exists", async ({
+    adminPage,
+    extractCookieHeaders,
+    makeRandomString,
+  }) => {
+    test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
+    test.setTimeout(90_000);
+
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    const catalogItemName = makeRandomString(10, "mcp");
+
+    await ensureVaultSecretExists();
+    await ensureDefaultTeamVaultFolder(cookieHeaders);
+
+    const newCatalogItem = await addCustomSelfHostedCatalogItem({
+      page: adminPage,
+      cookieHeaders,
+      catalogItemName,
+      envVars: {
+        key: "ARCHESTRA_TEST",
+        promptOnInstallation: false,
+        isSecret: true,
+        vaultSecret: {
+          name: secretName,
+          key: secretKey,
+          value: secretValue,
+          teamName: DEFAULT_TEAM_NAME,
+        },
+      },
+    });
+
+    await waitForInstallDialog(adminPage, { titlePattern: /Install -/ });
+
+    await expect(
+      adminPage.getByRole("dialog").getByText("Pull Vault secrets from:"),
+    ).not.toBeVisible();
+    await expect(
+      adminPage.getByRole("dialog").getByText("-- Select Vault folder --"),
+    ).not.toBeVisible();
+
+    await installMcpServer(adminPage);
+
+    await goToMcpRegistry(adminPage);
+    await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
+    await settleRegistryAfterInstall(adminPage);
+
+    await archestraApiSdk.deleteInternalMcpCatalogItem({
+      path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
     });
   });
 });

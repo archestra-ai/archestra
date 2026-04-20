@@ -23,7 +23,7 @@ The MCP Gateway supports four client authentication paths. They do not all prese
 
 - **OAuth 2.1** and **ID-JAG** both end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
-- **Bearer token** sends a static platform-managed token directly to the gateway. Newly generated tokens use `arch_<token>`. Legacy `archestra_<token>` values remain valid.
+- **Bearer token** sends a static platform-managed token directly to the gateway.
 
 ### OAuth 2.1
 
@@ -48,7 +48,7 @@ Admins can change this in **Settings > MCP**. The setting is organization-wide a
 
 ### Bearer Token
 
-For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Legacy `archestra_<token>` values still authenticate correctly. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
+For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
 
 Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If Archestra also needs to exchange the matched user's IdP token and use the result on the downstream MCP request, it must still have a usable IdP token for that user.
 

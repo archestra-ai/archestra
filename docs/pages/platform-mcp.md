@@ -54,4 +54,10 @@ MCP access has two layers:
 - **Gateway authentication** controls whether the client can call the MCP Gateway. Supported paths include OAuth 2.1, ID-JAG, external IdP JWT validation through JWKS, and static Archestra bearer tokens.
 - **Upstream MCP server authentication** controls how Archestra authenticates to the MCP server or external SaaS API behind the tool. Credentials can be static, OAuth-based, dynamically resolved per caller, exchanged through an enterprise IdP, or forwarded as a JWT for upstream JWKS validation.
 
-Access is also limited by gateway visibility, team membership, and the tools assigned to each gateway or Agent. See [Access Control](/docs/platform-access-control) for permissions and [Observability](/docs/platform-observability) for MCP logs, metrics, and traces.
+Access also depends on the resource a user is calling. A user must be allowed to see the Agent or MCP Gateway, usually through organization visibility or team membership, and that resource must have the specific tool assigned to it. If a gateway is scoped to one team, members outside that team cannot use it even if the underlying MCP server exists in the registry.
+
+See [Access Control](/docs/platform-access-control) for the permission model.
+
+## Observability
+
+Archestra records MCP tool usage so teams can monitor which tools are being called, which servers handle them, and whether calls succeed or fail. See [MCP Metrics](/docs/platform-observability#mcp-metrics) for Prometheus metrics and [MCP Tool Call Spans](/docs/platform-observability#mcp-tool-call-spans) for trace details.

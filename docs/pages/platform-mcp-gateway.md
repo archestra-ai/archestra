@@ -122,3 +122,11 @@ MCP Gateways support four client authentication paths:
 Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
 
 See [MCP Authentication](/docs/mcp-authentication) for more details.
+
+## Access Control
+
+Gateway access depends on both the caller and the gateway configuration. A user must be allowed to see the MCP Gateway, usually through organization visibility or team membership, and the gateway must have the specific tool assigned to it.
+
+If a gateway is scoped to one team, members outside that team cannot use it even if the underlying MCP server exists in the registry. This lets admins approve MCP servers centrally while still exposing different tool sets to different teams or clients.
+
+See [Access Control](/docs/platform-access-control) for the permission model.

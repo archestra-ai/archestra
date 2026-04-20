@@ -23,7 +23,7 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
-2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
+2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - Identity Provider JWKS](/docs/mcp-authentication#identity-provider-jwks) for details.
 3. **IdP Token Exchange for Downstream MCP Calls** — Archestra can exchange a signed-in user's IdP token for the downstream token an MCP server needs at tool-call time.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
@@ -261,7 +261,7 @@ To use this with an MCP server, you need to configure three places:
 
 This works with any gateway auth method that lets Archestra resolve a specific user and a usable IdP token for that user. In practice, **JWKS** and **ID-JAG** are the clearest options, **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP, and personal user bearer tokens can work when they map to a specific user with a linked IdP session. Team and organization bearer tokens do not carry enough user identity for per-user downstream token exchange.
 
-For local MCP servers, this requires HTTP transport. Local `stdio` servers do not support per-request token exchange and injection. See [MCP Authentication - Upstream Identity Provider Token Exchange](/docs/mcp-authentication#upstream-identity-provider-token-exchange) for the downstream credential flow.
+For local MCP servers, this requires HTTP transport. Local `stdio` servers do not support per-request token exchange and injection. See [MCP Authentication - Identity Provider Token Exchange](/docs/mcp-authentication#identity-provider-token-exchange) for the downstream credential flow.
 
 ## Role Mapping
 

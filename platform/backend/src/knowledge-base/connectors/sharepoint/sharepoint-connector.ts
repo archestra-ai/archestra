@@ -22,6 +22,10 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import {
+  type FolderTraversalAdapter,
+  traverseFolders,
+} from "../folder-traversal";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 const DEFAULT_BATCH_SIZE = 50;
@@ -139,11 +143,16 @@ export class SharePointConnector extends BaseConnector {
 
       let total = 0;
 
+      const recursive = parsed.recursive ?? true;
+      const maxDepth = parsed.maxDepth;
+
       for (const driveId of driveIds) {
         total += await this.countDriveItems({
           client,
           driveId,
           folderPath: parsed.folderPath,
+          recursive,
+          maxDepth,
           syncFrom: safetyBufferedSyncFrom,
         });
       }
@@ -203,15 +212,24 @@ export class SharePointConnector extends BaseConnector {
     // Track the highest lastModifiedDateTime seen across all phases (drives + pages)
     // so the checkpoint only advances monotonically and a later phase with older
     // timestamps cannot regress progress from an earlier phase.
+    // safeLastSyncedAt is the original checkpoint value and never changes — it is
+    // emitted on intermediate batches (hasMore=true) so a resumed run always
+    // re-visits any not-yet-processed folders/drives rather than skipping them
+    // because the checkpoint advanced past their file timestamps.
     const progress = {
       maxLastModified: checkpoint.lastSyncedAt as string | undefined,
+      safeLastSyncedAt: checkpoint.lastSyncedAt as string | undefined,
     };
+
+    const recursive = parsed.recursive ?? true;
+    const maxDepth = parsed.maxDepth;
 
     this.log.debug(
       {
         siteId,
         driveIds: parsed.driveIds,
         folderPath: parsed.folderPath,
+        recursive,
         includePages: parsed.includePages,
         syncFrom,
         supportsImages,
@@ -224,6 +242,8 @@ export class SharePointConnector extends BaseConnector {
       client,
       siteId,
       config: parsed,
+      recursive,
+      maxDepth,
       progress,
       syncFrom: safetyBufferedSyncFrom,
       batchSize,
@@ -302,7 +322,12 @@ export class SharePointConnector extends BaseConnector {
     client: Client;
     siteId: string;
     config: SharePointConfig;
-    progress: { maxLastModified: string | undefined };
+    recursive: boolean;
+    maxDepth: number | undefined;
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
     supportsImages: boolean;
@@ -311,6 +336,8 @@ export class SharePointConnector extends BaseConnector {
       client,
       siteId,
       config,
+      recursive,
+      maxDepth,
       progress,
       syncFrom,
       batchSize,
@@ -330,6 +357,8 @@ export class SharePointConnector extends BaseConnector {
         client,
         driveId,
         folderPath: config.folderPath,
+        recursive,
+        maxDepth,
         progress,
         syncFrom,
         batchSize,
@@ -360,7 +389,12 @@ export class SharePointConnector extends BaseConnector {
     client: Client;
     driveId: string;
     folderPath: string | undefined;
-    progress: { maxLastModified: string | undefined };
+    recursive: boolean;
+    maxDepth: number | undefined;
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreDrives: boolean;
@@ -370,6 +404,8 @@ export class SharePointConnector extends BaseConnector {
       client,
       driveId,
       folderPath,
+      recursive,
+      maxDepth,
       progress,
       syncFrom,
       batchSize,
@@ -377,11 +413,76 @@ export class SharePointConnector extends BaseConnector {
       supportsImages,
     } = params;
 
-    let url = buildDriveItemsUrl(driveId, folderPath, batchSize);
-    let hasMore = true;
+    const adapter: FolderTraversalAdapter = {
+      listDirectSubfolders: (parentId) =>
+        this.listDirectSubfolders({
+          client,
+          driveId,
+          parentId,
+          rootFolderPath: folderPath,
+        }),
+    };
+
+    const folderGen = traverseFolders(
+      adapter,
+      { rootFolderId: "root", recursive, maxDepth },
+      this.log,
+    );
+
+    let next = await folderGen.next();
+    while (!next.done) {
+      const folderId = next.value;
+      next = await folderGen.next();
+      const hasMoreFolders = !next.done;
+
+      yield* this.syncFilesInFolder({
+        client,
+        driveId,
+        folderId,
+        rootFolderPath: folderId === "root" ? folderPath : undefined,
+        progress,
+        syncFrom,
+        batchSize,
+        hasMoreFolders: hasMoreFolders || hasMoreDrives,
+        supportsImages,
+      });
+    }
+  }
+
+  private async *syncFilesInFolder(params: {
+    client: Client;
+    driveId: string;
+    folderId: string;
+    rootFolderPath: string | undefined;
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
+    syncFrom: string | undefined;
+    batchSize: number;
+    hasMoreFolders: boolean;
+    supportsImages: boolean;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const {
+      client,
+      driveId,
+      folderId,
+      rootFolderPath,
+      progress,
+      syncFrom,
+      batchSize,
+      hasMoreFolders,
+      supportsImages,
+    } = params;
+
+    let url: string =
+      folderId === "root"
+        ? buildRootChildrenUrl(driveId, rootFolderPath, batchSize)
+        : buildItemChildrenUrl(driveId, folderId, batchSize);
+    let hasMorePages = true;
     let batchIndex = 0;
 
-    while (hasMore) {
+    while (hasMorePages) {
       await this.rateLimit();
 
       let result: GraphListResponse<DriveItem>;
@@ -432,7 +533,7 @@ export class SharePointConnector extends BaseConnector {
       }
 
       const nextLink = result["@odata.nextLink"];
-      hasMore = !!nextLink;
+      hasMorePages = !!nextLink;
       if (nextLink) url = nextLink;
 
       // Use unfiltered results for checkpoint so it advances past non-text
@@ -448,14 +549,24 @@ export class SharePointConnector extends BaseConnector {
         progress.maxLastModified = lastModified;
       }
 
+      const hasMore = hasMorePages || hasMoreFolders;
+
+      // Only advance the checkpoint on the final batch. Intermediate batches
+      // (hasMore=true) keep the original checkpoint so a resumed run re-visits
+      // not-yet-processed folders whose files may have older timestamps.
+      const checkpointAt = hasMore
+        ? progress.safeLastSyncedAt
+        : progress.maxLastModified;
+
       batchIndex++;
       this.log.debug(
         {
           driveId,
+          folderId,
           batchIndex,
           itemCount: items.length,
           documentCount: documents.length,
-          hasMore: hasMore || hasMoreDrives,
+          hasMore,
         },
         "SharePoint drive batch done",
       );
@@ -465,14 +576,44 @@ export class SharePointConnector extends BaseConnector {
         failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
-          itemUpdatedAt: progress.maxLastModified
-            ? new Date(progress.maxLastModified)
-            : undefined,
-          previousLastSyncedAt: progress.maxLastModified,
+          itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
+          previousLastSyncedAt: checkpointAt,
         }),
-        hasMore: hasMore || hasMoreDrives,
+        hasMore,
       };
     }
+  }
+
+  private async listDirectSubfolders(params: {
+    client: Client;
+    driveId: string;
+    parentId: string;
+    rootFolderPath: string | undefined;
+  }): Promise<string[]> {
+    const { client, driveId, parentId, rootFolderPath } = params;
+    const subfolders: string[] = [];
+
+    let url: string | undefined =
+      parentId === "root"
+        ? buildRootSubfoldersUrl(driveId, rootFolderPath, 500)
+        : buildItemSubfoldersUrl(driveId, parentId, 500);
+
+    while (url) {
+      await this.rateLimit();
+      const result = (await client.api(url).get()) as GraphListResponse<{
+        id: string;
+        folder?: object;
+        file?: object;
+      }>;
+      for (const item of result.value) {
+        if (item.folder && !item.file) {
+          subfolders.push(item.id);
+        }
+      }
+      url = result["@odata.nextLink"];
+    }
+
+    return subfolders;
   }
 
   private async downloadFileData(
@@ -538,7 +679,10 @@ export class SharePointConnector extends BaseConnector {
   private async *syncSitePages(params: {
     client: Client;
     siteId: string;
-    progress: { maxLastModified: string | undefined };
+    progress: {
+      maxLastModified: string | undefined;
+      safeLastSyncedAt: string | undefined;
+    };
     syncFrom: string | undefined;
     batchSize: number;
   }): AsyncGenerator<ConnectorSyncBatch> {
@@ -605,6 +749,10 @@ export class SharePointConnector extends BaseConnector {
         progress.maxLastModified = lastModified;
       }
 
+      const checkpointAt = hasMore
+        ? progress.safeLastSyncedAt
+        : progress.maxLastModified;
+
       batchIndex++;
       this.log.debug(
         {
@@ -621,10 +769,8 @@ export class SharePointConnector extends BaseConnector {
         failures: this.flushFailures(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
-          itemUpdatedAt: progress.maxLastModified
-            ? new Date(progress.maxLastModified)
-            : undefined,
-          previousLastSyncedAt: progress.maxLastModified,
+          itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
+          previousLastSyncedAt: checkpointAt,
         }),
         hasMore,
       };
@@ -668,13 +814,58 @@ export class SharePointConnector extends BaseConnector {
     client: Client;
     driveId: string;
     folderPath: string | undefined;
+    recursive: boolean;
+    maxDepth: number | undefined;
     syncFrom: string | undefined;
   }): Promise<number> {
-    let url = buildDriveItemsUrl(params.driveId, params.folderPath, 500);
-    let count = 0;
+    const { client, driveId, folderPath, recursive, maxDepth, syncFrom } =
+      params;
 
+    const adapter: FolderTraversalAdapter = {
+      listDirectSubfolders: (parentId) =>
+        this.listDirectSubfolders({
+          client,
+          driveId,
+          parentId,
+          rootFolderPath: folderPath,
+        }),
+    };
+
+    let count = 0;
+    for await (const folderId of traverseFolders(
+      adapter,
+      { rootFolderId: "root", recursive, maxDepth },
+      this.log,
+    )) {
+      count += await this.countFilesInFolder({
+        client,
+        driveId,
+        folderId,
+        rootFolderPath: folderId === "root" ? folderPath : undefined,
+        syncFrom,
+      });
+    }
+
+    return count;
+  }
+
+  private async countFilesInFolder(params: {
+    client: Client;
+    driveId: string;
+    folderId: string;
+    rootFolderPath: string | undefined;
+    syncFrom: string | undefined;
+  }): Promise<number> {
+    const { client, driveId, folderId, rootFolderPath, syncFrom } = params;
+
+    let url: string | undefined =
+      folderId === "root"
+        ? buildRootChildrenUrl(driveId, rootFolderPath, 500)
+        : buildItemChildrenUrl(driveId, folderId, 500);
+
+    let count = 0;
     while (url) {
-      const result = (await params.client
+      const result = (await client
         .api(url)
         .get()) as GraphListResponse<DriveItem>;
       count += result.value.filter(
@@ -682,9 +873,9 @@ export class SharePointConnector extends BaseConnector {
           item.file &&
           !item.folder &&
           isSupportedFile(item.name) &&
-          isModifiedSince(item.lastModifiedDateTime, params.syncFrom),
+          isModifiedSince(item.lastModifiedDateTime, syncFrom),
       ).length;
-      url = result["@odata.nextLink"] ?? "";
+      url = result["@odata.nextLink"] ?? undefined;
     }
 
     return count;
@@ -882,13 +1073,11 @@ function getGraphBodyMessage(error: unknown): string | null {
   return null;
 }
 
-function buildDriveItemsUrl(
+function buildRootChildrenUrl(
   driveId: string,
   folderPath: string | undefined,
   batchSize: number,
 ): string {
-  // This lists only the direct children of the selected root/folder. Nested
-  // subfolders are not traversed recursively.
   const basePath = folderPath
     ? `${GRAPH_API_BASE}/drives/${driveId}/root:/${encodeGraphPath(folderPath)}:/children`
     : `${GRAPH_API_BASE}/drives/${driveId}/root/children`;
@@ -901,6 +1090,51 @@ function buildDriveItemsUrl(
   });
 
   return `${basePath}?${params.toString()}`;
+}
+
+function buildItemChildrenUrl(
+  driveId: string,
+  itemId: string,
+  batchSize: number,
+): string {
+  const params = new URLSearchParams({
+    $select:
+      "id,name,webUrl,lastModifiedDateTime,createdDateTime,size,file,folder,parentReference",
+    $orderby: "lastModifiedDateTime asc",
+    $top: String(batchSize),
+  });
+
+  return `${GRAPH_API_BASE}/drives/${driveId}/items/${itemId}/children?${params.toString()}`;
+}
+
+function buildRootSubfoldersUrl(
+  driveId: string,
+  folderPath: string | undefined,
+  batchSize: number,
+): string {
+  const basePath = folderPath
+    ? `${GRAPH_API_BASE}/drives/${driveId}/root:/${encodeGraphPath(folderPath)}:/children`
+    : `${GRAPH_API_BASE}/drives/${driveId}/root/children`;
+
+  const params = new URLSearchParams({
+    $select: "id,folder,file",
+    $top: String(batchSize),
+  });
+
+  return `${basePath}?${params.toString()}`;
+}
+
+function buildItemSubfoldersUrl(
+  driveId: string,
+  itemId: string,
+  batchSize: number,
+): string {
+  const params = new URLSearchParams({
+    $select: "id,folder,file",
+    $top: String(batchSize),
+  });
+
+  return `${GRAPH_API_BASE}/drives/${driveId}/items/${itemId}/children?${params.toString()}`;
 }
 
 function buildSitePagesUrl(siteId: string, batchSize: number): string {

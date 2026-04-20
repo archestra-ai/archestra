@@ -43,7 +43,7 @@ export function IdentityProviderSelector({
   const handleSsoSignIn = useCallback(
     async (providerId: string) => {
       try {
-        recordSsoSignInAttempt(callbackURL);
+        recordSsoSignInAttempt();
         await authClient.signIn.sso({
           providerId,
           callbackURL,

@@ -189,10 +189,10 @@ export function AuthViewWithErrorHandling({
       return;
     }
 
-    if (path === "sign-in" && hasSsoSignInAttempt(callbackURL)) {
+    if (path === "sign-in" && hasSsoSignInAttempt()) {
       setSsoError(GENERIC_SSO_SIGN_IN_FAILED);
     }
-  }, [callbackURL, path, searchParams]);
+  }, [path, searchParams]);
 
   useEffect(() => {
     // Intercept fetch to detect 500 errors from auth endpoints

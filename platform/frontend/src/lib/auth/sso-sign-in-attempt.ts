@@ -1,31 +1,23 @@
 const SSO_SIGN_IN_ATTEMPT_KEY = "archestra:sso-sign-in-attempt";
+const SSO_SIGN_IN_ATTEMPT_VALUE = "pending";
 
-export function recordSsoSignInAttempt(callbackURL: string) {
+export function recordSsoSignInAttempt() {
   try {
     window.sessionStorage.setItem(
       SSO_SIGN_IN_ATTEMPT_KEY,
-      normalizeCallbackURL(callbackURL),
+      SSO_SIGN_IN_ATTEMPT_VALUE,
     );
   } catch {
     // Ignore storage failures. SSO still works; only the fallback error UI is lost.
   }
 }
 
-export function hasSsoSignInAttempt(callbackURL?: string) {
-  if (!callbackURL) {
-    return false;
-  }
-
+export function hasSsoSignInAttempt() {
   try {
-    const attemptedCallbackURL = window.sessionStorage.getItem(
-      SSO_SIGN_IN_ATTEMPT_KEY,
+    return (
+      window.sessionStorage.getItem(SSO_SIGN_IN_ATTEMPT_KEY) ===
+      SSO_SIGN_IN_ATTEMPT_VALUE
     );
-
-    if (attemptedCallbackURL !== normalizeCallbackURL(callbackURL)) {
-      return false;
-    }
-
-    return true;
   } catch {
     return false;
   }
@@ -37,12 +29,4 @@ export function clearSsoSignInAttempt() {
   } catch {
     // Ignore storage failures.
   }
-}
-
-function normalizeCallbackURL(callbackURL: string) {
-  const url = new URL(callbackURL, window.location.origin);
-  url.searchParams.delete("exp");
-  url.searchParams.delete("sig");
-
-  return url.pathname + url.search;
 }

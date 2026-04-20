@@ -64,7 +64,7 @@ describe("AuthViewWithErrorHandling", () => {
   it("shows a generic failed SSO message when the attempted callback returns to sign-in without an error query", async () => {
     const callbackURL =
       "/api/auth/oauth2/authorize?response_type=code&client_id=test&state=abc&exp=123&sig=old";
-    recordSsoSignInAttempt(callbackURL);
+    recordSsoSignInAttempt();
     mockSearchParams.get.mockReturnValue(null);
 
     render(
@@ -81,10 +81,8 @@ describe("AuthViewWithErrorHandling", () => {
     ).toBeInTheDocument();
   });
 
-  it("matches a failed SSO callback when Better Auth regenerates exp and sig", async () => {
-    recordSsoSignInAttempt(
-      "/api/auth/oauth2/authorize?response_type=code&client_id=test&state=abc&exp=123&sig=old",
-    );
+  it("shows the failed SSO message when Better Auth regenerates exp and sig", async () => {
+    recordSsoSignInAttempt();
     mockSearchParams.get.mockReturnValue(null);
 
     render(
@@ -102,7 +100,7 @@ describe("AuthViewWithErrorHandling", () => {
   it("keeps the generic failed SSO message visible under React Strict Mode", async () => {
     const callbackURL =
       "/api/auth/oauth2/authorize?response_type=code&client_id=test&state=strict";
-    recordSsoSignInAttempt(callbackURL);
+    recordSsoSignInAttempt();
     mockSearchParams.get.mockReturnValue(null);
 
     render(

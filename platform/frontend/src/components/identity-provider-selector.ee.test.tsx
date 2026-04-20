@@ -83,11 +83,7 @@ describe("IdentityProviderSelector", () => {
           callbackURL: `${mockOrigin}/oauth/consent?client_id=test&scope=mcp`,
         }),
       );
-      expect(
-        hasSsoSignInAttempt(
-          `${mockOrigin}/oauth/consent?client_id=test&scope=mcp`,
-        ),
-      ).toBe(true);
+      expect(hasSsoSignInAttempt()).toBe(true);
     });
 
     it("should use home URL when no redirectTo param is present", async () => {

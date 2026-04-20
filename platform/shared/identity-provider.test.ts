@@ -24,6 +24,54 @@ describe("IdentityProviderOidcConfigSchema", () => {
     expect(result.hd).toBe("example.com");
     expect(result.tokenEndpoint).toBe("http://id-jag.example.com/token");
   });
+
+  it("accepts a single hosted domain hint", () => {
+    const result = IdentityProviderOidcConfigSchema.safeParse({
+      issuer: "https://accounts.google.com",
+      pkce: true,
+      hd: "example.com",
+      clientId: "gateway-client",
+      clientSecret: "gateway-secret",
+      discoveryEndpoint:
+        "https://accounts.google.com/.well-known/openid-configuration",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects comma-separated hosted domain hints", () => {
+    const result = IdentityProviderOidcConfigSchema.safeParse({
+      issuer: "https://accounts.google.com",
+      pkce: true,
+      hd: "example.com, subsidiary.example.com",
+      clientId: "gateway-client",
+      clientSecret: "gateway-secret",
+      discoveryEndpoint:
+        "https://accounts.google.com/.well-known/openid-configuration",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      "Enter a single valid domain, for example company.com",
+    );
+  });
+
+  it("rejects malformed hosted domain hints", () => {
+    const result = IdentityProviderOidcConfigSchema.safeParse({
+      issuer: "https://accounts.google.com",
+      pkce: true,
+      hd: "https://example.com/path",
+      clientId: "gateway-client",
+      clientSecret: "gateway-secret",
+      discoveryEndpoint:
+        "https://accounts.google.com/.well-known/openid-configuration",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      "Enter a single valid domain, for example company.com",
+    );
+  });
 });
 
 describe("IdentityProviderFormSchema", () => {

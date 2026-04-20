@@ -28,7 +28,14 @@ export const IdentityProviderOidcConfigSchema = z
     skipDiscovery: z.boolean().optional(),
     pkce: z.boolean(),
     enableRpInitiatedLogout: z.boolean().optional(),
-    hd: z.string().optional(),
+    hd: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (value) => !value || DOMAIN_VALIDATION_REGEX.test(value),
+        "Enter a single valid domain, for example company.com",
+      ),
     clientId: z.string(),
     clientSecret: z.string(),
     authorizationEndpoint: z.string().optional(),

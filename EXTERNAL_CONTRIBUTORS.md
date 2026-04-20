@@ -77,3 +77,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ayushgoyal-lsn
 - @Lesedi37
 - @vincemtnz
+- @vmatiyko

@@ -12,6 +12,8 @@ const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
 const DROPBOX = z.literal("dropbox");
+const ASANA = z.literal("asana");
+const LINEAR = z.literal("linear");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -23,6 +25,8 @@ export const ConnectorTypeSchema = z.union([
   SHAREPOINT,
   GDRIVE,
   DROPBOX,
+  ASANA,
+  LINEAR,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -218,6 +222,59 @@ export const GoogleDriveCheckpointSchema = z.object({
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 
+// ===== Asana Config & Checkpoint =====
+
+export const AsanaConfigSchema = z.object({
+  type: ASANA,
+  workspaceGid: z.string().min(1),
+  projectGids: z.array(z.string()).optional(),
+  tagsToSkip: z.array(z.string()).optional(),
+});
+export type AsanaConfig = z.infer<typeof AsanaConfigSchema>;
+
+export const AsanaCheckpointSchema = z.object({
+  type: ASANA,
+  lastSyncedAt: z.string().optional(),
+});
+export type AsanaCheckpoint = z.infer<typeof AsanaCheckpointSchema>;
+
+// ===== Linear Config & Checkpoint =====
+
+export const LinearConfigSchema = z.object({
+  type: LINEAR,
+  linearApiUrl: connectorUrlSchema.optional().default("https://api.linear.app"),
+  teamIds: z.array(z.string()).optional(),
+  projectIds: z.array(z.string()).optional(),
+  states: z.array(z.string()).optional(),
+  includeComments: z.boolean().optional(),
+  includeProjects: z.boolean().optional(),
+  includeCycles: z.boolean().optional(),
+  batchSize: z.number().int().positive().optional(),
+});
+export type LinearConfig = z.infer<typeof LinearConfigSchema>;
+
+export const LinearCheckpointSchema = z.object({
+  type: LINEAR,
+  lastSyncedAt: z.string().optional(),
+  /** High-water `updatedAt` (ISO) after a completed issues sweep; drives the next incremental issues lower bound. */
+  lastRawUpdatedAt: z.string().optional(),
+  /** Active sync phase for multi-entity runs (resume across batches). */
+  linearSyncPhase: z.enum(["issues", "projects", "cycles"]).optional(),
+  issuePageCursor: z.string().optional(),
+  /**
+   * `updatedAt: { gt }` lower bound for the in-flight issues sweep.
+   * Kept stable while paginating; cleared when the issues sweep completes.
+   */
+  issueUpdatedAfter: z.string().optional(),
+  projectLastRawUpdatedAt: z.string().optional(),
+  projectPageCursor: z.string().optional(),
+  projectUpdatedAfter: z.string().optional(),
+  cycleLastRawUpdatedAt: z.string().optional(),
+  cyclePageCursor: z.string().optional(),
+  cycleUpdatedAfter: z.string().optional(),
+});
+export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 // ===== Dropbox Config & Checkpoint =====
@@ -249,6 +306,8 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
   DropboxConfigSchema,
+  AsanaConfigSchema,
+  LinearConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -262,6 +321,8 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
   DropboxCheckpointSchema,
+  AsanaCheckpointSchema,
+  LinearCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

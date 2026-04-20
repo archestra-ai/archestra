@@ -1,10 +1,12 @@
 import type { Connector, ConnectorType } from "@/types";
+import { AsanaConnector } from "./asana/asana-connector";
 import { ConfluenceConnector } from "./confluence/confluence-connector";
 import { DropboxConnector } from "./dropbox/dropbox-connector";
 import { GoogleDriveConnector } from "./gdrive/gdrive-connector";
 import { GithubConnector } from "./github/github-connector";
 import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
+import { LinearConnector } from "./linear/linear-connector";
 import { NotionConnector } from "./notion/notion-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
 import { SharePointConnector } from "./sharepoint/sharepoint-connector";
@@ -19,6 +21,8 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   sharepoint: () => new SharePointConnector(),
   gdrive: () => new GoogleDriveConnector(),
   dropbox: () => new DropboxConnector(),
+  asana: () => new AsanaConnector(),
+  linear: () => new LinearConnector(),
 };
 
 export function getConnector(type: string): Connector {

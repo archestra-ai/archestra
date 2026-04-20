@@ -98111,6 +98111,18 @@
                                       "enum": [
                                         "dropbox"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "asana"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "linear"
+                                      ]
                                     }
                                   ]
                                 }
@@ -99936,6 +99948,18 @@
                   "enum": [
                     "dropbox"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "asana"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "linear"
+                  ]
                 }
               ]
             },
@@ -100039,6 +100063,18 @@
                                 "type": "string",
                                 "enum": [
                                   "dropbox"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "asana"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "linear"
                                 ]
                               }
                             ]
@@ -100405,6 +100441,89 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "asana"
+                                    ]
+                                  },
+                                  "workspaceGid": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "projectGids": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "tagsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "workspaceGid"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "linear"
+                                    ]
+                                  },
+                                  "linearApiUrl": {
+                                    "default": "https://api.linear.app"
+                                  },
+                                  "teamIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "projectIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "states": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includeComments": {
+                                    "type": "boolean"
+                                  },
+                                  "includeProjects": {
+                                    "type": "boolean"
+                                  },
+                                  "includeCycles": {
+                                    "type": "boolean"
+                                  },
+                                  "batchSize": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "linearApiUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -100887,6 +101006,18 @@
                         "enum": [
                           "dropbox"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "asana"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "linear"
+                        ]
                       }
                     ]
                   },
@@ -101257,6 +101388,86 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "asana"
+                            ]
+                          },
+                          "workspaceGid": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "projectGids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tagsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "workspaceGid"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "linear"
+                            ]
+                          },
+                          "linearApiUrl": {
+                            "type": "string"
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "projectIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "includeComments": {
+                            "type": "boolean"
+                          },
+                          "includeProjects": {
+                            "type": "boolean"
+                          },
+                          "includeCycles": {
+                            "type": "boolean"
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -101387,6 +101598,18 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "asana"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "linear"
                           ]
                         }
                       ]
@@ -101753,6 +101976,89 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            "workspaceGid": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "projectGids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "tagsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "workspaceGid"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            "linearApiUrl": {
+                              "default": "https://api.linear.app"
+                            },
+                            "teamIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeComments": {
+                              "type": "boolean"
+                            },
+                            "includeProjects": {
+                              "type": "boolean"
+                            },
+                            "includeCycles": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "linearApiUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -102183,6 +102489,18 @@
                           "enum": [
                             "dropbox"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "asana"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "linear"
+                          ]
                         }
                       ]
                     },
@@ -102548,6 +102866,89 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            "workspaceGid": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "projectGids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "tagsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "workspaceGid"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            "linearApiUrl": {
+                              "default": "https://api.linear.app"
+                            },
+                            "teamIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeComments": {
+                              "type": "boolean"
+                            },
+                            "includeProjects": {
+                              "type": "boolean"
+                            },
+                            "includeCycles": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "linearApiUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -103274,6 +103675,86 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "asana"
+                            ]
+                          },
+                          "workspaceGid": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "projectGids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tagsToSkip": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "workspaceGid"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "linear"
+                            ]
+                          },
+                          "linearApiUrl": {
+                            "type": "string"
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "projectIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "states": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "includeComments": {
+                            "type": "boolean"
+                          },
+                          "includeProjects": {
+                            "type": "boolean"
+                          },
+                          "includeCycles": {
+                            "type": "boolean"
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103402,6 +103883,18 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "asana"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "linear"
                           ]
                         }
                       ]
@@ -103768,6 +104261,89 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            "workspaceGid": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "projectGids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "tagsToSkip": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "workspaceGid"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            "linearApiUrl": {
+                              "default": "https://api.linear.app"
+                            },
+                            "teamIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "projectIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "states": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includeComments": {
+                              "type": "boolean"
+                            },
+                            "includeProjects": {
+                              "type": "boolean"
+                            },
+                            "includeCycles": {
+                              "type": "boolean"
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "linearApiUrl"
                           ],
                           "additionalProperties": false
                         }

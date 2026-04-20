@@ -440,6 +440,61 @@ describe("SlackProvider.parseWebhookNotification", () => {
 });
 
 // =============================================================================
+// sendReply
+// =============================================================================
+
+describe("SlackProvider.sendReply", () => {
+  test("sends native markdown blocks and includes footer in fallback text", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      chat: { postMessage },
+    };
+
+    const result = await provider.sendReply({
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text: "# Heading\n\n- [x] Done\n| A | B |",
+      footer: "Footer text",
+    });
+
+    expect(result).toBe("2222222222.000000");
+    expect(postMessage).toHaveBeenCalledWith({
+      channel: "C12345",
+      text: "# Heading\n\n- [x] Done\n| A | B |\n\nFooter text",
+      blocks: [
+        {
+          type: "markdown",
+          text: "# Heading\n\n- [x] Done\n| A | B |",
+        },
+        {
+          type: "context",
+          elements: [
+            {
+              type: "plain_text",
+              text: "Footer text",
+              emoji: true,
+            },
+          ],
+        },
+      ],
+      thread_ts: "1111111111.000000",
+    });
+  });
+});
+
+// =============================================================================
 // parseInteractivePayload
 // =============================================================================
 

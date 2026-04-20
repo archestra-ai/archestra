@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
+import { AsanaConfigFields } from "./asana-config-fields";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { DropboxConfigFields } from "./dropbox-config-fields";
@@ -47,6 +48,7 @@ import { GoogleDriveConfigFields } from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
+import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
@@ -82,6 +84,11 @@ const CONNECTOR_OPTIONS: {
     description: "Sync issues and merge requests from GitLab",
   },
   {
+    type: "linear",
+    label: CONNECTOR_TYPE_LABELS.linear,
+    description: "Sync issues, projects, and cycles from Linear",
+  },
+  {
     type: "servicenow",
     label: "ServiceNow",
     description: "Sync incidents from ServiceNow",
@@ -105,6 +112,11 @@ const CONNECTOR_OPTIONS: {
     type: "dropbox",
     label: "Dropbox",
     description: "Sync files and folders from Dropbox",
+  },
+  {
+    type: "asana",
+    label: CONNECTOR_TYPE_LABELS.asana,
+    description: "Sync tasks and comments from Asana",
   },
 ];
 
@@ -161,11 +173,19 @@ export function CreateConnectorDialog({
       confluence: { type, isCloud: true },
       github: { type, githubUrl: "https://api.github.com" },
       gitlab: { type, gitlabUrl: "https://gitlab.com" },
+      linear: {
+        type,
+        linearApiUrl: "https://api.linear.app",
+        includeComments: true,
+        includeProjects: false,
+        includeCycles: false,
+      },
       servicenow: { type, syncDataForLastMonths: 6 },
       notion: { type },
       sharepoint: { type, includePages: true },
       gdrive: { type, recursive: true },
       dropbox: { type, rootPath: "" },
+      asana: { type },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -442,6 +462,32 @@ export function CreateConnectorDialog({
                   />
                 )}
 
+                {connectorType === "asana" && (
+                  <FormField
+                    control={form.control}
+                    name="config.workspaceGid"
+                    rules={{ required: "Workspace GID is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Workspace GID</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1234567890"
+                            {...field}
+                            value={(field.value as string) ?? ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Your Asana workspace GID. Syncs top-level tasks only
+                          &mdash; subtasks aren&apos;t supported in the initial
+                          version.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 {needsEmail && (
                   <FormField
                     control={form.control}
@@ -662,6 +708,9 @@ export function CreateConnectorDialog({
                     {connectorType === "gitlab" && (
                       <GitlabConfigFields form={form} hideUrl />
                     )}
+                    {connectorType === "linear" && (
+                      <LinearConfigFields form={form} />
+                    )}
                     {connectorType === "servicenow" && (
                       <ServiceNowConfigFields form={form} hideUrl />
                     )}
@@ -676,6 +725,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "dropbox" && (
                       <DropboxConfigFields control={form.control} />
+                    )}
+                    {connectorType === "asana" && (
+                      <AsanaConfigFields form={form} hideWorkspaceGid />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -742,9 +794,18 @@ function getUrlConfig(type: ConnectorType): {
         placeholder: "https://your-instance.service-now.com",
         description: "Your ServiceNow instance URL.",
       };
+    case "linear":
+      return {
+        fieldName: "config.linearApiUrl",
+        label: "Linear API URL",
+        placeholder: "https://api.linear.app",
+        description: "Linear GraphQL API base URL.",
+      };
     case "notion":
       return null;
     case "gdrive":
+      return null;
+    case "asana":
       return null;
     case "sharepoint":
       return {

@@ -102,6 +102,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByText("GitHub")).toBeInTheDocument();
       expect(screen.getByText("GitLab")).toBeInTheDocument();
       expect(screen.getByText("Asana")).toBeInTheDocument();
+      expect(screen.getByText("Linear")).toBeInTheDocument();
     });
 
     it("renders all required fields after selecting a connector type", async () => {

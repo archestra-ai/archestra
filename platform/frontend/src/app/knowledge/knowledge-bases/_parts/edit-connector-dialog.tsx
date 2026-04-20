@@ -38,6 +38,7 @@ import { GoogleDriveConfigFields } from './gdrive-config-fields';
 import { GithubConfigFields } from './github-config-fields';
 import { GitlabConfigFields } from './gitlab-config-fields';
 import { JiraConfigFields } from './jira-config-fields';
+import { LinearConfigFields } from './linear-config-fields';
 import { NotionConfigFields } from './notion-config-fields';
 import { OutlineConfigFields } from './outline-config-fields';
 import { SchedulePicker } from './schedule-picker';
@@ -470,6 +471,7 @@ export function EditConnectorDialog({
               {connectorType === 'gitlab' && (
                 <GitlabConfigFields form={form} hideUrl />
               )}
+              {connectorType === 'linear' && <LinearConfigFields form={form} />}
               {connectorType === 'servicenow' && (
                 <ServiceNowConfigFields form={form} hideUrl />
               )}
@@ -573,6 +575,16 @@ function getEditUrlConfig(type: ConnectorType): {
           label: 'Site URL',
           placeholder: 'https://your-tenant.sharepoint.com/sites/your-site',
           description: 'Your SharePoint site URL.',
+        },
+      };
+    case 'linear':
+      return {
+        typeLabel: 'Linear',
+        urlFields: {
+          fieldName: 'config.linearApiUrl',
+          label: 'Linear API URL',
+          placeholder: 'https://api.linear.app',
+          description: 'Linear GraphQL API base URL.',
         },
       };
     case 'dropbox':

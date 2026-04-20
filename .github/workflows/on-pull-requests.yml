@@ -174,7 +174,7 @@ jobs:
           fail-on-severity: high
           # NOTE: disable license check here because we are already doing it in the license-compliance-check job
           # allow-licenses: MIT
-          license-check: false
+          license-check: "false"
           comment-summary-in-pr: on-failure
 
   dependency-review-merge-group:

@@ -23,7 +23,7 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
-2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
+2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - Identity Provider JWKS](/docs/mcp-authentication#identity-provider-jwks) for details.
 3. **IdP Token Exchange for Downstream MCP Calls** — Archestra can exchange a signed-in user's IdP token for the downstream token an MCP server needs at tool-call time.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.

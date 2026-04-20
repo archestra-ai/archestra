@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2025-02-12
+lastUpdated: 2026-04-20
 ---
 
 <!--
@@ -15,15 +15,11 @@ Exception:
 - Screenshot
 -->
 
-MCP Gateway is the unified access point for all MCP servers in Archestra Platform. It provides a single endpoint through which AI agents and applications can discover and interact with multiple MCP servers, regardless of whether they are remote services or locally orchestrated containers.
+MCP Gateway is the unified access point for MCP clients. It gives Cursor, Claude Desktop, Open WebUI, custom agents, and other MCP clients one endpoint for discovering and calling tools from remote MCP servers, self-hosted MCP servers, knowledge sources, and built-in Archestra tools.
 
-## To use MCP Gateway:
+Each gateway has its own tool assignments, team scope, authentication settings, custom header passthrough, logs, metrics, and traces. This lets teams expose only the tools a client should use without exposing every installed MCP server.
 
-1. Go to **MCPs** and make sure you have at least one MCP server installed.
-2. Go to **MCPs > Gateways** and create a new gateway or use an existing one.
-3. Click the pencil icon to open the **Edit MCP Gateway** form.
-4. In the **Tools** section, assign MCP server tools to the MCP Gateway and save the changes by pressing **Update**.
-5. Click the **Connect** icon to get connection instructions.
+## How It Fits
 
 ```mermaid
 graph TB
@@ -68,14 +64,63 @@ graph TB
     style Orch fill:#fff,stroke:#0066cc,stroke-width:1px
 ```
 
+## Creating A Gateway
+
+A gateway is ready when it has at least one tool assignment and one supported authentication path.
+
+Start from **MCPs > Gateways**, create or open a gateway, then assign tools from installed MCP servers, knowledge sources, or the built-in Archestra MCP server. Use **Connect** to copy client-specific connection details for Cursor, Claude Desktop, Open WebUI, or direct API usage.
+
+Gateway tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Static assignments are useful for shared team credentials. Resolve-at-call-time is useful when each caller should use their own upstream credential.
+
 ## Authentication
 
-Archestra's MCP Gateways support three authentication methods:
+Gateway authentication and upstream MCP server authentication are separate. The client authenticates to Archestra first. When a tool runs, Archestra resolves the credential needed by that specific upstream MCP server.
 
-- **OAuth 2.1** — MCP-native clients (Claude Desktop, Cursor, Open WebUI) authenticate automatically via the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). Supports both DCR and CIMD client registration.
+```mermaid
+graph LR
+    subgraph Clients
+        C1["Cursor / IDE"]
+        C2["Open WebUI"]
+        C3["Agent App"]
+    end
 
-- **Bearer Token** — For direct API integrations. Use `Authorization: Bearer arch_<token>`. Tokens can be scoped to a user, team, or organization. Create tokens in **Settings → Tokens**.
+    subgraph Archestra["Archestra Platform"]
+        GW["MCP Gateway"]
+        CR["Credential<br/>Resolution"]
+        GW --> CR
+    end
 
-- **External Identity Provider (JWKS)** — For MCP clients that authenticate with an external IdP (Keycloak, Okta, Entra ID, Auth0, etc.). The gateway validates JWT bearer tokens directly against the IdP's JWKS endpoint, allowing external users to access MCP tools without an Archestra account. Configure in **Settings → Identity Providers**, then select in the MCP Gateway's **Identity Provider (JWKS Auth)** dropdown.
+    subgraph Passthrough["Remote MCP Servers"]
+        U1["GitHub"]
+        U2["Atlassian"]
+        U3["ServiceNow"]
+    end
 
-See [MCP Authentication](/docs/mcp-authentication) for more details.
+    subgraph Hosted["Self-hosted MCP Servers"]
+        H1["Custom Server"]
+        H2["Internal Tool"]
+    end
+
+    C1 -- "Gateway Token" --> GW
+    C2 -- "Gateway Token" --> GW
+    C3 -- "Gateway Token" --> GW
+    CR -- "Upstream MCP Server Token" --> U1
+    CR -- "Upstream MCP Server Token" --> U2
+    CR -- "Upstream MCP Server Token" --> U3
+    CR -- "stdio or HTTP" --> H1
+    CR -- "stdio or HTTP" --> H2
+
+    style GW fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style CR fill:#fff,stroke:#0066cc,stroke-width:1px
+```
+
+MCP Gateways support four client authentication paths:
+
+- **OAuth 2.1**: MCP-native clients authenticate through the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). Archestra supports Authorization Code + PKCE, DCR, CIMD, and standard well-known discovery.
+- **ID-JAG**: Enterprise-managed MCP clients exchange an identity assertion JWT for an Archestra-issued MCP access token scoped to the gateway.
+- **Identity Provider JWKS**: Clients send an external IdP JWT directly to the gateway. Archestra validates it against the IdP's JWKS and matches the caller to an Archestra user.
+- **Bearer Token**: Direct integrations send `Authorization: Bearer arch_<token>`. Legacy `archestra_<token>` values remain valid. Tokens can be scoped to a user, team, or organization.
+
+Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
+
+See [MCP Authentication](/docs/mcp-authentication) for gateway auth flows, upstream credential resolution, OAuth refresh, and enterprise IdP token exchange.

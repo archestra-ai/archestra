@@ -68,7 +68,9 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time lets Archestra choose the best credential for the current caller, which is the usual pattern for per-user credentials.
+When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
+
+See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 
 ## Labels
 

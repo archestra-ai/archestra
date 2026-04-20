@@ -151,7 +151,7 @@ Auth credentials are stored in the secrets backend, which uses the database by d
 
 ### Credential Resolution
 
-Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve the best credential at execution time.
+Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity and available personal or team-scoped credentials.
 
 #### Static Credentials
 

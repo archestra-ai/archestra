@@ -47,7 +47,7 @@ Self-hosted MCP servers run inside your Kubernetes cluster through the MCP Orche
 
 Both types can be assigned to Agents and MCP Gateways. The client does not need to know which runtime backs each tool.
 
-## Authentication And Access
+## Authentication Model
 
 MCP access has two layers:
 

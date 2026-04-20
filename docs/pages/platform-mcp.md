@@ -1,7 +1,7 @@
 ---
 title: Overview
 category: MCP
-order: 0
+order: -1
 description: How MCP servers, gateways, authentication, and orchestration fit together
 lastUpdated: 2026-04-20
 ---

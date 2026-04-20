@@ -72,20 +72,8 @@ When assigning tools to an Agent or MCP Gateway, you can pin a specific installa
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 
-## Labels
-
-Labels are key-value pairs that you can assign to MCP servers in the registry to organize and categorize them. For example, you might label servers by category (`database`, `ai`, `communication`), environment (`production`, `staging`), or team ownership.
-
-Labels are useful for filtering the registry and keeping large catalogs understandable. They do not grant access by themselves; access comes from registry visibility, installation scope, team assignment, and RBAC.
-
-## Tool Discovery
-
-After an MCP server is installed, Archestra discovers the tools exposed by that installed connection. Those tools can then be assigned to Agents or MCP Gateways.
-
-Tool discovery is installation-specific. If the same registry entry is installed twice with different credentials or scopes, Archestra can discover and assign tools from each installed connection separately.
-
 ## From Registry To Gateway
 
-The registry does not expose tools to clients by itself. Tools become usable after they are assigned to an Agent or MCP Gateway.
+The registry does not expose tools to clients by itself. After a server is installed, Archestra discovers the tools exposed by that installed connection. Those tools become usable after they are assigned to an Agent or MCP Gateway.
 
 For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries, then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.

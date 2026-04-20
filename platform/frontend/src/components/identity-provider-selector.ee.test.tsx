@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
-import { consumeSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+import { hasSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config/config";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
@@ -84,7 +84,7 @@ describe("IdentityProviderSelector", () => {
         }),
       );
       expect(
-        consumeSsoSignInAttempt(
+        hasSsoSignInAttempt(
           `${mockOrigin}/oauth/consent?client_id=test&scope=mcp`,
         ),
       ).toBe(true);

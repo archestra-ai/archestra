@@ -20,7 +20,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { consumeSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+import {
+  clearSsoSignInAttempt,
+  hasSsoSignInAttempt,
+} from "@/lib/auth/sso-sign-in-attempt";
 import config from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -186,7 +189,7 @@ export function AuthViewWithErrorHandling({
       return;
     }
 
-    if (path === "sign-in" && consumeSsoSignInAttempt(callbackURL)) {
+    if (path === "sign-in" && hasSsoSignInAttempt(callbackURL)) {
       setSsoError(GENERIC_SSO_SIGN_IN_FAILED);
     }
   }, [callbackURL, path, searchParams]);
@@ -311,6 +314,7 @@ export function AuthViewWithErrorHandling({
           variant="ghost"
           onClick={() => {
             setSsoError(null);
+            clearSsoSignInAttempt();
             // Clear the error params from URL without page reload
             const url = new URL(window.location.href);
             url.searchParams.delete("error");

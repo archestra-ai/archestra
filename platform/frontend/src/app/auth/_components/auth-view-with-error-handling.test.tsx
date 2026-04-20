@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { useSearchParams } from "next/navigation";
+import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { recordSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { usePublicConfig } from "@/lib/config/config.query";
@@ -78,5 +79,22 @@ describe("AuthViewWithErrorHandling", () => {
         "Single sign-on could not be completed. Please try again or contact your administrator.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the generic failed SSO message visible under React Strict Mode", async () => {
+    const callbackURL =
+      "/api/auth/oauth2/authorize?response_type=code&client_id=test&state=strict";
+    recordSsoSignInAttempt(callbackURL);
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(
+      <StrictMode>
+        <AuthViewWithErrorHandling path="sign-in" callbackURL={callbackURL} />
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Sign-In Failed")).toBeInTheDocument();
+    });
   });
 });

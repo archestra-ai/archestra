@@ -8,7 +8,7 @@ export function recordSsoSignInAttempt(callbackURL: string) {
   }
 }
 
-export function consumeSsoSignInAttempt(callbackURL?: string) {
+export function hasSsoSignInAttempt(callbackURL?: string) {
   if (!callbackURL) {
     return false;
   }
@@ -22,9 +22,16 @@ export function consumeSsoSignInAttempt(callbackURL?: string) {
       return false;
     }
 
-    window.sessionStorage.removeItem(SSO_SIGN_IN_ATTEMPT_KEY);
     return true;
   } catch {
     return false;
+  }
+}
+
+export function clearSsoSignInAttempt() {
+  try {
+    window.sessionStorage.removeItem(SSO_SIGN_IN_ATTEMPT_KEY);
+  } catch {
+    // Ignore storage failures.
   }
 }

@@ -10,12 +10,20 @@ lastUpdated: 2026-04-20
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-Archestra's MCP Gateway handles authentication at two separate layers:
+MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
+
+This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
+
+That means one gateway can expose tools backed by different credential models. A GitHub tool might use a user's OAuth token, a Jira tool might use an enterprise IdP token exchange, and an internal self-hosted tool might require no external credential at all. The client still talks to the same gateway.
+
+The two layers are:
 
 - **Gateway authentication**: how a client proves it can call `POST /v1/mcp/<gateway-id>`
 - **Upstream MCP server authentication**: how Archestra authenticates to the MCP server or external system behind that gateway when a tool actually runs
 
-Clients only send the gateway-facing token. Archestra resolves the upstream MCP server authentication separately at execution time.
+Clients only send the gateway-facing token. Archestra resolves upstream MCP server authentication separately at execution time, using the caller identity, the gateway or Agent tool assignment, and the installed MCP server credential configuration.
+
+Use this page to choose the gateway authentication method for your client, then choose how upstream credentials should be stored, resolved, exchanged, or forwarded when tools execute.
 
 ## Gateway Authentication
 

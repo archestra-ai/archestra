@@ -60,7 +60,7 @@ Self-hosted registry entries define how the deployment should be built.
 - **Environment and secrets**: define install-time fields, static environment variables, and secret values needed by the server.
 - **Advanced YAML**: override the generated Kubernetes deployment when you need custom pod configuration.
 
-Use the [Private MCP Registry](/docs/platform-private-registry#server-configuration) page for the registry-level model and the install flow.
+Registry entries define whether a server is remote or self-hosted before the orchestrator creates any Kubernetes resources. See [Private MCP Registry - Server Configuration](/docs/platform-private-registry#server-configuration) for those registry fields.
 
 ## Transports
 

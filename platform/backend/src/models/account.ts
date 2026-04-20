@@ -137,6 +137,30 @@ class AccountModel {
     return account ?? null;
   }
 
+  static async deleteByUserIdAndProviderId(params: {
+    userId: string;
+    providerId: string;
+  }) {
+    logger.debug(
+      params,
+      "AccountModel.deleteByUserIdAndProviderId: deleting account",
+    );
+    const deleted = await db
+      .delete(schema.accountsTable)
+      .where(
+        and(
+          eq(schema.accountsTable.userId, params.userId),
+          eq(schema.accountsTable.providerId, params.providerId),
+        ),
+      )
+      .returning({ id: schema.accountsTable.id });
+    logger.debug(
+      { ...params, count: deleted.length },
+      "AccountModel.deleteByUserIdAndProviderId: completed",
+    );
+    return deleted.length;
+  }
+
   /**
    * Delete all accounts with a specific providerId.
    * This is used to clean up SSO accounts when an SSO provider is deleted,

@@ -3,7 +3,13 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
-import { MemberModel, SessionModel, TeamModel } from "@/models";
+import {
+  AccountModel,
+  MemberModel,
+  SessionModel,
+  TeamModel,
+  UserModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Create a hoisted ref to control disableInvitations in tests
@@ -560,14 +566,17 @@ describe("handleAfterHook", () => {
       makeMember,
       makeIdentityProvider,
       makeSession,
+      makeAccount,
     }) => {
       const user = await makeUser({ email: "person@other.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
+      await makeAccount(user.id, { providerId: "credential" });
       await makeIdentityProvider(org.id, {
         providerId: "google-workspace",
         domain: "example.com",
       });
+      await makeAccount(user.id, { providerId: "google-workspace" });
       const session = await makeSession(user.id, {
         activeOrganizationId: org.id,
       });
@@ -592,6 +601,55 @@ describe("handleAfterHook", () => {
         },
       });
       expect(await SessionModel.getById(session.id)).toHaveLength(0);
+      expect(
+        await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+          user.id,
+          "google-workspace",
+        ),
+      ).toBeUndefined();
+      expect(await MemberModel.getByUserId(user.id, org.id)).toBeDefined();
+      expect(await UserModel.findByEmail(user.email)).toBeDefined();
+    });
+
+    test("should clean up rows created by a rejected first-time SSO login", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeIdentityProvider,
+      makeSession,
+      makeAccount,
+    }) => {
+      const user = await makeUser({ email: "new-person@other.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      await makeIdentityProvider(org.id, {
+        providerId: "google-workspace-new-user",
+        domain: "example.com",
+      });
+      await makeAccount(user.id, { providerId: "google-workspace-new-user" });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: org.id,
+      });
+
+      const ctx = createMockContext({
+        path: "/sso/callback/google-workspace-new-user",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: session.id, activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await expect(handleAfterHook(ctx)).rejects.toMatchObject({
+        status: "FORBIDDEN",
+      });
+      expect(await SessionModel.getById(session.id)).toHaveLength(0);
+      expect(await AccountModel.getAllByUserId(user.id)).toHaveLength(0);
+      expect(await MemberModel.getByUserId(user.id, org.id)).toBeUndefined();
+      expect(await UserModel.findByEmail(user.email)).toBeUndefined();
     });
 
     test("should allow SSO login when user email matches provider domain", async ({

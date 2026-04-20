@@ -27,10 +27,12 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
+import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
+import UserModel from "@/models/user";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
@@ -786,6 +788,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         await assertSsoEmailDomainAllowed({
           providerId: providerIdHint,
           userEmail: user.email,
+          userId,
           sessionId,
         });
       }
@@ -917,6 +920,7 @@ function getSsoCallbackProviderId(params: {
 async function assertSsoEmailDomainAllowed(params: {
   providerId: string;
   userEmail: string;
+  userId: string;
   sessionId: string;
 }) {
   if (!config.enterpriseFeatures.core) {
@@ -939,7 +943,12 @@ async function assertSsoEmailDomainAllowed(params: {
     return;
   }
 
-  await SessionModel.deleteById(params.sessionId);
+  await cleanupRejectedSsoLogin({
+    providerId: params.providerId,
+    organizationId: provider.organizationId,
+    userId: params.userId,
+    sessionId: params.sessionId,
+  });
   logger.warn(
     {
       providerId: params.providerId,
@@ -952,6 +961,34 @@ async function assertSsoEmailDomainAllowed(params: {
   throw new APIError("FORBIDDEN", {
     message: "Your email domain is not allowed for this identity provider.",
   });
+}
+
+async function cleanupRejectedSsoLogin(params: {
+  providerId: string;
+  organizationId: string | null;
+  userId: string;
+  sessionId: string;
+}) {
+  await SessionModel.deleteById(params.sessionId);
+  await AccountModel.deleteByUserIdAndProviderId({
+    userId: params.userId,
+    providerId: params.providerId,
+  });
+
+  const accounts = await AccountModel.getAllByUserId(params.userId);
+
+  if (accounts.length === 0 && params.organizationId) {
+    await MemberModel.deleteByMemberOrUserId(
+      params.userId,
+      params.organizationId,
+    );
+  }
+
+  const hasMembership = await MemberModel.hasAnyMembership(params.userId);
+
+  if (accounts.length === 0 && !hasMembership) {
+    await UserModel.delete(params.userId);
+  }
 }
 
 function emailMatchesIdentityProviderDomain(

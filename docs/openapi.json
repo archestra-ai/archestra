@@ -98123,6 +98123,12 @@
                                       "enum": [
                                         "linear"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "salesforce"
+                                      ]
                                     }
                                   ]
                                 }
@@ -99960,6 +99966,12 @@
                   "enum": [
                     "linear"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "salesforce"
+                  ]
                 }
               ]
             },
@@ -100075,6 +100087,12 @@
                                 "type": "string",
                                 "enum": [
                                   "linear"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "salesforce"
                                 ]
                               }
                             ]
@@ -100524,6 +100542,40 @@
                                 "required": [
                                   "type",
                                   "linearApiUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "salesforce"
+                                    ]
+                                  },
+                                  "loginUrl": {
+                                    "default": "https://login.salesforce.com"
+                                  },
+                                  "objects": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "advancedObjectConfigJson": {
+                                    "type": "string"
+                                  },
+                                  "batchSize": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": true,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "loginUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -101018,6 +101070,12 @@
                         "enum": [
                           "linear"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "salesforce"
+                        ]
                       }
                     ]
                   },
@@ -101468,6 +101526,38 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "salesforce"
+                            ]
+                          },
+                          "loginUrl": {
+                            "type": "string"
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "advancedObjectConfigJson": {
+                            "type": "string"
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -101610,6 +101700,12 @@
                           "type": "string",
                           "enum": [
                             "linear"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
                           ]
                         }
                       ]
@@ -102059,6 +102155,40 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -102501,6 +102631,12 @@
                           "enum": [
                             "linear"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
+                          ]
                         }
                       ]
                     },
@@ -102949,6 +103085,40 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -103755,6 +103925,38 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "salesforce"
+                            ]
+                          },
+                          "loginUrl": {
+                            "type": "string"
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "advancedObjectConfigJson": {
+                            "type": "string"
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103895,6 +104097,12 @@
                           "type": "string",
                           "enum": [
                             "linear"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
                           ]
                         }
                       ]
@@ -104344,6 +104552,40 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }

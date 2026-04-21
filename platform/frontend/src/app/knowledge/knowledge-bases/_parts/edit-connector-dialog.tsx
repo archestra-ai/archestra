@@ -40,6 +40,7 @@ import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { SalesforceConfigFields } from "./salesforce-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -113,7 +114,10 @@ export function EditConnectorDialog({
   const { typeLabel, urlFields: urlConfig } = getEditUrlConfig(connectorType);
   const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
-  const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const needsEmail =
+    connectorType === "jira" ||
+    connectorType === "confluence" ||
+    connectorType === ("salesforce" as ConnectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const emailRequired = needsEmail && isCloud !== false;
 
@@ -410,13 +414,15 @@ export function EditConnectorDialog({
                         ? "Client Secret"
                         : connectorType === "gdrive"
                           ? "Service Account Key / OAuth Token"
-                          : connectorType === "dropbox"
-                            ? "Access Token"
-                            : needsEmail
-                              ? emailRequired
-                                ? "API Token"
-                                : "API Token / Personal Access Token"
-                              : "Personal Access Token"}
+                          : connectorType === ("salesforce" as ConnectorType)
+                            ? "Password + Security Token"
+                            : connectorType === "dropbox"
+                              ? "Access Token"
+                              : needsEmail
+                                ? emailRequired
+                                  ? "API Token"
+                                  : "API Token / Personal Access Token"
+                                : "Personal Access Token"}
                 </FormLabel>
                 <FormControl>
                   <Input
@@ -483,6 +489,9 @@ export function EditConnectorDialog({
                 <DropboxConfigFields control={form.control} />
               )}
               {connectorType === "asana" && <AsanaConfigFields form={form} />}
+              {connectorType === ("salesforce" as ConnectorType) && (
+                <SalesforceConfigFields form={form} />
+              )}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -571,6 +580,17 @@ function getEditUrlConfig(type: ConnectorType): {
       return { typeLabel: "Google Drive", urlFields: null };
     case "asana":
       return { typeLabel: "Asana", urlFields: null };
+    case "salesforce":
+      return {
+        typeLabel: "Salesforce",
+        urlFields: {
+          fieldName: "config.loginUrl",
+          label: "Login URL",
+          placeholder: "https://login.salesforce.com",
+          description:
+            "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
+        },
+      };
     case "sharepoint":
       return {
         typeLabel: "SharePoint",

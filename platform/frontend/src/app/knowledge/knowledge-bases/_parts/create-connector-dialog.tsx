@@ -50,6 +50,7 @@ import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { SalesforceConfigFields } from "./salesforce-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -117,6 +118,11 @@ const CONNECTOR_OPTIONS: {
     type: "asana",
     label: CONNECTOR_TYPE_LABELS.asana,
     description: "Sync tasks and comments from Asana",
+  },
+  {
+    type: "salesforce" as ConnectorType,
+    label: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
+    description: "Sync CRM objects from Salesforce",
   },
 ];
 
@@ -186,6 +192,10 @@ export function CreateConnectorDialog({
       gdrive: { type, recursive: true },
       dropbox: { type, rootPath: "" },
       asana: { type },
+      ["salesforce" as ConnectorType]: {
+        type,
+        loginUrl: "https://login.salesforce.com",
+      },
     };
     form.setValue("config", defaultConfigs[type]);
     setStep("configure");
@@ -241,7 +251,10 @@ export function CreateConnectorDialog({
 
   const urlConfig = getUrlConfig(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
-  const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const needsEmail =
+    connectorType === "jira" ||
+    connectorType === "confluence" ||
+    connectorType === ("salesforce" as ConnectorType);
   const emailRequired = needsEmail && isCloud !== false;
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
@@ -613,7 +626,10 @@ export function CreateConnectorDialog({
                               ? "Service account key or OAuth token is required"
                               : connectorType === "dropbox"
                                 ? "Access token is required"
-                                : "Personal access token is required",
+                                : connectorType ===
+                                    ("salesforce" as ConnectorType)
+                                  ? "Password + security token is required"
+                                  : "Personal access token is required",
                   }}
                   render={({ field }) => (
                     <FormItem>
@@ -628,11 +644,14 @@ export function CreateConnectorDialog({
                                 ? "Service Account Key / OAuth Token"
                                 : connectorType === "dropbox"
                                   ? "Access Token"
-                                  : needsEmail
-                                    ? emailRequired
-                                      ? "API Token"
-                                      : "API Token / Personal Access Token"
-                                    : "Personal Access Token"}
+                                  : connectorType ===
+                                      ("salesforce" as ConnectorType)
+                                    ? "Password + Security Token"
+                                    : needsEmail
+                                      ? emailRequired
+                                        ? "API Token"
+                                        : "API Token / Personal Access Token"
+                                      : "Personal Access Token"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -648,11 +667,14 @@ export function CreateConnectorDialog({
                                     ? "Paste service account JSON key or OAuth access token"
                                     : connectorType === "dropbox"
                                       ? "Your Dropbox access token"
-                                      : needsEmail
-                                        ? emailRequired
-                                          ? "Your API token"
-                                          : "Your API token or personal access token"
-                                        : "Your personal access token"
+                                      : connectorType ===
+                                          ("salesforce" as ConnectorType)
+                                        ? "Your Salesforce password concatenated with the security token"
+                                        : needsEmail
+                                          ? emailRequired
+                                            ? "Your API token"
+                                            : "Your API token or personal access token"
+                                          : "Your personal access token"
                           }
                           {...field}
                         />
@@ -728,6 +750,9 @@ export function CreateConnectorDialog({
                     )}
                     {connectorType === "asana" && (
                       <AsanaConfigFields form={form} hideWorkspaceGid />
+                    )}
+                    {connectorType === ("salesforce" as ConnectorType) && (
+                      <SalesforceConfigFields form={form} />
                     )}
                   </CollapsibleContent>
                 </Collapsible>
@@ -807,6 +832,14 @@ function getUrlConfig(type: ConnectorType): {
       return null;
     case "asana":
       return null;
+    case "salesforce":
+      return {
+        fieldName: "config.loginUrl",
+        label: "Login URL",
+        placeholder: "https://login.salesforce.com",
+        description:
+          "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
+      };
     case "sharepoint":
       return {
         fieldName: "config.siteUrl",

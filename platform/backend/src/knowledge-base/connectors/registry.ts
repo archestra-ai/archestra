@@ -8,6 +8,7 @@ import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
 import { LinearConnector } from "./linear/linear-connector";
 import { NotionConnector } from "./notion/notion-connector";
+import { SalesforceConnector } from "./salesforce/salesforce-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
 import { SharePointConnector } from "./sharepoint/sharepoint-connector";
 
@@ -23,6 +24,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   dropbox: () => new DropboxConnector(),
   asana: () => new AsanaConnector(),
   linear: () => new LinearConnector(),
+  salesforce: () => new SalesforceConnector(),
 };
 
 export function getConnector(type: string): Connector {

@@ -45,6 +45,7 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   dropbox: "Dropbox",
   asana: "Asana",
   linear: "Linear",
+  salesforce: "Salesforce",
 };
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [

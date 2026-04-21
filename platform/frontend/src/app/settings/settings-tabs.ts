@@ -23,6 +23,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
+    ...(permissionMap?.["/settings/connection"]
+      ? [{ label: "Connection", href: "/settings/connection" }]
+      : []),
     ...(knowledgeBaseEnabled && permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
       : []),

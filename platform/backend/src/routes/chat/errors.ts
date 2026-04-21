@@ -11,6 +11,7 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
+  isChatErrorResponse,
   OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
@@ -671,6 +672,18 @@ function mapOpenAIErrorToCode(
       case OpenAIErrorTypes.INVALID_REQUEST:
       case OpenAIErrorTypes.UNPROCESSABLE_ENTITY:
       case OpenAIErrorTypes.CONFLICT:
+        return ChatErrorCode.InvalidRequest;
+      case OpenAIErrorTypes.API_VALIDATION_ERROR:
+        // Archestra's LLM proxy wraps provider 400s with api_validation_error.
+        // Check the message to distinguish context-length from other bad requests.
+        if (
+          parsedError?.message &&
+          /maximum context length|context_length_exceeded/.test(
+            parsedError.message,
+          )
+        ) {
+          return ChatErrorCode.ContextTooLong;
+        }
         return ChatErrorCode.InvalidRequest;
     }
   }
@@ -1426,6 +1439,20 @@ export function mapProviderError(
             }
           : undefined,
       };
+    }
+  }
+
+  // Guard against double-mapping: when the error message is already a serialized
+  // ChatErrorResponse (e.g. from a RetryError wrapping a pre-mapped proxy error),
+  // return it directly instead of producing a misleading "unknown" result.
+  if (error instanceof Error && error.message) {
+    try {
+      const parsed = JSON.parse(error.message);
+      if (isChatErrorResponse(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Not a pre-mapped response, continue with normal mapping
     }
   }
 

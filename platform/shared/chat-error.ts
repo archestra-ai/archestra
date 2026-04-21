@@ -19,6 +19,8 @@ export const OpenAIErrorTypes = {
   RATE_LIMIT: "rate_limit_exceeded",
   SERVER_ERROR: "server_error",
   SERVICE_UNAVAILABLE: "service_unavailable",
+  // Archestra's LLM proxy wraps all 400 errors with this type
+  API_VALIDATION_ERROR: "api_validation_error",
   // Additional codes that appear in error.code field
   INVALID_API_KEY_CODE: "invalid_api_key",
   MODEL_NOT_FOUND: "model_not_found",

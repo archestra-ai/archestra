@@ -3,6 +3,7 @@ import {
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
+  type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
@@ -209,6 +210,53 @@ describe("mapProviderError - OpenAI", () => {
 
       expect(result.code).toBe(ChatErrorCode.ContextTooLong);
       expect(result.isRetryable).toBe(false);
+    });
+
+    it("should map to ContextTooLong for api_validation_error with context length message", () => {
+      const error = createOpenAIError(
+        400,
+        OpenAIErrorTypes.API_VALIDATION_ERROR,
+        "This model's maximum context length is 8192 tokens. However, your messages resulted in 8904 tokens (8582 in the messages, 322 in the functions). Please reduce the length of the messages or functions.",
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.ContextTooLong],
+      );
+      expect(result.isRetryable).toBe(false);
+    });
+
+    it("should map api_validation_error without context length message to InvalidRequest", () => {
+      const error = createOpenAIError(
+        400,
+        OpenAIErrorTypes.API_VALIDATION_ERROR,
+        "Invalid parameter: temperature must be between 0 and 2",
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    });
+  });
+
+  describe("double-mapping guard", () => {
+    it("should return pre-mapped ChatErrorResponse when error message is already mapped", () => {
+      const preMapped: ChatErrorResponse = {
+        code: ChatErrorCode.InvalidRequest,
+        message: ChatErrorMessages[ChatErrorCode.InvalidRequest],
+        isRetryable: false,
+        originalError: {
+          provider: "openai",
+          status: 400,
+          message: "This model's maximum context length is 8192 tokens...",
+          type: "api_validation_error",
+        },
+      };
+      const error = new Error(JSON.stringify(preMapped));
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+      expect(result.originalError?.provider).toBe("openai");
     });
   });
 

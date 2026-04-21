@@ -118,6 +118,27 @@ export function EditConnectorDialog({
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const emailRequired = needsEmail && isCloud !== false;
 
+  const jiraConfluenceApiTokenLabel = emailRequired
+    ? "API Token"
+    : "API Token / Personal Access Token";
+
+  const apiTokenLabels: Record<ConnectorType, string> = {
+    servicenow: "Password",
+    notion: "Integration Token",
+    sharepoint: "Client Secret",
+    gdrive: "Service Account Key / OAuth Token",
+    dropbox: "Access Token",
+    outline: "API Key",
+    jira: jiraConfluenceApiTokenLabel,
+    confluence: jiraConfluenceApiTokenLabel,
+    github: "Personal Access Token",
+    gitlab: "Personal Access Token",
+    linear: "Personal Access Token",
+    asana: "Personal Access Token",
+  };
+
+  const apiTokenLabel = apiTokenLabels[connectorType];
+
   const handleSubmit = async (values: EditConnectorFormValues) => {
     const hasCredentials = values.apiToken.length > 0;
     const result = await updateConnector.mutateAsync({
@@ -402,25 +423,7 @@ export function EditConnectorDialog({
             name="apiToken"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>
-                  {connectorType === "servicenow"
-                    ? "Password"
-                    : connectorType === "notion"
-                      ? "Integration Token"
-                      : connectorType === "sharepoint"
-                        ? "Client Secret"
-                        : connectorType === "gdrive"
-                          ? "Service Account Key / OAuth Token"
-                          : connectorType === "dropbox"
-                            ? "Access Token"
-                            : connectorType === "outline"
-                              ? "API Key"
-                              : needsEmail
-                                ? emailRequired
-                                  ? "API Token"
-                                  : "API Token / Personal Access Token"
-                                : "Personal Access Token"}
-                </FormLabel>
+                <FormLabel>{apiTokenLabel}</FormLabel>
                 <FormControl>
                   <Input
                     type="password"

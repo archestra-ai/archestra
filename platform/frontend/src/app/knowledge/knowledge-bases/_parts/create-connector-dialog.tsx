@@ -254,6 +254,65 @@ export function CreateConnectorDialog({
     ? getConnectorDocsUrl(selectedType)
     : null;
 
+  const jiraConfluenceApiTokenLabel = emailRequired
+    ? "API Token"
+    : "API Token / Personal Access Token";
+  const jiraConfluenceApiTokenPlaceholder = emailRequired
+    ? "Your API token"
+    : "Your API token or personal access token";
+  const jiraConfluenceApiTokenRequiredMessage = emailRequired
+    ? "API token is required"
+    : "API token or personal access token is required";
+
+  const apiTokenLabels: Record<ConnectorType, string> = {
+    servicenow: "Password",
+    notion: "Integration Token",
+    sharepoint: "Client Secret",
+    gdrive: "Service Account Key / OAuth Token",
+    dropbox: "Access Token",
+    outline: "API Key",
+    jira: jiraConfluenceApiTokenLabel,
+    confluence: jiraConfluenceApiTokenLabel,
+    github: "Personal Access Token",
+    gitlab: "Personal Access Token",
+    linear: "Personal Access Token",
+    asana: "Personal Access Token",
+  };
+
+  const apiTokenPlaceholders: Record<ConnectorType, string> = {
+    servicenow: "Your ServiceNow password",
+    notion: "secret_...",
+    sharepoint: "Your Azure AD client secret",
+    gdrive: "Paste service account JSON key or OAuth access token",
+    dropbox: "Your Dropbox access token",
+    outline: "Your Outline API key (starts with ol_api_)",
+    jira: jiraConfluenceApiTokenPlaceholder,
+    confluence: jiraConfluenceApiTokenPlaceholder,
+    github: "Your personal access token",
+    gitlab: "Your personal access token",
+    linear: "Your personal access token",
+    asana: "Your personal access token",
+  };
+
+  const apiTokenRequiredMessages: Record<ConnectorType, string> = {
+    servicenow: "Password is required",
+    notion: "Integration token is required",
+    sharepoint: "Client secret is required",
+    gdrive: "Service account key or OAuth token is required",
+    dropbox: "Access token is required",
+    outline: "API key is required",
+    jira: jiraConfluenceApiTokenRequiredMessage,
+    confluence: jiraConfluenceApiTokenRequiredMessage,
+    github: "Personal access token is required",
+    gitlab: "Personal access token is required",
+    linear: "Personal access token is required",
+    asana: "Personal access token is required",
+  };
+
+  const apiTokenLabel = apiTokenLabels[connectorType];
+  const apiTokenPlaceholder = apiTokenPlaceholders[connectorType];
+  const apiTokenRequiredMessage = apiTokenRequiredMessages[connectorType];
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
@@ -605,68 +664,14 @@ export function CreateConnectorDialog({
                 <FormField
                   control={form.control}
                   name="apiToken"
-                  rules={{
-                    required: needsEmail
-                      ? emailRequired
-                        ? "API token is required"
-                        : "API token or personal access token is required"
-                      : connectorType === "servicenow"
-                        ? "Password is required"
-                        : connectorType === "notion"
-                          ? "Integration token is required"
-                          : connectorType === "sharepoint"
-                            ? "Client secret is required"
-                            : connectorType === "gdrive"
-                              ? "Service account key or OAuth token is required"
-                              : connectorType === "dropbox"
-                                ? "Access token is required"
-                                : connectorType === "outline"
-                                  ? "API key is required"
-                                  : "Personal access token is required",
-                  }}
+                  rules={{ required: apiTokenRequiredMessage }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        {connectorType === "servicenow"
-                          ? "Password"
-                          : connectorType === "notion"
-                            ? "Integration Token"
-                            : connectorType === "sharepoint"
-                              ? "Client Secret"
-                              : connectorType === "gdrive"
-                                ? "Service Account Key / OAuth Token"
-                                : connectorType === "dropbox"
-                                  ? "Access Token"
-                                  : connectorType === "outline"
-                                    ? "API Key"
-                                    : needsEmail
-                                      ? emailRequired
-                                        ? "API Token"
-                                        : "API Token / Personal Access Token"
-                                      : "Personal Access Token"}
-                      </FormLabel>
+                      <FormLabel>{apiTokenLabel}</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder={
-                            connectorType === "servicenow"
-                              ? "Your ServiceNow password"
-                              : connectorType === "notion"
-                                ? "secret_..."
-                                : connectorType === "sharepoint"
-                                  ? "Your Azure AD client secret"
-                                  : connectorType === "gdrive"
-                                    ? "Paste service account JSON key or OAuth access token"
-                                    : connectorType === "dropbox"
-                                      ? "Your Dropbox access token"
-                                      : connectorType === "outline"
-                                        ? "Your Outline API key (starts with ol_api_)"
-                                        : needsEmail
-                                          ? emailRequired
-                                            ? "Your API token"
-                                            : "Your API token or personal access token"
-                                          : "Your personal access token"
-                          }
+                          placeholder={apiTokenPlaceholder}
                           {...field}
                         />
                       </FormControl>

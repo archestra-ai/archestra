@@ -44,6 +44,30 @@ export function OutlineConfigFields({
           </FormItem>
         )}
       />
+
+      <FormField
+        control={form.control}
+        name={`${prefix}.batchSize`}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Batch Size</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                placeholder="25"
+                {...field}
+                value={(field.value as number | undefined) ?? ""}
+                onChange={(e) => field.onChange(Number(e.target.value) || 25)}
+              />
+            </FormControl>
+            <FormDescription>
+              Number of documents fetched per page from the Outline API
+              (default: 25).
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

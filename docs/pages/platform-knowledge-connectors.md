@@ -257,7 +257,7 @@ The Outline connector syncs published documents from an [Outline](https://www.ge
 
 Authentication uses an Outline API key. Create one under **Settings → API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
 
-Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs. The UI uses the default page size of 25 for the `documents.list` API; connectors created via the API may override `batchSize` for rate-limit tuning.
+Incremental sync sorts documents by `updatedAt` descending and stops fetching once documents older than the previous checkpoint (minus a 5-minute safety buffer) are encountered. Only newly updated documents are re-indexed on subsequent syncs. Documents are fetched from the Outline `documents.list` API in pages of 25. The page size is fixed in the UI but can be overridden via the `batchSize` field when a connector is created through the Archestra HTTP API.
 
 ## Managing Connectors
 

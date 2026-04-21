@@ -3,7 +3,6 @@ import {
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
-  type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
@@ -236,27 +235,6 @@ describe("mapProviderError - OpenAI", () => {
       const result = mapProviderError(error, "openai");
 
       expect(result.code).toBe(ChatErrorCode.InvalidRequest);
-    });
-  });
-
-  describe("double-mapping guard", () => {
-    it("should return pre-mapped ChatErrorResponse when error message is already mapped", () => {
-      const preMapped: ChatErrorResponse = {
-        code: ChatErrorCode.InvalidRequest,
-        message: ChatErrorMessages[ChatErrorCode.InvalidRequest],
-        isRetryable: false,
-        originalError: {
-          provider: "openai",
-          status: 400,
-          message: "This model's maximum context length is 8192 tokens...",
-          type: "api_validation_error",
-        },
-      };
-      const error = new Error(JSON.stringify(preMapped));
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
-      expect(result.originalError?.provider).toBe("openai");
     });
   });
 

@@ -11,7 +11,6 @@ import {
   type ChatErrorResponse,
   GeminiErrorCodes,
   GeminiErrorReasons,
-  isChatErrorResponse,
   OllamaErrorTypes,
   OpenAIErrorTypes,
   RetryableErrorCodes,
@@ -1439,20 +1438,6 @@ export function mapProviderError(
             }
           : undefined,
       };
-    }
-  }
-
-  // Guard against double-mapping: when the error message is already a serialized
-  // ChatErrorResponse (e.g. from a RetryError wrapping a pre-mapped proxy error),
-  // return it directly instead of producing a misleading "unknown" result.
-  if (error instanceof Error && error.message) {
-    try {
-      const parsed = JSON.parse(error.message);
-      if (isChatErrorResponse(parsed)) {
-        return parsed;
-      }
-    } catch {
-      // Not a pre-mapped response, continue with normal mapping
     }
   }
 

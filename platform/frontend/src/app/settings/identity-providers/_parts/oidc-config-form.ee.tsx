@@ -140,12 +140,14 @@ export function OidcConfigForm({
           name="domain"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Domain</FormLabel>
+              <FormLabel>Allowed Email Domains</FormLabel>
               <FormControl>
-                <Input placeholder="company.com" {...field} />
+                <Input placeholder="company.com, subsidiary.com" {...field} />
               </FormControl>
               <FormDescription>
-                Email domain for automatic provider detection.
+                Users can sign in with this provider only when their returned
+                email matches one of these domains. Separate multiple domains
+                with commas.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -206,8 +208,10 @@ export function OidcConfigForm({
                   <Input placeholder="example.com" {...field} />
                 </FormControl>
                 <FormDescription>
-                  Passes Google&apos;s `hd` parameter to prefer or restrict
-                  account selection to a specific Workspace domain.
+                  Passes Google&apos;s `hd` parameter to prefer account
+                  selection for a Workspace domain. This is a Google hint, not
+                  the security boundary; sign-in is enforced by Allowed Email
+                  Domains.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

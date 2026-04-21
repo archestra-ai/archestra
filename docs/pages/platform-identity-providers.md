@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-04-17
+lastUpdated: 2026-04-20
 ---
 
 <!--
@@ -35,9 +35,22 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 1. Admin configures an Identity Provider in **Settings > Identity Providers**
 2. SSO buttons appear on the sign-in page for enabled providers
 3. Users click the SSO button and authenticate with their identity provider
-4. After successful authentication, users are automatically provisioned and logged in
+4. Archestra verifies the authenticated email belongs to the provider's allowed email domains
+5. After successful authentication, users are automatically provisioned and logged in
 
 ![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.webp)
+
+### Allowed Email Domains
+
+The **Allowed Email Domains** field is the Archestra-side sign-in boundary for an SSO provider. Users can sign in with that provider only when the email returned by the identity provider matches one of the configured domains.
+
+Use comma-separated domains for multi-domain SSO, for example:
+
+```
+company.com, subsidiary.com
+```
+
+Subdomains are included. For example, `engineering.company.com` matches `company.com`.
 
 ## Disabling Basic Authentication
 
@@ -116,13 +129,13 @@ Google OAuth allows users to sign in with their Google accounts.
 5. Add your callback URL: `https://your-domain.com/api/auth/sso/callback/Google`
 6. Copy the **Client ID** and **Client Secret**
 7. In Archestra, click **Enable** on the Google card
-8. Enter your domain and the credentials
+8. Enter the allowed email domains and the credentials
 
 **Google-specific notes:**
 
 - Users must have a Google Workspace or personal Google account
 - The discovery endpoint is automatically configured
-- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer or restrict account selection to a specific Google Workspace domain (for example `example.com`)
+- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer account selection for a specific Google Workspace domain (for example `example.com`). Archestra still enforces **Allowed Email Domains** after Google returns the authenticated email.
 
 ### GitHub
 
@@ -133,7 +146,7 @@ GitHub OAuth allows users to sign in with their GitHub accounts.
 3. Set the **Authorization callback URL** to: `https://your-domain.com/api/auth/sso/callback/GitHub`
 4. Copy the **Client ID** and generate a **Client Secret**
 5. In Archestra, click **Enable** on the GitHub card
-6. Enter your domain and the credentials
+6. Enter the allowed email domains and the credentials
 
 **GitHub limitations:**
 
@@ -152,7 +165,7 @@ GitLab OAuth allows users to sign in with their GitLab accounts (both GitLab.com
 5. Click **Save application**
 6. Copy the **Application ID** (Client ID) and **Secret** (Client Secret)
 7. In Archestra, click **Enable** on the GitLab card
-8. Enter your domain and the credentials
+8. Enter the allowed email domains and the credentials
 
 **GitLab-specific notes:**
 
@@ -173,7 +186,7 @@ Microsoft Entra ID (formerly Azure AD) allows users to sign in with their Micros
 7. Note your **Directory (tenant) ID** from the Overview page
 8. In Archestra, click **Enable** on the Microsoft Entra ID card
 9. Replace `{tenant-id}` in all URLs with your actual tenant ID
-10. Enter your domain and the credentials
+10. Enter the allowed email domains and the credentials
 
 **Entra ID-specific notes:**
 
@@ -190,7 +203,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `azure`, `auth0`)
 - **Issuer**: The OIDC issuer URL
-- **Domain**: Your organization's domain
+- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
 - **Client ID** and **Client Secret**: From your identity provider
 - **Discovery Endpoint**: The `.well-known/openid-configuration` URL (optional if issuer supports discovery)
 
@@ -212,7 +225,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `okta-saml`, `adfs`)
 - **Issuer**: Your organization's identifier
-- **Domain**: Your organization's domain
+- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
 - **SAML Issuer / Entity ID**: The identity provider's entity ID (from IdP metadata)
 - **SSO Entry Point URL**: The IdP's Single Sign-On URL
 - **IdP Certificate**: The X.509 certificate from your IdP for signature verification

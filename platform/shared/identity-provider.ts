@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOMAIN_VALIDATION_REGEX } from "./incoming-email";
 
 /**
  * Identity provider IDs - these are the canonical built-in provider identifiers used for:
@@ -21,13 +22,45 @@ export type IdentityProviderId =
 export const IDENTITY_TRUSTED_PROVIDER_IDS =
   Object.values(IDENTITY_PROVIDER_ID);
 
+export function emailMatchesAllowedIdentityProviderDomains(
+  email: string,
+  allowedDomains: string,
+) {
+  const emailDomain = getEmailDomain(email);
+  if (!emailDomain) {
+    return false;
+  }
+
+  return parseAllowedIdentityProviderDomains(allowedDomains).some(
+    (domain) => emailDomain === domain || emailDomain.endsWith(`.${domain}`),
+  );
+}
+
+export function parseAllowedIdentityProviderDomains(allowedDomains: string) {
+  return allowedDomains
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function getEmailDomain(email: string) {
+  return email.split("@")[1]?.trim().toLowerCase() ?? null;
+}
+
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
     skipDiscovery: z.boolean().optional(),
     pkce: z.boolean(),
     enableRpInitiatedLogout: z.boolean().optional(),
-    hd: z.string().optional(),
+    hd: z
+      .string()
+      .trim()
+      .optional()
+      .refine(
+        (value) => !value || DOMAIN_VALIDATION_REGEX.test(value),
+        "Enter a single valid domain, for example company.com",
+      ),
     clientId: z.string(),
     clientSecret: z.string(),
     authorizationEndpoint: z.string().optional(),
@@ -195,7 +228,22 @@ export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
-    domain: z.string().min(1, "Domain is required"),
+    domain: z
+      .string()
+      .min(1, "Allowed email domains are required")
+      .refine(
+        (value) => {
+          const domains = parseAllowedIdentityProviderDomains(value);
+          return (
+            domains.length > 0 &&
+            domains.every((domain) => DOMAIN_VALIDATION_REGEX.test(domain))
+          );
+        },
+        {
+          message:
+            "Enter valid comma-separated domains, for example company.com, subsidiary.com",
+        },
+      ),
     providerType: z.enum(["oidc", "saml"]),
     oidcConfig: IdentityProviderOidcConfigSchema.optional(),
     samlConfig: IdentityProviderSamlConfigSchema.optional(),

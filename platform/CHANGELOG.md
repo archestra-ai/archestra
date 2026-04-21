@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.2.20](https://github.com/archestra-ai/archestra/compare/platform-v1.2.19...platform-v1.2.20) (2026-04-20)
+
+
+### Features
+
+* **openapi:** name UserConfigField + UserConfigFieldDefault schemas ([#3969](https://github.com/archestra-ai/archestra/issues/3969)) ([759f667](https://github.com/archestra-ai/archestra/commit/759f667394d6d7f58790415f6f3fecc50aabcd4d))
+
+
+### Bug Fixes
+
+* sanitize Bedrock document names ([#3978](https://github.com/archestra-ai/archestra/issues/3978)) ([7ba8316](https://github.com/archestra-ai/archestra/commit/7ba83166e23b21cfe5f05dfafaa109cb7244f9e1))
+
+## [1.2.19](https://github.com/archestra-ai/archestra/compare/platform-v1.2.18...platform-v1.2.19) (2026-04-20)
+
+
+### Features
+
+* add asana knowledge connector ([#3922](https://github.com/archestra-ai/archestra/issues/3922)) ([8d4bcbe](https://github.com/archestra-ai/archestra/commit/8d4bcbe574cd157b3254462db06c01c723e4997e))
+* add fullscreen functionality to prompt input ([#3461](https://github.com/archestra-ai/archestra/issues/3461)) ([25106b5](https://github.com/archestra-ai/archestra/commit/25106b555307d5897c06c2a6b255f72efe0eb713))
+* add linear knowledge connector ([#3766](https://github.com/archestra-ai/archestra/issues/3766)) ([25e28f6](https://github.com/archestra-ai/archestra/commit/25e28f6f742ea4a504c102235ad94d37ef9ded6d))
+
+
+### Bug Fixes
+
+* **chat:** add copy button to code blocks in conversation artifacts ([#3868](https://github.com/archestra-ai/archestra/issues/3868)) ([41c1612](https://github.com/archestra-ai/archestra/commit/41c1612f3bcda914d2f8c61eb4b782520a42bc9b))
+* enforce SSO allowed email domains ([#3976](https://github.com/archestra-ai/archestra/issues/3976)) ([22d2743](https://github.com/archestra-ai/archestra/commit/22d2743db1a32a409d46290c59c7ebbd538060a3))
+* preserve native Slack markdown replies ([#3936](https://github.com/archestra-ai/archestra/issues/3936)) ([80010ae](https://github.com/archestra-ai/archestra/commit/80010ae20e0304cbf0f92c4a478eeafcb159e3be))
+* **sharepoint:** recursive subfolder traversal via folder-traversal utility ([#3960](https://github.com/archestra-ai/archestra/issues/3960)) ([081d0b2](https://github.com/archestra-ai/archestra/commit/081d0b218e90ba8938861493c7c19eef2803bc88))
+
+
+### Miscellaneous Chores
+
+* switch to pnpm in docker image for mcp base image ([#3657](https://github.com/archestra-ai/archestra/issues/3657)) ([2ef39dd](https://github.com/archestra-ai/archestra/commit/2ef39dded30c9ec41bea5e6dd24322481f163051))
+
 ## [1.2.18](https://github.com/archestra-ai/archestra/compare/platform-v1.2.17...platform-v1.2.18) (2026-04-17)
 
 

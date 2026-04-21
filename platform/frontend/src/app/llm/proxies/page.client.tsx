@@ -1,22 +1,10 @@
 "use client";
 
-import {
-  type AgentType,
-  archestraApiSdk,
-  type archestraApiTypes,
-  E2eTestId,
-} from "@shared";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import {
-  ChevronDown,
-  ChevronUp,
-  DollarSign,
-  Eye,
-  Lock,
-  Network,
-  Plus,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -27,16 +15,11 @@ import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
-import {
-  ConnectDialog,
-  ConnectDialogSection,
-} from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -183,12 +166,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 
   type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
+  const router = useRouter();
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingProxy, setConnectingProxy] = useState<{
-    id: string;
-    name: string;
-    agentType: AgentType;
-  } | null>(null);
+  const navigateToConnection = useCallback(
+    (agentId: string) => {
+      router.push(
+        `/connection?proxyId=${encodeURIComponent(agentId)}&from=table`,
+      );
+    },
+    [router],
+  );
   const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
 
@@ -329,7 +317,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           <LlmProxyActions
             agent={agent}
             canModify={canModify}
-            onConnect={setConnectingProxy}
+            onConnect={(a) => navigateToConnection(a.id)}
             onEdit={(agentData) => {
               setEditingProxy(agentData);
             }}
@@ -440,17 +428,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               defaultIconType="llm_proxy"
               onCreated={(proxy) => {
                 setIsCreateDialogOpen(false);
-                setConnectingProxy({ ...proxy, agentType: "llm_proxy" });
+                navigateToConnection(proxy.id);
               }}
             />
-
-            {connectingProxy && (
-              <ConnectProxyDialog
-                agent={connectingProxy}
-                open={!!connectingProxy}
-                onOpenChange={(open) => !open && setConnectingProxy(null)}
-              />
-            )}
 
             <AgentDialog
               open={!!editingProxy}
@@ -471,68 +451,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         </div>
       </PageLayout>
     </LoadingWrapper>
-  );
-}
-
-function ProxyConnectionColumns({ agentId }: { agentId: string }) {
-  return (
-    <div className="space-y-6">
-      <ConnectDialogSection
-        title="Proxy Features"
-        description="Route model traffic through the LLM Proxy for security controls, observability, and cost tracking."
-      >
-        <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 rounded-md border bg-blue-500/5 px-3 py-2 text-sm">
-            <Network className="h-4 w-4 text-blue-500" />
-            <span className="font-medium">LLM Proxy</span>
-          </div>
-          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
-            <Lock className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-            <span>Security</span>
-          </div>
-          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
-            <Eye className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-            <span>Observability</span>
-          </div>
-          <div className="flex items-center gap-1 rounded-full border bg-background/60 px-2 py-1 text-xs">
-            <DollarSign className="h-3 w-3 text-green-600 dark:text-green-400" />
-            <span>Cost</span>
-          </div>
-        </div>
-      </ConnectDialogSection>
-
-      <ConnectDialogSection
-        title="Connection Instructions"
-        description="Choose a provider, point your client at the proxy, and copy the exact URL or command."
-      >
-        <ProxyConnectionInstructions agentId={agentId} />
-      </ConnectDialogSection>
-    </div>
-  );
-}
-
-function ConnectProxyDialog({
-  agent,
-  open,
-  onOpenChange,
-}: {
-  agent: {
-    id: string;
-    name: string;
-    agentType: AgentType;
-  };
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <ConnectDialog
-      agent={agent}
-      open={open}
-      onOpenChange={onOpenChange}
-      docsPage="platform-llm-proxy"
-    >
-      <ProxyConnectionColumns agentId={agent.id} />
-    </ConnectDialog>
   );
 }
 

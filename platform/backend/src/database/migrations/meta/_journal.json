@@ -1478,6 +1478,13 @@
       "when": 1776454322359,
       "tag": "0210_rename-provider-type-to-exchange-strategy",
       "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "7",
+      "when": 1776718516081,
+      "tag": "0211_sleepy_killraven",
+      "breakpoints": true
     }
   ]
 }

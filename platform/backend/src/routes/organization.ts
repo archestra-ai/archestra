@@ -34,6 +34,7 @@ import {
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
+  UpdateConnectionSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateMcpSettingsSchema,
@@ -179,6 +180,56 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const agent = await AgentModel.findById(body.defaultAgentId);
         if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/connection-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateConnectionSettings,
+        description:
+          "Update /connection admin settings (default gateway/proxy, hidden clients/providers)",
+        tags: ["Organization"],
+        body: UpdateConnectionSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      if (body.connectionDefaultMcpGatewayId) {
+        const agent = await AgentModel.findById(
+          body.connectionDefaultMcpGatewayId,
+        );
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "MCP gateway not found");
+        }
+        if (
+          agent.agentType !== "mcp_gateway" &&
+          agent.agentType !== "profile"
+        ) {
+          throw new ApiError(400, "Agent is not an MCP gateway");
+        }
+      }
+
+      if (body.connectionDefaultLlmProxyId) {
+        const agent = await AgentModel.findById(
+          body.connectionDefaultLlmProxyId,
+        );
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "LLM proxy not found");
+        }
+        if (agent.agentType !== "llm_proxy" && agent.agentType !== "profile") {
+          throw new ApiError(400, "Agent is not an LLM proxy");
         }
       }
 

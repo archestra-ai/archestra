@@ -1,7 +1,7 @@
 # Build KinD and Docker CLI from source with a patched Go toolchain.
 # The Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.25.8-alpine@sha256:8e02eb337d9e0ea459e041f1ee5eece41cbb61f1d83e7d883a3e2fb4862063fa
+ARG GOLANG_IMAGE=golang:1.25.9-alpine@sha256:5caaf1cca9dc351e13deafbc3879fd4754801acba8653fa9540cea125d01a71f
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -22,14 +22,23 @@ RUN apk add --no-cache git
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
+    go mod edit -go=1.25.9 && \
+    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
+    go get golang.org/x/net@v0.51.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
+    go mod edit -go=1.25.9 && \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
-    # CVE-2026-27141: golang.org/x/net vulnerability fixed in >= 0.51.0
-    go get google.golang.org/grpc@v1.79.3 golang.org/x/net@v0.51.0 && \
+    go get google.golang.org/grpc@v1.79.3 && \
+    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
+    go get golang.org/x/net@v0.51.0 && \
+    # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
+    go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
+    # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
+    go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -44,12 +53,27 @@ RUN corepack enable
 
 RUN corepack prepare pnpm@10.33.0 --activate
 
+# CVE-2026-33671: pnpm 10.33.0 bundles picomatch 4.0.3 inside its own node_modules.
+# Corepack caches it at /root/.cache/node/corepack/, and it is inherited by every
+# downstream stage. Replace it with the 4.0.4 package tree so Scout does not flag
+# the cached copy in the final image.
+RUN set -eux; \
+    cd /tmp; \
+    wget -q -O picomatch-4.0.4.tgz https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz; \
+    echo "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c  picomatch-4.0.4.tgz" | sha256sum -c -; \
+    target=/root/.cache/node/corepack/v1/pnpm/10.33.0/dist/node_modules/picomatch; \
+    rm -rf "$target"/*; \
+    tar -xzf picomatch-4.0.4.tgz --strip-components=1 -C "$target"; \
+    rm -f picomatch-4.0.4.tgz; \
+    grep -q '"version": "4.0.4"' "$target/package.json"
+
 # Dependencies stage
 FROM base AS deps
 WORKDIR /app
 
 # Copy package files for all workspaces
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# .npmrc must be included so minimum-release-age / ignore-scripts are enforced
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
@@ -57,6 +81,21 @@ COPY patches/ patches/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+
+# CVE-2026-33671: Next.js bundles picomatch 4.0.3 at dist/compiled/picomatch/.
+# pnpm overrides cannot reach this vendored copy; upstream has not re-vendored
+# yet (tracked at vercel/next.js#92950). Replace it with the 4.0.4 package tree.
+# The path resolves through the symlink frontend/node_modules/next → .pnpm/next@.../node_modules/next,
+# so overwriting once updates every reference.
+RUN set -eux; \
+    cd /tmp; \
+    wget -q -O picomatch-4.0.4.tgz https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz; \
+    echo "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c  picomatch-4.0.4.tgz" | sha256sum -c -; \
+    target=/app/frontend/node_modules/next/dist/compiled/picomatch; \
+    rm -rf "$target"/*; \
+    tar -xzf picomatch-4.0.4.tgz --strip-components=1 -C "$target"; \
+    rm -f picomatch-4.0.4.tgz; \
+    grep -q '"version": "4.0.4"' "$target/package.json"
 
 # <----- Builder stage ----->
 FROM base AS builder
@@ -146,11 +185,11 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # Install KinD (Kubernetes in Docker) and docker-cli for embedded K8s cluster support
-# Both binaries are built from source in go-builder with Go 1.25.8 to fix CVE-2025-68121
+# Both binaries are built from source in go-builder with Go 1.25.9 to fix CVE-2025-68121
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
-# TODO: Once KinD releases a version compiled with Go >= 1.25.8, remove the kind-builder stage
+# TODO: Once KinD releases a version compiled with Go >= 1.25.9, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \
@@ -169,8 +208,11 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     chmod +x /usr/local/bin/kind
 
 RUN apk add --no-cache supervisor && \
-    # CVE-2026-24049: wheel path traversal — not needed at runtime, remove entirely
-    pip uninstall -y wheel 2>/dev/null; rm -rf /usr/lib/python*/ensurepip
+    # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
+    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
+    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
+           /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
+           /usr/lib/python*/ensurepip
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
@@ -180,7 +222,8 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
 VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc must be included so minimum-release-age / ignore-scripts are enforced
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY patches/ patches/
@@ -191,6 +234,18 @@ COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # Install production dependencies for both workspaces
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
+
+# CVE-2026-33671: replace Next's bundled picomatch 4.0.3 with 4.0.4 (same as deps stage).
+# Production install refetches next so the patched copy from the builder is not inherited.
+RUN set -eux; \
+    cd /tmp; \
+    wget -q -O picomatch-4.0.4.tgz https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz; \
+    echo "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c  picomatch-4.0.4.tgz" | sha256sum -c -; \
+    target=/app/frontend/node_modules/next/dist/compiled/picomatch; \
+    rm -rf "$target"/*; \
+    tar -xzf picomatch-4.0.4.tgz --strip-components=1 -C "$target"; \
+    rm -f picomatch-4.0.4.tgz; \
+    grep -q '"version": "4.0.4"' "$target/package.json"
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist

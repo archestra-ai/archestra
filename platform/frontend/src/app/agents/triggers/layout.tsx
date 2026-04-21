@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail } from "lucide-react";
+import { Bot, Mail } from "lucide-react";
 import { useMemo } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -54,10 +54,11 @@ export default function AgentTriggersLayout({
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
+    a2a: a2aActive,
   } = useTriggerStatuses();
 
   const tabs = useMemo(() => {
-    const allTabs = [
+    const channelTabs = [
       {
         label: (
           <TabLabel
@@ -87,9 +88,16 @@ export default function AgentTriggersLayout({
       },
     ];
 
-    // Sort: active tabs first
-    return allTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
-  }, [msTeamsActive, slackActive, emailActive]);
+    // Sort channel tabs by active first, then pin A2A as the final option.
+    return [
+      ...channelTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)),
+      {
+        label: <TabLabel icon={Bot} label="A2A" active={a2aActive} />,
+        href: "/agents/triggers/a2a",
+        active: a2aActive,
+      },
+    ];
+  }, [msTeamsActive, slackActive, emailActive, a2aActive]);
 
   if (canReadTriggers === false) {
     return null;

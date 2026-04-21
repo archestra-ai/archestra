@@ -312,6 +312,9 @@ export type OutlineConfig = z.infer<typeof OutlineConfigSchema>;
 
 export const OutlineCheckpointSchema = z.object({
   type: OUTLINE,
+  syncStart: z.string().optional(),
+  lastCollectionId: z.string().optional(),
+  lastDocumentId: z.string().optional(),
   lastSyncedAt: z.string().optional(),
 });
 export type OutlineCheckpoint = z.infer<typeof OutlineCheckpointSchema>;

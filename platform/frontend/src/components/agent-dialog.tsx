@@ -520,7 +520,8 @@ export function AgentDialog({
 }: AgentDialogProps) {
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
-  const shouldLoadIdentityProviders = open && agentType === "mcp_gateway";
+  const shouldLoadIdentityProviders =
+    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -634,7 +635,8 @@ export function AgentDialog({
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
-  const supportsIdentityProvider = agentType === "mcp_gateway";
+  const supportsIdentityProvider =
+    agentType === "mcp_gateway" || agentType === "llm_proxy";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const showPrimarySettingsCard =
     !isBuiltIn ||
@@ -1958,20 +1960,19 @@ export function AgentDialog({
                           </div>
                         )}
 
-                        {/* Identity Provider for enterprise-managed/JWKS auth */}
+                        {/* Identity Provider for JWKS auth */}
                         {supportsIdentityProvider &&
                           identityProviders.length > 0 && (
                             <div className="space-y-2">
-                              <Label>Identity Provider (Enterprise/JWKS)</Label>
+                              <Label>
+                                {agentType === "llm_proxy"
+                                  ? "Identity Provider (JWKS)"
+                                  : "Identity Provider (Enterprise/JWKS)"}
+                              </Label>
                               <p className="text-sm text-muted-foreground">
-                                Select the OIDC identity provider this MCP
-                                Gateway should trust for ID-JAG and direct JWKS
-                                JWT authentication. The same provider is also
-                                used when {appName} needs to resolve
-                                enterprise-managed downstream credentials for
-                                tool calls. Leave this unset to keep using the
-                                other supported MCP Gateway authentication
-                                methods without IdP JWT validation.
+                                {agentType === "llm_proxy"
+                                  ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
+                                  : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                                 {mcpAuthDocsUrl ? (
                                   <>
                                     {" "}
@@ -1994,7 +1995,7 @@ export function AgentDialog({
                                 }
                               >
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Use configured Identity Provider automatically" />
+                                  <SelectValue placeholder="No Identity Provider selected" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none">

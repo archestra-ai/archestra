@@ -76,7 +76,7 @@ Link an Identity Provider (IdP) to the LLM Proxy so clients can authenticate wit
 ### Setup
 
 1. Go to **Settings > Identity Providers** and create an OIDC provider (issuer URL, client ID, client secret)
-2. Link the LLM Proxy to that Identity Provider by setting `identityProviderId` on the proxy through the API
+2. Open the LLM Proxy profile and select the provider in the **Identity Provider (JWKS)** dropdown
 3. Clients authenticate with JWTs from the configured IdP
 
 Only JWT-shaped bearer tokens use this path. Standard provider API keys and Archestra virtual keys continue to use their normal authentication flow.

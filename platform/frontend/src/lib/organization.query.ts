@@ -438,6 +438,36 @@ export function useUpdateAgentSettings(
 }
 
 /**
+ * Update /connection admin settings (default gateway/proxy, hidden client/provider lists)
+ */
+export function useUpdateConnectionSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateConnectionSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateConnectionSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Update MCP settings (OAuth access token lifetime)
  */
 export function useUpdateMcpSettings(

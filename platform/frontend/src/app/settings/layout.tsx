@@ -38,6 +38,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Configure organization-wide MCP authentication and token behavior.",
   },
+  "/settings/connection": {
+    title: "Connection",
+    description:
+      'Control what other users see when getting connection instructions on the "Connect" page.',
+  },
   "/settings/organization": {
     title: "Organization",
     description:

@@ -192,6 +192,13 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/logs") || pathname.startsWith("/mcp/logs"),
       },
+      {
+        title: "Connect",
+        url: "/connection",
+        icon: Cable,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/connection"),
+      },
     ],
   },
 ];
@@ -414,14 +421,17 @@ export function AppSidebar() {
   });
   const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
 
-  // Filter nav groups based on enterprise features
+  // Filter nav groups based on enterprise features + connect permissions
   const filteredNavGroups = React.useMemo(() => {
-    if (knowledgeBaseEnabled) return contentNavGroups;
     return contentNavGroups.map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.title !== "Knowledge"),
+      items: group.items.filter((item) => {
+        if (!knowledgeBaseEnabled && item.title === "Knowledge") return false;
+        if (item.title === "Connect" && !showConnect) return false;
+        return true;
+      }),
     }));
-  }, [knowledgeBaseEnabled]);
+  }, [knowledgeBaseEnabled, showConnect]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {
@@ -432,14 +442,6 @@ export function AppSidebar() {
       separator?: boolean;
     }[] = [];
 
-    if (showConnect) {
-      links.push({
-        href: "/connection",
-        icon: <Cable className="h-4 w-4" />,
-        label: "Connect",
-      });
-    }
-
     links.push({
       href: "/settings/account",
       icon: <Settings className="h-4 w-4" />,
@@ -448,7 +450,7 @@ export function AppSidebar() {
     });
 
     return links;
-  }, [showConnect]);
+  }, []);
 
   return (
     <Sidebar collapsible="icon">

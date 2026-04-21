@@ -520,7 +520,7 @@ export function AgentDialog({
 }: AgentDialogProps) {
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
-  const shouldLoadIdentityProviders = open;
+  const shouldLoadIdentityProviders = open && agentType === "mcp_gateway";
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -634,16 +634,7 @@ export function AgentDialog({
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
-  const supportsIdentityProvider =
-    agentType === "agent" || agentType === "mcp_gateway";
-  const inferredIdentityProviderId =
-    supportsIdentityProvider && identityProviders.length === 1
-      ? identityProviders[0]?.id
-      : null;
-  const effectiveIdentityProviderId =
-    identityProviderId === undefined
-      ? inferredIdentityProviderId
-      : identityProviderId;
+  const supportsIdentityProvider = agentType === "mcp_gateway";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const showPrimarySettingsCard =
     !isBuiltIn ||
@@ -937,7 +928,7 @@ export function AgentDialog({
               suggestedPrompts: validSuggestedPrompts,
             }),
             ...(supportsIdentityProvider && {
-              identityProviderId: effectiveIdentityProviderId || null,
+              identityProviderId: identityProviderId || null,
             }),
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -973,7 +964,7 @@ export function AgentDialog({
             suggestedPrompts: validSuggestedPrompts,
           }),
           ...(supportsIdentityProvider && {
-            identityProviderId: effectiveIdentityProviderId || null,
+            identityProviderId: identityProviderId || null,
           }),
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
@@ -1054,7 +1045,7 @@ export function AgentDialog({
     considerContextUntrusted,
     llmApiKeyId,
     llmModel,
-    effectiveIdentityProviderId,
+    identityProviderId,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -1978,9 +1969,9 @@ export function AgentDialog({
                                 JWT authentication. The same provider is also
                                 used when {appName} needs to resolve
                                 enterprise-managed downstream credentials for
-                                tool calls. When there is exactly one Identity
-                                Provider configured, {appName} uses it
-                                automatically if you leave this unset.
+                                tool calls. Leave this unset to keep using the
+                                other supported MCP Gateway authentication
+                                methods without IdP JWT validation.
                                 {mcpAuthDocsUrl ? (
                                   <>
                                     {" "}
@@ -1995,7 +1986,7 @@ export function AgentDialog({
                                 ) : null}
                               </p>
                               <Select
-                                value={effectiveIdentityProviderId ?? "none"}
+                                value={identityProviderId ?? "none"}
                                 onValueChange={(value) =>
                                   setIdentityProviderId(
                                     value === "none" ? null : value,

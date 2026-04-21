@@ -175,9 +175,6 @@ export function McpCatalogForm({
     [identityProviders],
   );
   const hasOidcIdentityProviders = oidcIdentityProviders.length > 0;
-  const defaultIdentityProviderId =
-    oidcIdentityProviders.length === 1 ? oidcIdentityProviders[0]?.id : null;
-
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(formSchema as any),
@@ -241,10 +238,6 @@ export function McpCatalogForm({
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
-  const selectedIdentityProviderId = form.watch(
-    "enterpriseManagedConfig.identityProviderId",
-  );
-
   const handleAuthMethodChange = (
     nextAuthMethod: McpCatalogFormValues["authMethod"],
   ) => {
@@ -270,7 +263,6 @@ export function McpCatalogForm({
           ...(form.getValues("enterpriseManagedConfig") ?? {}),
           identityProviderId:
             form.getValues("enterpriseManagedConfig.identityProviderId") ??
-            defaultIdentityProviderId ??
             undefined,
           assertionMode: "exchange",
         },
@@ -285,7 +277,6 @@ export function McpCatalogForm({
         {
           identityProviderId:
             form.getValues("enterpriseManagedConfig.identityProviderId") ??
-            defaultIdentityProviderId ??
             undefined,
           assertionMode: "passthrough",
           requestedCredentialType: "bearer_token",
@@ -308,20 +299,6 @@ export function McpCatalogForm({
       form.setValue("enterpriseManagedConfig", null, { shouldDirty: true });
     }
   }, [authMethod, form, hasOidcIdentityProviders, isEnterpriseCoreEnabled]);
-
-  useEffect(() => {
-    if (
-      defaultIdentityProviderId &&
-      (authMethod === "enterprise_managed" || authMethod === "idp_jwt") &&
-      !selectedIdentityProviderId
-    ) {
-      form.setValue(
-        "enterpriseManagedConfig.identityProviderId",
-        defaultIdentityProviderId,
-        { shouldDirty: true },
-      );
-    }
-  }, [authMethod, defaultIdentityProviderId, form, selectedIdentityProviderId]);
 
   // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);

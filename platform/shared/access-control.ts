@@ -1052,6 +1052,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
 
   // Logs
+  "/audit-log": { log: ["read"] },
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
 

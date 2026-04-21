@@ -199,6 +199,20 @@ export const UpdateMcpSettingsSchema = z.object({
     McpOauthAccessTokenLifetimeSecondsSchema.optional(),
 });
 
+export const UpdateConnectionSettingsSchema = z.object({
+  connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
+  connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
+  connectionShownClientIds: z
+    .array(z.string().max(64))
+    .max(50)
+    .nullable()
+    .optional(),
+  connectionShownProviders: z
+    .array(SupportedProvidersSchema)
+    .nullable()
+    .optional(),
+});
+
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });

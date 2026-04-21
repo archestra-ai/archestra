@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.18"
+    "version": "1.2.20"
   },
   "components": {
     "schemas": {
@@ -16748,6 +16748,79 @@
           "object"
         ],
         "additionalProperties": {}
+      },
+      "UserConfigFieldDefaultInput": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "UserConfigFieldInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "directory",
+              "file"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "promptOnInstallation": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
+              }
+            ]
+          },
+          "multiple": {
+            "type": "boolean"
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "headerName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "description"
+        ]
       },
       "OpenAiChatCompletionRequest": {
         "type": "object",
@@ -34258,6 +34331,80 @@
           "object"
         ],
         "additionalProperties": {}
+      },
+      "UserConfigFieldDefault": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "UserConfigField": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "directory",
+              "file"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "promptOnInstallation": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserConfigFieldDefault"
+              }
+            ]
+          },
+          "multiple": {
+            "type": "boolean"
+          },
+          "sensitive": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "headerName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "description"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -90891,71 +91038,7 @@
                         "nullable": true,
                         "type": "object",
                         "additionalProperties": {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "enum": [
-                                "string",
-                                "number",
-                                "boolean",
-                                "directory",
-                                "file"
-                              ]
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "description": {
-                              "type": "string"
-                            },
-                            "promptOnInstallation": {
-                              "type": "boolean"
-                            },
-                            "required": {
-                              "type": "boolean"
-                            },
-                            "default": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "boolean"
-                                },
-                                {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                }
-                              ]
-                            },
-                            "multiple": {
-                              "type": "boolean"
-                            },
-                            "sensitive": {
-                              "type": "boolean"
-                            },
-                            "min": {
-                              "type": "number"
-                            },
-                            "max": {
-                              "type": "number"
-                            },
-                            "headerName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "title",
-                            "description"
-                          ],
-                          "additionalProperties": false
+                          "$ref": "#/components/schemas/UserConfigField"
                         }
                       },
                       "oauthConfig": {
@@ -91764,70 +91847,7 @@
                     "nullable": true,
                     "type": "object",
                     "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "string",
-                            "number",
-                            "boolean",
-                            "directory",
-                            "file"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "promptOnInstallation": {
-                          "type": "boolean"
-                        },
-                        "required": {
-                          "type": "boolean"
-                        },
-                        "default": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          ]
-                        },
-                        "multiple": {
-                          "type": "boolean"
-                        },
-                        "sensitive": {
-                          "type": "boolean"
-                        },
-                        "min": {
-                          "type": "number"
-                        },
-                        "max": {
-                          "type": "number"
-                        },
-                        "headerName": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "description"
-                      ]
+                      "$ref": "#/components/schemas/UserConfigFieldInput"
                     }
                   },
                   "oauthConfig": {
@@ -92368,71 +92388,7 @@
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "directory",
-                              "file"
-                            ]
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "promptOnInstallation": {
-                            "type": "boolean"
-                          },
-                          "required": {
-                            "type": "boolean"
-                          },
-                          "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            ]
-                          },
-                          "multiple": {
-                            "type": "boolean"
-                          },
-                          "sensitive": {
-                            "type": "boolean"
-                          },
-                          "min": {
-                            "type": "number"
-                          },
-                          "max": {
-                            "type": "number"
-                          },
-                          "headerName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "title",
-                          "description"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/UserConfigField"
                       }
                     },
                     "oauthConfig": {
@@ -93264,71 +93220,7 @@
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "directory",
-                              "file"
-                            ]
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "promptOnInstallation": {
-                            "type": "boolean"
-                          },
-                          "required": {
-                            "type": "boolean"
-                          },
-                          "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            ]
-                          },
-                          "multiple": {
-                            "type": "boolean"
-                          },
-                          "sensitive": {
-                            "type": "boolean"
-                          },
-                          "min": {
-                            "type": "number"
-                          },
-                          "max": {
-                            "type": "number"
-                          },
-                          "headerName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "title",
-                          "description"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/UserConfigField"
                       }
                     },
                     "oauthConfig": {
@@ -94131,70 +94023,7 @@
                     "nullable": true,
                     "type": "object",
                     "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "string",
-                            "number",
-                            "boolean",
-                            "directory",
-                            "file"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "promptOnInstallation": {
-                          "type": "boolean"
-                        },
-                        "required": {
-                          "type": "boolean"
-                        },
-                        "default": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          ]
-                        },
-                        "multiple": {
-                          "type": "boolean"
-                        },
-                        "sensitive": {
-                          "type": "boolean"
-                        },
-                        "min": {
-                          "type": "number"
-                        },
-                        "max": {
-                          "type": "number"
-                        },
-                        "headerName": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "description"
-                      ]
+                      "$ref": "#/components/schemas/UserConfigFieldInput"
                     }
                   },
                   "oauthConfig": {
@@ -94743,71 +94572,7 @@
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "directory",
-                              "file"
-                            ]
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "promptOnInstallation": {
-                            "type": "boolean"
-                          },
-                          "required": {
-                            "type": "boolean"
-                          },
-                          "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            ]
-                          },
-                          "multiple": {
-                            "type": "boolean"
-                          },
-                          "sensitive": {
-                            "type": "boolean"
-                          },
-                          "min": {
-                            "type": "number"
-                          },
-                          "max": {
-                            "type": "number"
-                          },
-                          "headerName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "type",
-                          "title",
-                          "description"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/components/schemas/UserConfigField"
                       }
                     },
                     "oauthConfig": {
@@ -100371,6 +100136,14 @@
                                   "folderPath": {
                                     "type": "string"
                                   },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
                                   "includePages": {
                                     "type": "boolean"
                                   },
@@ -101359,6 +101132,14 @@
                           "folderPath": {
                             "type": "string"
                           },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "includePages": {
                             "type": "boolean"
                           },
@@ -101983,6 +101764,14 @@
                             },
                             "folderPath": {
                               "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "includePages": {
                               "type": "boolean"
@@ -102914,6 +102703,14 @@
                             "folderPath": {
                               "type": "string"
                             },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
                             "includePages": {
                               "type": "boolean"
                             },
@@ -103758,6 +103555,14 @@
                           "folderPath": {
                             "type": "string"
                           },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
                           "includePages": {
                             "type": "boolean"
                           },
@@ -104380,6 +104185,14 @@
                             },
                             "folderPath": {
                               "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
                             },
                             "includePages": {
                               "type": "boolean"
@@ -130513,6 +130326,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -130551,7 +130390,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -131149,6 +130992,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -131187,7 +131056,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -132032,6 +131905,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -132070,7 +131969,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -132573,6 +132476,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -132611,7 +132540,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -133132,6 +133065,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -133170,7 +133129,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -133392,6 +133355,603 @@
           "kind": "static",
           "permissions": [
             "agentSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/organization/connection-settings": {
+      "patch": {
+        "operationId": "updateConnectionSettings",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Update /connection admin settings (default gateway/proxy, hidden clients/providers)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "connectionDefaultMcpGatewayId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "connectionDefaultLlmProxyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "connectionShownClientIds": {
+                    "nullable": true,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  },
+                  "connectionShownProviders": {
+                    "nullable": true,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "azure"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "logo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "logoDark": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "limitCleanupInterval": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m"
+                      ]
+                    },
+                    "onboardingComplete": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "enum": [
+                        "modern-minimal",
+                        "clean-slate",
+                        "mono",
+                        "twitter",
+                        "tangerine",
+                        "bubblegum",
+                        "caffeine",
+                        "amber-minimal",
+                        "cosmic-night",
+                        "doom-64",
+                        "mocha-mousse",
+                        "nature",
+                        "sunset-horizon",
+                        "neo-brutalism",
+                        "vercel",
+                        "claude",
+                        "vintage-paper",
+                        "boxy-minimalistic",
+                        "catppuccin",
+                        "solarized-dark",
+                        "gruvbox-dark",
+                        "dracula-dark",
+                        "monokai-dark",
+                        "moonlight-dark"
+                      ]
+                    },
+                    "customFont": {
+                      "type": "string",
+                      "enum": [
+                        "lato",
+                        "inter",
+                        "open-sans",
+                        "roboto",
+                        "source-sans-pro",
+                        "jetbrains-mono"
+                      ]
+                    },
+                    "convertToolResultsToToon": {
+                      "type": "boolean"
+                    },
+                    "compressionScope": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team"
+                      ]
+                    },
+                    "globalToolPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "permissive",
+                        "restrictive"
+                      ]
+                    },
+                    "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "embeddingModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "embeddingDimensions": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "embeddingChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "defaultLlmProvider": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "azure"
+                      ]
+                    },
+                    "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAgentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "favicon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ogDescription": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "footerText": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatLinks": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 25
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "chatPlaceholders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "animateChatPlaceholders": {
+                      "type": "boolean"
+                    },
+                    "iconLogo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "chatErrorSupportMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "slimChatErrorUi": {
+                      "type": "boolean"
+                    },
+                    "showTwoFactor": {
+                      "type": "boolean"
+                    },
+                    "mcpOauthAccessTokenLifetimeSeconds": {
+                      "type": "integer",
+                      "minimum": 300,
+                      "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "logoDark",
+                    "createdAt",
+                    "metadata",
+                    "limitCleanupInterval",
+                    "onboardingComplete",
+                    "theme",
+                    "customFont",
+                    "convertToolResultsToToon",
+                    "compressionScope",
+                    "globalToolPolicy",
+                    "allowChatFileUploads",
+                    "embeddingModel",
+                    "embeddingDimensions",
+                    "embeddingChatApiKeyId",
+                    "rerankerChatApiKeyId",
+                    "rerankerModel",
+                    "defaultLlmModel",
+                    "defaultLlmProvider",
+                    "defaultLlmApiKeyId",
+                    "defaultAgentId",
+                    "favicon",
+                    "appName",
+                    "ogDescription",
+                    "footerText",
+                    "chatLinks",
+                    "chatPlaceholders",
+                    "animateChatPlaceholders",
+                    "iconLogo",
+                    "chatErrorSupportMessage",
+                    "slimChatErrorUi",
+                    "showTwoFactor",
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
           ]
         }
       }
@@ -133657,6 +134217,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -133695,7 +134281,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -134198,6 +134788,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -134236,7 +134852,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -134706,6 +135326,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -134744,7 +135390,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -135509,6 +136159,32 @@
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
+                    },
+                    "connectionDefaultMcpGatewayId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionDefaultLlmProxyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "connectionShownClientIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectionShownProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -135547,7 +136223,11 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds"
+                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "connectionDefaultMcpGatewayId",
+                    "connectionDefaultLlmProxyId",
+                    "connectionShownClientIds",
+                    "connectionShownProviders"
                   ],
                   "additionalProperties": false
                 }

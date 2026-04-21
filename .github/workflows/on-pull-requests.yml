@@ -174,7 +174,7 @@ jobs:
           fail-on-severity: high
           # NOTE: disable license check here because we are already doing it in the license-compliance-check job
           # allow-licenses: MIT
-          license-check: false
+          license-check: "false"
           comment-summary-in-pr: on-failure
 
   dependency-review-merge-group:
@@ -252,6 +252,11 @@ jobs:
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
+      # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
+      - name: Verify no immature dependencies
+        run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
       - name: Type checking, linting, formatting, unit tests
         run: pnpm check:ci

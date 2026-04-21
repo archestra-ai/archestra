@@ -194,6 +194,74 @@ describe("Bedrock tool name encoding", () => {
     expect(providerToolNames[1]).toMatch(/^server__read_file_[a-f0-9]{8}$/);
   });
 
+  test("sanitizes provider-facing document names for Bedrock validation", () => {
+    const request = createConverseRequest({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              document: {
+                format: "pdf",
+                name: "customer_report.v2__final!!  copy.pdf",
+                source: { bytes: "ZmFrZQ==" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const commandInput = getCommandInput(request);
+    const documentBlock = commandInput.messages?.[0]?.content?.[0];
+    const documentName =
+      documentBlock && "document" in documentBlock
+        ? documentBlock.document.name
+        : "";
+
+    expect(documentName).toBe("customer report v2 final copy pdf");
+  });
+
+  test("sanitizes document names nested in tool results", () => {
+    const request = createConverseRequest({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tooluse_123",
+                content: [
+                  {
+                    document: {
+                      format: "txt",
+                      name: "..__",
+                      source: { bytes: "ZmFrZQ==" },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const commandInput = getCommandInput(request);
+    const toolResultBlock = commandInput.messages?.[0]?.content?.[0];
+    const toolResultContent =
+      toolResultBlock && "toolResult" in toolResultBlock
+        ? toolResultBlock.toolResult.content
+        : [];
+    const documentBlock = toolResultContent?.[0];
+    const documentName =
+      documentBlock && "document" in documentBlock
+        ? documentBlock.document.name
+        : "";
+
+    expect(documentName).toBe("Document");
+  });
+
   test("re-encodes streamed tool call events with the original tool name", () => {
     const toolName =
       "splunk_olly_preprod_mcp__olly_get_apm_service_errors_and_requests";

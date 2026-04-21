@@ -267,6 +267,7 @@ describe("useSettingsTabs", () => {
         "Agents",
         "MCP",
         "LLM",
+        "Connection",
         "Users",
         "Teams",
         "Roles",

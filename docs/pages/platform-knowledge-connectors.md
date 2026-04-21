@@ -140,7 +140,10 @@ Ingests documents and site pages from SharePoint Online via the Microsoft Graph 
 | Client Secret | Azure AD app registration client secret value                                                      |
 | Drive IDs     | Comma-separated document library IDs to sync (optional -- leave blank to sync all site libraries)   |
 | Folder Path   | Restrict sync to a specific folder path within each drive (optional)                                |
+| Recursive     | Traverse subfolders within each drive or Folder Path (default: on)                                  |
 | Include Pages | Toggle to sync site pages and their web part content (default: on)                                  |
+
+The `maxDepth` field is available via the API for programmatic connector creation but is not exposed in the UI. When Recursive is enabled, traversal descends up to 50 levels by default (range: 1--100).
 
 Authentication uses an Azure AD app registration with client credentials (OAuth2). The app registration requires the `Sites.Read.All` application permission on Microsoft Graph, and admin consent must be granted.
 
@@ -150,10 +153,6 @@ To configure the connector:
 - `Client ID` comes from **Application (client) ID** on the same page
 - `Client Secret` is the secret **Value** from **Certificates & secrets**, not the secret ID
 - `Site URL` should be the exact SharePoint site web URL, not just the display name
-
-Known limitation:
-
-- SharePoint file sync currently lists only the direct children of the selected drive root or `Folder Path`. Nested subfolders are not traversed recursively. If you need multiple nested folders today, point `Folder Path` at the specific folder you want to sync or create separate connectors. Recursive traversal is tracked in [issue #3665](https://github.com/archestra-ai/archestra/issues/3665).
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 

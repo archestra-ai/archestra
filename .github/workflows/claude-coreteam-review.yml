@@ -35,7 +35,7 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           # Add users here as they configure their OAuth tokens
-          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" || "$AUTHOR" == "brojd" ]]; then
+          if [[ "$AUTHOR" == "iskhakov" || "$AUTHOR" == "joeyorlando" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -67,16 +67,3 @@ jobs:
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEY_CLAUDE_CODE_OAUTH_TOKEN }}
-
-  dominik-pr-review:
-    needs: determine-token
-    if: needs.determine-token.outputs.should_run == 'true' && needs.determine-token.outputs.pr_author == 'brojd'
-    permissions:
-      contents: read # Required to pass repository context into the reusable review workflow.
-      pull-requests: write # Required for the reusable review workflow to publish comments.
-      id-token: write # Required by the Claude action's GitHub-backed auth flow.
-    uses: ./.github/workflows/claude-coreteam-review-shared.yml
-    with:
-      pr_number: ${{ github.event.pull_request.number }}
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.DOMINIK_CLAUDE_CODE_OAUTH_TOKEN }}

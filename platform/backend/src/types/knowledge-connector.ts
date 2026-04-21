@@ -293,7 +293,11 @@ export const SalesforceConfigSchema = z.object({
         if (!value) return true;
         try {
           const parsed = JSON.parse(value);
-          return typeof parsed === "object" && parsed !== null;
+          return (
+            typeof parsed === "object" &&
+            parsed !== null &&
+            !Array.isArray(parsed)
+          );
         } catch {
           return false;
         }

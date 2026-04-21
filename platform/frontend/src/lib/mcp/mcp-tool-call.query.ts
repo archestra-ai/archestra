@@ -37,6 +37,7 @@ export function useMcpToolCalls({
   sortBy,
   sortDirection = "desc",
   initialData,
+  enabled = true,
 }: {
   agentId?: string;
   startDate?: string;
@@ -51,6 +52,7 @@ export function useMcpToolCalls({
     archestraApiTypes.GetMcpToolCallsData["query"]
   >["sortDirection"];
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -117,6 +119,7 @@ export function useMcpToolCalls({
       !search
         ? initialData
         : undefined,
+    enabled,
   });
 }
 

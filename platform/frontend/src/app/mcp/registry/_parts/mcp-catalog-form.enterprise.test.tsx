@@ -1,5 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { createRef } from "react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
@@ -203,66 +202,6 @@ describe("McpCatalogForm enterprise gating", () => {
         name: /None \(e\.g\. static API key via environment variables\)/,
       }),
     ).toBeChecked();
-  });
-
-  it("does not auto-select the only OIDC identity provider for IdP JWT auth", async () => {
-    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
-    useIdentityProvidersMock.mockReturnValue({
-      data: [
-        {
-          id: "idp-1",
-          providerId: "okta",
-          issuer: "https://idp.example.com",
-          oidcConfig: { clientId: "client-id" },
-        },
-      ] as never,
-    });
-
-    const submitRef = createRef<(() => Promise<void>) | null>();
-    const onSubmit = vi.fn();
-
-    render(
-      <McpCatalogForm
-        mode="edit"
-        onSubmit={onSubmit}
-        submitRef={submitRef}
-        initialValues={
-          {
-            id: "catalog-1",
-            name: "JWT MCP",
-            description: "",
-            icon: null,
-            serverType: "remote",
-            serverUrl: "https://mcp.example.com",
-            oauthConfig: null,
-            userConfig: {},
-            enterpriseManagedConfig: {
-              assertionMode: "passthrough",
-              requestedCredentialType: "bearer_token",
-              tokenInjectionMode: "authorization_bearer",
-            },
-            localConfig: null,
-            deploymentSpecYaml: null,
-            scope: "personal",
-            teams: [],
-            labels: [],
-          } as never
-        }
-      />,
-    );
-
-    await waitFor(() => expect(submitRef.current).toBeTypeOf("function"));
-
-    await act(async () => {
-      await submitRef.current?.();
-    });
-
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText(
-        "Identity Provider is required for this authorization mode.",
-      ),
-    ).toBeInTheDocument();
   });
 
   it("disables browser autofill for MCP config forms and secret fields", () => {

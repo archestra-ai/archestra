@@ -7,6 +7,14 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type {
+  MemoryConfidenceBand,
+  MemoryKind,
+  MemoryPolicyFlag,
+  MemoryRejectionReason,
+  MemoryScopeType,
+  MemoryStatus,
+} from "@/types/memory-item";
 import conversationsTable from "./conversation";
 import organizationsTable from "./organization";
 import usersTable from "./user";
@@ -18,10 +26,10 @@ const memoryItemsTable = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
-    scopeType: text("scope_type").notNull(),
+    scopeType: text("scope_type").$type<MemoryScopeType>().notNull(),
     scopeId: text("scope_id").notNull(),
-    kind: text("kind").notNull(),
-    status: text("status").notNull().default("candidate"),
+    kind: text("kind").$type<MemoryKind>().notNull(),
+    status: text("status").$type<MemoryStatus>().notNull().default("candidate"),
     content: text("content").notNull(),
     createdBy: text("created_by").references(() => usersTable.id, {
       onDelete: "set null",
@@ -30,11 +38,12 @@ const memoryItemsTable = pgTable(
       onDelete: "set null",
     }),
     reviewedAt: timestamp("reviewed_at", { mode: "date" }),
-    rejectionReason: text("rejection_reason"),
+    rejectionReason: text("rejection_reason").$type<MemoryRejectionReason>(),
     rejectionComment: text("rejection_comment"),
     extractorVersion: text("extractor_version"),
     policyFlags: text("policy_flags")
       .array()
+      .$type<MemoryPolicyFlag[]>()
       .notNull()
       .default(sql`'{}'::text[]`),
     sourceConversationId: uuid("source_conversation_id").references(
@@ -46,7 +55,7 @@ const memoryItemsTable = pgTable(
       (): AnyPgColumn => memoryItemsTable.id,
       { onDelete: "set null" },
     ),
-    confidenceBand: text("confidence_band"),
+    confidenceBand: text("confidence_band").$type<MemoryConfidenceBand>(),
     language: text("language"),
     lastVerifiedAt: timestamp("last_verified_at", { mode: "date" }),
     expiresAt: timestamp("expires_at", { mode: "date" }),

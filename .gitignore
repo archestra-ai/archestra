@@ -19,5 +19,6 @@ platform/CLAUDE_LOCAL.md
 __pycache__/
 
 .claude/worktrees/
+.claude/*.lock
 .turbo/
 

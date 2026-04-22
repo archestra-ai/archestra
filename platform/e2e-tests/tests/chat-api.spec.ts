@@ -111,6 +111,10 @@ test.describe("Chat message persistence on provider error", () => {
       const updatedConversation = await getConvResponse.json();
 
       expect(updatedConversation.messages.length).toBeGreaterThan(0);
+      expect(updatedConversation.lastChatError).toMatchObject({
+        code: "server_error",
+        isRetryable: true,
+      });
 
       const userMessage = updatedConversation.messages.find(
         (m: { role: string }) => m.role === "user",

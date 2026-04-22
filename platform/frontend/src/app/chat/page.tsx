@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -845,7 +845,11 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
-  const error = chatSession?.error;
+  const persistedChatError = useMemo(
+    () => toPersistedChatError(conversation?.lastChatError),
+    [conversation?.lastChatError],
+  );
+  const error = chatSession?.error ?? persistedChatError;
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
@@ -2088,6 +2092,18 @@ export function ChatPageContent({
       </StandardDialog>
     </div>
   );
+}
+
+function toPersistedChatError(
+  lastChatError:
+    | archestraApiTypes.GetChatConversationResponses["200"]["lastChatError"]
+    | undefined,
+): Error | undefined {
+  if (!lastChatError) {
+    return undefined;
+  }
+
+  return new Error(JSON.stringify(lastChatError));
 }
 
 export default function ChatPage() {

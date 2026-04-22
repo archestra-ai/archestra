@@ -170,8 +170,14 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // 3. Raw Bedrock bearer API key — pass through.
         apiKey = bearerToken;
       }
-    } else if (!isBedrockIamAuthEnabled()) {
-      // 4. IAM fallback requires no token; without it, reject.
+    }
+
+    // 4. If no bearer key was resolved (no token, or a virtual key whose
+    // parent ChatAPIKey has no secret), the only remaining option is IAM.
+    // Gate on the IAM flag so behavior matches `bedrockAdapter.createClient`
+    // in the inference path — we don't silently use ambient AWS creds when
+    // the operator hasn't enabled IAM.
+    if (!apiKey && !isBedrockIamAuthEnabled()) {
       throw new ApiError(
         401,
         "Authentication required. Provide a Bedrock API key or virtual API key via Authorization: Bearer <token>.",

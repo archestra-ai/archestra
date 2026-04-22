@@ -11,9 +11,11 @@ import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
   BatchSpanProcessor,
+  ParentBasedSampler,
   type ReadableSpan,
   type Span,
   type SpanProcessor,
+  TraceIdRatioBasedSampler,
 } from "@opentelemetry/sdk-trace-base";
 import {
   ATTR_SERVICE_NAME,
@@ -38,6 +40,7 @@ const {
       traceExporter: traceExporterConfig,
       logExporter: logExporterConfig,
       verboseTracing,
+      tracesSampleRate,
     },
     sentry: { enabled: sentryEnabled },
   },
@@ -178,7 +181,11 @@ const sdk = new NodeSDK({
    */
   contextManager: sentryEnabled ? new Sentry.SentryContextManager() : undefined,
   sampler:
-    sentryEnabled && sentryClient ? new SentrySampler(sentryClient) : undefined,
+    sentryEnabled && sentryClient
+      ? new SentrySampler(sentryClient)
+      : new ParentBasedSampler({
+          root: new TraceIdRatioBasedSampler(tracesSampleRate),
+        }),
   textMapPropagator: sentryEnabled ? new SentryPropagator() : undefined,
   // Use multiple span processors to send traces to both Sentry and OTLP endpoints
   spanProcessors,
@@ -193,6 +200,7 @@ sdk.start();
 logger.info(
   {
     sentryEnabled,
+    tracesSampleRate: sentryEnabled ? "managed by Sentry" : tracesSampleRate,
     verboseTracing,
     enableAutoInstrumentations,
     otlpFiltering: sentryEnabled && !verboseTracing,

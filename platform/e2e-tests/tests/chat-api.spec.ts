@@ -115,6 +115,11 @@ test.describe("Chat message persistence on provider error", () => {
         code: "server_error",
         isRetryable: true,
       });
+      expect(updatedConversation.chatErrors).toHaveLength(1);
+      expect(updatedConversation.chatErrors[0].error).toMatchObject({
+        code: "server_error",
+        isRetryable: true,
+      });
 
       const userMessage = updatedConversation.messages.find(
         (m: { role: string }) => m.role === "user",

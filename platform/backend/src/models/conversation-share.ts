@@ -256,6 +256,7 @@ class ConversationShareModel {
         visibility: share.visibility,
       },
       messages,
+      chatErrors: [],
       sharedByUserId: share.createdByUserId,
     };
   }

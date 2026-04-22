@@ -401,6 +401,14 @@ function ChatSessionHook({
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
+      }, 500);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
         errorName: chatError.name,

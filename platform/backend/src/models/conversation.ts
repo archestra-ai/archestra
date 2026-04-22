@@ -15,6 +15,7 @@ import type {
   InsertConversation,
   UpdateConversation,
 } from "@/types";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 
 class ConversationModel {
@@ -192,6 +193,7 @@ class ConversationModel {
             agent: row.agent,
             share: row.share?.id ? row.share : null,
             messages: [],
+            chatErrors: [],
           });
         }
 
@@ -249,6 +251,7 @@ class ConversationModel {
         agent: row.agent,
         share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
+        chatErrors: [],
       }));
     }
   }
@@ -308,15 +311,13 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
+    const chatErrors = await ConversationChatErrorModel.findByConversation(id);
     const messages = [];
 
     for (const row of rows) {
       if (row.message?.content) {
         // Merge database UUID into message content (overrides AI SDK's temporary ID)
-        messages.push({
-          ...row.message.content,
-          id: row.message.id,
-        });
+        messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
 
@@ -325,6 +326,7 @@ class ConversationModel {
       agent: firstRow.agent,
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
+      chatErrors,
     };
   }
 
@@ -510,14 +512,14 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
+    const chatErrors = await ConversationChatErrorModel.findByConversation(
+      params.id,
+    );
     const messages = [];
 
     for (const row of rows) {
       if (row.message?.content) {
-        messages.push({
-          ...row.message.content,
-          id: row.message.id,
-        });
+        messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
 
@@ -526,8 +528,35 @@ class ConversationModel {
       agent: firstRow.agent,
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
+      chatErrors,
     };
   }
 }
 
 export default ConversationModel;
+
+function addMessagePersistenceMetadata(message: {
+  id: string;
+  content: unknown;
+  createdAt: Date;
+}) {
+  const content =
+    typeof message.content === "object" && message.content !== null
+      ? message.content
+      : {};
+  const metadata =
+    "metadata" in content &&
+    typeof content.metadata === "object" &&
+    content.metadata !== null
+      ? content.metadata
+      : {};
+
+  return {
+    ...content,
+    id: message.id,
+    metadata: {
+      ...metadata,
+      createdAt: message.createdAt.toISOString(),
+    },
+  };
+}

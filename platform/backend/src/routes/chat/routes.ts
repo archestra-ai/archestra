@@ -40,6 +40,7 @@ import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
+  ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
   ConversationShareModel,
@@ -2050,6 +2051,16 @@ function persistConversationChatError(params: {
   error: ChatErrorResponse;
 }) {
   const lastChatError = getSerializableChatError(params.error);
+
+  void ConversationChatErrorModel.create({
+    conversationId: params.conversationId,
+    error: lastChatError,
+  }).catch((error) => {
+    logger.error(
+      { error, conversationId: params.conversationId },
+      "Failed to persist chat error event on conversation",
+    );
+  });
 
   void ConversationModel.updateLastChatError({
     id: params.conversationId,

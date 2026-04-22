@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  ilike,
   inArray,
   isNull,
   lt,
@@ -69,29 +70,11 @@ class MemoryItemModel {
     scopeType?: MemoryScopeType;
     status?: MemoryStatus;
     kind?: MemoryKind;
+    search?: string;
     limit: number;
     offset: number;
   }): Promise<MemoryItem[]> {
-    const teamIds = params.teamIds ?? [];
-    const conditions: SQL[] = [
-      eq(schema.memoryItemsTable.organizationId, params.organizationId),
-      MemoryItemModel.buildVisibleScopePredicate({
-        userId: params.userId,
-        organizationId: params.organizationId,
-        teamIds,
-        includeOrganizationScope: params.isOrgAdmin,
-      }),
-    ];
-
-    if (params.scopeType) {
-      conditions.push(eq(schema.memoryItemsTable.scopeType, params.scopeType));
-    }
-    if (params.status) {
-      conditions.push(eq(schema.memoryItemsTable.status, params.status));
-    }
-    if (params.kind) {
-      conditions.push(eq(schema.memoryItemsTable.kind, params.kind));
-    }
+    const conditions = MemoryItemModel.buildListForUserConditions(params);
 
     return await db
       .select()
@@ -100,6 +83,53 @@ class MemoryItemModel {
       .orderBy(desc(schema.memoryItemsTable.createdAt))
       .limit(params.limit)
       .offset(params.offset);
+  }
+
+  static async countForUser(params: {
+    userId: string;
+    organizationId: string;
+    teamIds?: string[];
+    isOrgAdmin: boolean;
+    scopeType?: MemoryScopeType;
+    status?: MemoryStatus;
+    kind?: MemoryKind;
+    search?: string;
+  }): Promise<number> {
+    const conditions = MemoryItemModel.buildListForUserConditions(params);
+
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.memoryItemsTable)
+      .where(and(...conditions));
+
+    return Number(result?.total ?? 0);
+  }
+
+  static async countPendingReview(params: {
+    organizationId: string;
+    requesterUserId: string;
+    requesterRole: string;
+    teamIds?: string[];
+  }): Promise<number> {
+    const teamIds = params.teamIds ?? [];
+
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.memoryItemsTable)
+      .where(
+        and(
+          eq(schema.memoryItemsTable.organizationId, params.organizationId),
+          eq(schema.memoryItemsTable.status, "candidate"),
+          MemoryItemModel.buildPendingReviewScopePredicate({
+            organizationId: params.organizationId,
+            requesterUserId: params.requesterUserId,
+            requesterRole: params.requesterRole,
+            teamIds,
+          }),
+        ),
+      );
+
+    return Number(result?.total ?? 0);
   }
 
   static async listPendingReview(params: {
@@ -422,6 +452,45 @@ class MemoryItemModel {
         desc(schema.memoryItemsTable.createdAt),
       )
       .limit(params.limit);
+  }
+
+  private static buildListForUserConditions(params: {
+    userId: string;
+    organizationId: string;
+    teamIds?: string[];
+    isOrgAdmin: boolean;
+    scopeType?: MemoryScopeType;
+    status?: MemoryStatus;
+    kind?: MemoryKind;
+    search?: string;
+  }): SQL[] {
+    const teamIds = params.teamIds ?? [];
+    const conditions: SQL[] = [
+      eq(schema.memoryItemsTable.organizationId, params.organizationId),
+      MemoryItemModel.buildVisibleScopePredicate({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        teamIds,
+        includeOrganizationScope: params.isOrgAdmin,
+      }),
+    ];
+
+    if (params.scopeType) {
+      conditions.push(eq(schema.memoryItemsTable.scopeType, params.scopeType));
+    }
+    if (params.status) {
+      conditions.push(eq(schema.memoryItemsTable.status, params.status));
+    }
+    if (params.kind) {
+      conditions.push(eq(schema.memoryItemsTable.kind, params.kind));
+    }
+    if (params.search) {
+      conditions.push(
+        ilike(schema.memoryItemsTable.content, `%${params.search}%`),
+      );
+    }
+
+    return conditions;
   }
 
   private static buildVisibleScopePredicate(params: {

@@ -53093,6 +53093,684 @@
         }
       }
     },
+    "/v1/bedrock/openai/chat/completions": {
+      "post": {
+        "operationId": "bedrockOpenaiChatCompletionsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Call Amazon Bedrock models using the OpenAI ChatCompletions wire format (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header with Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/bedrock/openai/{agentId}/chat/completions": {
+      "post": {
+        "operationId": "bedrockOpenaiChatCompletionsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Call Amazon Bedrock models using the OpenAI ChatCompletions wire format (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Authorization header with Bearer token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/bedrock/openai/models": {
+      "get": {
+        "operationId": "bedrockOpenaiListModelsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "List Amazon Bedrock models (via ListInferenceProfiles) in OpenAI models-list format\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Bearer token: Archestra virtual API key for Bedrock"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "list"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "created": {
+                            "type": "number"
+                          },
+                          "owned_by": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "object",
+                          "created",
+                          "owned_by"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/bedrock/openai/{agentId}/models": {
+      "get": {
+        "operationId": "bedrockOpenaiListModelsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "List Amazon Bedrock models (via ListInferenceProfiles) in OpenAI models-list format (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Bearer token: Archestra virtual API key for Bedrock"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "list"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "created": {
+                            "type": "number"
+                          },
+                          "owned_by": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "object",
+                          "created",
+                          "owned_by"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/bedrock/converse": {
       "post": {
         "operationId": "bedrockConverseWithDefaultAgent",
@@ -60201,6 +60879,86 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "lastChatError": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "rate_limit",
+                              "authentication",
+                              "permission_denied",
+                              "invalid_request",
+                              "not_found",
+                              "context_too_long",
+                              "content_filtered",
+                              "server_error",
+                              "network_error",
+                              "unknown"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "isRetryable": {
+                            "type": "boolean"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          },
+                          "traceId": {
+                            "type": "string"
+                          },
+                          "spanId": {
+                            "type": "string"
+                          },
+                          "originalError": {
+                            "type": "object",
+                            "properties": {
+                              "provider": {
+                                "type": "string",
+                                "enum": [
+                                  "openai",
+                                  "gemini",
+                                  "anthropic",
+                                  "bedrock",
+                                  "cohere",
+                                  "cerebras",
+                                  "mistral",
+                                  "perplexity",
+                                  "groq",
+                                  "xai",
+                                  "openrouter",
+                                  "vllm",
+                                  "ollama",
+                                  "zhipuai",
+                                  "deepseek",
+                                  "minimax",
+                                  "azure"
+                                ]
+                              },
+                              "status": {
+                                "type": "number"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "raw": {}
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "message",
+                          "isRetryable"
+                        ],
+                        "additionalProperties": false
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -60292,6 +61050,7 @@
                       "hasCustomToolSelection",
                       "todoList",
                       "artifact",
+                      "lastChatError",
                       "pinnedAt",
                       "createdAt",
                       "updatedAt",
@@ -60685,6 +61444,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -60776,6 +61615,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -61127,6 +61967,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -61218,6 +62138,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -61629,6 +62550,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -61720,6 +62721,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -63492,6 +64494,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -63586,6 +64668,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -63958,6 +65041,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -64049,6 +65212,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -64416,6 +65580,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -64507,6 +65751,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -64884,6 +66129,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -64975,6 +66300,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
@@ -142035,6 +143361,86 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "lastChatError": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limit",
+                            "authentication",
+                            "permission_denied",
+                            "invalid_request",
+                            "not_found",
+                            "context_too_long",
+                            "content_filtered",
+                            "server_error",
+                            "network_error",
+                            "unknown"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "isRetryable": {
+                          "type": "boolean"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "traceId": {
+                          "type": "string"
+                        },
+                        "spanId": {
+                          "type": "string"
+                        },
+                        "originalError": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "status": {
+                              "type": "number"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "raw": {}
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "isRetryable"
+                      ],
+                      "additionalProperties": false
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -142126,6 +143532,7 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
+                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",

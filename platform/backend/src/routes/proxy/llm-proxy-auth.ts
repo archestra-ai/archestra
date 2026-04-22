@@ -123,7 +123,8 @@ export interface JwksAuthResult {
 
 /**
  * Attempt JWKS authentication for agents with an external identity provider.
- * Returns null if no JWKS auth was attempted (no IdP configured, no bearer token, or virtual key token).
+ * Returns null if no JWKS auth was attempted (no IdP configured, no bearer token,
+ * virtual key token, or the bearer value is not shaped like a JWT).
  * Throws ApiError if the JWT is invalid.
  */
 export async function attemptJwksAuth(
@@ -144,6 +145,7 @@ export async function attemptJwksAuth(
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1] ?? null;
   if (!bearerToken || hasArchestraTokenPrefix(bearerToken)) return null;
+  if (!isJwtLike(bearerToken)) return null;
 
   let jwksResult: Awaited<ReturnType<typeof validateExternalIdpToken>>;
   try {
@@ -299,3 +301,9 @@ export class VirtualKeyRateLimiter {
 }
 
 export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
+
+function isJwtLike(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  return parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
+}

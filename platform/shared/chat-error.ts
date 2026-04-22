@@ -1,4 +1,8 @@
-import type { SupportedProvider } from "./model-constants";
+import { z } from "zod";
+import {
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "./model-constants";
 
 // =============================================================================
 // Provider-Specific Error Types (from official documentation)
@@ -309,6 +313,24 @@ export interface ChatErrorResponse {
     raw?: unknown;
   };
 }
+
+export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
+  code: z.nativeEnum(ChatErrorCode),
+  message: z.string(),
+  isRetryable: z.boolean(),
+  sessionId: z.string().optional(),
+  traceId: z.string().optional(),
+  spanId: z.string().optional(),
+  originalError: z
+    .object({
+      provider: SupportedProvidersSchema.optional(),
+      status: z.number().optional(),
+      message: z.string().optional(),
+      type: z.string().optional(),
+      raw: z.unknown().optional(),
+    })
+    .optional(),
+});
 
 /**
  * Type guard to check if an object is a ChatErrorResponse

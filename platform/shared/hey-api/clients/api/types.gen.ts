@@ -15707,6 +15707,236 @@ export type AzureChatCompletionsWithAgentResponses = {
 
 export type AzureChatCompletionsWithAgentResponse = AzureChatCompletionsWithAgentResponses[keyof AzureChatCompletionsWithAgentResponses];
 
+export type BedrockOpenaiChatCompletionsWithDefaultAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/bedrock/openai/chat/completions';
+};
+
+export type BedrockOpenaiChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type BedrockOpenaiChatCompletionsWithAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/openai/{agentId}/chat/completions';
+};
+
+export type BedrockOpenaiChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        /**
+         * Bearer token: Archestra virtual API key for Bedrock
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/bedrock/openai/models';
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentError = BedrockOpenaiListModelsWithDefaultAgentErrors[keyof BedrockOpenaiListModelsWithDefaultAgentErrors];
+
+export type BedrockOpenaiListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentResponse = BedrockOpenaiListModelsWithDefaultAgentResponses[keyof BedrockOpenaiListModelsWithDefaultAgentResponses];
+
+export type BedrockOpenaiListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        /**
+         * Bearer token: Archestra virtual API key for Bedrock
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/openai/{agentId}/models';
+};
+
+export type BedrockOpenaiListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockOpenaiListModelsWithAgentError = BedrockOpenaiListModelsWithAgentErrors[keyof BedrockOpenaiListModelsWithAgentErrors];
+
+export type BedrockOpenaiListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type BedrockOpenaiListModelsWithAgentResponse = BedrockOpenaiListModelsWithAgentResponses[keyof BedrockOpenaiListModelsWithAgentResponses];
+
 export type BedrockConverseWithDefaultAgentData = {
     body: {
         modelId: string;
@@ -17591,6 +17821,21 @@ export type GetChatConversationsResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -17701,6 +17946,21 @@ export type CreateChatConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -17886,6 +18146,21 @@ export type GetChatConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18000,6 +18275,21 @@ export type UpdateChatConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18444,6 +18734,21 @@ export type GetSharedConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18553,6 +18858,21 @@ export type ForkSharedConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18664,6 +18984,21 @@ export type GenerateChatConversationTitleResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18774,6 +19109,21 @@ export type UpdateChatMessageResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -38017,6 +38367,21 @@ export type CreateScheduleTriggerRunConversationResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         artifact: string | null;
+        lastChatError: {
+            code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+            message: string;
+            isRetryable: boolean;
+            sessionId?: string;
+            traceId?: string;
+            spanId?: string;
+            originalError?: {
+                provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                status?: number;
+                message?: string;
+                type?: string;
+                raw?: unknown;
+            };
+        } | null;
         pinnedAt: string | null;
         createdAt: string;
         updatedAt: string;

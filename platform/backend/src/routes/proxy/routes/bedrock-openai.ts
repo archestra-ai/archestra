@@ -223,7 +223,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     }
 
-    let models;
+    let models: Awaited<ReturnType<typeof fetchBedrockModels>>;
     if (apiKey) {
       logger.info("[BedrockOpenai] fetching models via api key");
       models = await fetchBedrockModels(apiKey, baseUrl);

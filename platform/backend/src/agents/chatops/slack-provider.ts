@@ -3,6 +3,7 @@ import {
   buildSlackSlashCommandsForCommand,
   getSlackSlashCommandAction,
   SLACK_REQUIRED_BOT_SCOPES,
+  SLACK_SLASH_COMMANDS,
   TimeInMs,
 } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
@@ -381,7 +382,11 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Available commands:*\n`/archestra-select-agent` — Change the default agent handling requests in the channel\n`/archestra-status` — Check the current agent handling requests in the channel\n`/archestra-help` — Show available commands",
+              text:
+                "*Available commands:*\n" +
+                `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
+                `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
+                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands`,
             },
           },
           { type: "divider" },

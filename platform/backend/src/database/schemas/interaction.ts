@@ -22,6 +22,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import usersTable from "./user";
+import virtualApiKeysTable from "./virtual-api-key";
 
 const interactionsTable = pgTable(
   "interactions",
@@ -44,12 +45,34 @@ const interactionsTable = pgTable(
     executionId: varchar("execution_id"),
     /**
      * Optional user ID passed via X-Archestra-User-Id header.
-     * This allows clients to associate interactions with a specific Archestra user.
-     * Particularly useful for identifying which user was using the Archestra Chat.
+     * Header-derived tracing/attribution field — do NOT overload for budget
+     * accounting. Budget write-back reads `billedUserId` instead.
      */
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * Authoritative "who pays" field for per-user token budgets.
+     * Populated by the LLM proxy based on the auth path:
+     *   - Chat UI session           → request.user.id
+     *   - personal chat API key     → chatApiKey.user_id
+     *   - team / org chat API key   → NULL
+     *   - virtual API key           → NULL (vkey traffic never bills a user)
+     *   - JWKS external caller      → jwksResult.userId
+     * Read by `updateUsageAfterInteraction` and the "By user" cost breakdown.
+     */
+    billedUserId: text("billed_user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Virtual API key that served this request, when applicable.
+     * Populated for every vkey-authenticated call; NULL otherwise.
+     * Drives per-vkey budget accounting and the "By virtual key" breakdown.
+     */
+    virtualApiKeyId: uuid("virtual_api_key_id").references(
+      () => virtualApiKeysTable.id,
+      { onDelete: "set null" },
+    ),
     /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
@@ -103,7 +126,16 @@ const interactionsTable = pgTable(
     executionIdIdx: index("interactions_execution_id_idx").on(
       table.executionId,
     ),
+    // Kept load-bearing by the LLM proxy logs filter/order and the getDistinctUsers admin view; both read user_id directly.
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
+    billedUserCreatedAtIdx: index("interactions_billed_user_created_at_idx").on(
+      table.billedUserId,
+      table.createdAt.desc(),
+    ),
+    virtualApiKeyIdIdx: index("interactions_virtual_api_key_id_idx").on(
+      table.virtualApiKeyId,
+      table.createdAt.desc(),
+    ),
     sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),
     createdAtIdx: index("interactions_created_at_idx").on(
       table.createdAt.desc(),

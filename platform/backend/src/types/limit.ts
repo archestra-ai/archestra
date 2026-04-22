@@ -1,3 +1,4 @@
+import { validateLimitShape } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,11 +7,26 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
+export { validateLimitShape } from "@shared";
+
 /**
- * Entity types that can have limits applied
+ * Entity types that can have limits applied.
+ *
+ * `user` scopes a limit to a single identifiable human (chat UI sessions,
+ * personal chat-api-keys, JWKS-authenticated external callers). Shared
+ * resources like virtual API keys, team/org chat-api-keys never bill a user.
+ *
+ * `virtual_api_key` scopes a limit to a specific vkey regardless of which
+ * downstream caller uses it — caps the integration key itself.
  */
 // TODO: need to make a database migration to migrate agent -> profile
-export const LimitEntityTypeSchema = z.enum(["organization", "team", "agent"]);
+export const LimitEntityTypeSchema = z.enum([
+  "organization",
+  "team",
+  "agent",
+  "user",
+  "virtual_api_key",
+]);
 export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
 
 /**
@@ -44,61 +60,28 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   id: true,
   createdAt: true,
   updatedAt: true,
+  organizationId: true,
 });
 
 /**
  * Refined types for better type safety and validation
  */
-export const CreateLimitSchema = InsertLimitSchema.omit({
+export const CreateLimitApiSchema = InsertLimitSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-}).refine(
-  (data) => {
-    // Validation: mcp_server_calls requires mcpServerName and should not have model
-    if (data.limitType === "mcp_server_calls") {
-      if (!data.mcpServerName) {
-        return false;
-      }
-      if (data.model) {
-        return false;
-      }
-    }
-    // Validation: tool_calls requires both mcpServerName and toolName and should not have model
-    if (data.limitType === "tool_calls") {
-      if (!data.mcpServerName || !data.toolName) {
-        return false;
-      }
-      if (data.model) {
-        return false;
-      }
-    }
-    // Validation: token_cost requires non-empty model array and should not have mcp or tool specificity
-    if (data.limitType === "token_cost") {
-      if (
-        !data.model ||
-        !Array.isArray(data.model) ||
-        data.model.length === 0
-      ) {
-        return false;
-      }
-      if (data.mcpServerName || data.toolName) {
-        return false;
-      }
-    }
-    return true;
-  },
-  {
-    message: "Invalid limit configuration for the specified limit type",
-  },
-);
+  organizationId: true,
+}).refine(validateLimitShape, {
+  message: "Invalid limit configuration for the specified limit type",
+});
 
 /**
  * Exported types
  */
 export type Limit = z.infer<typeof SelectLimitSchema>;
 export type InsertLimit = z.infer<typeof InsertLimitSchema>;
-export type CreateLimit = z.infer<typeof CreateLimitSchema>;
+export type CreateLimitApi = z.infer<typeof CreateLimitApiSchema>;
+export type CreateLimit = CreateLimitApi & { organizationId: string };
 export type UpdateLimit = z.infer<typeof UpdateLimitSchema>;
 
 /**

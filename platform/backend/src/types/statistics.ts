@@ -48,6 +48,27 @@ export const OverviewStatisticsSchema = z.object({
   topModel: z.string(),
 });
 
+export const UserStatisticsSchema = z.object({
+  userId: z.string(),
+  userName: z.string().nullable(),
+  userEmail: z.string().nullable(),
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cost: z.number(),
+  timeSeries: z.array(StatisticsTimeSeriesPointSchema),
+});
+
+export const VirtualKeyStatisticsSchema = z.object({
+  virtualKeyId: z.string(),
+  virtualKeyName: z.string().nullable(),
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cost: z.number(),
+  timeSeries: z.array(StatisticsTimeSeriesPointSchema),
+});
+
 export const CostSavingsStatisticsSchema = z.object({
   totalBaselineCost: z.number(),
   totalActualCost: z.number(),
@@ -106,6 +127,8 @@ export type AgentStatistics = z.infer<typeof AgentStatisticsSchema>;
 export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type OverviewStatistics = z.infer<typeof OverviewStatisticsSchema>;
 export type CostSavingsStatistics = z.infer<typeof CostSavingsStatisticsSchema>;
+export type UserStatistics = z.infer<typeof UserStatisticsSchema>;
+export type VirtualKeyStatistics = z.infer<typeof VirtualKeyStatisticsSchema>;
 
 export type StatisticsTeamTimeSeriesData = z.infer<
   typeof StatisticsTeamTimeSeriesDataSchema

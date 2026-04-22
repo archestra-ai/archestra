@@ -10,7 +10,12 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import { LimitModel } from "@/models";
-import { LimitEntityTypeSchema, LimitTypeSchema, UuidIdSchema } from "@/types";
+import {
+  LimitEntityTypeSchema,
+  LimitTypeSchema,
+  UuidIdSchema,
+  validateLimitShape,
+} from "@/types";
 import {
   catchError,
   defineArchestraTool,
@@ -48,11 +53,14 @@ const LimitOutputItemSchema = z.object({
 const CreateLimitToolArgsSchema = z
   .object({
     entity_type: LimitEntityTypeSchema.describe(
-      "The type of entity to apply the limit to.",
+      "The type of entity to apply the limit to (organization, team, agent, user, or virtual_api_key).",
     ),
-    entity_id: UuidIdSchema.describe(
-      "The ID of the entity (organization, team, or agent).",
-    ),
+    entity_id: z
+      .string()
+      .min(1)
+      .describe(
+        "The ID of the entity. UUIDs for agent / virtual_api_key, text IDs for organization / team / user.",
+      ),
     limit_type: LimitTypeSchema.describe("The type of limit to apply."),
     limit_value: z
       .number()
@@ -60,7 +68,9 @@ const CreateLimitToolArgsSchema = z
     model: z
       .array(z.string())
       .optional()
-      .describe("Array of model names. Required for token_cost limits."),
+      .describe(
+        'Array of model names for token_cost limits. Use ["*"] as the sole element to cover every model (ALL_MODELS_SENTINEL). Mixing "*" with concrete model names is rejected.',
+      ),
     mcp_server_name: z
       .string()
       .optional()
@@ -73,39 +83,16 @@ const CreateLimitToolArgsSchema = z
       .describe("Tool name. Required for tool_calls limits."),
   })
   .strict()
-  .superRefine((args, ctx) => {
-    if (
-      args.limit_type === "token_cost" &&
-      (!args.model || !Array.isArray(args.model) || args.model.length === 0)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["model"],
-        message:
-          "model array with at least one model is required for token_cost limits.",
-      });
-    }
-
-    if (args.limit_type === "mcp_server_calls" && !args.mcp_server_name) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["mcp_server_name"],
-        message: "mcp_server_name is required for mcp_server_calls limits.",
-      });
-    }
-
-    if (
-      args.limit_type === "tool_calls" &&
-      (!args.mcp_server_name || !args.tool_name)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["tool_name"],
-        message:
-          "mcp_server_name and tool_name are required for tool_calls limits.",
-      });
-    }
-  });
+  .refine(
+    (args) =>
+      validateLimitShape({
+        limitType: args.limit_type,
+        model: args.model,
+        mcpServerName: args.mcp_server_name,
+        toolName: args.tool_name,
+      }),
+    { message: "Invalid limit configuration for the specified limit type" },
+  );
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -118,17 +105,24 @@ const registry = defineArchestraTools([
       limit: LimitOutputItemSchema,
     }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
+      const { agent: contextAgent, organizationId } = context;
 
       logger.info(
         { agentId: contextAgent.id, createLimitArgs: args },
         "create_limit tool called",
       );
 
+      if (!organizationId) {
+        return errorResult(
+          "create_limit requires an authenticated organization context.",
+        );
+      }
+
       try {
         const limit = await LimitModel.create({
           entityType: args.entity_type,
           entityId: args.entity_id,
+          organizationId,
           limitType: args.limit_type,
           limitValue: args.limit_value,
           model: args.model,
@@ -163,27 +157,38 @@ const registry = defineArchestraTools([
         entity_type: LimitEntityTypeSchema.optional().describe(
           "Optional filter by entity type.",
         ),
-        entity_id: UuidIdSchema.optional().describe(
-          "Optional filter by entity ID.",
-        ),
+        entity_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional filter by entity ID (UUID for agent/virtual_api_key, text for organization/team/user).",
+          ),
       })
       .strict(),
     outputSchema: z.object({
       limits: z.array(LimitOutputItemSchema),
     }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
+      const { agent: contextAgent, organizationId } = context;
 
       logger.info(
         { agentId: contextAgent.id, getLimitsArgs: args },
         "get_limits tool called",
       );
 
-      try {
-        const limits = await LimitModel.findAll(
-          args.entity_type,
-          args.entity_id,
+      if (!organizationId) {
+        return errorResult(
+          "get_limits requires an authenticated organization context.",
         );
+      }
+
+      try {
+        const limits = await LimitModel.findAll({
+          organizationId,
+          entityType: args.entity_type,
+          entityId: args.entity_id,
+        });
 
         if (limits.length === 0) {
           return structuredSuccessResult(
@@ -242,12 +247,18 @@ const registry = defineArchestraTools([
       limit: LimitOutputItemSchema,
     }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
+      const { agent: contextAgent, organizationId } = context;
 
       logger.info(
         { agentId: contextAgent.id, updateLimitArgs: args },
         "update_limit tool called",
       );
+
+      if (!organizationId) {
+        return errorResult(
+          "update_limit requires an authenticated organization context.",
+        );
+      }
 
       try {
         const updateData: Record<string, unknown> = {};
@@ -259,7 +270,11 @@ const registry = defineArchestraTools([
           return errorResult("No fields provided to update.");
         }
 
-        const limit = await LimitModel.patch(args.id, updateData);
+        const limit = await LimitModel.patch({
+          id: args.id,
+          data: updateData,
+          organizationId,
+        });
 
         if (!limit) {
           return errorResult(`Limit with ID ${args.id} not found.`);
@@ -288,15 +303,21 @@ const registry = defineArchestraTools([
       id: z.string(),
     }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
+      const { agent: contextAgent, organizationId } = context;
 
       logger.info(
         { agentId: contextAgent.id, deleteLimitArgs: args },
         "delete_limit tool called",
       );
 
+      if (!organizationId) {
+        return errorResult(
+          "delete_limit requires an authenticated organization context.",
+        );
+      }
+
       try {
-        const deleted = await LimitModel.delete(args.id);
+        const deleted = await LimitModel.delete(args.id, organizationId);
 
         if (!deleted) {
           return errorResult(`Limit with ID ${args.id} not found.`);

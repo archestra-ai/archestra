@@ -12,6 +12,8 @@ import type {
   SelectVirtualApiKey,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
+import LimitModel from "./limit";
+import TeamModel from "./team";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -257,6 +259,11 @@ class VirtualApiKeyModel {
     const virtualKey = await VirtualApiKeyModel.findById(id);
     if (!virtualKey) return false;
 
+    // Drop any limits scoped to this vkey before the FK target goes away.
+    // `limits.entity_id` is polymorphic text with no FK, so nothing would
+    // cascade automatically.
+    await LimitModel.deleteByEntity("virtual_api_key", id);
+
     await db
       .delete(schema.virtualApiKeysTable)
       .where(eq(schema.virtualApiKeysTable.id, id));
@@ -501,6 +508,22 @@ class VirtualApiKeyModel {
     authorName: Map<string, string | null>;
   }> {
     return VirtualApiKeyModel.getVisibilityMetadata(virtualApiKeyIds);
+  }
+
+  /**
+   * Returns the set of vkey IDs visible to a non-admin user in the given org.
+   */
+  static async getAccessibleVirtualKeyIds(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<string[]> {
+    const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
+    return VirtualApiKeyModel.getAccessibleIds({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      userTeamIds,
+      isAdmin: false,
+    });
   }
 
   private static async getAccessibleIds(params: {

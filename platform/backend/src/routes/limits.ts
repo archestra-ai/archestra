@@ -4,7 +4,7 @@ import { z } from "zod";
 import { LimitModel, OptimizationRuleModel } from "@/models";
 import {
   ApiError,
-  CreateLimitSchema,
+  CreateLimitApiSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   LimitEntityTypeSchema,
@@ -37,18 +37,22 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Cleanup limits if needed before fetching
-      if (organizationId) {
-        await LimitModel.cleanupLimitsIfNeeded(organizationId);
-      }
+      await LimitModel.cleanupLimitsIfNeeded(organizationId);
 
       // Ensure default token prices and optimization rules exist
-      if (organizationId) {
-        await OptimizationRuleModel.ensureDefaultOptimizationRules(
-          organizationId,
-        );
-      }
+      await OptimizationRuleModel.ensureDefaultOptimizationRules(
+        organizationId,
+      );
 
-      const limits = await LimitModel.findAll(entityType, entityId, limitType);
+      // Scope the query to the caller's org. Prevents admins in org A from
+      // listing limits in org B via the polymorphic entity_id field
+
+      const limits = await LimitModel.findAll({
+        organizationId,
+        entityType,
+        entityId,
+        limitType,
+      });
 
       // Add per-model usage breakdown for token_cost limits
       const limitsWithUsage = await Promise.all(
@@ -74,12 +78,17 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateLimit,
         description: "Create a new limit",
         tags: ["Limits"],
-        body: CreateLimitSchema,
+        body: CreateLimitApiSchema,
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ body }, reply) => {
-      return reply.send(await LimitModel.create(body));
+    async ({ body, organizationId }, reply) => {
+      return reply.send(
+        await LimitModel.create({
+          ...body,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -96,8 +105,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const limit = await LimitModel.findById(id);
+    async ({ params: { id }, organizationId }, reply) => {
+      const limit = await LimitModel.findById(id, organizationId);
 
       if (!limit) {
         throw new ApiError(404, "Limit not found");
@@ -121,8 +130,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
-      const limit = await LimitModel.patch(id, body);
+    async ({ params: { id }, body, organizationId }, reply) => {
+      const limit = await LimitModel.patch({ id, data: body, organizationId });
 
       if (!limit) {
         throw new ApiError(404, "Limit not found");
@@ -145,8 +154,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const deleted = await LimitModel.delete(id);
+    async ({ params: { id }, organizationId }, reply) => {
+      const deleted = await LimitModel.delete(id, organizationId);
 
       if (!deleted) {
         throw new ApiError(404, "Limit not found");

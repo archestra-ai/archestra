@@ -1,6 +1,8 @@
-import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { ALL_MODELS_SENTINEL } from "@shared";
+import { and, eq, isNull, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { metrics } from "@/observability";
 import type {
   CreateLimit,
   Limit,
@@ -34,14 +36,18 @@ class LimitModel {
   }
 
   /**
-   * Initialize model usage records for a limit
-   * Creates a record in limit_model_usage for each model in the limit
+   * Seed one `limit_model_usage` row per concrete model. For `["*"]` limits
+   * we skip seeding — rows are created lazily on first use via upsert.
    */
   static async initializeModelUsageRecords(
     limitId: string,
     models: string[],
   ): Promise<void> {
     if (!models || models.length === 0) {
+      return;
+    }
+    if (models.includes(ALL_MODELS_SENTINEL)) {
+      // ["*"] covers every model; lazy-create usage rows at first use instead.
       return;
     }
 
@@ -60,14 +66,19 @@ class LimitModel {
   }
 
   /**
-   * Find all limits, optionally filtered by entity type, entity ID, and/or limit type
+   * List limits for one org. `organizationId` is required to prevent
+   * cross-org listing via the polymorphic `entity_id` column.
    */
-  static async findAll(
-    entityType?: LimitEntityType,
-    entityId?: string,
-    limitType?: LimitType,
-  ): Promise<Limit[]> {
-    const whereConditions: SQL[] = [];
+  static async findAll(params: {
+    organizationId: string;
+    entityType?: LimitEntityType;
+    entityId?: string;
+    limitType?: LimitType;
+  }): Promise<Limit[]> {
+    const { organizationId, entityType, entityId, limitType } = params;
+    const whereConditions: SQL[] = [
+      eq(schema.limitsTable.organizationId, organizationId),
+    ];
 
     if (entityType) {
       whereConditions.push(eq(schema.limitsTable.entityType, entityType));
@@ -81,13 +92,10 @@ class LimitModel {
       whereConditions.push(eq(schema.limitsTable.limitType, limitType));
     }
 
-    const whereClause =
-      whereConditions.length > 0 ? and(...whereConditions) : undefined;
-
     const limits = await db
       .select()
       .from(schema.limitsTable)
-      .where(whereClause);
+      .where(and(...whereConditions));
 
     return limits;
   }
@@ -160,46 +168,85 @@ class LimitModel {
   }
 
   /**
-   * Find a limit by ID
+   * Read a limit by id. Pass `organizationId` from routes to block cross-org
+   * reads; leave it undefined for internal cross-org lookups (cleanup, tests).
    */
-  static async findById(id: string): Promise<Limit | null> {
+  static async findById(
+    id: string,
+    organizationId?: string,
+  ): Promise<Limit | null> {
+    const conditions: SQL[] = [eq(schema.limitsTable.id, id)];
+    if (organizationId) {
+      conditions.push(eq(schema.limitsTable.organizationId, organizationId));
+    }
+
     const [limit] = await db
       .select()
       .from(schema.limitsTable)
-      .where(eq(schema.limitsTable.id, id));
+      .where(and(...conditions));
 
     return limit || null;
   }
 
-  /**
-   * Patch a limit
-   */
-  static async patch(
-    id: string,
-    data: Partial<UpdateLimit>,
-  ): Promise<Limit | null> {
+  /** Update a limit. `organizationId` scopes the write; returns null on cross-org id. */
+  static async patch(params: {
+    id: string;
+    data: Partial<UpdateLimit>;
+    organizationId?: string;
+  }): Promise<Limit | null> {
+    const { id, data, organizationId } = params;
+    const conditions: SQL[] = [eq(schema.limitsTable.id, id)];
+    if (organizationId) {
+      conditions.push(eq(schema.limitsTable.organizationId, organizationId));
+    }
+
     const [limit] = await db
       .update(schema.limitsTable)
       .set(data)
-      .where(eq(schema.limitsTable.id, id))
+      .where(and(...conditions))
       .returning();
 
     return limit || null;
   }
 
-  /**
-   * Delete a limit
-   */
-  static async delete(id: string): Promise<boolean> {
-    // First check if the limit exists
-    const existing = await LimitModel.findById(id);
-    if (!existing) {
-      return false;
+  /** Delete a limit. `organizationId` scopes the write; returns false on cross-org id. */
+  static async delete(id: string, organizationId?: string): Promise<boolean> {
+    const conditions: SQL[] = [eq(schema.limitsTable.id, id)];
+    if (organizationId) {
+      conditions.push(eq(schema.limitsTable.organizationId, organizationId));
     }
 
-    await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
+    const deleted = await db
+      .delete(schema.limitsTable)
+      .where(and(...conditions))
+      .returning({ id: schema.limitsTable.id });
 
-    return true;
+    return deleted.length > 0;
+  }
+
+  /** Manual cascade: `entity_id` is polymorphic text with no FK, so callers delete limits when the target is removed. */
+  static async deleteByEntity(
+    entityType: LimitEntityType,
+    entityId: string,
+  ): Promise<number> {
+    const deleted = await db
+      .delete(schema.limitsTable)
+      .where(
+        and(
+          eq(schema.limitsTable.entityType, entityType),
+          eq(schema.limitsTable.entityId, entityId),
+        ),
+      )
+      .returning({ id: schema.limitsTable.id });
+
+    if (deleted.length > 0) {
+      logger.info(
+        { entityType, entityId, deleted: deleted.length },
+        "LimitModel.deleteByEntity: removed orphaned limits",
+      );
+    }
+
+    return deleted.length;
   }
 
   /**
@@ -232,8 +279,10 @@ class LimitModel {
   }
 
   /**
-   * Update token usage for limits of a specific entity and model
-   * Used by usage tracking service after interactions
+   * Credit tokens to any limit in `organizationId` whose `model[]` covers the
+   * incoming model or contains `["*"]`. Usage rows are keyed by model name.
+   * `organizationId` is required so a user present in multiple orgs does not
+   * leak usage across them.
    */
   static async updateTokenLimitUsage(
     entityType: LimitEntityType,
@@ -241,23 +290,34 @@ class LimitModel {
     model: string,
     inputTokens: number,
     outputTokens: number,
+    organizationId: string,
   ): Promise<void> {
     logger.debug(
-      { entityType, entityId, model, inputTokens, outputTokens },
+      {
+        entityType,
+        entityId,
+        organizationId,
+        model,
+        inputTokens,
+        outputTokens,
+      },
       "[LimitModel] Update token limit usage",
     );
     try {
-      // Find all token_cost limits for this entity that include this model
+      // Match either `model @> [incoming]` or `model @> ["*"]`.
       const limits = await db
         .select({ id: schema.limitsTable.id })
         .from(schema.limitsTable)
         .where(
           and(
+            eq(schema.limitsTable.organizationId, organizationId),
             eq(schema.limitsTable.entityType, entityType),
             eq(schema.limitsTable.entityId, entityId),
             eq(schema.limitsTable.limitType, "token_cost"),
-            // Check if model is in the JSONB array
-            sql`${schema.limitsTable.model} ? ${model}`,
+            or(
+              sql`${schema.limitsTable.model} @> ${JSON.stringify([model])}::jsonb`,
+              sql`${schema.limitsTable.model} @> ${JSON.stringify([ALL_MODELS_SENTINEL])}::jsonb`,
+            ),
           ),
         );
 
@@ -302,10 +362,7 @@ class LimitModel {
     }
   }
 
-  /**
-   * Find limits that need cleanup based on organization's cleanup interval
-   * Returns limits where lastCleanup is null or older than the cutoff time
-   */
+  /** Find org limits whose `lastCleanup` is NULL or older than `cutoffTime`. */
   static async findLimitsNeedingCleanup(
     organizationId: string,
     cutoffTime: Date,
@@ -315,8 +372,7 @@ class LimitModel {
       .from(schema.limitsTable)
       .where(
         and(
-          eq(schema.limitsTable.entityType, "organization"),
-          eq(schema.limitsTable.entityId, organizationId),
+          eq(schema.limitsTable.organizationId, organizationId),
           // Either never cleaned up OR last cleanup was before cutoff
           or(
             isNull(schema.limitsTable.lastCleanup),
@@ -360,12 +416,13 @@ class LimitModel {
   }
 
   /**
-   * Get limits for entity validation checks
-   * Used by limit validation service to check if limits are exceeded
+   * Limits in `organizationId` matching the given entity. `organizationId` is
+   * required so a multi-org user cannot leak enforcement across orgs.
    */
   static async findLimitsForValidation(
     entityType: LimitEntityType,
     entityId: string,
+    organizationId: string,
     limitType: LimitType = "token_cost",
   ): Promise<Limit[]> {
     const limits = await db
@@ -373,6 +430,7 @@ class LimitModel {
       .from(schema.limitsTable)
       .where(
         and(
+          eq(schema.limitsTable.organizationId, organizationId),
           eq(schema.limitsTable.entityType, entityType),
           eq(schema.limitsTable.entityId, entityId),
           eq(schema.limitsTable.limitType, limitType),
@@ -492,199 +550,181 @@ class LimitModel {
 }
 
 /**
+ * Context for `checkLimitsBeforeRequest`. `billedUserId`/`virtualKeyId` are
+ * `undefined` when not applicable; the matching scope is then skipped.
+ */
+export interface LimitViolation {
+  scope: LimitEntityType;
+  contentMessage: string;
+}
+
+export interface CheckLimitsContext {
+  agentId: string;
+  organizationId: string;
+  billedUserId?: string;
+  virtualKeyId?: string;
+  model: string;
+}
+
+/**
  * Service for validating if current usage has exceeded limits
  * Similar to tool invocation policies but for token cost limits
  */
 export class LimitValidationService {
   /**
-   * Check if current usage has already exceeded any token cost limits
-   * Returns null if allowed, or [refusalMessage, contentMessage] if blocked
+   * Return the first scope over its token-cost limit, or null if allowed.
+   * Order (short-circuit on first hit): virtual_api_key → user → agent → teams → organization.
    */
   static async checkLimitsBeforeRequest(
-    agentId: string,
-  ): Promise<null | [string, string]> {
+    ctx: CheckLimitsContext,
+  ): Promise<null | LimitViolation> {
+    const { agentId, organizationId, billedUserId, virtualKeyId, model } = ctx;
     try {
-      logger.info(
-        `[LimitValidation] Starting limit check for agent: ${agentId}`,
+      logger.debug(
+        { agentId, organizationId, billedUserId, virtualKeyId, model },
+        "[LimitValidation] Starting limit check",
       );
 
-      // Get agent's teams to check team and organization limits
+      await LimitModel.cleanupLimitsIfNeeded(organizationId);
+
+      // 1. Virtual API key scope
+      if (virtualKeyId) {
+        const violation = await LimitValidationService.checkEntityLimits(
+          "virtual_api_key",
+          virtualKeyId,
+          model,
+          organizationId,
+        );
+        if (violation) {
+          logger.info(
+            { scope: "virtual_api_key", entityId: virtualKeyId },
+            "[LimitValidation] BLOCKED",
+          );
+          return violation;
+        }
+      }
+
+      // 2. User scope — only for identifiable humans (chat UI / personal key / JWKS).
+      if (billedUserId) {
+        const violation = await LimitValidationService.checkEntityLimits(
+          "user",
+          billedUserId,
+          model,
+          organizationId,
+        );
+        if (violation) {
+          logger.info(
+            { scope: "user", entityId: billedUserId },
+            "[LimitValidation] BLOCKED",
+          );
+          return violation;
+        }
+      }
+
+      // 3. Agent scope
+      const agentViolation = await LimitValidationService.checkEntityLimits(
+        "agent",
+        agentId,
+        model,
+        organizationId,
+      );
+      if (agentViolation) {
+        logger.info(
+          { scope: "agent", entityId: agentId },
+          "[LimitValidation] BLOCKED",
+        );
+        return agentViolation;
+      }
+
+      // 4. Team scope — iterate over agent's teams
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-      logger.info(
-        `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
+      for (const teamId of agentTeamIds) {
+        const violation = await LimitValidationService.checkEntityLimits(
+          "team",
+          teamId,
+          model,
+          organizationId,
+        );
+        if (violation) {
+          logger.info(
+            { scope: "team", entityId: teamId },
+            "[LimitValidation] BLOCKED",
+          );
+          return violation;
+        }
+      }
+
+      // 5. Organization scope
+      const orgViolation = await LimitValidationService.checkEntityLimits(
+        "organization",
+        organizationId,
+        model,
+        organizationId,
       );
-
-      // Get organization ID for cleanup (either from teams or fallback)
-      let organizationId: string | null = null;
-      if (agentTeamIds.length > 0) {
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-        if (teams.length > 0 && teams[0].organizationId) {
-          organizationId = teams[0].organizationId;
-        }
-      } else {
-        // If agent has no teams, check if there are any organization limits to apply
-        const existingOrgLimits = await db
-          .select({ entityId: schema.limitsTable.entityId })
-          .from(schema.limitsTable)
-          .where(sql`${schema.limitsTable.entityType} = 'organization'`)
-          .limit(1);
-        if (existingOrgLimits.length > 0) {
-          organizationId = existingOrgLimits[0].entityId;
-        }
-      }
-
-      // Run cleanup if we have an organization ID
-      if (organizationId) {
+      if (orgViolation) {
         logger.info(
-          `[LimitValidation] Running cleanup for organization: ${organizationId}`,
+          { scope: "organization", entityId: organizationId },
+          "[LimitValidation] BLOCKED",
         );
-        await LimitModel.cleanupLimitsIfNeeded(organizationId);
+        return orgViolation;
       }
 
-      // Check agent-level limits first (highest priority)
       logger.info(
-        `[LimitValidation] Checking agent-level limits for: ${agentId}`,
+        { agentId },
+        "[LimitValidation] ALLOWED — all scopes within limit",
       );
-      const agentLimitViolation =
-        await LimitValidationService.checkEntityLimits("agent", agentId);
-      if (agentLimitViolation) {
-        logger.info(
-          `[LimitValidation] BLOCKED by agent-level limit for: ${agentId}`,
-        );
-        return agentLimitViolation;
-      }
-      logger.info(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
-
-      // Check team-level limits
-      if (agentTeamIds.length > 0) {
-        logger.info(
-          `[LimitValidation] Checking team-level limits for agent: ${agentId}`,
-        );
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-        logger.info(
-          `[LimitValidation] Found ${teams.length} teams for agent ${agentId}: ${teams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
-        );
-
-        for (const team of teams) {
-          logger.info(
-            `[LimitValidation] Checking team limit for team: ${team.id}`,
-          );
-          const teamLimitViolation =
-            await LimitValidationService.checkEntityLimits("team", team.id);
-          if (teamLimitViolation) {
-            logger.info(
-              `[LimitValidation] BLOCKED by team-level limit for team: ${team.id}`,
-            );
-            return teamLimitViolation;
-          }
-          logger.info(
-            `[LimitValidation] Team-level limits OK for team: ${team.id}`,
-          );
-        }
-
-        // Check organization-level limits
-        if (teams.length > 0 && teams[0].organizationId) {
-          logger.info(
-            `[LimitValidation] Checking organization-level limits for org: ${teams[0].organizationId}`,
-          );
-          const orgLimitViolation =
-            await LimitValidationService.checkEntityLimits(
-              "organization",
-              teams[0].organizationId,
-            );
-          if (orgLimitViolation) {
-            logger.info(
-              `[LimitValidation] BLOCKED by organization-level limit for org: ${teams[0].organizationId}`,
-            );
-            return orgLimitViolation;
-          }
-          logger.info(
-            `[LimitValidation] Organization-level limits OK for org: ${teams[0].organizationId}`,
-          );
-        }
-      } else {
-        logger.info(
-          `[LimitValidation] Agent ${agentId} has no teams, checking fallback organization limits`,
-        );
-        // If agent has no teams, check if there are any organization limits to apply
-        const existingOrgLimits = await db
-          .select({ entityId: schema.limitsTable.entityId })
-          .from(schema.limitsTable)
-          .where(sql`${schema.limitsTable.entityType} = 'organization'`)
-          .limit(1);
-        logger.info(
-          `[LimitValidation] Found ${existingOrgLimits.length} fallback organization limits`,
-        );
-
-        if (existingOrgLimits.length > 0) {
-          logger.info(
-            `[LimitValidation] Checking fallback organization limit for org: ${existingOrgLimits[0].entityId}`,
-          );
-          const orgLimitViolation =
-            await LimitValidationService.checkEntityLimits(
-              "organization",
-              existingOrgLimits[0].entityId,
-            );
-          if (orgLimitViolation) {
-            logger.info(
-              `[LimitValidation] BLOCKED by fallback organization-level limit for org: ${existingOrgLimits[0].entityId}`,
-            );
-            return orgLimitViolation;
-          }
-          logger.info(
-            `[LimitValidation] Fallback organization-level limits OK for org: ${existingOrgLimits[0].entityId}`,
-          );
-        }
-      }
-      logger.info(
-        `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
-      );
-      return null; // No limits exceeded
+      return null;
     } catch (error) {
       logger.error(
-        `[LimitValidation] Error checking limits before request: ${error}`,
+        { err: error, ctx },
+        "[LimitValidation] Error checking limits before request",
       );
-      // In case of error, allow the request to proceed
+      // Fail-open: a DB/pricing outage must not wedge the proxy.
+      // The counter surfaces silently-disabled enforcement.
+      metrics.llm.reportLimitCheckErrored("");
       return null;
     }
   }
 
   /**
-   * Check if current token cost usage has exceeded limits for a specific entity
+   * Check one scope. Limits whose `model[]` does not cover `incomingModel`
+   * are skipped so an exhausted Claude limit never blocks an OpenAI request.
    */
   private static async checkEntityLimits(
-    entityType: "organization" | "team" | "agent",
+    entityType: LimitEntityType,
     entityId: string,
-  ): Promise<null | [string, string]> {
+    incomingModel: string,
+    organizationId: string,
+  ): Promise<null | LimitViolation> {
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
       );
       const limits = await LimitModel.findLimitsForValidation(
         entityType,
         entityId,
+        organizationId,
         "token_cost",
       );
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] Found ${limits.length} token_cost limits for ${entityType} ${entityId}`,
       );
 
       if (limits.length === 0) {
-        logger.info(
-          `[LimitValidation] No token_cost limits found for ${entityType} ${entityId} - allowing`,
-        );
         return null;
       }
 
       for (const limit of limits) {
-        logger.info(
+        if (!limitAppliesToModel(limit.model, incomingModel)) {
+          logger.debug(
+            { limitId: limit.id, limitModels: limit.model, incomingModel },
+            "[LimitValidation] Skipping limit — model[] does not cover incoming request",
+          );
+          continue;
+        }
+
+        logger.debug(
           `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
 
@@ -703,8 +743,9 @@ export class LimitValidationService {
               .where(eq(schema.limitModelUsageTable.limitId, limit.id));
 
             if (modelUsages.length === 0) {
-              logger.warn(
-                `[LimitValidation] No model usage records found for limit ${limit.id}`,
+              logger.debug(
+                { limitId: limit.id },
+                "[LimitValidation] No model usage records yet for limit (e.g. fresh ['*'] limit)",
               );
               comparisonValue = 0;
             } else {
@@ -756,24 +797,13 @@ export class LimitValidationService {
         }
 
         if (comparisonValue >= limit.limitValue) {
-          logger.info(
+          logger.debug(
             `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
           );
 
-          // Calculate remaining based on the comparison type (tokens vs dollars)
           const remaining = Math.max(0, limit.limitValue - comparisonValue);
           const totalTokens = totalTokensIn + totalTokensOut;
 
-          // For metadata, use token counts for programmatic access
-          const archestraMetadata = `
-<archestra-limit-type>token_cost</archestra-limit-type>
-<archestra-limit-entity-type>${entityType}</archestra-limit-entity-type>
-<archestra-limit-entity-id>${entityId}</archestra-limit-entity-id>
-<archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
-<archestra-limit-value>${limit.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, limit.limitValue - totalTokens)}</archestra-limit-remaining>`;
-
-          // For user message, use appropriate units based on limit type
           let contentMessage: string;
           if (limitDescription === "cost_dollars") {
             contentMessage = `
@@ -795,28 +825,32 @@ Remaining: ${Math.max(0, limit.limitValue - totalTokens).toLocaleString()} token
 Please contact your administrator to increase the limit or wait for the usage to reset.`;
           }
 
-          const refusalMessage = `${archestraMetadata}
-${contentMessage}`;
-
-          return [refusalMessage, contentMessage];
-        } else {
-          logger.info(
-            `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
-          );
+          return { scope: entityType, contentMessage };
         }
       }
 
-      logger.info(
-        `[LimitValidation] All ${limits.length} limits OK for ${entityType} ${entityId}`,
-      );
-      return null; // No limits exceeded for this entity
+      return null;
     } catch (error) {
       logger.error(
         `[LimitValidation] Error checking ${entityType} limits for ${entityId}: ${error}`,
       );
+      metrics.llm.reportLimitCheckErrored(entityType);
       return null; // Allow request on error
     }
   }
 }
 
 export default LimitModel;
+
+/**
+ * True if the limit's `model[]` covers `incomingModel`:
+ * null/empty → false; contains `["*"]` → true; else exact membership.
+ */
+function limitAppliesToModel(
+  limitModels: string[] | null | undefined,
+  incomingModel: string,
+): boolean {
+  if (!limitModels || limitModels.length === 0) return false;
+  if (limitModels.includes(ALL_MODELS_SENTINEL)) return true;
+  return limitModels.includes(incomingModel);
+}

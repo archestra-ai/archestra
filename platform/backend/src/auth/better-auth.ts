@@ -32,6 +32,7 @@ import { LOG_LEVEL } from "@/logging/log-level";
 import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
 import InvitationModel from "@/models/invitation";
+import LimitModel from "@/models/limit";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
@@ -725,6 +726,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         logger.info(`✅ All sessions for user ${userId} invalidated`);
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to invalidate user sessions:");
+      }
+
+      // Clean up user-scope limits — `limits.entity_id` is polymorphic text
+      // with no FK, so better-auth's user deletion cannot cascade to them.
+      try {
+        await LimitModel.deleteByEntity("user", userId);
+      } catch (error) {
+        logger.error(
+          { err: error, userId },
+          "❌ Failed to clean up user-scope limits after user removal:",
+        );
       }
     }
   }

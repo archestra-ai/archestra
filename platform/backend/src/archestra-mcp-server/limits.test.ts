@@ -52,9 +52,8 @@ describe("limit tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "model array with at least one model is required",
+      "Invalid limit configuration for the specified limit type",
     );
-    expect((result.content[0] as any).text).toContain("model:");
   });
 
   test("create_limit returns error when mcp_server_calls limit missing mcp_server_name", async () => {
@@ -70,9 +69,8 @@ describe("limit tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "mcp_server_name is required for mcp_server_calls",
+      "Invalid limit configuration for the specified limit type",
     );
-    expect((result.content[0] as any).text).toContain("mcp_server_name:");
   });
 
   test("create_limit returns error when tool_calls limit missing fields", async () => {
@@ -88,9 +86,8 @@ describe("limit tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "mcp_server_name and tool_name are required for tool_calls",
+      "Invalid limit configuration for the specified limit type",
     );
-    expect((result.content[0] as any).text).toContain("tool_name:");
   });
 
   test("get_limits returns empty when no limits exist", async () => {

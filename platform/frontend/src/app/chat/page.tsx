@@ -1037,6 +1037,7 @@ export function ChatPageContent({
     sendMessage({
       role: "user",
       parts,
+      metadata: { createdAt: new Date().toISOString() },
     });
   }, [
     conversation,
@@ -1168,6 +1169,7 @@ export function ChatPageContent({
     sendMessage?.({
       role: "user",
       parts,
+      metadata: { createdAt: new Date().toISOString() },
     });
   };
 
@@ -1414,6 +1416,7 @@ export function ChatPageContent({
     sendMessage({
       role: "user",
       parts: [{ type: "text", text: pendingReauthResume.message }],
+      metadata: { createdAt: new Date().toISOString() },
     });
   }, [conversationId, sendMessage, status]);
 
@@ -1773,6 +1776,7 @@ export function ChatPageContent({
                           sendMessage({
                             role: "user",
                             parts: [{ type: "text", text: editedText }],
+                            metadata: { createdAt: new Date().toISOString() },
                           });
                         }
                       }

@@ -977,6 +977,9 @@ export function ChatMessages({
                                 session?.sendMessage({
                                   role: "user",
                                   parts: [{ type: "text", text }],
+                                  metadata: {
+                                    createdAt: new Date().toISOString(),
+                                  },
                                 })
                               }
                             />
@@ -1057,6 +1060,9 @@ export function ChatMessages({
                                   session?.sendMessage({
                                     role: "user",
                                     parts: [{ type: "text", text }],
+                                    metadata: {
+                                      createdAt: new Date().toISOString(),
+                                    },
                                   })
                                 }
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
@@ -1129,6 +1135,9 @@ export function ChatMessages({
                                   session?.sendMessage({
                                     role: "user",
                                     parts: [{ type: "text", text }],
+                                    metadata: {
+                                      createdAt: new Date().toISOString(),
+                                    },
                                   })
                                 }
                               />

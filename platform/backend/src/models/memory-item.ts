@@ -389,6 +389,7 @@ class MemoryItemModel {
     organizationId: string;
     teamIds?: string[];
     limit: number;
+    includeOrganizationScope?: boolean;
   }): Promise<MemoryItem[]> {
     const teamIds = params.teamIds ?? [];
     const orphanedRecordPredicate = or(
@@ -410,7 +411,7 @@ class MemoryItemModel {
             userId: params.userId,
             organizationId: params.organizationId,
             teamIds,
-            includeOrganizationScope: false,
+            includeOrganizationScope: params.includeOrganizationScope ?? false,
           }),
           orphanedRecordPredicate ? not(orphanedRecordPredicate) : sql`true`,
         ),

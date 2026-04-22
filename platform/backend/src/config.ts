@@ -712,6 +712,55 @@ const config = {
       return "anthropic";
     })(),
   },
+  memory: {
+    extractionEnabled:
+      process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED !== "false",
+    injectionEnabled: process.env.ARCHESTRA_MEMORY_INJECTION_ENABLED === "true",
+    idleDelaySeconds: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS,
+      300,
+    ),
+    extractorMaxTokens: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS,
+      800,
+    ),
+    extractorModelOverride: parseOptionalString(
+      process.env.ARCHESTRA_MEMORY_EXTRACTOR_MODEL_OVERRIDE,
+    ),
+    extractorApiKeyIdOverride: parseOptionalString(
+      process.env.ARCHESTRA_MEMORY_EXTRACTOR_API_KEY_ID_OVERRIDE,
+    ),
+    extractorFallbackModel: parseOptionalString(
+      process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_MODEL,
+    ),
+    extractorFallbackApiKeyId: parseOptionalString(
+      process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_API_KEY_ID,
+    ),
+    injectionTokenBudget: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET,
+      600,
+    ),
+    injectionTopK: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_INJECTION_TOP_K,
+      10,
+    ),
+    tombstoneTtlDays: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS,
+      30,
+    ),
+    candidateTtlDays: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS,
+      30,
+    ),
+    maxContentLength: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH,
+      500,
+    ),
+    maxCandidatesPerExtraction: parsePositiveInt(
+      process.env.ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION,
+      5,
+    ),
+  },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     knowledgeBase:
@@ -903,4 +952,9 @@ export function parseCommaSeparatedList(value: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function parseOptionalString(value: string | undefined): string | undefined {
+  const trimmedValue = value?.trim();
+  return trimmedValue ? trimmedValue : undefined;
 }

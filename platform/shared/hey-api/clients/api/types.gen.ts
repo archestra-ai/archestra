@@ -35409,6 +35409,13 @@ export type GetOrganizationResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35509,6 +35516,13 @@ export type GetAppearanceSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         animateChatPlaceholders: boolean;
@@ -35532,6 +35546,13 @@ export type UpdateAppearanceSettingsData = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard?: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatErrorSupportMessage?: string | null;
         slimChatErrorUi?: boolean;
         chatPlaceholders?: Array<string> | null;
@@ -35639,6 +35660,13 @@ export type UpdateAppearanceSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35761,6 +35789,13 @@ export type UpdateSecuritySettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -35884,6 +35919,13 @@ export type UpdateLlmSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -36008,6 +36050,13 @@ export type UpdateAgentSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -36132,6 +36181,13 @@ export type UpdateConnectionSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -36253,6 +36309,13 @@ export type UpdateMcpSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -36377,6 +36440,13 @@ export type UpdateKnowledgeSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -36496,6 +36566,13 @@ export type DropEmbeddingConfigResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;
@@ -36698,6 +36775,13 @@ export type CompleteOnboardingResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;

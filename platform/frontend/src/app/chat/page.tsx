@@ -41,6 +41,7 @@ import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
@@ -1922,18 +1923,23 @@ export function ChatPageContent({
                   }
                 }}
               >
-                {organization?.chatLinks &&
-                  organization.chatLinks.length > 0 && (
-                    <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                      {organization.chatLinks.map((link) => (
-                        <ChatLinkButton
-                          key={`${link.label}-${link.url}`}
-                          url={link.url}
-                          label={link.label}
-                        />
-                      ))}
-                    </div>
-                  )}
+                {((organization?.chatLinks?.length ?? 0) > 0 ||
+                  organization?.onboardingWizard) && (
+                  <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                    {organization?.chatLinks?.map((link) => (
+                      <ChatLinkButton
+                        key={`link-${link.label}-${link.url}`}
+                        url={link.url}
+                        label={link.label}
+                      />
+                    ))}
+                    {organization?.onboardingWizard && (
+                      <OnboardingWizardButton
+                        wizard={organization.onboardingWizard}
+                      />
+                    )}
+                  </div>
+                )}
                 {isPlaywrightSetupRequired && canUpdateAgent && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}

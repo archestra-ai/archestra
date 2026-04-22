@@ -36141,6 +36141,13 @@ export type UpdateConnectionSettingsResponses = {
             label: string;
             url: string;
         }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
         iconLogo: string | null;

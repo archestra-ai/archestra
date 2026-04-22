@@ -430,3 +430,37 @@ describe("/v1/bedrock/openai/chat/completions — streaming", () => {
     expect(events[events.length - 1]).toBe("[DONE]");
   });
 });
+
+describe("/v1/bedrock/openai/chat/completions — auth gate", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test("returns 401 when no bearer is provided and IAM is disabled", async ({
+    makeAgent,
+  }) => {
+    const createClientSpy = vi
+      .spyOn(bedrockAdapterFactory, "createClient")
+      .mockImplementation(() => ({}) as never);
+
+    const app = createFastifyApp();
+    await app.register(bedrockOpenaiProxyRoutes);
+    const agent = await makeAgent({ name: "bedrock-openai-auth" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "zai.glm-4.7",
+        messages: [{ role: "user", content: "hi" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toMatch(/Authentication required/i);
+    // Crucially, we never reached the Bedrock adapter — no SigV4-time failure.
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+});

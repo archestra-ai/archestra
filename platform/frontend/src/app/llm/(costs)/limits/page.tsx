@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  ALL_MODELS_SENTINEL,
+  type archestraApiTypes,
+  validateLimitShape,
+} from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { CircleHelp, Edit, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
@@ -39,8 +43,12 @@ import {
   useUpdateLimit,
 } from "@/lib/limits.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useOrganization,
+  useOrganizationMembers,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
@@ -56,6 +64,7 @@ type LimitFormState = {
   entityId: string;
   limitValue: string;
   model: string[];
+  wideLimitValue: string;
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
@@ -63,7 +72,21 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   entityId: "",
   limitValue: "",
   model: [],
+  wideLimitValue: "",
 };
+
+const ENTITY_TYPE_NOUN: Record<LimitEntityType, string> = {
+  organization: "organization",
+  team: "team",
+  agent: "agent",
+  user: "user",
+  virtual_api_key: "virtual API key",
+};
+
+function isWideLimit(limit: LimitData) {
+  const models = getLimitModels(limit);
+  return models.length === 1 && models[0] === ALL_MODELS_SENTINEL;
+}
 
 const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
   "1h": "Every hour",
@@ -90,6 +113,8 @@ export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
   const { data: limits = [], isPending } = useLimits();
   const { data: teams = [] } = useTeams();
+  const { data: allVirtualApiKeysData } = useAllVirtualApiKeys({ limit: 100 });
+  const orgVirtualApiKeys = allVirtualApiKeysData?.data ?? [];
   const { data: organization } = useOrganization();
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const createLimit = useCreateLimit();
@@ -106,6 +131,7 @@ export default function LimitsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
+  const { data: members = [] } = useOrganizationMembers(isDialogOpen);
 
   const llmLimits = useMemo(
     () => limits.filter((limit) => limit.limitType === "token_cost"),
@@ -123,6 +149,35 @@ export default function LimitsPage() {
       })),
     [modelsWithApiKeys],
   );
+
+  const resolvedEntityId =
+    formState.entityType === "organization"
+      ? (organization?.id ?? "")
+      : formState.entityId;
+
+  const existingWideLimit = useMemo(() => {
+    if (!resolvedEntityId) return null;
+    return (
+      llmLimits.find(
+        (candidate) =>
+          candidate.entityType === formState.entityType &&
+          candidate.entityId === resolvedEntityId &&
+          isWideLimit(candidate) &&
+          (!editingLimit || candidate.id !== editingLimit.id),
+      ) ?? null
+    );
+  }, [llmLimits, formState.entityType, resolvedEntityId, editingLimit]);
+
+  useEffect(() => {
+    if (!isDialogOpen) return;
+    if (editingLimit && isWideLimit(editingLimit)) return;
+    setFormState((current) => ({
+      ...current,
+      wideLimitValue: existingWideLimit
+        ? String(existingWideLimit.limitValue)
+        : "",
+    }));
+  }, [existingWideLimit, isDialogOpen, editingLimit]);
 
   const handleCreateOpen = useCallback(() => {
     setEditingLimit(null);
@@ -147,11 +202,13 @@ export default function LimitsPage() {
 
   const handleEditOpen = useCallback((limit: LimitData) => {
     setEditingLimit(limit);
+    const wide = isWideLimit(limit);
     setFormState({
       entityType: limit.entityType as LimitEntityType,
       entityId: limit.entityType === "organization" ? "" : limit.entityId,
-      limitValue: String(limit.limitValue),
-      model: getLimitModels(limit),
+      limitValue: wide ? "" : String(limit.limitValue),
+      model: wide ? [] : getLimitModels(limit),
+      wideLimitValue: wide ? String(limit.limitValue) : "",
     });
     setModelToAdd("");
     setIsDialogOpen(true);
@@ -160,10 +217,23 @@ export default function LimitsPage() {
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
       if (limit.entityType === "organization") return "Organization";
-      const team = teams.find((candidate) => candidate.id === limit.entityId);
-      return team?.name ?? "Unknown team";
+      if (limit.entityType === "team") {
+        const team = teams.find((candidate) => candidate.id === limit.entityId);
+        return team?.name ?? "Unknown team";
+      }
+      if (limit.entityType === "user") {
+        const member = members.find((m) => m.id === limit.entityId);
+        return member?.name || member?.email || "Unknown user";
+      }
+      if (limit.entityType === "virtual_api_key") {
+        const vkey = orgVirtualApiKeys.find((k) => k.id === limit.entityId);
+        return vkey?.name ?? "Unknown virtual key";
+      }
+      // Historical `agent` rows (created via API/MCP before the UI picker
+      // covered them) render as raw ID rather than breaking the table.
+      return limit.entityId;
     },
-    [teams],
+    [teams, members, orgVirtualApiKeys],
   );
 
   const getUsageStatus = useCallback(
@@ -202,7 +272,9 @@ export default function LimitsPage() {
         appliedToFilter === "all" || limit.entityType === appliedToFilter;
       const matchesModel =
         modelFilter === "all" ||
-        (Array.isArray(limit.model) && limit.model.includes(modelFilter));
+        (Array.isArray(limit.model) &&
+          (limit.model.includes(modelFilter) ||
+            limit.model.includes(ALL_MODELS_SENTINEL)));
 
       return matchesStatus && matchesAppliedTo && matchesModel;
     });
@@ -246,7 +318,7 @@ export default function LimitsPage() {
           <div className="flex flex-wrap gap-1">
             {getLimitModels(row.original).map((model) => (
               <Badge key={model} variant="outline" className="text-xs">
-                {model}
+                {model === ALL_MODELS_SENTINEL ? "All models" : model}
               </Badge>
             ))}
           </div>
@@ -311,33 +383,75 @@ export default function LimitsPage() {
     ];
 
   async function handleSubmit() {
-    const body = {
-      entityType: formState.entityType,
-      entityId:
-        formState.entityType === "organization"
-          ? (organization?.id ?? "")
-          : formState.entityId,
-      limitType: "token_cost" as const,
-      limitValue: Number(formState.limitValue),
-      model: formState.model,
-    };
+    const entityId = resolvedEntityId;
+    if (!entityId) return;
 
-    if (editingLimit) {
-      const result = await updateLimit.mutateAsync({
-        id: editingLimit.id,
-        ...body,
-      });
-      if (result) {
-        setIsDialogOpen(false);
-        setEditingLimit(null);
+    const specificValue = Number(formState.limitValue) || 0;
+    const wideValue = Number(formState.wideLimitValue) || 0;
+    const hasSpecific = formState.model.length > 0 && specificValue > 0;
+    const hasWide = wideValue > 0;
+
+    const specificBody = hasSpecific
+      ? {
+          entityType: formState.entityType,
+          entityId,
+          limitType: "token_cost" as const,
+          limitValue: specificValue,
+          model: formState.model,
+        }
+      : null;
+    const wideBody = hasWide
+      ? {
+          entityType: formState.entityType,
+          entityId,
+          limitType: "token_cost" as const,
+          limitValue: wideValue,
+          model: [ALL_MODELS_SENTINEL],
+        }
+      : null;
+
+    if (specificBody && !validateLimitShape(specificBody)) return;
+    if (wideBody && !validateLimitShape(wideBody)) return;
+
+    if (editingLimit && isWideLimit(editingLimit)) {
+      if (wideBody) {
+        await updateLimit.mutateAsync({ id: editingLimit.id, ...wideBody });
       }
-      return;
+      if (specificBody) {
+        await createLimit.mutateAsync(specificBody);
+      }
+    } else if (editingLimit) {
+      if (specificBody) {
+        await updateLimit.mutateAsync({ id: editingLimit.id, ...specificBody });
+      }
+      if (wideBody && wideValue !== (existingWideLimit?.limitValue ?? 0)) {
+        if (existingWideLimit) {
+          await updateLimit.mutateAsync({
+            id: existingWideLimit.id,
+            ...wideBody,
+          });
+        } else {
+          await createLimit.mutateAsync(wideBody);
+        }
+      }
+    } else {
+      if (specificBody) {
+        await createLimit.mutateAsync(specificBody);
+      }
+      if (wideBody && wideValue !== (existingWideLimit?.limitValue ?? 0)) {
+        if (existingWideLimit) {
+          await updateLimit.mutateAsync({
+            id: existingWideLimit.id,
+            ...wideBody,
+          });
+        } else {
+          await createLimit.mutateAsync(wideBody);
+        }
+      }
     }
 
-    const result = await createLimit.mutateAsync(body);
-    if (result) {
-      setIsDialogOpen(false);
-    }
+    setIsDialogOpen(false);
+    setEditingLimit(null);
   }
 
   async function handleDelete() {
@@ -346,10 +460,12 @@ export default function LimitsPage() {
     setLimitToDelete(null);
   }
 
-  const canSubmit =
-    Number(formState.limitValue) > 0 &&
-    formState.model.length > 0 &&
-    (formState.entityType === "organization" || formState.entityId.length > 0);
+  const entitySelected =
+    formState.entityType === "organization" || formState.entityId.length > 0;
+  const hasValidSpecific =
+    formState.model.length > 0 && Number(formState.limitValue) > 0;
+  const hasValidWide = Number(formState.wideLimitValue) > 0;
+  const canSubmit = entitySelected && (hasValidSpecific || hasValidWide);
 
   return (
     <div className="space-y-4">
@@ -402,6 +518,8 @@ export default function LimitsPage() {
             <SelectItem value="all">All applied to</SelectItem>
             <SelectItem value="organization">Organization</SelectItem>
             <SelectItem value="team">Team</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+            <SelectItem value="virtual_api_key">Virtual API Key</SelectItem>
           </SelectContent>
         </Select>
 
@@ -439,7 +557,7 @@ export default function LimitsPage() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Configure scoped LLM token-cost limits for the organization or a team."
+        description="Configure scoped LLM token-cost limits for the organization, a team, a user, or a virtual API key."
         size="small"
       >
         <DialogForm
@@ -469,6 +587,10 @@ export default function LimitsPage() {
                   <SelectContent>
                     <SelectItem value="organization">Organization</SelectItem>
                     <SelectItem value="team">Team</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="virtual_api_key">
+                      Virtual API Key
+                    </SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -494,11 +616,65 @@ export default function LimitsPage() {
                     </SelectContent>
                   </Select>
                 )}
+
+                {formState.entityType === "user" && (
+                  <Select
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:flex-1">
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name || member.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {formState.entityType === "virtual_api_key" && (
+                  <Select
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:flex-1">
+                      <SelectValue placeholder="Select virtual API key" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgVirtualApiKeys.map((vkey) => (
+                        <SelectItem key={vkey.id} value={vkey.id}>
+                          {vkey.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
+              {formState.entityType === "user" && (
+                <p className="text-xs text-muted-foreground">
+                  Personal budgets cap a user's spend across Chat UI, internal
+                  automation, and JWKS-authenticated calls. Virtual API key
+                  traffic is not counted — use virtual-key-scope budgets for
+                  those.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label>Add model</Label>
+              <Label>Models</Label>
               <LlmModelSearchableSelect
                 value={modelToAdd}
                 onValueChange={(value) => {
@@ -540,7 +716,7 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Limit value ($)</Label>
+              <Label>Limit value for selected models ($)</Label>
               <Input
                 value={formatNumericInput(formState.limitValue)}
                 onChange={(event) =>
@@ -551,7 +727,39 @@ export default function LimitsPage() {
                 }
                 placeholder="1,000"
                 inputMode="numeric"
+                disabled={formState.model.length === 0}
               />
+              <p className="text-xs text-muted-foreground">
+                Applies only to the models picked above. Leave empty to skip
+                per-model limits.
+              </p>
+            </div>
+
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <Label>
+                Overall limit for this {ENTITY_TYPE_NOUN[formState.entityType]}{" "}
+                ($)
+              </Label>
+              <Input
+                value={formatNumericInput(formState.wideLimitValue)}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    wideLimitValue: event.target.value.replace(/[^0-9]/g, ""),
+                  }))
+                }
+                placeholder="Not set"
+                inputMode="numeric"
+              />
+              <p className="text-xs text-muted-foreground">
+                Caps total spend for this{" "}
+                {ENTITY_TYPE_NOUN[formState.entityType]} across every model,
+                including new models as they are added. Independent from the
+                per-model limit above.
+                {existingWideLimit
+                  ? " To remove this cap, delete it from the limits list."
+                  : ""}
+              </p>
             </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">

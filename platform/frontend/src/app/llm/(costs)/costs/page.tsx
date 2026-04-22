@@ -38,6 +38,8 @@ import {
   useModelStatistics,
   useProfileStatistics,
   useTeamStatistics,
+  useUserStatistics,
+  useVirtualKeyStatistics,
 } from "@/lib/statistics.query";
 
 /**
@@ -90,6 +92,46 @@ const ChartContainerWrapper = ({
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
 
+function buildTopSeriesChartData<
+  T extends { timeSeries: { timestamp: string; value: number }[] },
+>(
+  entries: T[],
+  idAccessor: (entry: T) => string,
+  formatTimestamp: (ts: string) => string,
+): Record<string, string | number>[] {
+  if (entries.length === 0) return [];
+  const top = entries.slice(0, 5);
+  const allTimestamps = [
+    ...new Set(top.flatMap((e) => e.timeSeries.map((p) => p.timestamp))),
+  ].sort();
+  return allTimestamps.map((timestamp) => {
+    const dataPoint: Record<string, string | number> = {
+      timestamp,
+      label: formatTimestamp(timestamp),
+    };
+    for (const entry of top) {
+      const point = entry.timeSeries.find((p) => p.timestamp === timestamp);
+      dataPoint[idAccessor(entry)] = point ? point.value : 0;
+    }
+    return dataPoint;
+  });
+}
+
+function buildTopSeriesChartConfig<T>(
+  entries: T[],
+  idAccessor: (entry: T) => string,
+  labelAccessor: (entry: T) => string,
+): ChartConfig {
+  const config: ChartConfig = {};
+  entries.slice(0, 5).forEach((entry, index) => {
+    config[idAccessor(entry)] = {
+      label: labelAccessor(entry),
+      color: `var(--chart-${index + 1})`,
+    };
+  });
+  return config;
+}
+
 export default function StatisticsPage() {
   const router = useRouter();
   const setActionButton = useSetCostsAction();
@@ -111,6 +153,11 @@ export default function StatisticsPage() {
     timeframe,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
+    timeframe,
+  });
+  // User stats group by `billed_user_id`, NOT `user_id` (header-tracing field).
+  const { data: userStatistics = [] } = useUserStatistics({ timeframe });
+  const { data: virtualKeyStatistics = [] } = useVirtualKeyStatistics({
     timeframe,
   });
 
@@ -226,41 +273,73 @@ export default function StatisticsPage() {
     [timeframe],
   );
 
-  // Convert team statistics to recharts format
-  const teamChartData = useMemo(() => {
-    if (teamStatistics.length === 0) return [];
-
-    const allTimestamps = [
-      ...new Set(
-        teamStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
+  const teamChartData = useMemo(
+    () =>
+      buildTopSeriesChartData(
+        teamStatistics,
+        (team) => team.teamId,
+        formatTimestamp,
       ),
-    ].sort();
+    [teamStatistics, formatTimestamp],
+  );
 
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      teamStatistics.slice(0, 5).forEach((team) => {
-        const point = team.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[team.teamId] = point ? point.value : 0;
-      });
-      return dataPoint;
-    });
-  }, [teamStatistics, formatTimestamp]);
+  const teamChartConfig = useMemo(
+    () =>
+      buildTopSeriesChartConfig(
+        teamStatistics,
+        (team) => team.teamId,
+        (team) => team.teamName,
+      ),
+    [teamStatistics],
+  );
 
-  const teamChartConfig = useMemo(() => {
-    const config: ChartConfig = {};
-    teamStatistics.slice(0, 5).forEach((team, index) => {
-      config[team.teamId] = {
-        label: team.teamName,
-        color: `var(--chart-${index + 1})`,
-      };
-    });
-    return config;
-  }, [teamStatistics]);
+  // By-user chart data (top 5 spenders across the selected timeframe).
+  const sortedUserStatistics = useMemo(
+    () => userStatistics.slice().sort((a, b) => b.cost - a.cost),
+    [userStatistics],
+  );
+  const userChartData = useMemo(
+    () =>
+      buildTopSeriesChartData(
+        sortedUserStatistics,
+        (e) => e.userId,
+        formatTimestamp,
+      ),
+    [sortedUserStatistics, formatTimestamp],
+  );
+  const userChartConfig = useMemo(
+    () =>
+      buildTopSeriesChartConfig(
+        sortedUserStatistics,
+        (e) => e.userId,
+        (e) => e.userName ?? e.userEmail ?? e.userId,
+      ),
+    [sortedUserStatistics],
+  );
+
+  // By-virtual-key chart data (top 5 spenders across the selected timeframe).
+  const sortedVirtualKeyStatistics = useMemo(
+    () => virtualKeyStatistics.slice().sort((a, b) => b.cost - a.cost),
+    [virtualKeyStatistics],
+  );
+  const virtualKeyChartData = useMemo(
+    () =>
+      buildTopSeriesChartData(
+        sortedVirtualKeyStatistics,
+        (e) => e.virtualKeyId,
+        formatTimestamp,
+      ),
+    [sortedVirtualKeyStatistics, formatTimestamp],
+  );
+  const virtualKeyChartConfig = useMemo(
+    () =>
+      buildTopSeriesChartConfig(
+        sortedVirtualKeyStatistics,
+        (e) => e.virtualKeyId,
+        (e) => e.virtualKeyName ?? e.virtualKeyId,
+      ),
+    [sortedVirtualKeyStatistics],
+  );
 
   // Filter agent statistics by type
   const chatAgentStatistics = useMemo(
@@ -272,113 +351,62 @@ export default function StatisticsPage() {
     [agentStatistics],
   );
 
-  // Convert agent statistics to recharts format
-  const agentChartData = useMemo(() => {
-    if (chatAgentStatistics.length === 0) return [];
-
-    const allTimestamps = [
-      ...new Set(
-        chatAgentStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
+  const agentChartData = useMemo(
+    () =>
+      buildTopSeriesChartData(
+        chatAgentStatistics,
+        (agent) => agent.agentId,
+        formatTimestamp,
       ),
-    ].sort();
-
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      chatAgentStatistics.slice(0, 5).forEach((agent) => {
-        const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[agent.agentId] = point ? point.value : 0;
-      });
-      return dataPoint;
-    });
-  }, [chatAgentStatistics, formatTimestamp]);
-
-  const agentChartConfig = useMemo(() => {
-    const config: ChartConfig = {};
-    chatAgentStatistics.slice(0, 5).forEach((agent, index) => {
-      config[agent.agentId] = {
-        label: agent.agentName,
-        color: `var(--chart-${index + 1})`,
-      };
-    });
-    return config;
-  }, [chatAgentStatistics]);
-
-  // Convert LLM proxy statistics to recharts format
-  const llmProxyChartData = useMemo(() => {
-    if (llmProxyStatistics.length === 0) return [];
-
-    const allTimestamps = [
-      ...new Set(
-        llmProxyStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
+    [chatAgentStatistics, formatTimestamp],
+  );
+  const agentChartConfig = useMemo(
+    () =>
+      buildTopSeriesChartConfig(
+        chatAgentStatistics,
+        (agent) => agent.agentId,
+        (agent) => agent.agentName,
       ),
-    ].sort();
+    [chatAgentStatistics],
+  );
 
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      llmProxyStatistics.slice(0, 5).forEach((agent) => {
-        const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[agent.agentId] = point ? point.value : 0;
-      });
-      return dataPoint;
-    });
-  }, [llmProxyStatistics, formatTimestamp]);
-
-  const llmProxyChartConfig = useMemo(() => {
-    const config: ChartConfig = {};
-    llmProxyStatistics.slice(0, 5).forEach((agent, index) => {
-      config[agent.agentId] = {
-        label: agent.agentName,
-        color: `var(--chart-${index + 1})`,
-      };
-    });
-    return config;
-  }, [llmProxyStatistics]);
-
-  // Convert model statistics to recharts format
-  const modelChartData = useMemo(() => {
-    if (modelStatistics.length === 0) return [];
-
-    const allTimestamps = [
-      ...new Set(
-        modelStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
+  const llmProxyChartData = useMemo(
+    () =>
+      buildTopSeriesChartData(
+        llmProxyStatistics,
+        (agent) => agent.agentId,
+        formatTimestamp,
       ),
-    ].sort();
+    [llmProxyStatistics, formatTimestamp],
+  );
+  const llmProxyChartConfig = useMemo(
+    () =>
+      buildTopSeriesChartConfig(
+        llmProxyStatistics,
+        (agent) => agent.agentId,
+        (agent) => agent.agentName,
+      ),
+    [llmProxyStatistics],
+  );
 
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      modelStatistics.slice(0, 5).forEach((model) => {
-        const point = model.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[model.model] = point ? point.value : 0;
-      });
-      return dataPoint;
-    });
-  }, [modelStatistics, formatTimestamp]);
-
-  const modelChartConfig = useMemo(() => {
-    const config: ChartConfig = {};
-    modelStatistics.slice(0, 5).forEach((model, index) => {
-      config[model.model] = {
-        label: model.model,
-        color: `var(--chart-${index + 1})`,
-      };
-    });
-    return config;
-  }, [modelStatistics]);
+  const modelChartData = useMemo(
+    () =>
+      buildTopSeriesChartData(
+        modelStatistics,
+        (model) => model.model,
+        formatTimestamp,
+      ),
+    [modelStatistics, formatTimestamp],
+  );
+  const modelChartConfig = useMemo(
+    () =>
+      buildTopSeriesChartConfig(
+        modelStatistics,
+        (model) => model.model,
+        (model) => model.model,
+      ),
+    [modelStatistics],
+  );
 
   // Cost savings chart data
   const costSavingsChartData = useMemo(() => {
@@ -1077,6 +1105,240 @@ export default function StatisticsPage() {
                         </TableCell>
                       </TableRow>
                     ))
+                  )}
+                </TableBody>
+              </Table>
+            </StatisticsTablePanel>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>By user</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <ChartContainerWrapper
+                config={userChartConfig}
+                data={userChartData}
+                emptyMessage="No billed-user data available"
+              >
+                <LineChart
+                  accessibilityLayer
+                  data={userChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {userStatistics
+                    .slice()
+                    .sort((a, b) => b.cost - a.cost)
+                    .slice(0, 5)
+                    .map((entry) => (
+                      <Line
+                        key={entry.userId}
+                        dataKey={entry.userId}
+                        type="monotone"
+                        stroke={`var(--color-${entry.userId})`}
+                        strokeWidth={2}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${entry.userId})`,
+                        }}
+                        activeDot={{ strokeWidth: 0, r: 5 }}
+                      />
+                    ))}
+                </LineChart>
+              </ChartContainerWrapper>
+              {userStatistics.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Chart shows top 5 by cost
+                </p>
+              )}
+            </div>
+            <StatisticsTablePanel>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      User
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Requests
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Tokens
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                      Cost
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {userStatistics.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No billed-user data available for the selected timeframe
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    userStatistics
+                      .slice()
+                      .sort((a, b) => b.cost - a.cost)
+                      .map((entry) => (
+                        <TableRow key={entry.userId}>
+                          <TableCell className="font-medium">
+                            {entry.userName ?? entry.userEmail ?? entry.userId}
+                          </TableCell>
+                          <TableCell>
+                            {entry.requests.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {(
+                              entry.inputTokens + entry.outputTokens
+                            ).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${entry.cost.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                  )}
+                </TableBody>
+              </Table>
+            </StatisticsTablePanel>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>By virtual API key</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <ChartContainerWrapper
+                config={virtualKeyChartConfig}
+                data={virtualKeyChartData}
+                emptyMessage="No virtual-key data available"
+              >
+                <LineChart
+                  accessibilityLayer
+                  data={virtualKeyChartData}
+                  margin={{ top: 12, left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <ChartTooltip content={CostChartTooltip} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  {virtualKeyStatistics
+                    .slice()
+                    .sort((a, b) => b.cost - a.cost)
+                    .slice(0, 5)
+                    .map((entry) => (
+                      <Line
+                        key={entry.virtualKeyId}
+                        dataKey={entry.virtualKeyId}
+                        type="monotone"
+                        stroke={`var(--color-${entry.virtualKeyId})`}
+                        strokeWidth={2}
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: `var(--color-${entry.virtualKeyId})`,
+                        }}
+                        activeDot={{ strokeWidth: 0, r: 5 }}
+                      />
+                    ))}
+                </LineChart>
+              </ChartContainerWrapper>
+              {virtualKeyStatistics.length > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Chart shows top 5 by cost
+                </p>
+              )}
+            </div>
+            <StatisticsTablePanel>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Virtual key
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Requests
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Tokens
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                      Cost
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {virtualKeyStatistics.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No virtual-key data available for the selected timeframe
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    virtualKeyStatistics
+                      .slice()
+                      .sort((a, b) => b.cost - a.cost)
+                      .map((entry) => (
+                        <TableRow key={entry.virtualKeyId}>
+                          <TableCell className="font-medium">
+                            {entry.virtualKeyName ?? entry.virtualKeyId}
+                          </TableCell>
+                          <TableCell>
+                            {entry.requests.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {(
+                              entry.inputTokens + entry.outputTokens
+                            ).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${entry.cost.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))
                   )}
                 </TableBody>
               </Table>

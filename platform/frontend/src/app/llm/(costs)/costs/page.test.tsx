@@ -11,6 +11,8 @@ const mockUseTeamStatistics = vi.fn();
 const mockUseProfileStatistics = vi.fn();
 const mockUseModelStatistics = vi.fn();
 const mockUseCostSavingsStatistics = vi.fn();
+const mockUseUserStatistics = vi.fn();
+const mockUseVirtualKeyStatistics = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -30,6 +32,10 @@ vi.mock("@/lib/statistics.query", () => ({
     mockUseModelStatistics(params),
   useCostSavingsStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
     mockUseCostSavingsStatistics(params),
+  useUserStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
+    mockUseUserStatistics(params),
+  useVirtualKeyStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
+    mockUseVirtualKeyStatistics(params),
 }));
 
 vi.mock("recharts", () => ({
@@ -67,6 +73,8 @@ describe("StatisticsPage", () => {
     mockUseCostSavingsStatistics.mockReturnValue({
       data: { timeSeries: [] },
     });
+    mockUseUserStatistics.mockReturnValue({ data: [] });
+    mockUseVirtualKeyStatistics.mockReturnValue({ data: [] });
   });
 
   it("queries statistics with the selected custom timeframe", async () => {
@@ -160,7 +168,7 @@ describe("StatisticsPage", () => {
       container.querySelectorAll(".max-h-\\[280px\\]"),
     );
 
-    expect(tablePanels).toHaveLength(4);
+    expect(tablePanels).toHaveLength(6);
     for (const tablePanel of tablePanels) {
       expect(tablePanel.className).toContain("max-h-[280px]");
       expect(tablePanel.className).toContain("overflow-auto");

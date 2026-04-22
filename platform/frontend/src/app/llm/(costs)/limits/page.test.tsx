@@ -39,10 +39,15 @@ vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
     data: { id: "org-1", limitCleanupInterval: "1m" },
   }),
+  useOrganizationMembers: () => ({ data: [] }),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: () => ({ data: [] }),
+}));
+
+vi.mock("@/lib/virtual-api-keys.query", () => ({
+  useAllVirtualApiKeys: () => ({ data: { data: [] } }),
 }));
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({

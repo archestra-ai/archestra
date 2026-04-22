@@ -7,12 +7,16 @@ import {
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 
+const STATISTICS_REFETCH_INTERVAL_MS = 30_000;
+
 const {
   getTeamStatistics,
   getAgentStatistics,
   getModelStatistics,
   getOverviewStatistics,
   getCostSavingsStatistics,
+  getUserStatistics,
+  getVirtualKeyStatistics,
 } = archestraApiSdk;
 
 export function useTeamStatistics({
@@ -31,7 +35,7 @@ export function useTeamStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
   });
 }
 
@@ -51,7 +55,7 @@ export function useProfileStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
   });
 }
 
@@ -71,7 +75,7 @@ export function useModelStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
   });
 }
 
@@ -91,7 +95,7 @@ export function useOverviewStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
   });
 }
 
@@ -111,6 +115,46 @@ export function useCostSavingsStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function useUserStatistics({
+  timeframe = "24h",
+  initialData,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  initialData?: archestraApiTypes.GetUserStatisticsResponses["200"];
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "users", timeframe],
+    queryFn: async () => {
+      const response = await getUserStatistics({
+        query: { timeframe },
+      });
+      return response.data;
+    },
+    initialData,
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function useVirtualKeyStatistics({
+  timeframe = "24h",
+  initialData,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  initialData?: archestraApiTypes.GetVirtualKeyStatisticsResponses["200"];
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "virtual-keys", timeframe],
+    queryFn: async () => {
+      const response = await getVirtualKeyStatistics({
+        query: { timeframe },
+      });
+      return response.data;
+    },
+    initialData,
+    refetchInterval: STATISTICS_REFETCH_INTERVAL_MS,
   });
 }

@@ -61,7 +61,8 @@ interface EditProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   page: OnboardingWizardDialogPage;
-  onSave: (page: OnboardingWizardDialogPage) => void;
+  /** Return true to close the dialog; false keeps it open (e.g. save failed) */
+  onSave: (page: OnboardingWizardDialogPage) => boolean | Promise<boolean>;
   pageNumber: number;
   pageCount: number;
 }
@@ -188,9 +189,16 @@ function EditPageDialog({
     setDraft((prev) => ({ ...prev, image: null }));
   }, []);
 
-  const handleSave = useCallback(() => {
-    onSave(draft);
-    onOpenChange(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      const shouldClose = await onSave(draft);
+      if (shouldClose) onOpenChange(false);
+    } finally {
+      setSaving(false);
+    }
   }, [draft, onSave, onOpenChange]);
 
   return (
@@ -212,32 +220,50 @@ function EditPageDialog({
             >
               Cancel
             </Button>
-            <Button type="button" onClick={handleSave}>
-              Save page
+            <Button type="button" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save page"}
             </Button>
           </div>
         </div>
       }
     >
-      <div className="grid gap-4 md:grid-cols-2 min-h-0 h-full">
+      <div
+        className={cn(
+          "grid gap-4 min-h-0 h-full",
+          draft.image ? "md:grid-cols-2" : "md:grid-cols-1",
+        )}
+      >
         <div className="flex flex-col min-h-0 rounded-lg border">
-          <div className="flex items-center gap-1 border-b p-1">
-            <Button
-              type="button"
-              variant={tab === "markdown" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setTab("markdown")}
-            >
-              Markdown
-            </Button>
-            <Button
-              type="button"
-              variant={tab === "preview" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setTab("preview")}
-            >
-              Preview
-            </Button>
+          <div className="flex items-center justify-between gap-2 border-b p-1">
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant={tab === "markdown" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setTab("markdown")}
+              >
+                Markdown
+              </Button>
+              <Button
+                type="button"
+                variant={tab === "preview" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setTab("preview")}
+              >
+                Preview
+              </Button>
+            </div>
+            {!draft.image && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4 mr-1" />
+                Upload image
+              </Button>
+            )}
           </div>
           {tab === "markdown" ? (
             <Textarea
@@ -271,20 +297,20 @@ function EditPageDialog({
           )}
         </div>
 
-        <div className="flex flex-col min-h-0 gap-3">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Image</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="h-4 w-4 mr-1" />
-                {draft.image ? "Change" : "Upload"}
-              </Button>
-              {draft.image && (
+        {draft.image && (
+          <div className="flex flex-col min-h-0 gap-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Image</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4 mr-1" />
+                  Change
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -294,39 +320,40 @@ function EditPageDialog({
                   <X className="h-4 w-4 mr-1" />
                   Remove
                 </Button>
-              )}
+              </div>
             </div>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/gif"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-          <div className="flex-1 min-h-40 flex items-center justify-center overflow-hidden rounded-lg bg-muted">
-            {draft.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
+            <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={draft.image}
                 alt=""
                 className="max-w-full max-h-full object-contain"
               />
-            ) : (
-              <span className="text-sm text-muted-foreground">
-                No image. PNG or GIF, max 2MB.
-              </span>
-            )}
+            </div>
           </div>
-        </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/gif"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
       </div>
     </StandardDialog>
   );
 }
 
 function TwoColumnPage({ page }: { page: OnboardingWizardDialogPage }) {
+  const hasImage = !!page.image;
   return (
-    <div className="grid gap-4 md:grid-cols-2 min-h-0 h-full">
+    <div
+      className={cn(
+        "grid gap-6 min-h-0 h-full",
+        hasImage ? "md:grid-cols-2" : "md:grid-cols-1",
+      )}
+    >
       <div
         className={cn(
           "rounded-lg border p-6 overflow-y-auto",
@@ -340,18 +367,16 @@ function TwoColumnPage({ page }: { page: OnboardingWizardDialogPage }) {
           {page.content}
         </ReactMarkdown>
       </div>
-      <div className="flex items-center justify-center overflow-hidden rounded-lg bg-muted">
-        {page.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
+      {hasImage && (
+        <div className="flex items-center justify-center min-h-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={page.image}
+            src={page.image ?? undefined}
             alt=""
             className="max-w-full max-h-full object-contain"
           />
-        ) : (
-          <div className="w-full h-full min-h-40 border border-dashed rounded-lg bg-muted/40" />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

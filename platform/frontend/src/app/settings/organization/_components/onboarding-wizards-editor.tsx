@@ -11,6 +11,7 @@ import type {
   OnboardingWizardValidationError,
   OnboardingWizardValue,
 } from "./onboarding-wizards-editor.utils";
+import { sanitizeOnboardingWizard } from "./onboarding-wizards-editor.utils";
 
 const MAX_PAGES = 10;
 
@@ -18,12 +19,19 @@ interface OnboardingWizardEditorProps {
   wizard: OnboardingWizardValue | null;
   validationError: OnboardingWizardValidationError;
   onChange: (wizard: OnboardingWizardValue | null) => void;
+  /**
+   * Persist the wizard immediately (used by the page-edit dialog so clicking
+   * "Save page" doesn't require a second click on the outer settings save bar).
+   * Returns whether the persist succeeded so the dialog can close only on success.
+   */
+  onPersist?: (wizard: OnboardingWizardValue | null) => Promise<boolean>;
 }
 
 export function OnboardingWizardEditor({
   wizard,
   validationError,
   onChange,
+  onPersist,
 }: OnboardingWizardEditorProps) {
   const nextIdRef = useRef(0);
   const createId = useCallback(() => `page-${++nextIdRef.current}`, []);
@@ -79,13 +87,22 @@ export function OnboardingWizardEditor({
   );
 
   const handlePageSave = useCallback(
-    (index: number, page: OnboardingWizardPageValue) => {
-      if (!wizard) return;
+    async (
+      index: number,
+      page: OnboardingWizardPageValue,
+    ): Promise<boolean> => {
+      if (!wizard) return false;
       const nextPages = [...wizard.pages];
       nextPages[index] = page;
-      onChange({ ...wizard, pages: nextPages });
+      const nextWizard = { ...wizard, pages: nextPages };
+      onChange(nextWizard);
+      if (onPersist) {
+        const sanitized = sanitizeOnboardingWizard(nextWizard);
+        return await onPersist(sanitized);
+      }
+      return true;
     },
-    [onChange, wizard],
+    [onChange, onPersist, wizard],
   );
 
   if (!wizard) {
@@ -244,7 +261,10 @@ export function OnboardingWizardEditor({
           page={pages[editingPageIndex]}
           pageNumber={editingPageIndex + 1}
           pageCount={pages.length}
-          onSave={(page) => handlePageSave(editingPageIndex, page)}
+          onSave={async (page) => {
+            const ok = await handlePageSave(editingPageIndex, page);
+            return ok;
+          }}
         />
       )}
     </div>

@@ -317,6 +317,17 @@ export default function OrganizationSettingsPage() {
                 wizard={effectiveOnboardingWizard}
                 validationError={displayedOnboardingWizardValidationError}
                 onChange={setOnboardingWizardDraft}
+                onPersist={async (sanitized) => {
+                  const result = await updateMutation.mutateAsync({
+                    onboardingWizard: sanitized,
+                  });
+                  if (!result) return false;
+                  // Clear the draft so the settings save bar no longer flags
+                  // onboarding as dirty.
+                  setOnboardingWizardDraft(undefined);
+                  setShowOnboardingWizardValidationErrors(false);
+                  return true;
+                }}
               />
               <div className="space-y-2">
                 <Label htmlFor="chatErrorSupportMessage">

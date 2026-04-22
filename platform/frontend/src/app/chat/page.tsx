@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -82,6 +82,10 @@ import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  clearOAuthReauthChatResume,
+  getOAuthReauthChatResume,
+} from "@/lib/auth/oauth-session";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -134,6 +138,7 @@ import {
   shouldResetInitialChatState,
 } from "./chat-initial-state";
 import ArchestraPromptInput from "./prompt-input";
+import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
@@ -166,6 +171,7 @@ export function ChatPageContent({
   );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSendTriggeredRef = useRef(false);
+  const oauthReauthResumeTriggeredRef = useRef(false);
   // Store pending URL for browser navigation after conversation is created
   const [pendingBrowserUrl, setPendingBrowserUrl] = useState<
     string | undefined
@@ -199,6 +205,12 @@ export function ChatPageContent({
   const { data: canReadLlmProvider } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
+  const { data: canReadLlmModels } = useHasPermissions({
+    llmModel: ["read"],
+  });
+  const { data: canSeeProviderSettings } = useHasPermissions({
+    chatProviderSettings: ["enable"],
+  });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
   });
@@ -221,7 +233,11 @@ export function ChatPageContent({
     return false;
   });
 
-  const hasChatAccess = canReadAgent !== false && canReadLlmProvider !== false;
+  const hasChatAccess = canReadAgent !== false;
+  const canUseProviderSettings =
+    canSeeProviderSettings === true &&
+    canReadLlmProvider === true &&
+    canReadLlmModels === true;
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
@@ -230,9 +246,9 @@ export function ChatPageContent({
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
-    useLlmModelsByProvider();
+    useLlmModelsByProvider({ enabled: canUseProviderSettings });
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess });
+    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
 
   // State for initial chat (when no conversation exists yet)
@@ -540,7 +556,29 @@ export function ChatPageContent({
     () => (conversation?.messages ?? []) as PartialUIMessage[],
     [conversation?.messages],
   );
-  const effectiveForkAgentId = forkAgentId ?? internalAgents[0]?.id ?? null;
+  const sharedConversationAgentId =
+    conversation?.agentId ?? conversation?.agent?.id ?? null;
+  const {
+    accessibleSharedAgentId,
+    shouldPromptForForkAgentSelection,
+    effectiveAgentId: effectiveForkAgentId,
+  } = useMemo(
+    () =>
+      resolveSharedConversationForkState({
+        availableAgentIds: internalAgents.map((agent) => agent.id),
+        selectedAgentId: forkAgentId,
+        sharedConversationAgentId,
+      }),
+    [forkAgentId, internalAgents, sharedConversationAgentId],
+  );
+
+  useEffect(() => {
+    if (isForkDialogOpen) {
+      return;
+    }
+
+    setForkAgentId(accessibleSharedAgentId);
+  }, [accessibleSharedAgentId, isForkDialogOpen]);
 
   // Track title generation for typing animation in the header
   const conversationForTitleTracking = useMemo(
@@ -807,7 +845,11 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
-  const error = chatSession?.error;
+  const persistedChatError = useMemo(
+    () => toPersistedChatError(conversation?.lastChatError),
+    [conversation?.lastChatError],
+  );
+  const error = chatSession?.error ?? persistedChatError;
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
@@ -1237,7 +1279,6 @@ export function ChatPageContent({
       if (
         (!hasText && !hasFiles) ||
         !initialAgentId ||
-        !initialModel ||
         createConversationMutation.isPending
       ) {
         return;
@@ -1300,7 +1341,6 @@ export function ChatPageContent({
     [
       isPlaywrightSetupVisible,
       initialAgentId,
-      initialModel,
       createInitialConversation,
       updateEnabledToolsMutation,
       selectConversation,
@@ -1328,8 +1368,6 @@ export function ChatPageContent({
 
     // Wait for agent to be ready.
     if (!initialAgentId) return;
-    if (!initialModel) return;
-
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
 
@@ -1346,25 +1384,37 @@ export function ChatPageContent({
     initialUserPrompt,
     conversationId,
     initialAgentId,
-    initialModel,
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
   ]);
 
+  useEffect(() => {
+    const pendingReauthResume = getOAuthReauthChatResume();
+    if (
+      oauthReauthResumeTriggeredRef.current ||
+      !pendingReauthResume ||
+      pendingReauthResume.conversationId !== conversationId ||
+      !sendMessage ||
+      status !== "ready"
+    ) {
+      return;
+    }
+
+    oauthReauthResumeTriggeredRef.current = true;
+    clearOAuthReauthChatResume();
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: pendingReauthResume.message }],
+    });
+  }, [conversationId, sendMessage, status]);
+
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
 
-  // If user lacks permission to read agents or LLM providers, show access denied
+  // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
-  if (
-    !conversationId &&
-    (canReadAgent === false || canReadLlmProvider === false)
-  ) {
-    const missingPermissions: string[] = [];
-    if (canReadAgent === false) missingPermissions.push("agent:read");
-    if (canReadLlmProvider === false)
-      missingPermissions.push("llmProviderApiKey:read");
+  if (!conversationId && canReadAgent === false) {
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -1378,16 +1428,9 @@ export function ChatPageContent({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <div className="flex flex-col items-center gap-1">
-            {missingPermissions.map((p) => (
-              <code
-                key={p}
-                className="rounded bg-muted px-2 py-1 text-sm font-mono"
-              >
-                {p}
-              </code>
-            ))}
-          </div>
+          <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
+            agent:read
+          </code>
         </EmptyContent>
       </Empty>
     );
@@ -1764,7 +1807,16 @@ export function ChatPageContent({
                         </div>
                       </div>
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                        <Button onClick={() => setIsForkDialogOpen(true)}>
+                        <Button
+                          onClick={() => {
+                            if (shouldPromptForForkAgentSelection) {
+                              setIsForkDialogOpen(true);
+                              return;
+                            }
+
+                            void handleForkSharedConversation();
+                          }}
+                        >
                           <Plus className="h-4 w-4 mr-2" />
                           Start New Chat from here
                         </Button>
@@ -2004,7 +2056,11 @@ export function ChatPageContent({
         open={isForkDialogOpen}
         onOpenChange={setIsForkDialogOpen}
         title="Start New Chat"
-        description="Select an agent to start a new chat with the preloaded messages from this conversation."
+        description={
+          shouldPromptForForkAgentSelection
+            ? "The original agent is not available to you. Select another agent to start a new chat with the preloaded messages from this conversation."
+            : "Select an agent to start a new chat with the preloaded messages from this conversation."
+        }
         size="small"
         bodyClassName="py-1"
         footer={
@@ -2036,6 +2092,18 @@ export function ChatPageContent({
       </StandardDialog>
     </div>
   );
+}
+
+function toPersistedChatError(
+  lastChatError:
+    | archestraApiTypes.GetChatConversationResponses["200"]["lastChatError"]
+    | undefined,
+): Error | undefined {
+  if (!lastChatError) {
+    return undefined;
+  }
+
+  return new Error(JSON.stringify(lastChatError));
 }
 
 export default function ChatPage() {

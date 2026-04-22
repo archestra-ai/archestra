@@ -100,6 +100,14 @@ async function openCatalogToolAssignment({
   const searchInput = page.getByTestId(
     getAssignmentComboboxSearchInputTestId(E2eTestId.AgentToolsAddButton),
   );
+  const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
+  const pillButtonByTestId = page.getByTestId(
+    getAgentToolCatalogPillTestId(catalogItemName),
+  );
+  const pillButtonByRole = page.getByRole("button", {
+    name: new RegExp(escapeRegExp(catalogItemName)),
+  });
+
   await expect(searchInput).toBeVisible({ timeout: 10_000 });
   await searchInput.fill(catalogItemName);
 
@@ -116,29 +124,54 @@ async function openCatalogToolAssignment({
     ),
   );
 
+  type CatalogAssignmentState =
+    | "token-select"
+    | "pill-testid"
+    | "pill-role"
+    | "enabled"
+    | "disabled"
+    | "missing";
+  // Widen the literal initializer to the full union: TS narrows `let` vars
+  // initialized with a literal to that literal type and does not widen the
+  // narrowing when the variable is mutated only through a captured closure
+  // (like the expect.poll callback below). Casting the initializer prevents
+  // narrowing from the start so subsequent comparisons type-check correctly.
+  let catalogAssignmentState = "missing" as CatalogAssignmentState;
+
   await expect
     .poll(
       async () => {
+        if (await visibleTokenSelect.isVisible().catch(() => false)) {
+          catalogAssignmentState = "token-select";
+          return catalogAssignmentState;
+        }
+        if (await pillButtonByTestId.isVisible().catch(() => false)) {
+          catalogAssignmentState = "pill-testid";
+          return catalogAssignmentState;
+        }
+        if (await pillButtonByRole.isVisible().catch(() => false)) {
+          catalogAssignmentState = "pill-role";
+          return catalogAssignmentState;
+        }
         if (await enabledCatalogItem.isVisible().catch(() => false)) {
-          return "enabled";
+          catalogAssignmentState = "enabled";
+          return catalogAssignmentState;
         }
         if (await disabledCatalogItem.isVisible().catch(() => false)) {
-          return "disabled";
+          catalogAssignmentState = "disabled";
+          return catalogAssignmentState;
         }
-        return "missing";
+        catalogAssignmentState = "missing";
+        return catalogAssignmentState;
       },
       { timeout: 30_000, intervals: [500, 1000, 2000] },
     )
-    .toBe("enabled");
-  await enabledCatalogItem.click();
+    .not.toBe("missing");
 
-  const visibleTokenSelect = page.getByTestId(E2eTestId.TokenSelect).last();
-  const pillButtonByTestId = page.getByTestId(
-    getAgentToolCatalogPillTestId(catalogItemName),
-  );
-  const pillButtonByRole = page.getByRole("button", {
-    name: new RegExp(escapeRegExp(catalogItemName)),
-  });
+  if (catalogAssignmentState === "enabled") {
+    await enabledCatalogItem.click();
+    await page.keyboard.press("Escape");
+  }
 
   try {
     await expect(visibleTokenSelect).toBeVisible({ timeout: 5_000 });
@@ -162,9 +195,9 @@ async function openCatalogToolAssignment({
       .not.toBe("missing");
 
     if (await pillButtonByTestId.isVisible().catch(() => false)) {
-      await pillButtonByTestId.click();
+      await pillButtonByTestId.click({ force: true });
     } else if (await pillButtonByRole.isVisible().catch(() => false)) {
-      await pillButtonByRole.click();
+      await pillButtonByRole.click({ force: true });
     }
 
     await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });

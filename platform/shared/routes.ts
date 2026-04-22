@@ -11,6 +11,19 @@ export const RouteId = {
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
+  // Schedule Trigger Routes
+  GetScheduleTriggers: "getScheduleTriggers",
+  CreateScheduleTrigger: "createScheduleTrigger",
+  GetScheduleTrigger: "getScheduleTrigger",
+  UpdateScheduleTrigger: "updateScheduleTrigger",
+  DeleteScheduleTrigger: "deleteScheduleTrigger",
+  EnableScheduleTrigger: "enableScheduleTrigger",
+  DisableScheduleTrigger: "disableScheduleTrigger",
+  RunScheduleTriggerNow: "runScheduleTriggerNow",
+  GetScheduleTriggerRuns: "getScheduleTriggerRuns",
+  GetScheduleTriggerRun: "getScheduleTriggerRun",
+  CreateScheduleTriggerRunConversation: "createScheduleTriggerRunConversation",
+
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
@@ -303,6 +316,9 @@ export const RouteId = {
 
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
+
+  // Connection Settings Routes (organization-level)
+  UpdateConnectionSettings: "updateConnectionSettings",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",

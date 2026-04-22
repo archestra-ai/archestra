@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useFeature } from "@/lib/config/config.query";
 
 const { getTeams, getTeamVaultFolder } = archestraApiSdk;
 
@@ -49,6 +50,7 @@ export function useTeamsPaginated(params: TeamsPaginatedParams) {
  * Fetches teams first, then fetches vault folders for each team in parallel
  */
 export function useTeamsWithVaultFolders() {
+  const byosEnabled = useFeature("byosEnabled");
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
 
   const vaultFolderQueries = useQueries({
@@ -60,7 +62,7 @@ export function useTeamsWithVaultFolders() {
         });
         return { teamId: team.id, vaultPath: data?.vaultPath ?? null };
       },
-      enabled: !!teams,
+      enabled: byosEnabled && !!teams,
     })),
   });
 

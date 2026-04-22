@@ -1,125 +1,53 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
-import type { ArchitectureTabType } from "@/components/architecture-diagram/architecture-diagram";
-import { ConnectionOptions } from "@/components/connection-options";
-import { ExternalDocsLink } from "@/components/external-docs-link";
-import { PageLayout } from "@/components/page-layout";
-import { useDefaultLlmProxy, useDefaultMcpGateway } from "@/lib/agent.query";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import {
+  useDefaultLlmProxy,
+  useDefaultMcpGateway,
+  useProfile,
+} from "@/lib/agent.query";
+import { useOrganization } from "@/lib/organization.query";
+import { ConnectionFlow } from "./connection-flow";
+import { getShownProviders } from "./connection-flow.utils";
+import { ConnectionHero } from "./connection-hero";
+import { ExposedServersSummary } from "./exposed-servers-summary";
 
 export default function ConnectionPage() {
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const { data: defaultLlmProxy } = useDefaultLlmProxy();
+  const { data: organization } = useOrganization();
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab");
+  const urlGatewayId = searchParams.get("gatewayId");
 
-  const [activeTab, setActiveTab] = useState<ArchitectureTabType>(
-    tabParam === "mcp" ? "mcp" : tabParam === "a2a" ? "a2a" : "proxy",
-  );
-  const integrationGuides = [
-    {
-      href: getFrontendDocsUrl("platform-n8n-example"),
-      title: "N8N",
-      subtitle: "Workflow automation",
-    },
-    {
-      href: getFrontendDocsUrl("platform-vercel-ai-example"),
-      title: "Vercel AI SDK",
-      subtitle: "TypeScript framework",
-    },
-    {
-      href: getFrontendDocsUrl("platform-openwebui-example"),
-      title: "OpenWebUI",
-      subtitle: "Chat interface",
-    },
-    {
-      href: getFrontendDocsUrl("platform-pydantic-example"),
-      title: "Pydantic AI",
-      subtitle: "Python framework",
-    },
-    {
-      href: getFrontendDocsUrl("platform-quickstart"),
-      title: "More integrations",
-      subtitle: "View all guides",
-    },
-  ].filter(
-    (guide): guide is typeof guide & { href: string } => guide.href !== null,
-  );
-
-  useEffect(() => {
-    if (tabParam === "mcp" || tabParam === "proxy" || tabParam === "a2a") {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const adminDefaultMcpGatewayId =
+    organization?.connectionDefaultMcpGatewayId ?? null;
+  const adminDefaultLlmProxyId =
+    organization?.connectionDefaultLlmProxyId ?? null;
+  // Mirror the fallback chain ConnectionFlow uses for the MCP gateway so the
+  // Exposed Servers card reflects the same gateway the rest of the page is
+  // scoped to. URL param wins so deep links render the right servers.
+  const summaryGatewayId =
+    urlGatewayId ?? adminDefaultMcpGatewayId ?? defaultMcpGateway?.id ?? null;
+  const { data: summaryGateway } = useProfile(summaryGatewayId ?? undefined);
+  const hasMcps = (summaryGateway?.tools?.length ?? 0) > 0;
 
   return (
-    <PageLayout
-      title="Connect"
-      description="Choose how your apps connect to agents with LLM Proxy, MCP Gateway, or A2A."
-    >
-      <div className="space-y-8">
-        {/* Architecture & Connection */}
-        <div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            <div>
-              <ArchestraArchitectureDiagram
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-            </div>
-            <div>
-              <ConnectionOptions
-                mcpGatewayId={defaultMcpGateway?.id}
-                llmProxyId={defaultLlmProxy?.id}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Integration Guides */}
-        {integrationGuides.length > 0 && (
-          <div className="border-t pt-8">
-            <h2 className="text-lg font-medium mb-4">Integration Guides</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {integrationGuides.map((guide) => (
-                <ExternalDocsLink
-                  key={guide.title}
-                  href={guide.href}
-                  className="flex gap-2 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50 hover:no-underline"
-                  showIcon={false}
-                >
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">{guide.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {guide.subtitle}
-                    </div>
-                  </div>
-                  <svg
-                    className="w-4 h-4 text-muted-foreground"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    role="img"
-                    aria-label="Arrow icon"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </ExternalDocsLink>
-              ))}
-            </div>
-          </div>
+    <div className="mx-auto w-full max-w-[1680px] px-6 py-6">
+      <div className="mb-7 flex flex-col gap-5">
+        <ConnectionHero hasMcps={hasMcps} />
+        {summaryGatewayId && (
+          <ExposedServersSummary gatewayId={summaryGatewayId} />
         )}
       </div>
-    </PageLayout>
+
+      <ConnectionFlow
+        defaultMcpGatewayId={defaultMcpGateway?.id}
+        defaultLlmProxyId={defaultLlmProxy?.id}
+        adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
+        adminDefaultLlmProxyId={adminDefaultLlmProxyId}
+        shownClientIds={organization?.connectionShownClientIds ?? null}
+        shownProviders={getShownProviders(organization)}
+      />
+    </div>
   );
 }

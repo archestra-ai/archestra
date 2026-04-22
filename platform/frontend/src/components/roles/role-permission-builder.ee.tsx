@@ -8,6 +8,7 @@ import {
   resourceDescriptions,
   resourceLabels,
 } from "@shared";
+import { allAvailableActions } from "@shared/access-control";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,9 @@ const actionLabels: Record<Action, string> = {
   enable: "Enable",
   query: "Query",
 };
+
+const UNGRANTABLE_PERMISSION_TOOLTIP =
+  "You can only grant permissions that you currently have yourself.";
 
 export function RolePermissionBuilder({
   permission,
@@ -310,104 +314,121 @@ export function RolePermissionBuilder({
 
               {expandedCategories.has(category) && (
                 <div className="mt-2 space-y-2">
-                  {resources
-                    .filter((resource) => userPermissions[resource]) // Only show resources user has permission for
-                    .map((resource) => {
-                      const availableActions = userPermissions[resource] || [];
-                      const selectedActions = permission[resource] || [];
-                      const resourceCheckState =
-                        getResourceCheckState(resource);
-                      const isPartiallySelected =
-                        resourceCheckState === "indeterminate";
+                  {resources.map((resource) => {
+                    const availableActions = userPermissions[resource] || [];
+                    const allActions = allAvailableActions[resource] || [];
+                    const selectedActions = permission[resource] || [];
+                    const resourceCheckState = getResourceCheckState(resource);
+                    const isPartiallySelected =
+                      resourceCheckState === "indeterminate";
 
-                      return (
-                        <div
-                          key={resource}
-                          className="rounded-md border bg-card p-3"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                aria-label={`${
-                                  resourceLabels[resource] || resource
-                                } permissions`}
-                                id={`${resource}-all`}
-                                checked={resourceCheckState}
-                                disabled={readOnly}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    selectAllForResource(resource);
-                                  } else {
-                                    deselectAllForResource(resource);
-                                  }
-                                }}
-                                className={
-                                  isPartiallySelected ? "opacity-50" : ""
+                    return (
+                      <div
+                        key={resource}
+                        className="rounded-md border bg-card p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              aria-label={`${
+                                resourceLabels[resource] || resource
+                              } permissions`}
+                              id={`${resource}-all`}
+                              checked={resourceCheckState}
+                              disabled={readOnly}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  selectAllForResource(resource);
+                                } else {
+                                  deselectAllForResource(resource);
                                 }
-                              />
-                              <div>
-                                <Label
-                                  htmlFor={`${resource}-all`}
-                                  className="font-medium cursor-pointer"
-                                >
-                                  {resourceLabels[resource] || resource}
-                                  {isPartiallySelected && (
-                                    <span className="text-xs text-muted-foreground ml-1">
-                                      (Partial)
-                                    </span>
-                                  )}
-                                </Label>
-                                {resourceDescriptions[resource] && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {resourceDescriptions[resource]}
-                                  </p>
+                              }}
+                              className={
+                                isPartiallySelected ? "opacity-50" : ""
+                              }
+                            />
+                            <div>
+                              <Label
+                                htmlFor={`${resource}-all`}
+                                className="font-medium cursor-pointer"
+                              >
+                                {resourceLabels[resource] || resource}
+                                {isPartiallySelected && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    (Partial)
+                                  </span>
                                 )}
-                              </div>
+                              </Label>
+                              {resourceDescriptions[resource] && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {resourceDescriptions[resource]}
+                                </p>
+                              )}
                             </div>
-                            {selectedActions.length > 0 && (
-                              <span className="text-xs text-muted-foreground">
-                                {selectedActions.length}/
-                                {availableActions.length}
-                              </span>
-                            )}
                           </div>
-
-                          <Separator className="my-3" />
-
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                            {availableActions.map((action) => {
-                              const isSelected =
-                                selectedActions.includes(action);
-
-                              return (
-                                <div
-                                  key={action}
-                                  className="flex items-center gap-2"
-                                >
-                                  <Checkbox
-                                    id={`${resource}-${action}`}
-                                    checked={isSelected}
-                                    disabled={readOnly}
-                                    onCheckedChange={() => {
-                                      toggleAction(resource, action);
-                                    }}
-                                  />
-                                  <Label
-                                    htmlFor={`${resource}-${action}`}
-                                    className="text-sm cursor-pointer"
-                                  >
-                                    {actionLabels[action]}
-                                    {isSelected && (
-                                      <Check className="ml-1 inline h-3 w-3" />
-                                    )}
-                                  </Label>
-                                </div>
-                              );
-                            })}
-                          </div>
+                          {selectedActions.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {selectedActions.length}/{availableActions.length}
+                            </span>
+                          )}
                         </div>
-                      );
-                    })}
+
+                        <Separator className="my-3" />
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                          {allActions.map((action) => {
+                            const isSelected = selectedActions.includes(action);
+                            const canGrantAction =
+                              availableActions.includes(action);
+                            const shouldDisableAction =
+                              readOnly || (!canGrantAction && !isSelected);
+
+                            return (
+                              <div
+                                key={action}
+                                className="flex items-center gap-2"
+                              >
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox
+                                        id={`${resource}-${action}`}
+                                        checked={isSelected}
+                                        disabled={shouldDisableAction}
+                                        onCheckedChange={() => {
+                                          toggleAction(resource, action);
+                                        }}
+                                      />
+                                      <Label
+                                        htmlFor={`${resource}-${action}`}
+                                        className={`text-sm ${
+                                          shouldDisableAction
+                                            ? "cursor-not-allowed text-muted-foreground"
+                                            : "cursor-pointer"
+                                        }`}
+                                      >
+                                        {actionLabels[action]}
+                                        {isSelected && (
+                                          <Check className="ml-1 inline h-3 w-3" />
+                                        )}
+                                      </Label>
+                                    </div>
+                                  </TooltipTrigger>
+                                  {shouldDisableAction &&
+                                    !readOnly &&
+                                    !canGrantAction && (
+                                      <TooltipContent>
+                                        {UNGRANTABLE_PERMISSION_TOOLTIP}
+                                      </TooltipContent>
+                                    )}
+                                </Tooltip>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </Card>

@@ -93,6 +93,26 @@ describe("SessionModel", () => {
   });
 
   describe("deleteAllByUserId", () => {
+    test("should delete a session by ID", async () => {
+      await SessionModel.deleteById(testSessionId);
+
+      const deletedSession = await SessionModel.getById(testSessionId);
+      expect(deletedSession).toHaveLength(0);
+
+      const otherUserSessions = await SessionModel.getByUserId(testUser2Id);
+      expect(otherUserSessions).toHaveLength(1);
+      expect(otherUserSessions[0]?.id).toBe(testSession3Id);
+    });
+
+    test("should handle non-existent session ID gracefully", async () => {
+      await expect(
+        SessionModel.deleteById(crypto.randomUUID()),
+      ).resolves.not.toThrow();
+
+      const existingSessions = await SessionModel.getAll();
+      expect(existingSessions).toHaveLength(3);
+    });
+
     test("should delete all sessions for a user", async () => {
       // Verify sessions exist before deletion
       const sessionsBefore = await SessionModel.getByUserId(testUserId);

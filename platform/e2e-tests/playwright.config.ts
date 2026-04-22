@@ -9,6 +9,7 @@ const projectNames = {
   setupUsers: "setup-users",
   setupTeams: "setup-teams",
   credentialsWithVault: "credentials-with-vault",
+  quickstart: "quickstart",
   chromium: "chromium",
   firefox: "firefox",
   webkit: "webkit",
@@ -25,12 +26,57 @@ const testPatterns = {
   adminSetup: /auth\.admin\.setup\.ts/,
   usersSetup: /auth\.users\.setup\.ts/,
   teamsSetup: /auth\.teams\.setup\.ts/,
+  quickstart: "**/quickstart.spec.ts",
   // Special test files that need isolated execution
-  credentialsWithVault: /credentials-with-vault\.ee\.spec\.ts/,
-  identityProviders: /identity-providers\.ee\.spec\.ts/,
+  credentialsWithVault: "**/credentials-with-vault.ee.spec.ts",
+  identityProviders: "**/identity-providers.ee.spec.ts",
   // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
-  vaultK8s: /vault-k8s-startup\.spec\.ts/,
+  vaultK8s: "**/vault-k8s-startup.spec.ts",
+  llmProxy: "**/llm-proxy/**/*.spec.ts",
 };
+
+const uiTestMatch = [
+  "**/agents.spec.ts",
+  "**/auth-origin.spec.ts",
+  "**/auth-redirect.spec.ts",
+  "**/auth.spec.ts",
+  "**/chat-auth-required.spec.ts",
+  "**/chat-localstorage.spec.ts",
+  "**/chat.spec.ts",
+  "**/credentials-with-vault.ee.spec.ts",
+  "**/dynamic-credentials.spec.ts",
+  "**/identity-providers.ee.spec.ts",
+  "**/invitation.spec.ts",
+  "**/llm-provider-api-keys.spec.ts",
+  "**/mcp-install.spec.ts",
+  "**/quickstart.spec.ts",
+  "**/static-credentials-management.spec.ts",
+  "**/test-mcp-server.spec.ts",
+  "**/virtual-api-keys.spec.ts",
+];
+
+const apiTestMatch = [
+  "**/built-in-agents.spec.ts",
+  "**/chat-api.spec.ts",
+  "**/custom-yaml-restart.spec.ts",
+  "**/image-pull-secrets.spec.ts",
+  "**/mcp-enterprise-managed.ee.spec.ts",
+  "**/mcp-gateway-auth-at-call-time.spec.ts",
+  "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",
+  "**/mcp-gateway-jwks.ee.spec.ts",
+  "**/mcp-gateway-jwt-propagation.ee.spec.ts",
+  "**/oauth-self-hosted.spec.ts",
+  "**/orchestrator.spec.ts",
+  "**/ssrf-protection.spec.ts",
+  "**/vault-k8s-startup.spec.ts",
+  testPatterns.llmProxy,
+];
+
+const quickstartTestMatch = [
+  "**/auth-origin.spec.ts",
+  "**/mcp-install.spec.ts",
+  "**/quickstart.spec.ts",
+];
 
 /**
  * Tests to ignore in standard browser projects (chromium, firefox, webkit).
@@ -39,7 +85,8 @@ const testPatterns = {
 const browserTestIgnore = [
   testPatterns.credentialsWithVault,
   testPatterns.identityProviders,
-  testPatterns.vaultK8s,
+  testPatterns.quickstart,
+  testPatterns.llmProxy,
 ];
 
 /**
@@ -119,7 +166,17 @@ export default defineConfig({
     {
       name: projectNames.credentialsWithVault,
       testMatch: testPatterns.credentialsWithVault,
-      testDir: "./tests/ui",
+      testDir: "./tests",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    {
+      name: projectNames.quickstart,
+      testDir: "./tests",
+      testMatch: quickstartTestMatch,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,
@@ -129,7 +186,8 @@ export default defineConfig({
     // Main UI tests on Chrome
     {
       name: projectNames.chromium,
-      testDir: "./tests/ui",
+      testDir: "./tests",
+      testMatch: uiTestMatch,
       testIgnore: browserTestIgnore,
       use: {
         ...devices["Desktop Chrome"],
@@ -140,7 +198,8 @@ export default defineConfig({
     // Firefox tests - only runs tests tagged with @firefox
     {
       name: projectNames.firefox,
-      testDir: "./tests/ui",
+      testDir: "./tests",
+      testMatch: uiTestMatch,
       testIgnore: browserTestIgnore,
       use: {
         ...devices["Desktop Firefox"],
@@ -152,7 +211,8 @@ export default defineConfig({
     // WebKit tests - only runs tests tagged with @webkit
     {
       name: projectNames.webkit,
-      testDir: "./tests/ui",
+      testDir: "./tests",
+      testMatch: uiTestMatch,
       testIgnore: browserTestIgnore,
       use: {
         ...devices["Desktop Safari"],
@@ -164,7 +224,7 @@ export default defineConfig({
     // Identity provider tests - manipulate shared backend state, authenticate fresh each test
     {
       name: projectNames.identityProviders,
-      testDir: "./tests/ui",
+      testDir: "./tests",
       testMatch: testPatterns.identityProviders,
       use: {
         ...devices["Desktop Chrome"],
@@ -175,7 +235,8 @@ export default defineConfig({
     // API integration tests
     {
       name: projectNames.api,
-      testDir: "./tests/api",
+      testDir: "./tests",
+      testMatch: apiTestMatch,
       testIgnore: [testPatterns.vaultK8s],
       use: {
         ...devices["Desktop Chrome"],
@@ -187,7 +248,7 @@ export default defineConfig({
     {
       name: projectNames.vaultK8s,
       testMatch: testPatterns.vaultK8s,
-      testDir: "./tests/api",
+      testDir: "./tests",
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

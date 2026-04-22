@@ -38,9 +38,9 @@ export type ResolvedChatModelState = {
 
 export type CreateConversationInput = {
   agentId: string;
-  selectedModel: string;
-  selectedProvider: SupportedProvider | undefined;
-  chatApiKeyId: string | null;
+  selectedModel?: string;
+  selectedProvider?: SupportedProvider;
+  chatApiKeyId?: string | null;
 };
 
 export function resolveInitialAgentState(params: {
@@ -140,18 +140,22 @@ export function buildCreateConversationInput(params: {
   chatApiKeyId: string | null;
   chatModels: LlmModel[];
 }): CreateConversationInput | null {
-  if (!params.agentId || !params.modelId) {
+  if (!params.agentId) {
     return null;
   }
 
+  const selectedProvider = params.modelId
+    ? getProviderForModelId({
+        modelId: params.modelId,
+        chatModels: params.chatModels,
+      })
+    : undefined;
+
   return {
     agentId: params.agentId,
-    selectedModel: params.modelId,
-    selectedProvider: getProviderForModelId({
-      modelId: params.modelId,
-      chatModels: params.chatModels,
-    }),
-    chatApiKeyId: params.chatApiKeyId,
+    selectedModel: params.modelId || undefined,
+    selectedProvider,
+    chatApiKeyId: params.chatApiKeyId ?? undefined,
   };
 }
 

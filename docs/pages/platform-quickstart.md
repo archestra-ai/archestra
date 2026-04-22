@@ -51,7 +51,7 @@ Once it's up, follow http://localhost:3000
 4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.
 5. Go to **Settings -> LLM API Keys** and add your preferred provider. You can connect commercial providers like OpenAI, Anthropic, or Google Gemini. For a free option, use [Cerebras](https://cerebras.ai/) or a local [Ollama](https://ollama.com/) instance.
 6. Go to **Chat**, choose the "Archestra Docs Reader Agent" and ask "How could I deploy Archestra?"
-   ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.png)
+   ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.webp)
 7. Enjoy Archestra navigating the website for you!
 
 ## Connect to Your Agent via MCP Gateway `Advanced`
@@ -80,7 +80,7 @@ graph LR
     "archestra": {
       "url": "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d",
       "headers": {
-        "Authorization": "Bearer archestra_119220a7bfc485d66b678d3e9fb2db36"
+        "Authorization": "Bearer arch_119220a7bfc485d66b678d3e9fb2db36"
       }
     }
   }
@@ -90,7 +90,7 @@ graph LR
 I converted it to the command for claude:
 
 ```
-claude mcp add archestra "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d" --transport http --header "Authorization: Bearer archestra_119220a7bfc485d66b678d3e9fb2db36"
+claude mcp add archestra "http://localhost:9000/v1/mcp/e1b0272c-3839-4575-a49d-aabb864d638d" --transport http --header "Authorization: Bearer arch_119220a7bfc485d66b678d3e9fb2db36"
 ```
 
 Now ask Claude:

@@ -5,6 +5,7 @@ import { PostHogProvider } from "posthog-js/react";
 import { useEffect, useRef } from "react";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config/config";
+import { usePublicConfig } from "@/lib/config/config.query";
 
 export function PostHogProviderWrapper({
   children,
@@ -13,6 +14,8 @@ export function PostHogProviderWrapper({
 }) {
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
+  const { data: publicConfig, isLoading: isPublicConfigLoading } =
+    usePublicConfig();
   const hasIdentifiedUserRef = useRef(false);
   const isPostHogInitializedRef = useRef(false);
   const lastIdentifiedUserIdRef = useRef<string | null>(null);
@@ -21,20 +24,24 @@ export function PostHogProviderWrapper({
   const userName = session?.user?.name;
 
   useEffect(() => {
-    const {
-      enabled: analyticsEnabled,
-      token,
-      config: posthogConfig,
-    } = config.posthog;
+    const analytics = publicConfig?.analytics;
 
-    if (analyticsEnabled) {
-      posthog.init(token, posthogConfig);
+    if (
+      !isPublicConfigLoading &&
+      analytics?.enabled &&
+      analytics.posthog.key &&
+      !isPostHogInitializedRef.current
+    ) {
+      posthog.init(analytics.posthog.key, {
+        ...config.posthog.config,
+        api_host: analytics.posthog.host,
+      });
       isPostHogInitializedRef.current = true;
     }
-  }, []);
+  }, [isPublicConfigLoading, publicConfig]);
 
   useEffect(() => {
-    const analyticsEnabled = config.posthog.enabled;
+    const analyticsEnabled = publicConfig?.analytics?.enabled;
     if (
       !analyticsEnabled ||
       !isPostHogInitializedRef.current ||
@@ -60,7 +67,7 @@ export function PostHogProviderWrapper({
       hasIdentifiedUserRef.current = false;
       lastIdentifiedUserIdRef.current = null;
     }
-  }, [isSessionPending, userEmail, userId, userName]);
+  }, [isSessionPending, publicConfig, userEmail, userId, userName]);
 
   return <PostHogProvider client={posthog}>{children}</PostHogProvider>;
 }

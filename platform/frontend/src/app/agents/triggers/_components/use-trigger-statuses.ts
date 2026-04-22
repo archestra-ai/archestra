@@ -1,3 +1,4 @@
+import { useInternalAgents } from "@/lib/agent.query";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useIncomingEmailStatus } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
@@ -12,6 +13,9 @@ export function useTriggerStatuses() {
     useIncomingEmailStatus();
   const { data: chatApiKeys = [], isLoading: apiKeysLoading } =
     useLlmProviderApiKeys();
+  const { data: internalAgents, isLoading: agentsLoading } = useInternalAgents({
+    enabled: true,
+  });
 
   const hasLlmKey = chatApiKeys.length > 0;
   const ngrokDomain = configData?.features.ngrokDomain;
@@ -35,10 +39,15 @@ export function useTriggerStatuses() {
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
 
+  // A2A surfaces existing agents over the A2A protocol — no provider config
+  // step, so it's "active" whenever there's at least one agent to expose.
+  const a2aActive = (internalAgents?.length ?? 0) > 0;
+
   const triggers = [
     { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
     { active: slackActive, href: "/agents/triggers/slack" },
     { active: emailActive, href: "/agents/triggers/email" },
+    { active: a2aActive, href: "/agents/triggers/a2a" },
   ] as const;
   const firstActiveHref =
     triggers.find((t) => t.active)?.href ?? triggers[0].href;
@@ -47,8 +56,13 @@ export function useTriggerStatuses() {
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
+    a2a: a2aActive,
     firstActiveHref,
     isLoading:
-      chatOpsLoading || featuresLoading || emailLoading || apiKeysLoading,
+      chatOpsLoading ||
+      featuresLoading ||
+      emailLoading ||
+      apiKeysLoading ||
+      agentsLoading,
   };
 }

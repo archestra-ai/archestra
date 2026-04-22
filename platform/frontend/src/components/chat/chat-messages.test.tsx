@@ -88,6 +88,14 @@ vi.mock("@/components/chat/auth-required-tool", () => ({
   ),
 }));
 
+vi.mock("@/components/chat/assigned-credential-unavailable-tool", () => ({
+  AssignedCredentialUnavailableTool: ({
+    catalogName,
+  }: {
+    catalogName: string;
+  }) => <div>assigned-credential-unavailable:{catalogName}</div>,
+}));
+
 vi.mock("@/components/chat/expired-auth-tool", () => ({
   ExpiredAuthTool: ({
     catalogName,
@@ -692,6 +700,50 @@ describe("ChatMessages", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText("tool-id-jag_test__get_server_info"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders structured assigned-credential-unavailable tool output as config error UI", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-githubcopilot__remote-mcp__issue_write",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: {
+              isError: true,
+              _meta: {
+                archestraError: {
+                  type: "assigned_credential_unavailable",
+                  message: "Assigned credential unavailable",
+                  catalogId: "cat_abc",
+                  catalogName: "githubcopilot__remote-mcp",
+                },
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "assigned-credential-unavailable:githubcopilot__remote-mcp",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("tool-githubcopilot__remote-mcp__issue_write"),
     ).not.toBeInTheDocument();
   });
 

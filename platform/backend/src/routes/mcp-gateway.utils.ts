@@ -11,7 +11,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-  ARCHESTRA_TOKEN_PREFIX,
+  hasArchestraTokenPrefix,
   isAgentTool,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
@@ -328,6 +328,7 @@ export async function createAgentServer(
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
+                userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
               });
@@ -581,7 +582,7 @@ export function extractPassthroughHeaders(
 }
 
 /**
- * Validate an archestra_ prefixed token for a specific profile
+ * Validate a platform-managed token for a specific profile
  * Returns token auth info if valid, null otherwise
  *
  * Validates that:
@@ -908,7 +909,7 @@ export async function validateMCPGatewayToken(
     };
 
   // Try external IdP JWKS validation first (if profile has an IdP configured)
-  if (!tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (!hasArchestraTokenPrefix(tokenValue)) {
     const externalIdpResult = await validateExternalIdpToken(
       profileId,
       tokenValue,
@@ -919,7 +920,7 @@ export async function validateMCPGatewayToken(
     }
   }
 
-  if (tokenValue.startsWith(ARCHESTRA_TOKEN_PREFIX)) {
+  if (hasArchestraTokenPrefix(tokenValue)) {
     const resolvedToken = await resolveArchestraToken(
       tokenValue,
       tokenHashes.rawTokenHash,

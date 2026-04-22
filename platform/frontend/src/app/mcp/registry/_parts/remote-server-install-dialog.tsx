@@ -36,6 +36,7 @@ type UserConfigType = Record<
     type: "string" | "number" | "boolean" | "directory" | "file";
     title: string;
     description: string;
+    promptOnInstallation?: boolean;
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     multiple?: boolean;
@@ -100,6 +101,11 @@ export function RemoteServerInstallDialog({
   const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
+  const userConfig =
+    (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
+  const hasPromptSensitiveFields = Object.values(userConfig).some(
+    (config) => config.sensitive && config.promptOnInstallation !== false,
+  );
 
   // Helper to update vault secret for a specific field
   const updateVaultSecret = (
@@ -133,21 +139,22 @@ export function RemoteServerInstallDialog({
     setVaultSecrets({});
   };
 
-  // Show vault selector when BYOS is enabled (for both personal and team installations)
-  const useVaultSecrets = byosEnabled;
+  // Show vault selector only when BYOS is enabled and sensitive fields exist.
+  const useVaultSecrets = byosEnabled && hasPromptSensitiveFields;
 
   const handleConfirm = async () => {
     if (!catalogItem) {
       return;
     }
 
-    const userConfig =
-      (catalogItem.userConfig as UserConfigType | null | undefined) || {};
-
     try {
       const metadata: Record<string, unknown> = {};
 
       for (const [fieldName, fieldConfig] of Object.entries(userConfig)) {
+        if (fieldConfig.promptOnInstallation === false) {
+          continue;
+        }
+
         // For BYOS mode, sensitive fields use vault references
         if (useVaultSecrets && fieldConfig.sensitive) {
           const vaultRef = vaultSecrets[fieldName];
@@ -202,18 +209,23 @@ export function RemoteServerInstallDialog({
     return null;
   }
 
-  const userConfig =
-    (catalogItem.userConfig as UserConfigType | null | undefined) || {};
-  const hasConfig = Object.keys(userConfig).length > 0;
+  const promptableUserConfig = Object.fromEntries(
+    Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
+      return fieldConfig.promptOnInstallation !== false;
+    }),
+  );
+  const hasConfig = Object.keys(promptableUserConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
+  const usesBrowserOAuth =
+    catalogItem.oauthConfig?.grant_type !== "client_credentials";
 
   // Get sensitive and non-sensitive required fields
-  const sensitiveRequiredFields = Object.entries(userConfig).filter(
+  const sensitiveRequiredFields = Object.entries(promptableUserConfig).filter(
     ([_, cfg]) => cfg.required && cfg.sensitive,
   );
-  const nonSensitiveRequiredFields = Object.entries(userConfig).filter(
-    ([_, cfg]) => cfg.required && !cfg.sensitive,
-  );
+  const nonSensitiveRequiredFields = Object.entries(
+    promptableUserConfig,
+  ).filter(([_, cfg]) => cfg.required && !cfg.sensitive);
 
   // Check if non-sensitive required fields are valid (always need manual input)
   const isNonSensitiveValid = nonSensitiveRequiredFields.every(([fieldName]) =>
@@ -328,7 +340,7 @@ export function RemoteServerInstallDialog({
         </div>
       )}
 
-      {canInstall && hasOAuth && (
+      {canInstall && hasOAuth && usesBrowserOAuth && (
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
@@ -338,98 +350,111 @@ export function RemoteServerInstallDialog({
         </Alert>
       )}
 
+      {canInstall && hasOAuth && !usesBrowserOAuth && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            This server uses shared OAuth client credentials. The values below
+            are stored with the installation, and {catalogItem.name} will fetch
+            short-lived bearer tokens automatically when tools run.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Config fields - always show when config exists */}
       {canInstall && hasConfig && (
         <div className="space-y-4">
-          {Object.entries(userConfig).map(([fieldName, fieldConfig]) => (
-            <div key={fieldName} className="grid gap-2">
-              {fieldConfig.type === "boolean" ? (
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id={fieldName}
-                    checked={configValues[fieldName] === "true"}
-                    onCheckedChange={(checked) =>
-                      setConfigValues((prev) => ({
-                        ...prev,
-                        [fieldName]: checked ? "true" : "false",
-                      }))
-                    }
-                  />
-                  <Label htmlFor={fieldName} className="cursor-pointer">
+          {Object.entries(promptableUserConfig).map(
+            ([fieldName, fieldConfig]) => (
+              <div key={fieldName} className="grid gap-2">
+                {fieldConfig.type === "boolean" ? (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={fieldName}
+                      checked={configValues[fieldName] === "true"}
+                      onCheckedChange={(checked) =>
+                        setConfigValues((prev) => ({
+                          ...prev,
+                          [fieldName]: checked ? "true" : "false",
+                        }))
+                      }
+                    />
+                    <Label htmlFor={fieldName} className="cursor-pointer">
+                      {fieldConfig.title}
+                      {fieldConfig.required && (
+                        <span className="text-red-500"> *</span>
+                      )}
+                    </Label>
+                  </div>
+                ) : (
+                  <Label htmlFor={fieldName}>
                     {fieldConfig.title}
                     {fieldConfig.required && (
                       <span className="text-red-500"> *</span>
                     )}
                   </Label>
-                </div>
-              ) : (
-                <Label htmlFor={fieldName}>
-                  {fieldConfig.title}
-                  {fieldConfig.required && (
-                    <span className="text-red-500"> *</span>
-                  )}
-                </Label>
-              )}
-              {fieldConfig.description && (
-                <p className="text-xs text-muted-foreground">
-                  <LinkifiedText>{fieldConfig.description}</LinkifiedText>
-                </p>
-              )}
+                )}
+                {fieldConfig.description && (
+                  <p className="text-xs text-muted-foreground">
+                    <LinkifiedText>{fieldConfig.description}</LinkifiedText>
+                  </p>
+                )}
 
-              {/* BYOS mode: vault selector for sensitive fields */}
-              {fieldConfig.type === "boolean" ? null : fieldConfig.sensitive &&
-                useVaultSecrets ? (
-                <Suspense
-                  fallback={
-                    <div className="text-sm text-muted-foreground">
-                      Loading...
-                    </div>
-                  }
-                >
-                  <InlineVaultSecretSelector
-                    teamId={vaultTeamId}
-                    selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
-                    selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
-                    onSecretPathChange={(path) =>
-                      updateVaultSecret(fieldName, "path", path)
+                {/* BYOS mode: vault selector for sensitive fields */}
+                {fieldConfig.type ===
+                "boolean" ? null : fieldConfig.sensitive && useVaultSecrets ? (
+                  <Suspense
+                    fallback={
+                      <div className="text-sm text-muted-foreground">
+                        Loading...
+                      </div>
                     }
-                    onSecretKeyChange={(key) =>
-                      updateVaultSecret(fieldName, "key", key)
+                  >
+                    <InlineVaultSecretSelector
+                      teamId={vaultTeamId}
+                      selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
+                      selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
+                      onSecretPathChange={(path) =>
+                        updateVaultSecret(fieldName, "path", path)
+                      }
+                      onSecretKeyChange={(key) =>
+                        updateVaultSecret(fieldName, "key", key)
+                      }
+                      disabled={isInstalling}
+                      noTeamMessage={
+                        credentialType === "personal"
+                          ? "Select a vault folder to pull secrets from"
+                          : undefined
+                      }
+                    />
+                  </Suspense>
+                ) : (
+                  <Input
+                    id={fieldName}
+                    type={
+                      fieldConfig.sensitive
+                        ? "password"
+                        : fieldConfig.type === "number"
+                          ? "number"
+                          : "text"
                     }
-                    disabled={isInstalling}
-                    noTeamMessage={
-                      credentialType === "personal"
-                        ? "Select a vault folder to pull secrets from"
-                        : undefined
+                    placeholder={
+                      fieldConfig.default?.toString() || fieldConfig.description
                     }
+                    value={configValues[fieldName] || ""}
+                    onChange={(e) =>
+                      setConfigValues((prev) => ({
+                        ...prev,
+                        [fieldName]: e.target.value,
+                      }))
+                    }
+                    min={fieldConfig.min}
+                    max={fieldConfig.max}
                   />
-                </Suspense>
-              ) : (
-                <Input
-                  id={fieldName}
-                  type={
-                    fieldConfig.sensitive
-                      ? "password"
-                      : fieldConfig.type === "number"
-                        ? "number"
-                        : "text"
-                  }
-                  placeholder={
-                    fieldConfig.default?.toString() || fieldConfig.description
-                  }
-                  value={configValues[fieldName] || ""}
-                  onChange={(e) =>
-                    setConfigValues((prev) => ({
-                      ...prev,
-                      [fieldName]: e.target.value,
-                    }))
-                  }
-                  min={fieldConfig.min}
-                  max={fieldConfig.max}
-                />
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            ),
+          )}
         </div>
       )}
 

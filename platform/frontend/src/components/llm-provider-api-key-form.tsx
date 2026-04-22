@@ -70,6 +70,7 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: string;
     consoleName: string;
     description?: string;
+    baseUrlRequired?: boolean;
   }
 > = {
   anthropic: {
@@ -188,10 +189,11 @@ const PROVIDER_CONFIG: Record<
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",
-    placeholder: "Bearer token...",
+    placeholder: "Bedrock API key (bedrock-api-key-... / ABSK...)",
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
+    baseUrlRequired: true,
   },
   minimax: {
     name: "MiniMax",
@@ -274,6 +276,9 @@ export function LlmProviderApiKeyForm({
   const hasApiKeyChanged =
     apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
   const providerConfig = PROVIDER_CONFIG[provider];
+  const isBaseUrlRequired =
+    providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+
   const allowedProviderSet = useMemo(
     () =>
       new Set<CreateLlmProviderApiKeyBody["provider"]>(
@@ -611,9 +616,11 @@ export function LlmProviderApiKeyForm({
         <div className="space-y-2">
           <Label htmlFor="llm-provider-api-key-base-url">
             Base URL{" "}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
+            {!isBaseUrlRequired && (
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            )}
           </Label>
           <p className="text-xs text-muted-foreground">
             Override the default API endpoint. Useful for self-hosted or proxy
@@ -631,6 +638,9 @@ export function LlmProviderApiKeyForm({
             {...form.register("baseUrl", {
               validate: (value) => {
                 if (!value) {
+                  if (isBaseUrlRequired) {
+                    return "Base URL is required for this provider";
+                  }
                   return true;
                 }
 

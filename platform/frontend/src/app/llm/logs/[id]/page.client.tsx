@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  calculateCostSavings,
+  DynamicInteraction,
+} from "@shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -20,10 +24,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInteraction } from "@/lib/interactions/interaction.query";
-import {
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@/lib/interactions/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
 export function ChatPage({

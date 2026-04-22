@@ -8,6 +8,7 @@ import {
   test,
 } from "@/test";
 import {
+  getAnalyticsConfig,
   getCorsOrigins,
   getDatabaseUrl,
   getOtelExporterOtlpEndpoint,
@@ -35,6 +36,46 @@ vi.mock("./logging", () => ({
 }));
 
 import logger from "./logging";
+
+describe("getAnalyticsConfig", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_ANALYTICS;
+    delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY;
+    delete process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("uses the default PostHog analytics config", () => {
+    expect(getAnalyticsConfig()).toEqual({
+      enabled: true,
+      posthog: {
+        key: expect.stringMatching(/^phc_/),
+        host: "https://eu.i.posthog.com",
+      },
+    });
+  });
+
+  test("uses custom PostHog analytics env vars", () => {
+    process.env.ARCHESTRA_ANALYTICS = "disabled";
+    process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY = " ph_custom ";
+    process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST =
+      " https://posthog.example.com ";
+
+    expect(getAnalyticsConfig()).toEqual({
+      enabled: false,
+      posthog: {
+        key: "ph_custom",
+        host: "https://posthog.example.com",
+      },
+    });
+  });
+});
 
 describe("getDatabaseUrl", () => {
   const originalEnv = process.env;

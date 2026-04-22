@@ -1,0 +1,85 @@
+name: Merge EXTERNAL_CONTRIBUTORS file
+
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - 'EXTERNAL_CONTRIBUTORS.md'
+
+# No top-level permissions; grant only at job level where needed.
+permissions: {}
+
+concurrency:
+  group: merge-external-contributors
+  cancel-in-progress: false
+
+jobs:
+  merge-external-contributors:
+    name: Merge EXTERNAL_CONTRIBUTORS file
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.user.login == 'archestra-contributor-pr-bot[bot]'
+      && startsWith(github.head_ref, 'contributor/')
+    permissions:
+      contents: write # fetch PR refs for diff validation
+      pull-requests: write # approve and merge the PR
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate PR
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Verify only EXTERNAL_CONTRIBUTORS.md is changed
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF...origin/$HEAD_REF")
+          if [ "$CHANGED_FILES" != "EXTERNAL_CONTRIBUTORS.md" ]; then
+            echo "::error::PR changes files other than EXTERNAL_CONTRIBUTORS.md: $CHANGED_FILES"
+            exit 1
+          fi
+
+          # Verify only one line was added and nothing removed
+          DIFF=$(git diff "origin/$BASE_REF...origin/$HEAD_REF" -- EXTERNAL_CONTRIBUTORS.md)
+          ADDED=$(echo "$DIFF" | grep -c '^+[^+]' || true)
+          REMOVED=$(echo "$DIFF" | grep -c '^-[^-]' || true)
+
+          if [ "$REMOVED" -ne 0 ]; then
+            echo "::error::PR removes lines from EXTERNAL_CONTRIBUTORS.md"
+            exit 1
+          fi
+
+          if [ "$ADDED" -ne 1 ]; then
+            echo "::error::PR must add exactly one line, found $ADDED"
+            exit 1
+          fi
+
+          # Verify the added line matches expected format: - @username
+          ADDED_LINE=$(echo "$DIFF" | grep '^+[^+]' | sed 's/^+//')
+          if ! echo "$ADDED_LINE" | grep -qE '^- @[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'; then
+            echo "::error::Added line doesn't match expected format '- @username': $ADDED_LINE"
+            exit 1
+          fi
+
+          echo "Validation passed: adding $ADDED_LINE"
+
+      - name: Generate token
+        id: generate-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.ARCHESTRA_MERGE_EXTERNAL_CONTRIBUTORS_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_MERGE_EXTERNAL_CONTRIBUTORS_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Update PR branch
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr update-branch "$PR_NUMBER" || true
+
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR_NUMBER" --squash --admin

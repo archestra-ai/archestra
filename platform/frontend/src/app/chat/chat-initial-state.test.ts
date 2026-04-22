@@ -135,6 +135,22 @@ describe("buildCreateConversationInput", () => {
     });
   });
 
+  test("builds a minimal payload when model selectors are unavailable", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "",
+        chatApiKeyId: null,
+        chatModels: [],
+      }),
+    ).toEqual({
+      agentId: "agent-1",
+      selectedModel: undefined,
+      selectedProvider: undefined,
+      chatApiKeyId: undefined,
+    });
+  });
+
   test("returns null when the initial selection is incomplete", () => {
     expect(
       buildCreateConversationInput({

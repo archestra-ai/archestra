@@ -9,8 +9,8 @@ import {
   useState,
 } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import { Response } from "@/components/ai-elements/response";
 import { MessageActions } from "@/components/chat/message-actions";
+import { UserMessageText } from "@/components/chat/user-message-text";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -18,7 +18,6 @@ import {
   isCsvAttachment,
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
-import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
@@ -248,7 +247,7 @@ export function EditableUserMessage({
         {/* Text message bubble - only show if there's text */}
         {text && (
           <MessageContent>
-            <Response>{preserveNewlines(text)}</Response>
+            <UserMessageText text={text} />
           </MessageContent>
         )}
         {/* Actions below the message - only show edit for messages with text */}

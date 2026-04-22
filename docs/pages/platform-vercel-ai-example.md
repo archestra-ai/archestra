@@ -143,22 +143,22 @@ Also by default, if your context was exposed to untrusted information, any subse
 
 This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the context is untrusted
 
-![Add Tool Call Policy](/docs/platfrom/add-tool-call-policy.png)
+![Add Tool Call Policy](/docs/platfrom/add-tool-call-policy.webp)
 
 I.e. we can always allow \`fetch\` to open \`[google.com](http://google.com)\`, even if the context \_might\_ have a prompt injection and is untrusted
 
 Also we can add a rule to what to consider as untrusted content. E.g. in Tool Result Policies, if we know that we queried our corporate website, we know that we the result will be trusted, and therefore, tool calling would still be allowed:
 
-![Add Tool Result Policy](/docs/platfrom/add-tool-result-policy.png)
+![Add Tool Result Policy](/docs/platfrom/add-tool-result-policy.webp)
 
 The decision tree for Archestra would be:
 
-![Archestra Decision Tree](/docs/platfrom/archestra-decision-tree.png)
+![Archestra Decision Tree](/docs/platfrom/archestra-decision-tree.webp)
 
 ## All Set
 
 Now you are safe from Lethal Trifecta type attacks and prompt injections cannot influence your agent. Following the example from the [Problem section](#problem), Archestra would block any subsequent tool calls if the context is marked as untrusted.
 
-![Policy Get File](/docs/platfrom/policy-get_file.png)
+![Policy Get File](/docs/platfrom/policy-get_file.webp)
 
-![Tool blocked](/docs/platfrom/tool-blocked.png)
+![Tool blocked](/docs/platfrom/tool-blocked.webp)

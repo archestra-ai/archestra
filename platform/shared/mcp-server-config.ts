@@ -1,33 +1,72 @@
 import { z } from "zod";
 
-export const OAuthConfigSchema = z.object({
-  name: z.string(),
-  server_url: z.string(),
-  auth_server_url: z.string().optional(),
-  resource_metadata_url: z.string().optional(),
-  client_id: z.string(),
-  client_secret: z.string().optional(),
-  redirect_uris: z.array(z.string()),
-  scopes: z.array(z.string()),
-  description: z.string().optional(),
-  well_known_url: z.string().optional(),
-  default_scopes: z.array(z.string()),
-  supports_resource_metadata: z.boolean(),
-  generic_oauth: z.boolean().optional(),
-  token_endpoint: z.string().optional(),
-  access_token_env_var: z
-    .string()
-    .regex(
-      /^[A-Za-z_][A-Za-z0-9_]*$/,
-      "Must be a valid environment variable name (letters, digits, underscores)",
-    )
-    .optional(),
-  requires_proxy: z.boolean().optional(),
-  provider_name: z.string().optional(),
-  browser_auth: z.boolean().optional(),
-  streamable_http_url: z.string().optional(),
-  streamable_http_port: z.number().optional(),
-});
+export const OAuthConfigSchema = z
+  .object({
+    name: z.string(),
+    server_url: z.string(),
+    grant_type: z.enum(["authorization_code", "client_credentials"]).optional(),
+    auth_server_url: z.string().optional(),
+    authorization_endpoint: z.string().optional(),
+    resource_metadata_url: z.string().optional(),
+    client_id: z.string(),
+    client_secret: z.string().optional(),
+    audience: z.string().optional(),
+    redirect_uris: z.array(z.string()),
+    scopes: z.array(z.string()),
+    description: z.string().optional(),
+    well_known_url: z.string().optional(),
+    default_scopes: z.array(z.string()),
+    supports_resource_metadata: z.boolean(),
+    generic_oauth: z.boolean().optional(),
+    token_endpoint: z.string().optional(),
+    access_token_env_var: z
+      .string()
+      .regex(
+        /^[A-Za-z_][A-Za-z0-9_]*$/,
+        "Must be a valid environment variable name (letters, digits, underscores)",
+      )
+      .optional(),
+    requires_proxy: z.boolean().optional(),
+    provider_name: z.string().optional(),
+    browser_auth: z.boolean().optional(),
+    streamable_http_url: z.string().optional(),
+    streamable_http_port: z.number().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const grantType = value.grant_type ?? "authorization_code";
+    const requiresAuthorizationEndpoint = grantType !== "client_credentials";
+
+    if (
+      requiresAuthorizationEndpoint &&
+      Boolean(value.authorization_endpoint) !== Boolean(value.token_endpoint)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "authorization_endpoint and token_endpoint must be set together",
+        path: ["authorization_endpoint"],
+      });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "authorization_endpoint and token_endpoint must be set together",
+        path: ["token_endpoint"],
+      });
+    }
+
+    if (
+      grantType === "client_credentials" &&
+      value.authorization_endpoint &&
+      !value.token_endpoint
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "token_endpoint is required when authorization_endpoint is set for client credentials",
+        path: ["token_endpoint"],
+      });
+    }
+  });
 
 export const EnvironmentVariableSchema = z.object({
   key: z.string().min(1, "Key is required"),

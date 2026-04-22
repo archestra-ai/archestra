@@ -1,0 +1,53 @@
+name: Add Archestra banner to issues and PRs
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions: {}
+
+concurrency:
+  group: archestra-banner-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  add-banner:
+    name: Add Archestra banner
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write # edit issue body
+      pull-requests: write # edit PR body
+    steps:
+      - name: Generate token
+        id: generate-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.ARCHESTRA_CONTRIBUTOR_PR_BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_CONTRIBUTOR_PR_BOT_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Append banner to body
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          MARKER='<!-- archestra-banner:v1 -->'
+
+          BANNER=$'\n\n---\n<!-- archestra-banner:v1 -->\n<a href="https://archestra.ai/contributor-onboard" rel="nofollow noreferrer noopener" target="_blank">\n\n<img alt="Image" src="https://github.com/user-attachments/assets/1f9497f2-96ad-4334-b3a4-c63ff38abdb9"/>\n\n</a>'
+
+          # Fetch current body via API (avoids YAML/template injection from user-controlled body)
+          CURRENT_BODY=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '.body // ""')
+
+          if printf '%s' "$CURRENT_BODY" | grep -qF "$MARKER"; then
+            echo "Banner already present, skipping"
+            exit 0
+          fi
+
+          # Build JSON payload safely with jq
+          jq -n --arg body "${CURRENT_BODY}${BANNER}" '{body: $body}' > /tmp/payload.json
+
+          gh api "repos/$REPO/issues/$ISSUE_NUMBER" \
+            -X PATCH \
+            --input /tmp/payload.json

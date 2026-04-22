@@ -11,6 +11,7 @@ import { createXai } from "@ai-sdk/xai";
 import { context, propagation } from "@opentelemetry/api";
 import type { InteractionSource } from "@shared";
 import {
+  BILLED_USER_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
@@ -157,6 +158,7 @@ export function createLLMModel(params: {
   agentId: string;
   modelName: string;
   userId?: string;
+  billedUserId?: string;
   externalAgentId?: string;
   sessionId?: string;
   source?: InteractionSource;
@@ -169,6 +171,7 @@ export function createLLMModel(params: {
     agentId,
     modelName,
     userId,
+    billedUserId,
     externalAgentId,
     sessionId,
     source,
@@ -183,6 +186,9 @@ export function createLLMModel(params: {
   }
   if (userId) {
     clientHeaders[USER_ID_HEADER] = userId;
+  }
+  if (billedUserId) {
+    clientHeaders[BILLED_USER_ID_HEADER] = billedUserId;
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
@@ -306,6 +312,7 @@ export async function createLLMModelForAgent(params: {
     agentId,
     modelName,
     userId,
+    billedUserId: userId,
     externalAgentId,
     sessionId,
     source,

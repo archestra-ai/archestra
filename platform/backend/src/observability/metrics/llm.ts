@@ -65,6 +65,8 @@ let llmCostTotal: client.Counter<string>;
 let llmTimeToFirstToken: client.Histogram<string>;
 let llmTokensPerSecond: client.Histogram<string>;
 let llmTokenUsage: client.Histogram<string>;
+let llmLimitExceededCounter: client.Counter<string>;
+let llmLimitCheckErroredCounter: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -120,6 +122,12 @@ export function initializeMetrics(labelKeys: string[]): void {
     }
     if (llmTokenUsage) {
       client.register.removeSingleMetric("llm_token_usage");
+    }
+    if (llmLimitExceededCounter) {
+      client.register.removeSingleMetric("llm_limit_exceeded_total");
+    }
+    if (llmLimitCheckErroredCounter) {
+      client.register.removeSingleMetric("llm_limit_check_errored_total");
     }
   } catch (_error) {
     // Ignore errors if metrics don't exist
@@ -193,6 +201,18 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     buckets: [4, 16, 64, 256, 1024, 4096, 16384, 65536],
     enableExemplars: true,
+  });
+
+  llmLimitExceededCounter = new client.Counter({
+    name: "llm_limit_exceeded_total",
+    help: "Count of LLM requests blocked by a token-cost limit",
+    labelNames: ["scope"],
+  });
+
+  llmLimitCheckErroredCounter = new client.Counter({
+    name: "llm_limit_check_errored_total",
+    help: "Count of LLM limit checks that errored and fail-opened the request",
+    labelNames: ["scope"],
   });
 
   logger.info(
@@ -790,6 +810,26 @@ export function reportKbLlmCall(params: {
       exemplarLabels,
     });
   }
+}
+
+/** Increments `llm_limit_exceeded_total{scope}` when a request is blocked by a token-cost limit. */
+export function reportLimitExceeded(scope: string): void {
+  if (!llmLimitExceededCounter) {
+    logger.warn("LLM metrics not initialized, skipping limit-exceeded report");
+    return;
+  }
+  llmLimitExceededCounter.inc({ scope }, 1);
+}
+
+/** Increments `llm_limit_check_errored_total{scope}` when the limit check throws and the request is fail-opened. */
+export function reportLimitCheckErrored(scope: string): void {
+  if (!llmLimitCheckErroredCounter) {
+    logger.warn(
+      "LLM metrics not initialized, skipping limit-check-errored report",
+    );
+    return;
+  }
+  llmLimitCheckErroredCounter.inc({ scope }, 1);
 }
 
 function extractGeminiModel(arg: unknown): string | undefined {

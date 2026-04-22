@@ -2146,10 +2146,10 @@ describe("LLM proxy provider matrix", () => {
         vi.spyOn(
           LimitValidationService,
           "checkLimitsBeforeRequest",
-        ).mockResolvedValue([
-          "Refusal",
-          "The token cost limit has been exceeded.",
-        ]);
+        ).mockResolvedValue({
+          scope: "organization",
+          contentMessage: "The token cost limit has been exceeded.",
+        });
         await setupRoute(agent);
 
         const blockedResponse = await app.inject({

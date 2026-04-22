@@ -632,9 +632,7 @@ class InteractionModel {
       }));
   }
 
-  /**
-   * Update usage limits after an interaction is created
-   */
+  /** Credits `virtual_api_key` and `user` scopes when set; walks agent → teams → org otherwise. */
   static async updateUsageAfterInteraction(
     interaction: InsertInteraction & { id: string },
   ): Promise<void> {
@@ -656,86 +654,87 @@ class InteractionModel {
         return;
       }
 
-      // Get agent's teams to update team and organization limits
-      // If profileId is null (agent was deleted), we can't update usage - skip silently
+      // Org is required for all limit updates so a multi-org user cannot
+      // leak usage across orgs. Without an agent row we cannot derive it,
+      // so skip enforcement updates entirely for deleted-agent interactions.
       if (!interaction.profileId) {
         logger.info(
-          `Interaction ${interaction.id} has null profileId (agent deleted) - skipping limit update`,
+          `Interaction ${interaction.id} has null profileId (agent deleted) - skipping limit updates`,
         );
         return;
       }
-      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.profileId,
-      );
+
+      const [agentRow] = await db
+        .select({ organizationId: schema.agentsTable.organizationId })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, interaction.profileId));
+
+      if (!agentRow?.organizationId) {
+        logger.warn(
+          `Interaction ${interaction.id} agent ${interaction.profileId} has no organizationId - skipping limit updates`,
+        );
+        return;
+      }
+      const organizationId = agentRow.organizationId;
 
       const updatePromises: Promise<void>[] = [];
 
-      if (agentTeamIds.length === 0) {
-        logger.warn(
-          `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
+      // virtual_api_key scope — only for vkey traffic.
+      if (interaction.virtualApiKeyId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "virtual_api_key",
+            interaction.virtualApiKeyId,
+            model,
+            inputTokens,
+            outputTokens,
+            organizationId,
+          ),
         );
-
-        // Even if agent has no teams, we should still try to update organization limits
-        // We'll use a default organization approach - get the first organization from existing limits
-        try {
-          const existingOrgLimits = await db
-            .select({ entityId: schema.limitsTable.entityId })
-            .from(schema.limitsTable)
-            .where(eq(schema.limitsTable.entityType, "organization"))
-            .limit(1);
-
-          if (existingOrgLimits.length > 0) {
-            updatePromises.push(
-              LimitModel.updateTokenLimitUsage(
-                "organization",
-                existingOrgLimits[0].entityId,
-                model,
-                inputTokens,
-                outputTokens,
-              ),
-            );
-          }
-        } catch (error) {
-          logger.error(
-            { error },
-            "Failed to find organization for agent with no teams",
-          );
-        }
-      } else {
-        // Get team details to access organizationId
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-
-        // Update organization-level token cost limits (from first team's organization)
-        if (teams.length > 0 && teams[0].organizationId) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "organization",
-              teams[0].organizationId,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-
-        // Update team-level token cost limits
-        for (const team of teams) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "team",
-              team.id,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
       }
 
-      // Update profile-level token cost limits (if any exist)
+      // user scope — only for identifiable-human callers. Read from
+      // `billedUserId`, NOT from `userId` (tracing).
+      if (interaction.billedUserId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "user",
+            interaction.billedUserId,
+            model,
+            inputTokens,
+            outputTokens,
+            organizationId,
+          ),
+        );
+      }
+
+      updatePromises.push(
+        LimitModel.updateTokenLimitUsage(
+          "organization",
+          organizationId,
+          model,
+          inputTokens,
+          outputTokens,
+          organizationId,
+        ),
+      );
+
+      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
+        interaction.profileId,
+      );
+      for (const teamId of agentTeamIds) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "team",
+            teamId,
+            model,
+            inputTokens,
+            outputTokens,
+            organizationId,
+          ),
+        );
+      }
+
       updatePromises.push(
         LimitModel.updateTokenLimitUsage(
           "agent",
@@ -743,10 +742,10 @@ class InteractionModel {
           model,
           inputTokens,
           outputTokens,
+          organizationId,
         ),
       );
 
-      // Execute all updates in parallel
       await Promise.all(updatePromises);
     } catch (error) {
       logger.error({ error }, "Error updating usage limits after interaction");

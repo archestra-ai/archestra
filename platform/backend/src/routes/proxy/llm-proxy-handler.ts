@@ -11,6 +11,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import {
+  BILLED_USER_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
@@ -109,6 +110,8 @@ export interface LLMProxyContext<TRequest> {
   unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
   userId?: string;
+  billedUserId?: string;
+  virtualKeyId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   sessionId?: string | null;
   sessionSource?: SessionSource;
@@ -248,6 +251,8 @@ export async function handleLLMProxy<
   let perKeyBaseUrl: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  let billedUserId: string | undefined;
+  let virtualKeyId: string | undefined;
 
   // 1. Try JWKS auth if the agent has an external identity provider configured
   const jwksResult = await attemptJwksAuth(
@@ -262,6 +267,7 @@ export async function handleLLMProxy<
     if (jwksResult.userId) {
       userId = jwksResult.userId;
       resolvedUser = await UserModel.getById(userId);
+      billedUserId = jwksResult.userId;
     }
   }
 
@@ -289,11 +295,23 @@ export async function handleLLMProxy<
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
       wasVirtualKeyResolved = true;
+      virtualKeyId = virtualResult.virtualKeyId;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure(request.ip);
       }
       throw error;
+    }
+  }
+
+  if (!billedUserId && isLoopbackAddress(request.ip)) {
+    // Trust is the loopback boundary; `llm-client.ts` guarantees scope-correct billedUserId.
+    const internalBilledUserId = utils.headers.metaHeader.getHeaderValue(
+      headersForExtraction,
+      BILLED_USER_ID_HEADER,
+    );
+    if (internalBilledUserId) {
+      billedUserId = internalBilledUserId;
     }
   }
 
@@ -312,17 +330,27 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: resolvedAgentId,
+        organizationId: resolvedAgent.organizationId,
+        model: requestAdapter.getModel(),
+        billedUserId,
+        virtualKeyId,
+      });
 
     if (limitViolation) {
-      const [_refusalMessage, contentMessage] = limitViolation;
+      metrics.llm.reportLimitExceeded(limitViolation.scope);
       logger.info(
-        { resolvedAgentId, reason: "token_cost_limit_exceeded" },
+        {
+          resolvedAgentId,
+          reason: "token_cost_limit_exceeded",
+          limitScope: limitViolation.scope,
+        },
         `${providerName} request blocked due to token cost limit`,
       );
       return reply.status(429).send({
         error: {
-          message: contentMessage,
+          message: limitViolation.contentMessage,
           type: "rate_limit_exceeded",
           code: "token_cost_limit_exceeded",
         },
@@ -593,6 +621,8 @@ export async function handleLLMProxy<
       unsafeContextBoundary,
       externalAgentId,
       userId,
+      billedUserId,
+      virtualKeyId,
       resolvedUser,
       sessionId,
       sessionSource,
@@ -628,6 +658,8 @@ export async function handleLLMProxy<
         externalAgentId,
         executionId,
         userId,
+        billedUserId,
+        virtualApiKeyId: virtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -689,6 +721,8 @@ async function handleStreaming<
     unsafeContextBoundary,
     externalAgentId,
     userId,
+    billedUserId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1006,6 +1040,8 @@ async function handleStreaming<
             externalAgentId,
             executionId,
             userId,
+            billedUserId,
+            virtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1064,6 +1100,8 @@ async function handleNonStreaming<
     unsafeContextBoundary,
     externalAgentId,
     userId,
+    billedUserId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1210,6 +1248,8 @@ async function handleNonStreaming<
           externalAgentId,
           executionId,
           userId,
+          billedUserId,
+          virtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1273,6 +1313,8 @@ async function handleNonStreaming<
         externalAgentId,
         executionId,
         userId,
+        billedUserId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,

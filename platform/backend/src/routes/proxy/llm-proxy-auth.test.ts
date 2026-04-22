@@ -224,6 +224,34 @@ describe("validateVirtualApiKey", () => {
     expect(result.apiKey).toBeUndefined();
     expect(result.baseUrl).toBeUndefined();
   });
+
+  test("returns the virtual key id, with no billing-user field (vkey traffic never bills a user)", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: "sk-vkey-bill-user" },
+    });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+
+    const { virtualKey, value } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "vkey-no-billed-user",
+      authorId: creator.id,
+    });
+
+    const result = await validateVirtualApiKey(value, "openai");
+    expect(result.virtualKeyId).toBe(virtualKey.id);
+    // vkey traffic NEVER bills a user — the result shape no longer carries a
+    // billedUserId field, and the handler leaves billedUserId undefined.
+    expect("billedUserId" in result).toBe(false);
+  });
 });
 
 // =========================================================================

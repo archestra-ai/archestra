@@ -89,3 +89,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sasha-ilatovskii
 - @ruslan-korneev
 - @gentlementlegen
+- @janfaiengineer

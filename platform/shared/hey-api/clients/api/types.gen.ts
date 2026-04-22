@@ -15707,6 +15707,236 @@ export type AzureChatCompletionsWithAgentResponses = {
 
 export type AzureChatCompletionsWithAgentResponse = AzureChatCompletionsWithAgentResponses[keyof AzureChatCompletionsWithAgentResponses];
 
+export type BedrockOpenaiChatCompletionsWithDefaultAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/bedrock/openai/chat/completions';
+};
+
+export type BedrockOpenaiChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type BedrockOpenaiChatCompletionsWithAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/openai/{agentId}/chat/completions';
+};
+
+export type BedrockOpenaiChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        /**
+         * Bearer token: Archestra virtual API key for Bedrock
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/bedrock/openai/models';
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentError = BedrockOpenaiListModelsWithDefaultAgentErrors[keyof BedrockOpenaiListModelsWithDefaultAgentErrors];
+
+export type BedrockOpenaiListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type BedrockOpenaiListModelsWithDefaultAgentResponse = BedrockOpenaiListModelsWithDefaultAgentResponses[keyof BedrockOpenaiListModelsWithDefaultAgentResponses];
+
+export type BedrockOpenaiListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        /**
+         * Bearer token: Archestra virtual API key for Bedrock
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/openai/{agentId}/models';
+};
+
+export type BedrockOpenaiListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BedrockOpenaiListModelsWithAgentError = BedrockOpenaiListModelsWithAgentErrors[keyof BedrockOpenaiListModelsWithAgentErrors];
+
+export type BedrockOpenaiListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type BedrockOpenaiListModelsWithAgentResponse = BedrockOpenaiListModelsWithAgentResponses[keyof BedrockOpenaiListModelsWithAgentResponses];
+
 export type BedrockConverseWithDefaultAgentData = {
     body: {
         modelId: string;

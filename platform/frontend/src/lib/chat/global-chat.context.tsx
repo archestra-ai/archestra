@@ -404,6 +404,8 @@ function ChatSessionHook({
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
+      // Chat errors are persisted asynchronously by the backend after the stream
+      // fails, so refetch once immediately and once shortly after that write.
       setTimeout(() => {
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],

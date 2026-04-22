@@ -452,8 +452,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   : fullError;
                 persistConversationChatError({
                   conversationId,
-                  userId: user.id,
-                  organizationId,
                   error: errorForFrontend,
                 });
 
@@ -714,8 +712,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         : fullError;
                       persistConversationChatError({
                         conversationId,
-                        userId: user.id,
-                        organizationId,
                         error: errorForFrontend,
                       });
 
@@ -2036,8 +2032,6 @@ async function persistNewMessages(
 
 function persistConversationChatError(params: {
   conversationId: string;
-  userId: string;
-  organizationId: string;
   error: ChatErrorResponse;
 }) {
   const chatError = getSerializableChatError(params.error);

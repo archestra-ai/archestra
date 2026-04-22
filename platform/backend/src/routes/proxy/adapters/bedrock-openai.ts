@@ -76,8 +76,10 @@ class BedrockOpenaiResponseAdapter
   }
 
   /**
-   * This is what Fastify serializes to the client AND what the interaction
-   * log stores as `response`. Translate at the last moment, right here.
+   * Wire response: OpenAI `chat.completion` shape. Fastify serializes this
+   * to the client. Log storage goes through `getLoggedResponse()` below so
+   * the interaction row matches the `bedrock:converse` type used by the
+   * logs UI parser.
    */
   getOriginalResponse(): BedrockResponse {
     const converse = this.inner.getOriginalResponse();
@@ -85,6 +87,10 @@ class BedrockOpenaiResponseAdapter
       converse,
       this.ctx,
     ) as unknown as BedrockResponse;
+  }
+
+  getLoggedResponse(): BedrockResponse {
+    return this.inner.getOriginalResponse();
   }
 
   /**
@@ -203,10 +209,15 @@ class BedrockOpenaiStreamAdapter
     return this.encoder.formatEnd();
   }
 
+  /**
+   * Stored in the interaction log. Returns the Converse-shape response the
+   * inner Bedrock adapter reconstructs from accumulated state — matches the
+   * `bedrock:converse` type the logs UI parser expects. The wire bytes the
+   * client receives are emitted through `processChunk` / `formatEndSSE`,
+   * not through this method.
+   */
   toProviderResponse(): BedrockResponse {
-    return this.encoder.buildFinalResponseFromState(
-      this.inner.state,
-    ) as unknown as BedrockResponse;
+    return this.inner.toProviderResponse();
   }
 }
 

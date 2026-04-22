@@ -58,6 +58,29 @@ describe("BedrockOpenai response adapter", () => {
     });
   });
 
+  test("getLoggedResponse returns the inner Converse shape (for interaction log)", () => {
+    const factory = makeBedrockOpenaiAdapterFactory(ctx);
+    const converse = {
+      output: {
+        message: {
+          role: "assistant" as const,
+          content: [{ text: "hi" }],
+        },
+      },
+      stopReason: "end_turn" as const,
+      usage: { inputTokens: 3, outputTokens: 2 },
+    };
+    const resp = factory.createResponseAdapter(
+      converse as Bedrock.Types.ConverseResponse,
+    );
+
+    const logged = resp.getLoggedResponse?.();
+    expect(logged).toBe(converse);
+    // And the wire response is still OpenAI-shaped — the two must diverge.
+    // biome-ignore lint/suspicious/noExplicitAny: crossing typed boundary
+    expect((resp.getOriginalResponse() as any).object).toBe("chat.completion");
+  });
+
   test("tool_use response → OpenAI tool_calls + finish_reason tool_calls", () => {
     const factory = makeBedrockOpenaiAdapterFactory(ctx);
     const resp = factory.createResponseAdapter({
@@ -300,7 +323,13 @@ describe("BedrockOpenai stream adapter — wire output", () => {
     });
   });
 
-  test("toProviderResponse reconstructs OpenAI chat.completion from state", () => {
+  // toProviderResponse is the log-storage hook (see LLMStreamAdapter doc) —
+  // not a wire-serialization method. Under the bedrock-openai adapter it
+  // intentionally returns Converse shape so the interaction row matches the
+  // `bedrock:converse` type that the logs UI parser keys off. Client wire
+  // bytes stay OpenAI-shaped via processChunk/formatEndSSE — this test only
+  // covers what gets persisted.
+  test("toProviderResponse reconstructs Converse shape from state (for log)", () => {
     const factory = makeBedrockOpenaiAdapterFactory(ctx);
     const stream = factory.createStreamAdapter({
       modelId: "zai.glm-4.7",
@@ -324,13 +353,10 @@ describe("BedrockOpenai stream adapter — wire output", () => {
 
     // biome-ignore lint/suspicious/noExplicitAny: crossing typed boundary
     const resp = stream.toProviderResponse() as any;
-    expect(resp.id).toBe("chatcmpl-abc");
-    expect(resp.object).toBe("chat.completion");
-    expect(resp.model).toBe("zai.glm-4.7");
-    expect(resp.choices[0].message.content).toBe("Hello");
-    expect(resp.choices[0].finish_reason).toBe("stop");
-    expect(resp.usage.prompt_tokens).toBe(10);
-    expect(resp.usage.completion_tokens).toBe(5);
+    expect(resp.output.message.role).toBe("assistant");
+    expect(resp.output.message.content).toEqual([{ text: "Hello" }]);
+    expect(resp.stopReason).toBe("end_turn");
+    expect(resp.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 });
 

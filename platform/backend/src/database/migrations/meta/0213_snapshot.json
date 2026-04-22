@@ -1,5 +1,5 @@
 {
-  "id": "c74a189b-2538-4b9f-91db-a772a5696d35",
+  "id": "0fdcb78e-7cce-4847-810b-a2ba7342480c",
   "prevId": "deff4e60-8d11-4d5d-bdb9-aeb41486e0d1",
   "version": "7",
   "dialect": "postgresql",
@@ -2048,12 +2048,6 @@
         "artifact": {
           "name": "artifact",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_chat_error": {
-          "name": "last_chat_error",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

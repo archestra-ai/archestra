@@ -1,1 +1,0 @@
-ALTER TABLE "conversations" DROP COLUMN "last_chat_error";

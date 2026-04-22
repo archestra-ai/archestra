@@ -10,4 +10,5 @@ INSERT INTO "conversation_chat_errors" ("conversation_id", "error", "created_at"
 SELECT "id", "last_chat_error", "updated_at"
 FROM "conversations"
 WHERE "last_chat_error" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX "conversation_chat_errors_conversation_id_idx" ON "conversation_chat_errors" USING btree ("conversation_id");
+CREATE INDEX "conversation_chat_errors_conversation_id_idx" ON "conversation_chat_errors" USING btree ("conversation_id");--> statement-breakpoint
+ALTER TABLE "conversations" DROP COLUMN "last_chat_error";

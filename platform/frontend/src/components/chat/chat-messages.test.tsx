@@ -269,6 +269,43 @@ describe("ChatMessages", () => {
     );
   });
 
+  it("does not render persisted chat errors before live messages without timestamps", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "live retry" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        chatErrors={[
+          {
+            id: "error-1",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "server_error",
+              message: "Provider failed",
+              isRetryable: true,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const retry = screen.getByText("live retry");
+    const error = screen.getByTestId("inline-chat-error");
+
+    expect(retry.compareDocumentPosition(error)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {
     const messages = [
       {

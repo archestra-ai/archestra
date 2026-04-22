@@ -2238,8 +2238,8 @@ function buildMessageTimeline(params: {
     const messageCreatedAt = getMessageCreatedAt(message);
     while (
       errorIndex < sortedChatErrors.length &&
-      (!messageCreatedAt ||
-        Date.parse(sortedChatErrors[errorIndex].createdAt) <= messageCreatedAt)
+      messageCreatedAt !== null &&
+      Date.parse(sortedChatErrors[errorIndex].createdAt) <= messageCreatedAt
     ) {
       timelineItems.push({
         kind: "chat-error",

@@ -81,7 +81,7 @@ else:
     # Uses pkill -P to kill by parent PID since child processes may have their own process groups on macOS
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; ARCHESTRA_LOGGING_LEVEL=debug ARCHESTRA_ANALYTICS=disabled pnpm dev --filter @backend & wait $!',
     # On Windows, pnpm dev runs directly; cmd.exe handles process termination when Tilt stops
-    serve_cmd_bat='set ARCHESTRA_LOGGING_LEVEL=debug && set ARCHESTRA_ANALYTICS=disabled && pnpm dev --filter @backend',
+    serve_cmd_bat='set "ARCHESTRA_ANALYTICS=disabled" && pnpm dev --filter @backend',
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],
@@ -128,6 +128,9 @@ local_resource(
       sleep 5
     done
   ''',
+  # Keep logic in a script file and pin working directory for stable cross-platform execution.
+  serve_cmd_bat='powershell -NoProfile -ExecutionPolicy Bypass -File dev\\mcp-http-port-forward.ps1',
+  serve_dir=config.main_dir,
   labels=['dev'],
 )
 

@@ -1,5 +1,5 @@
 {
-  "id": "86acb529-1fcd-4e34-8d45-a141da7896bd",
+  "id": "deff4e60-8d11-4d5d-bdb9-aeb41486e0d1",
   "prevId": "978d2384-d87c-48ab-a2c9-e045036f3677",
   "version": "7",
   "dialect": "postgresql",
@@ -1979,6 +1979,12 @@
         "artifact": {
           "name": "artifact",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_chat_error": {
+          "name": "last_chat_error",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -6201,12 +6207,6 @@
         },
         "chat_links": {
           "name": "chat_links",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "onboarding_wizard": {
-          "name": "onboarding_wizard",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

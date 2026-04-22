@@ -1,3 +1,4 @@
+import type { ChatErrorResponse } from "@shared";
 import {
   and,
   desc,
@@ -386,6 +387,24 @@ class ConversationModel {
     })) as Conversation;
 
     return updatedWithAgent;
+  }
+
+  static async updateLastChatError(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    lastChatError: ChatErrorResponse | null;
+  }): Promise<void> {
+    await db
+      .update(schema.conversationsTable)
+      .set({ lastChatError: params.lastChatError })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      );
   }
 
   static async delete(

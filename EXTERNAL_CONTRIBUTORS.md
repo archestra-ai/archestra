@@ -83,3 +83,11 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @gushul
 - @HarshadaGawas05
 - @eugene-bagaev
+- @tigranl
+- @garvae
+- @silentworker101
+- @sasha-ilatovskii
+- @ruslan-korneev
+- @gentlementlegen
+- @janfaiengineer
+- @Aqil-Ahmad

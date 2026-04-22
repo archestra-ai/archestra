@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import {
   Conversation,
   ConversationContent,
@@ -378,15 +379,6 @@ export function ChatMessages({
     };
   });
 
-  // Only auto-scroll on content resize during streaming.
-  // When idle, user interactions like expanding tool calls should not
-  // trigger scroll — returning the current scrollTop keeps position stable.
-  const preventResizeScroll = useCallback(
-    (_target: number, { scrollElement }: { scrollElement: HTMLElement }) =>
-      scrollElement.scrollTop,
-    [],
-  );
-
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -423,8 +415,8 @@ export function ChatMessages({
     <Conversation
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
-      targetScrollTop={isResponseInProgress ? undefined : preventResizeScroll}
     >
+      <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
@@ -1261,6 +1253,24 @@ function useStreamingStallDetection(
   }, [status]);
 
   return isStreamingStalled;
+}
+
+// Re-engage stick-to-bottom when the user sends a new message.
+// If the user has scrolled up, the library keeps state.isAtBottom=false and
+// won't auto-scroll on content resize — this resets it on the submit transition.
+function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const prevStatusRef = useRef(status);
+
+  useEffect(() => {
+    if (status === "submitted" && prevStatusRef.current !== "submitted") {
+      scrollToBottom();
+    }
+
+    prevStatusRef.current = status;
+  }, [status, scrollToBottom]);
+
+  return null;
 }
 
 const MessageTool = memo(

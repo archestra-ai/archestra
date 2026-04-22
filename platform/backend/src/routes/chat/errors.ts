@@ -99,6 +99,7 @@ interface ParsedOpenAIError {
   code?: string;
   message?: string;
   param?: string;
+  internal_code?: string;
 }
 
 interface ParsedAnthropicError {
@@ -165,6 +166,7 @@ function parseOpenAIError(responseBody: string): ParsedOpenAIError | null {
         code: parsed.error.code,
         message: parsed.error.message,
         param: parsed.error.param,
+        internal_code: parsed.error.internal_code,
       };
     }
     return null;
@@ -673,13 +675,11 @@ function mapOpenAIErrorToCode(
       case OpenAIErrorTypes.CONFLICT:
         return ChatErrorCode.InvalidRequest;
       case OpenAIErrorTypes.API_VALIDATION_ERROR:
-        // Archestra's LLM proxy wraps provider 400s with api_validation_error.
-        // Check the message to distinguish context-length from other bad requests.
+        // Archestra's backend error type for all 400s — use internal_code to
+        // distinguish provider-specific errors that were preserved by the proxy.
         if (
-          parsedError?.message &&
-          /maximum context length|context_length_exceeded/.test(
-            parsedError.message,
-          )
+          parsedError?.internal_code ===
+          OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
         ) {
           return ChatErrorCode.ContextTooLong;
         }

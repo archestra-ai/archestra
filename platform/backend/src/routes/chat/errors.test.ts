@@ -27,6 +27,7 @@ describe("mapProviderError - OpenAI", () => {
     errorType: string,
     message: string,
     code?: string,
+    internalCode?: string,
   ) {
     return {
       name: "AI_APICallError",
@@ -36,6 +37,7 @@ describe("mapProviderError - OpenAI", () => {
           type: errorType,
           message,
           code,
+          internal_code: internalCode,
         },
       }),
       isRetryable: statusCode >= 500 || statusCode === 429,
@@ -211,11 +213,13 @@ describe("mapProviderError - OpenAI", () => {
       expect(result.isRetryable).toBe(false);
     });
 
-    it("should map to ContextTooLong for api_validation_error with context length message", () => {
+    it("should map to ContextTooLong for api_validation_error with context_length_exceeded internal_code", () => {
       const error = createOpenAIError(
         400,
         OpenAIErrorTypes.API_VALIDATION_ERROR,
-        "This model's maximum context length is 8192 tokens. However, your messages resulted in 8904 tokens (8582 in the messages, 322 in the functions). Please reduce the length of the messages or functions.",
+        "This model's maximum context length is 8192 tokens. However, your messages resulted in 8904 tokens.",
+        undefined,
+        OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED,
       );
       const result = mapProviderError(error, "openai");
 
@@ -226,7 +230,7 @@ describe("mapProviderError - OpenAI", () => {
       expect(result.isRetryable).toBe(false);
     });
 
-    it("should map api_validation_error without context length message to InvalidRequest", () => {
+    it("should map api_validation_error without internal_code to InvalidRequest", () => {
       const error = createOpenAIError(
         400,
         OpenAIErrorTypes.API_VALIDATION_ERROR,

@@ -403,6 +403,7 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * error.error.message structure), so this normalizes them to a string.
    */
   extractErrorMessage(error: unknown): string;
+  extractInternalCode?(error: unknown): string | undefined;
 }
 
 /**

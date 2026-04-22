@@ -315,7 +315,7 @@ export interface ChatErrorResponse {
 }
 
 export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
-  code: z.enum(ChatErrorCode),
+  code: z.nativeEnum(ChatErrorCode),
   message: z.string(),
   isRetryable: z.boolean(),
   sessionId: z.string().optional(),

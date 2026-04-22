@@ -38,7 +38,7 @@ type FastifyRequestLike = Pick<FastifyRequest, "ip" | "raw">;
  * way out.
  */
 const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const BEDROCK_PREFIX = `${PROXY_API_PREFIX}/bedrock/openai`;
+  const BEDROCK_OPENAI_PREFIX = `${PROXY_API_PREFIX}/bedrock/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
   logger.info(
@@ -46,7 +46,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${BEDROCK_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
+    `${BEDROCK_OPENAI_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
@@ -75,7 +75,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${BEDROCK_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
+    `${BEDROCK_OPENAI_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
@@ -237,7 +237,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   }
 
   fastify.get(
-    `${BEDROCK_PREFIX}/models`,
+    `${BEDROCK_OPENAI_PREFIX}/models`,
     {
       schema: {
         operationId: RouteId.BedrockOpenaiListModelsWithDefaultAgent,
@@ -258,7 +258,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    `${BEDROCK_PREFIX}/:agentId/models`,
+    `${BEDROCK_OPENAI_PREFIX}/:agentId/models`,
     {
       schema: {
         operationId: RouteId.BedrockOpenaiListModelsWithAgent,

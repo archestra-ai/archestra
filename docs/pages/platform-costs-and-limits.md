@@ -43,13 +43,13 @@ Who gets billed for a given request is summarised here:
 
 | Caller | Billed user | Billed virtual key |
 |---|---|---|
-| Chat UI (Better-Auth session) | the current user | — |
+| Chat UI (signed-in session) | the current user | — |
 | Chat API key, scope = personal | the key's owner | — |
 | Chat API key, scope = team or org | nobody (shared key) | — |
 | Virtual API key (any scope) | nobody (shared key) | the vkey itself |
 | JWKS-authenticated external caller | the local user the JWT maps to (by email) | — |
 
-Important: virtual-key traffic never bills a user — not even the user who created the key. If you want a "per-human" cap inside a shared integration key, use the team or organization scope instead.
+Important: virtual-key traffic never bills a user — not even the user who created the key. A virtual key is a shared credential; the individual humans calling through it are not identifiable to Archestra, so user-scope budgets cannot be enforced on that traffic. Use a virtual-key-scope budget to cap the key itself, or a team/organization-scope budget to cap the surrounding group.
 
 Per-user enforcement is only authoritative when the caller's identity is derived from a trusted signal:
 
@@ -69,7 +69,7 @@ If a model has no pricing configured, Archestra falls back to a default tier (~$
 
 ### Rolling vs calendar resets
 
-Limits reset on a **rolling window** driven by the organization-wide [limit cleanup interval](#limit-cleanup), not on a calendar boundary. A monthly cap resets 30 days after the last reset, not on the 1st of the month. If you need calendar-aligned resets (month, day, week), track this limitation when presenting budgets to stakeholders — calendar reset support is a planned follow-up.
+Limits reset on a **rolling window** driven by the organization-wide [limit cleanup interval](#limit-cleanup), not on a calendar boundary. A monthly cap resets 30 days after the last reset, not on the 1st of the month. Calendar-aligned resets (first of the month, start of the week, etc.) are not currently supported.
 
 ## Limit Cleanup
 

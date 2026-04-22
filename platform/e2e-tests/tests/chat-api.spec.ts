@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { API_BASE_URL, UI_BASE_URL } from "../consts";
+import { getE2eRequestUrl, UI_BASE_URL } from "../consts";
 import { expect, test } from "./api-fixtures";
 
 const NONEXISTENT_MESSAGE_ID = "1d6934ea-eb0d-452d-abf3-72122d140c49";
@@ -75,7 +75,7 @@ test.describe("Chat message persistence on provider error", () => {
       const tempMessageId = randomUUID();
       const messageText = `Hello chat-error-persistence-test ${tempMessageId}`;
 
-      const chatResponse = await request.post(`${API_BASE_URL}/api/chat`, {
+      const chatResponse = await request.post(getE2eRequestUrl("/api/chat"), {
         headers: {
           "Content-Type": "application/json",
           Origin: UI_BASE_URL,
@@ -111,6 +111,10 @@ test.describe("Chat message persistence on provider error", () => {
       const updatedConversation = await getConvResponse.json();
 
       expect(updatedConversation.messages.length).toBeGreaterThan(0);
+      expect(updatedConversation.lastChatError).toMatchObject({
+        code: "server_error",
+        isRetryable: true,
+      });
 
       const userMessage = updatedConversation.messages.find(
         (m: { role: string }) => m.role === "user",
@@ -193,7 +197,7 @@ test.describe("Chat message persistence on provider error", () => {
       const tempMessageId = randomUUID();
       const messageText = `Hello chat-midstream-error-test ${tempMessageId}`;
 
-      const chatResponse = await request.post(`${API_BASE_URL}/api/chat`, {
+      const chatResponse = await request.post(getE2eRequestUrl("/api/chat"), {
         headers: {
           "Content-Type": "application/json",
           Origin: UI_BASE_URL,
@@ -279,7 +283,7 @@ test.describe("Chat message persistence on provider error", () => {
       const msg1Id = randomUUID();
       const msg1Text = `First chat-midstream-error-test ${msg1Id}`;
 
-      const chat1 = await request.post(`${API_BASE_URL}/api/chat`, {
+      const chat1 = await request.post(getE2eRequestUrl("/api/chat"), {
         headers: {
           "Content-Type": "application/json",
           Origin: UI_BASE_URL,
@@ -309,7 +313,7 @@ test.describe("Chat message persistence on provider error", () => {
 
       // 2. "Retry" — send the same conversation with the same user message
       // (simulating the frontend resending after the error)
-      const chat2 = await request.post(`${API_BASE_URL}/api/chat`, {
+      const chat2 = await request.post(getE2eRequestUrl("/api/chat"), {
         headers: {
           "Content-Type": "application/json",
           Origin: UI_BASE_URL,

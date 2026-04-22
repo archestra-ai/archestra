@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerUserModel from "@/models/mcp-server-user";
+import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -13,6 +14,10 @@ const {
   hasPermissionMock,
   invalidateConnectionsForServerMock,
   inspectServerMock,
+  k8sGetOrLoadDeploymentMock,
+  k8sRestartServerMock,
+  k8sStartServerMock,
+  k8sStopServerMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
 } = vi.hoisted(() => ({
@@ -21,6 +26,10 @@ const {
   hasPermissionMock: vi.fn(),
   invalidateConnectionsForServerMock: vi.fn(),
   inspectServerMock: vi.fn(),
+  k8sGetOrLoadDeploymentMock: vi.fn(),
+  k8sRestartServerMock: vi.fn(),
+  k8sStartServerMock: vi.fn(),
+  k8sStopServerMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
   MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
 }));
@@ -43,6 +52,16 @@ vi.mock("@/auth/utils", () => ({
   hasPermission: hasPermissionMock,
 }));
 
+vi.mock("@/k8s/mcp-server-runtime", () => ({
+  McpServerRuntimeManager: {
+    isEnabled: true,
+    startServer: k8sStartServerMock,
+    restartServer: k8sRestartServerMock,
+    stopServer: k8sStopServerMock,
+    getOrLoadDeployment: k8sGetOrLoadDeploymentMock,
+  },
+}));
+
 describe("mcp server inspect route", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -51,6 +70,12 @@ describe("mcp server inspect route", () => {
   beforeEach(async ({ makeUser }) => {
     user = await makeUser();
     hasPermissionMock.mockResolvedValue({ success: true });
+    k8sStartServerMock.mockResolvedValue(undefined);
+    k8sRestartServerMock.mockResolvedValue(undefined);
+    k8sStopServerMock.mockResolvedValue(undefined);
+    k8sGetOrLoadDeploymentMock.mockResolvedValue({
+      waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+    });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -67,6 +92,10 @@ describe("mcp server inspect route", () => {
     hasPermissionMock.mockReset();
     invalidateConnectionsForServerMock.mockReset();
     inspectServerMock.mockReset();
+    k8sGetOrLoadDeploymentMock.mockReset();
+    k8sRestartServerMock.mockReset();
+    k8sStartServerMock.mockReset();
+    k8sStopServerMock.mockReset();
     global.fetch = originalFetch;
     await app.close();
   });
@@ -282,6 +311,606 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("installs a remote MCP server with static additional headers from the catalog", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Static Header Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+      },
+    });
+
+    connectAndGetToolsMock
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Static Header Remote",
+        catalogId: catalog.id,
+        userConfigValues: {
+          header_x_api_key: "installer-override",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      secrets: {
+        header_x_api_key: "catalog-api-key",
+      },
+    });
+  });
+
+  test("installs a remote MCP server with mixed static and prompted headers", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Mixed Header Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+    });
+
+    connectAndGetToolsMock
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Mixed Header Remote",
+        catalogId: catalog.id,
+        userConfigValues: {
+          tenant_id: "tenant-42",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      secrets: {
+        header_x_api_key: "catalog-api-key",
+        tenant_id: "tenant-42",
+      },
+    });
+  });
+
+  test("ignores unknown install user config keys when creating the secret payload", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Known Header Remote",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+    });
+
+    connectAndGetToolsMock
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "Returns server details",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Known Header Remote",
+        catalogId: catalog.id,
+        userConfigValues: {
+          tenant_id: "tenant-42",
+          unknown_key: "should-be-dropped",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      secrets: {
+        tenant_id: "tenant-42",
+      },
+    });
+    expect(
+      (
+        connectAndGetToolsMock.mock.calls[0]?.[0] as {
+          secrets?: Record<string, unknown>;
+        }
+      ).secrets,
+    ).not.toHaveProperty("unknown_key");
+  });
+
+  test("installs a local MCP server with prompted header user config", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Header Server",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Prompted header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-api-key",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Header Server",
+        catalogId: catalog.id,
+        userConfigValues: {
+          header_x_api_key: "header-value",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(k8sStartServerMock).toHaveBeenCalledTimes(1);
+    expect(k8sStartServerMock.mock.calls[0]?.[1]).toEqual({
+      header_x_api_key: "header-value",
+    });
+  });
+
+  test("installs a local MCP server with both secret env vars and prompted header user config", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Mixed Secret Server",
+      serverType: "local",
+      userConfig: {
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+            value: "catalog-secret",
+          },
+        ],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Mixed Secret Server",
+        catalogId: catalog.id,
+        userConfigValues: {
+          tenant_id: "tenant-42",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [installedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+
+    expect(installedServer?.secretId).toBeTruthy();
+    if (!installedServer?.secretId) {
+      throw new Error("Expected local install to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      installedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      API_KEY: "catalog-secret",
+      tenant_id: "tenant-42",
+    });
+  });
+
+  test("installs a local streamable-http MCP server with static additional headers from the catalog", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Static Header Server",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Static Header Server",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [installedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+
+    expect(installedServer?.secretId).toBeTruthy();
+    if (!installedServer?.secretId) {
+      throw new Error("Expected local install to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      installedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "catalog-api-key",
+    });
+  });
+
+  test("local install ignores unknown user config keys and preserves catalog static headers", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Filtered Header Server",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Local Filtered Header Server",
+        catalogId: catalog.id,
+        userConfigValues: {
+          header_x_api_key: "installer-override",
+          tenant_id: "tenant-42",
+          unknown_key: "should-be-dropped",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [installedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+
+    expect(installedServer?.secretId).toBeTruthy();
+    if (!installedServer?.secretId) {
+      throw new Error("Expected local install to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      installedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "catalog-api-key",
+      tenant_id: "tenant-42",
+    });
+    expect(storedSecret?.secret).not.toHaveProperty("unknown_key");
+  });
+
+  test("reinstalls a local MCP server with prompted header user config", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Header Reinstall",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Prompted header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-api-key",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        userConfigValues: {
+          header_x_api_key: "header-value",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.secretId).toBeTruthy();
+    if (!updatedServer?.secretId) {
+      throw new Error("Expected reinstall to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "header-value",
+    });
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  });
+
+  test("local reinstall ignores unknown keys and installer overrides for catalog static headers", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Reinstall Filtered Header Server",
+      serverType: "local",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {
+        userConfigValues: {
+          header_x_api_key: "installer-override",
+          tenant_id: "tenant-42",
+          unknown_key: "should-be-dropped",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [updatedServer] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+    expect(updatedServer?.secretId).toBeTruthy();
+    if (!updatedServer?.secretId) {
+      throw new Error("Expected reinstall to persist a secretId");
+    }
+
+    const storedSecret = await secretManager().getSecret(
+      updatedServer.secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      header_x_api_key: "catalog-api-key",
+      tenant_id: "tenant-42",
+    });
+    expect(storedSecret?.secret).not.toHaveProperty("unknown_key");
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+
+      if (serverRow?.localInstallationStatus !== "pending") {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  });
+
   test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
     makeAccount,
     makeIdentityProvider,
@@ -297,7 +926,7 @@ describe("mcp server inspect route", () => {
           "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
         tokenEndpointAuthentication: "client_secret_post",
         enterpriseManagedCredentials: {
-          providerType: "keycloak",
+          exchangeStrategy: "rfc8693",
           subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
         },
       },
@@ -819,6 +1448,16 @@ describe("mcp server inspect route", () => {
       name: "Remote Reauth Server",
       serverType: "remote",
       serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        api_key: {
+          type: "string",
+          title: "API Key",
+          description: "Prompted API key",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+        },
+      },
     });
     const mcpServer = await makeMcpServer({
       ownerId: user.id,
@@ -846,6 +1485,9 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(200);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(invalidateConnectionsForServerMock).toHaveBeenCalledWith(
+      mcpServer.id,
+    );
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       catalogItem: expect.objectContaining({ id: catalog.id }),
       mcpServerId: "validation",
@@ -854,6 +1496,76 @@ describe("mcp server inspect route", () => {
       id: mcpServer.id,
       oauthRefreshError: null,
       oauthRefreshFailedAt: null,
+    });
+  });
+
+  test("re-authentication ignores installer overrides for catalog static headers", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Static Header Reauth Server",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Static API key",
+          promptOnInstallation: false,
+          required: false,
+          sensitive: false,
+          headerName: "x-api-key",
+          default: "catalog-api-key",
+        },
+        tenant_id: {
+          type: "string",
+          title: "Tenant ID",
+          description: "Prompted tenant ID",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant-id",
+        },
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(mcpServer.id, user.id);
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${mcpServer.id}/reauthenticate`,
+      payload: {
+        userConfigValues: {
+          header_x_api_key: "installer-override",
+          tenant_id: "tenant-42",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(invalidateConnectionsForServerMock).toHaveBeenCalledWith(
+      mcpServer.id,
+    );
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      catalogItem: expect.objectContaining({ id: catalog.id }),
+      mcpServerId: "validation",
+      secrets: {
+        header_x_api_key: "catalog-api-key",
+        tenant_id: "tenant-42",
+      },
     });
   });
 

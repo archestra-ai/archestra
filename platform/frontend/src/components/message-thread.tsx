@@ -58,10 +58,10 @@ import {
 } from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import { SwapAgentBoundaryDivider } from "@/components/chat/swap-agent-boundary";
+import { UserMessageText } from "@/components/chat/user-message-text";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
-import { preserveNewlines } from "@/lib/chat/chat-utils";
 import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
 import {
   getRenderedToolName,
@@ -307,11 +307,11 @@ const MessageThread = ({
                                       System Prompt
                                     </div>
                                   )}
-                                  <Response>
-                                    {message.role === "user"
-                                      ? preserveNewlines(part.text)
-                                      : part.text}
-                                  </Response>
+                                  {message.role === "user" ? (
+                                    <UserMessageText text={part.text} />
+                                  ) : (
+                                    <Response>{part.text}</Response>
+                                  )}
                                   {citationParts && (
                                     <KnowledgeGraphCitations
                                       parts={citationParts}

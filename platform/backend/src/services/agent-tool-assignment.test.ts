@@ -198,6 +198,52 @@ describe("validateCredentialSource", () => {
       },
     });
   });
+
+  test("accepts a personal credential for a team-scoped resource when the owner is a team member", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(author.id, organization.id, { role: "member" });
+    await makeMember(owner.id, organization.id, { role: "member" });
+
+    const sharedTeam = await makeTeam(organization.id, author.id, {
+      name: "Shared Team",
+    });
+    await makeTeamMember(sharedTeam.id, author.id);
+    await makeTeamMember(sharedTeam.id, owner.id);
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "team",
+      teams: [sharedTeam.id],
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toBeNull();
+  });
 });
 
 describe("validateExecutionSource", () => {

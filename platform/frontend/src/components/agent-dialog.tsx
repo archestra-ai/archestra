@@ -140,6 +140,7 @@ import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
+  normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -519,7 +520,8 @@ export function AgentDialog({
 }: AgentDialogProps) {
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
-  const shouldLoadIdentityProviders = open;
+  const shouldLoadIdentityProviders =
+    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -634,19 +636,8 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
-    agentType === "agent" || agentType === "mcp_gateway";
-  const inferredIdentityProviderId =
-    supportsIdentityProvider && identityProviders.length === 1
-      ? identityProviders[0]?.id
-      : null;
-  const effectiveIdentityProviderId =
-    identityProviderId === undefined
-      ? inferredIdentityProviderId
-      : identityProviderId;
-  const mcpAuthDocsUrl = getFrontendDocsUrl(
-    DocsPage.McpAuthentication,
-    "enterprise-managed-authorization",
-  );
+    agentType === "mcp_gateway" || agentType === "llm_proxy";
+  const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -872,10 +863,7 @@ export function AgentDialog({
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-    // Filter out incomplete suggested prompts (empty title or prompt)
-    const validSuggestedPrompts = suggestedPrompts.filter(
-      (sp) => sp.summaryTitle.trim() && sp.prompt.trim(),
-    );
+    const validSuggestedPrompts = normalizeSuggestedPrompts(suggestedPrompts);
     const normalizedDescription = shouldShowDescriptionField({
       agentType,
       isBuiltIn,
@@ -942,7 +930,7 @@ export function AgentDialog({
               suggestedPrompts: validSuggestedPrompts,
             }),
             ...(supportsIdentityProvider && {
-              identityProviderId: effectiveIdentityProviderId || null,
+              identityProviderId: identityProviderId || null,
             }),
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -978,7 +966,7 @@ export function AgentDialog({
             suggestedPrompts: validSuggestedPrompts,
           }),
           ...(supportsIdentityProvider && {
-            identityProviderId: effectiveIdentityProviderId || null,
+            identityProviderId: identityProviderId || null,
           }),
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
@@ -1059,7 +1047,7 @@ export function AgentDialog({
     considerContextUntrusted,
     llmApiKeyId,
     llmModel,
-    effectiveIdentityProviderId,
+    identityProviderId,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -1972,19 +1960,19 @@ export function AgentDialog({
                           </div>
                         )}
 
-                        {/* Identity Provider for enterprise-managed/JWKS auth */}
+                        {/* Identity Provider for JWKS auth */}
                         {supportsIdentityProvider &&
                           identityProviders.length > 0 && (
                             <div className="space-y-2">
-                              <Label>Identity Provider (Enterprise/JWKS)</Label>
+                              <Label>
+                                {agentType === "llm_proxy"
+                                  ? "Identity Provider (JWKS)"
+                                  : "Identity Provider (Enterprise/JWKS)"}
+                              </Label>
                               <p className="text-sm text-muted-foreground">
-                                Optionally select an Identity Provider to
-                                validate incoming enterprise assertions or
-                                direct JWT bearer tokens issued by this IdP, and
-                                to broker enterprise-managed credentials for
-                                tool calls. When there is exactly one Identity
-                                Provider configured, {appName} uses it
-                                automatically if you leave this unset.
+                                {agentType === "llm_proxy"
+                                  ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
+                                  : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                                 {mcpAuthDocsUrl ? (
                                   <>
                                     {" "}
@@ -1999,7 +1987,7 @@ export function AgentDialog({
                                 ) : null}
                               </p>
                               <Select
-                                value={effectiveIdentityProviderId ?? "none"}
+                                value={identityProviderId ?? "none"}
                                 onValueChange={(value) =>
                                   setIdentityProviderId(
                                     value === "none" ? null : value,
@@ -2007,7 +1995,7 @@ export function AgentDialog({
                                 }
                               >
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Use configured Identity Provider automatically" />
+                                  <SelectValue placeholder="No Identity Provider selected" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none">

@@ -28,18 +28,25 @@ const AuthFieldSchema = z.object({
   description: z.string().optional(),
 });
 
-const UserConfigFieldSchema = z.object({
+export const UserConfigFieldDefaultSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+
+export const UserConfigFieldSchema = z.object({
   type: z.enum(["string", "number", "boolean", "directory", "file"]),
   title: z.string(),
   description: z.string(),
+  promptOnInstallation: z.boolean().optional(),
   required: z.boolean().optional(),
-  default: z
-    .union([z.string(), z.number(), z.boolean(), z.array(z.string())])
-    .optional(),
+  default: UserConfigFieldDefaultSchema.optional(),
   multiple: z.boolean().optional(),
   sensitive: z.boolean().optional(),
   min: z.number().optional(),
   max: z.number().optional(),
+  headerName: z.string().optional(),
 });
 
 // Define a version of LocalConfigSchema for SELECT operations
@@ -136,9 +143,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   });
 
 export const InsertInternalMcpCatalogSchema =
-  InsertInternalMcpCatalogSchemaBase.superRefine(
-    validateEnterpriseManagedTransportConfig,
-  );
+  InsertInternalMcpCatalogSchemaBase.superRefine(validateInternalMcpCatalog);
 
 const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
@@ -169,13 +174,11 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   });
 
 export const UpdateInternalMcpCatalogSchema =
-  UpdateInternalMcpCatalogSchemaBase.superRefine(
-    validateEnterpriseManagedTransportConfig,
-  );
+  UpdateInternalMcpCatalogSchemaBase.superRefine(validateInternalMcpCatalog);
 
 export const PartialUpdateInternalMcpCatalogSchema =
   UpdateInternalMcpCatalogSchemaBase.partial().superRefine(
-    validateEnterpriseManagedTransportConfig,
+    validateInternalMcpCatalog,
   );
 
 export type InternalMcpCatalogServerType = z.infer<
@@ -220,4 +223,54 @@ function validateEnterpriseManagedTransportConfig(
     message:
       "Enterprise-managed credentials require streamable-http transport for local MCP servers.",
   });
+}
+
+function validateInternalMcpCatalog(
+  value: {
+    serverType?: InternalMcpCatalogServerType;
+    enterpriseManagedConfig?: unknown;
+    localConfig?: { transportType?: "stdio" | "streamable-http" } | null;
+    userConfig?: Record<string, UserConfigField> | null;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  validateEnterpriseManagedTransportConfig(value, ctx);
+  validateHeaderMappedUserConfig(value.userConfig, ctx);
+}
+
+function validateHeaderMappedUserConfig(
+  userConfig: Record<string, UserConfigField> | null | undefined,
+  ctx: z.RefinementCtx,
+): void {
+  const normalizedHeaderNames = new Map<string, string>();
+
+  for (const [fieldName, fieldConfig] of Object.entries(userConfig ?? {})) {
+    if (!fieldConfig.headerName) {
+      continue;
+    }
+
+    const normalizedHeaderName = fieldConfig.headerName.toLowerCase();
+    const existingFieldName = normalizedHeaderNames.get(normalizedHeaderName);
+    if (existingFieldName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["userConfig", fieldName, "headerName"],
+        message: `Header name duplicates field "${existingFieldName}"`,
+      });
+      continue;
+    }
+    normalizedHeaderNames.set(normalizedHeaderName, fieldName);
+
+    if (
+      fieldConfig.sensitive === true &&
+      fieldConfig.promptOnInstallation === false
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["userConfig", fieldName, "sensitive"],
+        message:
+          "Static header-mapped userConfig fields cannot be marked sensitive.",
+      });
+    }
+  }
 }

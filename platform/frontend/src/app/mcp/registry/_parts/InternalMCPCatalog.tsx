@@ -41,6 +41,7 @@ import {
   setOAuthServerType,
   setOAuthState,
   setOAuthTeamId,
+  setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/hooks/use-dialog";
@@ -57,6 +58,7 @@ import {
   useReauthenticateMcpServer,
   useReinstallMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
@@ -392,7 +394,15 @@ export function InternalMCPCatalog({
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
     _teamMode: boolean,
+    options?: {
+      preserveInstallTarget?: boolean;
+    },
   ) => {
+    if (!options?.preserveInstallTarget) {
+      setPreselectedTeamId(null);
+      setInstallPersonalOnly(false);
+    }
+
     const hasUserConfig =
       catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
 
@@ -407,7 +417,17 @@ export function InternalMCPCatalog({
     openDialog("remote-install");
   };
 
-  const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
+  const handleInstallLocalServer = async (
+    catalogItem: CatalogItem,
+    options?: {
+      preserveInstallTarget?: boolean;
+    },
+  ) => {
+    if (!options?.preserveInstallTarget) {
+      setPreselectedTeamId(null);
+      setInstallPersonalOnly(false);
+    }
+
     // Check if this local server requires OAuth authentication
     if (catalogItem.oauthConfig) {
       // Check if there are prompted env vars that need collecting first
@@ -416,8 +436,12 @@ export function InternalMCPCatalog({
           (env) => env.promptOnInstallation === true,
         ) || [];
 
-      if (promptedEnvVars.length > 0) {
-        // Has prompted env vars - open local install dialog first to collect them,
+      const promptableUserConfig = Object.values(
+        catalogItem.userConfig ?? {},
+      ).filter((field) => field.promptOnInstallation !== false);
+
+      if (promptedEnvVars.length > 0 || promptableUserConfig.length > 0) {
+        // Has prompted env vars or promptable user-config - open local install dialog first to collect them,
         // then initiate OAuth after dialog confirm
         setLocalServerCatalogItem(catalogItem);
         setOAuthPendingAfterEnvVars(true);
@@ -468,12 +492,15 @@ export function InternalMCPCatalog({
         Object.keys(catalogItem.userConfig).length > 0;
       return !hasUserConfig;
     }
-    // Local server: check for prompted env vars
+    // Local server: check for prompted env vars or promptable user-config
     const promptedEnvVars =
       catalogItem.localConfig?.environment?.filter(
         (env) => env.promptOnInstallation === true,
       ) || [];
-    return promptedEnvVars.length === 0;
+    const promptableUserConfig = Object.values(
+      catalogItem.userConfig ?? {},
+    ).filter((field) => field.promptOnInstallation !== false);
+    return promptedEnvVars.length === 0 && promptableUserConfig.length === 0;
   };
 
   // Install directly without opening a dialog (works for both personal and shared)
@@ -511,9 +538,13 @@ export function InternalMCPCatalog({
     } else {
       setInstallPersonalOnly(true);
       if (catalogItem.serverType === "local") {
-        handleInstallLocalServer(catalogItem);
+        handleInstallLocalServer(catalogItem, {
+          preserveInstallTarget: true,
+        });
       } else {
-        handleInstallRemoteServer(catalogItem, false);
+        handleInstallRemoteServer(catalogItem, false, {
+          preserveInstallTarget: true,
+        });
       }
     }
   };
@@ -528,9 +559,13 @@ export function InternalMCPCatalog({
     } else {
       setPreselectedTeamId(teamId);
       if (catalogItem.serverType === "local") {
-        handleInstallLocalServer(catalogItem);
+        handleInstallLocalServer(catalogItem, {
+          preserveInstallTarget: true,
+        });
       } else {
-        handleInstallRemoteServer(catalogItem, false);
+        handleInstallRemoteServer(catalogItem, false, {
+          preserveInstallTarget: true,
+        });
       }
     }
   };
@@ -585,6 +620,16 @@ export function InternalMCPCatalog({
           setOAuthEnvironmentValues(safeValues);
         }
       }
+      if (
+        installResult.userConfigValues &&
+        Object.keys(installResult.userConfigValues).length > 0
+      ) {
+        setOAuthUserConfigValues({
+          values: installResult.userConfigValues,
+          userConfig: localServerCatalogItem.userConfig,
+          isByosVault: installResult.isByosVault,
+        });
+      }
       closeDialog("local-install");
       // Now initiate OAuth flow
       setSelectedCatalogItem(localServerCatalogItem);
@@ -599,6 +644,7 @@ export function InternalMCPCatalog({
         id: reauthServerId,
         name: localServerCatalogItem.name,
         environmentValues: installResult.environmentValues,
+        userConfigValues: installResult.userConfigValues,
         isByosVault: installResult.isByosVault,
       });
 
@@ -624,6 +670,7 @@ export function InternalMCPCatalog({
           id: serverIdToReinstall,
           name: localServerCatalogItem.name,
           environmentValues: installResult.environmentValues,
+          userConfigValues: installResult.userConfigValues,
           isByosVault: installResult.isByosVault,
           serviceAccount: installResult.serviceAccount,
         });
@@ -650,6 +697,7 @@ export function InternalMCPCatalog({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       environmentValues: installResult.environmentValues,
+      userConfigValues: installResult.userConfigValues,
       isByosVault: installResult.isByosVault,
       teamId: installResult.teamId ?? undefined,
       serviceAccount: installResult.serviceAccount,
@@ -677,30 +725,14 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
-    // For non-BYOS mode: Extract access_token from metadata if present and pass as accessToken
-    // For BYOS mode: metadata contains vault references, pass via userConfigValues
-    const accessToken =
-      !result.isByosVault &&
-      result.metadata?.access_token &&
-      typeof result.metadata.access_token === "string"
-        ? result.metadata.access_token
-        : undefined;
+    const credentialPayload = buildRemoteInstallCredentialPayload(result);
 
     // Re-authentication mode: update existing server credentials in-place
     if (reauthServerId) {
       await reauthMutation.mutateAsync({
         id: reauthServerId,
         name: catalogItem.name,
-        ...(accessToken && { accessToken }),
-        ...(result.isByosVault && {
-          userConfigValues: result.metadata as Record<string, string>,
-        }),
-        ...(!result.isByosVault &&
-          !accessToken &&
-          result.metadata && {
-            userConfigValues: result.metadata as Record<string, string>,
-          }),
-        isByosVault: result.isByosVault,
+        ...credentialPayload,
       });
 
       closeDialog("remote-install");
@@ -714,11 +746,7 @@ export function InternalMCPCatalog({
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      ...(accessToken && { accessToken }),
-      ...(result.isByosVault && {
-        userConfigValues: result.metadata as Record<string, string>,
-      }),
-      isByosVault: result.isByosVault,
+      ...credentialPayload,
       teamId: result.teamId ?? undefined,
     });
     setInstallingItemId(null);

@@ -4,11 +4,13 @@ export const OAuthConfigSchema = z
   .object({
     name: z.string(),
     server_url: z.string(),
+    grant_type: z.enum(["authorization_code", "client_credentials"]).optional(),
     auth_server_url: z.string().optional(),
     authorization_endpoint: z.string().optional(),
     resource_metadata_url: z.string().optional(),
     client_id: z.string(),
     client_secret: z.string().optional(),
+    audience: z.string().optional(),
     redirect_uris: z.array(z.string()),
     scopes: z.array(z.string()),
     description: z.string().optional(),
@@ -31,7 +33,11 @@ export const OAuthConfigSchema = z
     streamable_http_port: z.number().optional(),
   })
   .superRefine((value, ctx) => {
+    const grantType = value.grant_type ?? "authorization_code";
+    const requiresAuthorizationEndpoint = grantType !== "client_credentials";
+
     if (
+      requiresAuthorizationEndpoint &&
       Boolean(value.authorization_endpoint) !== Boolean(value.token_endpoint)
     ) {
       ctx.addIssue({
@@ -44,6 +50,19 @@ export const OAuthConfigSchema = z
         code: z.ZodIssueCode.custom,
         message:
           "authorization_endpoint and token_endpoint must be set together",
+        path: ["token_endpoint"],
+      });
+    }
+
+    if (
+      grantType === "client_credentials" &&
+      value.authorization_endpoint &&
+      !value.token_endpoint
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "token_endpoint is required when authorization_endpoint is set for client credentials",
         path: ["token_endpoint"],
       });
     }

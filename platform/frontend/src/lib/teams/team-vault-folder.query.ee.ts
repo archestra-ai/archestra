@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useFeature } from "@/lib/config/config.query";
 import { handleApiError } from "@/lib/utils";
 
 const {
@@ -21,6 +22,7 @@ export type VaultSecretListItem =
  * Hook to get a team's Vault folder configuration
  */
 export function useTeamVaultFolder(teamId: string | null) {
+  const byosEnabled = useFeature("byosEnabled");
   return useQuery({
     queryKey: ["team-vault-folder", teamId],
     queryFn: async () => {
@@ -34,7 +36,7 @@ export function useTeamVaultFolder(teamId: string | null) {
       }
       return data;
     },
-    enabled: !!teamId,
+    enabled: byosEnabled && !!teamId,
     throwOnError: false, // Handle errors gracefully in the component instead of crashing
   });
 }
@@ -127,6 +129,7 @@ export function useCheckTeamVaultFolderConnectivity() {
  * Hook to list secrets in a team's Vault folder
  */
 export function useTeamVaultFolderSecrets(teamId: string | null) {
+  const byosEnabled = useFeature("byosEnabled");
   return useQuery({
     queryKey: ["team-vault-folder-secrets", teamId],
     queryFn: async () => {
@@ -140,7 +143,7 @@ export function useTeamVaultFolderSecrets(teamId: string | null) {
       }
       return data ?? [];
     },
-    enabled: !!teamId,
+    enabled: byosEnabled && !!teamId,
     throwOnError: false, // Handle errors gracefully in the component instead of crashing
   });
 }
@@ -152,6 +155,7 @@ export function useTeamVaultSecretKeys(
   teamId: string | null,
   secretPath: string | null,
 ) {
+  const byosEnabled = useFeature("byosEnabled");
   return useQuery({
     queryKey: ["team-vault-secret-keys", teamId, secretPath],
     queryFn: async () => {
@@ -166,7 +170,7 @@ export function useTeamVaultSecretKeys(
       }
       return data ?? { keys: [] };
     },
-    enabled: !!teamId && !!secretPath,
+    enabled: byosEnabled && !!teamId && !!secretPath,
     retry: false, // Don't retry on 403/404 errors
     throwOnError: false, // Handle errors gracefully in the component instead of crashing
   });

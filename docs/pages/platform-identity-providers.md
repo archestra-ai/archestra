@@ -1,9 +1,9 @@
 ---
 title: "Identity Providers"
 category: Administration
-description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and enterprise-managed credential brokerage"
+description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-03-30
+lastUpdated: 2026-04-20
 ---
 
 <!--
@@ -18,13 +18,13 @@ This document covers Identity Provider configuration for Archestra Platform. Inc
 - Limitations and requirements
 -->
 
-![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.png)
+![Identity Providers Overview](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.webp)
 
 Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 1. **Single Sign-On (SSO)** — Users authenticate with their existing IdP credentials using OpenID Connect (OIDC) or SAML 2.0
-2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - External IdP JWKS](/docs/mcp-authentication#external-idp-jwks) for details.
-3. **Enterprise-Managed Credentials** — Archestra can exchange a signed-in user's IdP token for a downstream credential at tool-call time.
+2. **MCP Gateway JWKS Authentication** — External MCP clients authenticate using JWTs issued by configured IdPs, validated via JWKS. See [MCP Authentication - Identity Provider JWKS](/docs/mcp-authentication#identity-provider-jwks) for details.
+3. **IdP Token Exchange for Downstream MCP Calls** — Archestra can exchange a signed-in user's IdP token for the downstream token an MCP server needs at tool-call time.
 
 > **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
@@ -35,9 +35,22 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 1. Admin configures an Identity Provider in **Settings > Identity Providers**
 2. SSO buttons appear on the sign-in page for enabled providers
 3. Users click the SSO button and authenticate with their identity provider
-4. After successful authentication, users are automatically provisioned and logged in
+4. Archestra verifies the authenticated email belongs to the provider's allowed email domains
+5. After successful authentication, users are automatically provisioned and logged in
 
-![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.png)
+![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.webp)
+
+### Allowed Email Domains
+
+The **Allowed Email Domains** field is the Archestra-side sign-in boundary for an SSO provider. Users can sign in with that provider only when the email returned by the identity provider matches one of the configured domains.
+
+Use comma-separated domains for multi-domain SSO, for example:
+
+```
+company.com, subsidiary.com
+```
+
+Subdomains are included. For example, `engineering.company.com` matches `company.com`.
 
 ## Disabling Basic Authentication
 
@@ -103,7 +116,7 @@ Okta is an enterprise identity management platform. To configure Okta SSO:
 
 - Disable **DPoP** (Demonstrating Proof of Possession) in your Okta application settings. Archestra does not support DPoP.
 - The issuer URL is automatically set to `https://your-domain.okta.com`
-- If you also use enterprise-managed credentials, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+- If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
 
 ### Google
 
@@ -116,13 +129,13 @@ Google OAuth allows users to sign in with their Google accounts.
 5. Add your callback URL: `https://your-domain.com/api/auth/sso/callback/Google`
 6. Copy the **Client ID** and **Client Secret**
 7. In Archestra, click **Enable** on the Google card
-8. Enter your domain and the credentials
+8. Enter the allowed email domains and the credentials
 
 **Google-specific notes:**
 
 - Users must have a Google Workspace or personal Google account
 - The discovery endpoint is automatically configured
-- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer or restrict account selection to a specific Google Workspace domain (for example `example.com`)
+- Optional: set **Hosted Domain Hint** to pass Google's `hd` parameter and prefer account selection for a specific Google Workspace domain (for example `example.com`). Archestra still enforces **Allowed Email Domains** after Google returns the authenticated email.
 
 ### GitHub
 
@@ -133,7 +146,7 @@ GitHub OAuth allows users to sign in with their GitHub accounts.
 3. Set the **Authorization callback URL** to: `https://your-domain.com/api/auth/sso/callback/GitHub`
 4. Copy the **Client ID** and generate a **Client Secret**
 5. In Archestra, click **Enable** on the GitHub card
-6. Enter your domain and the credentials
+6. Enter the allowed email domains and the credentials
 
 **GitHub limitations:**
 
@@ -152,7 +165,7 @@ GitLab OAuth allows users to sign in with their GitLab accounts (both GitLab.com
 5. Click **Save application**
 6. Copy the **Application ID** (Client ID) and **Secret** (Client Secret)
 7. In Archestra, click **Enable** on the GitLab card
-8. Enter your domain and the credentials
+8. Enter the allowed email domains and the credentials
 
 **GitLab-specific notes:**
 
@@ -173,7 +186,7 @@ Microsoft Entra ID (formerly Azure AD) allows users to sign in with their Micros
 7. Note your **Directory (tenant) ID** from the Overview page
 8. In Archestra, click **Enable** on the Microsoft Entra ID card
 9. Replace `{tenant-id}` in all URLs with your actual tenant ID
-10. Enter your domain and the credentials
+10. Enter the allowed email domains and the credentials
 
 **Entra ID-specific notes:**
 
@@ -190,7 +203,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `azure`, `auth0`)
 - **Issuer**: The OIDC issuer URL
-- **Domain**: Your organization's domain
+- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
 - **Client ID** and **Client Secret**: From your identity provider
 - **Discovery Endpoint**: The `.well-known/openid-configuration` URL (optional if issuer supports discovery)
 
@@ -204,20 +217,6 @@ Optional configuration:
 - **PKCE**: Enable if your provider requires it
 - **Enable RP-Initiated Logout**: Sends the `post_logout_redirect_uri` parameter during sign-out. This is enabled by default and can be turned off for providers that reject RP-initiated logout requests
 
-### Enterprise-Managed Credential Settings
-
-OIDC providers include an optional **Enterprise-Managed Credentials** section. Use it when your identity provider can issue or broker downstream credentials on behalf of the signed-in user.
-
-The key fields are:
-
-- **Exchange Client ID** and **Exchange Client Secret**: The client Archestra uses when calling the IdP's token exchange endpoint
-- **Exchange Token Endpoint**: The token exchange endpoint
-- **Exchange Client Authentication**: The client authentication method the IdP expects
-- **User Token To Exchange**: Which signed-in user token Archestra should exchange
-- **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
-
-These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
-
 ### Generic SAML
 
 Archestra supports SAML 2.0 for enterprise identity providers that don't support OIDC.
@@ -226,7 +225,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `okta-saml`, `adfs`)
 - **Issuer**: Your organization's identifier
-- **Domain**: Your organization's domain
+- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
 - **SAML Issuer / Entity ID**: The identity provider's entity ID (from IdP metadata)
 - **SSO Entry Point URL**: The IdP's Single Sign-On URL
 - **IdP Certificate**: The X.509 certificate from your IdP for signature verification
@@ -244,6 +243,38 @@ Optional configuration:
 - The NameID format should be set to `emailAddress` in your IdP
 - User attributes (email, firstName, lastName) should be included in the SAML assertion
 - See your IdP's documentation for specific configuration steps
+
+## Enterprise-Managed Credentials
+
+OIDC providers include an optional **Enterprise-Managed Credentials** section. Use it when your identity provider can issue or broker downstream credentials on behalf of the signed-in user.
+
+The key fields are:
+
+- **Exchange Client ID** and **Exchange Client Secret**: The client Archestra uses when calling the IdP's token exchange endpoint
+- **Exchange Token Endpoint**: The token exchange endpoint
+- **Exchange Client Authentication**: The client authentication method the IdP expects
+- **User Token To Exchange**: Which signed-in user token Archestra should exchange
+- **Private Key / Key ID**: Only needed when the IdP requires signed client assertions
+
+These settings do not change the SSO login flow. They are used when an MCP server is configured to resolve downstream credentials through the identity provider.
+
+Provider defaults:
+
+- **Okta managed credentials** default to private key JWT and ID token exchange
+- **RFC 8693 token exchange** defaults to client secret POST and access token exchange
+- **Microsoft Entra OBO** defaults to client secret POST and access token exchange
+
+### Using Enterprise-Managed Credentials for Downstream MCP Calls
+
+To use this with an MCP server, you need to configure three places:
+
+1. **Identity Provider**: In **Settings > Identity Providers**, open the OIDC provider and complete the **Enterprise-Managed Credentials** section. The main fields are **Exchange Client ID**, **Exchange Client Secret**, **Exchange Token Endpoint**, **Exchange Client Authentication**, and **User Token To Exchange**.
+2. **MCP catalog item**: In the server's multitenant authorization settings, choose **Identity Provider Token Exchange**. Then set the **Requested Credential**, **Injection Mode**, and the **Managed Resource Identifier** or scopes for the downstream API.
+3. **Tool assignment**: Assign the tool with **Resolve at call time** so Archestra resolves the downstream credential for the caller when the tool runs.
+
+This works with any gateway auth method that lets Archestra resolve a specific user and a usable IdP token for that user. In practice, **JWKS** and **ID-JAG** are the clearest options, **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP, and personal user bearer tokens can work when they map to a specific user with a linked IdP session. Team and organization bearer tokens do not carry enough user identity for per-user downstream token exchange.
+
+For local MCP servers, this requires HTTP transport. Local `stdio` servers do not support per-request token exchange and injection. See [MCP Authentication - Identity Provider Token Exchange](/docs/mcp-authentication#identity-provider-token-exchange) for the downstream credential flow.
 
 ## Role Mapping
 

@@ -25,10 +25,10 @@ import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
+  createJsonSchemaTransformObject,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
-  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -43,6 +43,7 @@ import {
   PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
@@ -82,6 +83,10 @@ import {
   MCP_GATEWAY_PREFIX,
   READY_PATH,
 } from "./routes/route-paths";
+import {
+  UserConfigFieldDefaultSchema,
+  UserConfigFieldSchema,
+} from "./types/mcp-catalog";
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
@@ -202,6 +207,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Xai.API.ChatCompletionResponseSchema, {
     id: "XaiChatCompletionResponse",
   });
+  z.globalRegistry.add(UserConfigFieldDefaultSchema, {
+    id: "UserConfigFieldDefault",
+  });
+  z.globalRegistry.add(UserConfigFieldSchema, {
+    id: "UserConfigField",
+  });
 }
 
 // Register schemas at module load time
@@ -226,7 +237,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
     },
     hideUntagged: true,
     transform: jsonSchemaTransform,
-    transformObject: jsonSchemaTransformObject,
+    transformObject: createJsonSchemaTransformObject({
+      zodToJsonConfig: { target: "openapi-3.0" },
+    }),
   });
 }
 
@@ -255,6 +268,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.geminiProxyRoutes);
   fastify.register(routes.azureProxyRoutes);
   fastify.register(routes.bedrockProxyRoutes);
+  fastify.register(routes.bedrockOpenaiProxyRoutes);
   fastify.register(routes.cerebrasProxyRoutes);
   fastify.register(routes.cohereProxyRoutes);
   fastify.register(routes.deepseekProxyRoutes);
@@ -422,12 +436,12 @@ export const addMetricsAuthenticationHook = (
     return;
   }
 
+  const metricsPath = observability.metrics.endpoint;
+
   fastify.addHook("preHandler", async (request, reply) => {
     if (
-      request.url === HEALTH_PATH ||
-      request.url === READY_PATH ||
-      request.url.startsWith(`${HEALTH_PATH}?`) ||
-      request.url.startsWith(`${READY_PATH}?`)
+      request.url !== metricsPath &&
+      !request.url.startsWith(`${metricsPath}?`)
     ) {
       return;
     }
@@ -961,6 +975,14 @@ const startWorker = async () => {
   try {
     await initializeDatabase();
     cacheManager.start();
+
+    // Sync Archestra MCP branding so the worker recognises branded tool names
+    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // Without this, isToolName() only matches the default "archestra__" prefix
+    // and builtin tools fall through to mcpClient.executeToolCall() which fails
+    // because they have credentialResolutionMode "static" with no mcpServerId.
+    const organization = await OrganizationModel.getFirst();
+    archestraMcpBranding.syncFromOrganization(organization);
 
     // Set OpenMetrics content type to enable exemplar support
     const promClient = await import("prom-client");

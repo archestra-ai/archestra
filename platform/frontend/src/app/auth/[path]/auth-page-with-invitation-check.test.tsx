@@ -282,6 +282,7 @@ describe("AuthPageWithInvitationCheck", () => {
         get: vi.fn((key: string) =>
           key === "redirectTo" ? "%2Fdashboard" : null,
         ),
+        toString: vi.fn(() => "redirectTo=%2Fdashboard"),
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: undefined,
@@ -295,11 +296,41 @@ describe("AuthPageWithInvitationCheck", () => {
       );
     });
 
+    it("should preserve OAuth authorize params for MCP client auth redirects", () => {
+      const params = new URLSearchParams({
+        response_type: "code",
+        client_id: "https://claude.ai/oauth/claude-code-client-metadata",
+        redirect_uri: "http://localhost:54022/callback",
+        scope: "mcp offline_access",
+        state: "state123",
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        resource: "http://localhost:9000/v1/mcp/default-mcp-gateway",
+        exp: "123",
+        sig: "abc",
+      });
+      vi.mocked(useSearchParams).mockReturnValue({
+        get: vi.fn((key: string) => params.get(key)),
+        toString: vi.fn(() => params.toString()),
+      } as unknown as ReturnType<typeof useSearchParams>);
+      vi.mocked(useInvitationCheck).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      } as ReturnType<typeof useInvitationCheck>);
+
+      render(<AuthPageWithInvitationCheck path="sign-in" />);
+
+      expect(screen.getByTestId("auth-callback").textContent).toBe(
+        `/api/auth/oauth2/authorize?${params.toString()}`,
+      );
+    });
+
     it("should fallback to / for invalid redirectTo", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn((key: string) =>
           key === "redirectTo" ? encodeURIComponent("https://evil.com") : null,
         ),
+        toString: vi.fn(() => "redirectTo=https%3A%2F%2Fevil.com"),
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: undefined,
@@ -314,6 +345,7 @@ describe("AuthPageWithInvitationCheck", () => {
     it("should fallback to / when redirectTo is not provided", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
+        toString: vi.fn(() => ""),
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: undefined,
@@ -331,6 +363,9 @@ describe("AuthPageWithInvitationCheck", () => {
           key === "redirectTo"
             ? "%2Fsearch%3Fq%3Dhello%26filter%3Dactive"
             : null,
+        ),
+        toString: vi.fn(
+          () => "redirectTo=%2Fsearch%3Fq%3Dhello%26filter%3Dactive",
         ),
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
@@ -350,6 +385,7 @@ describe("AuthPageWithInvitationCheck", () => {
         get: vi.fn((key: string) =>
           key === "redirectTo" ? encodeURIComponent("//evil.com") : null,
         ),
+        toString: vi.fn(() => "redirectTo=%2F%2Fevil.com"),
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: undefined,

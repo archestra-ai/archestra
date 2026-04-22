@@ -40,6 +40,12 @@ jobs:
     outputs:
       previous_image: ${{ steps.previous-platform-image.outputs.previous-image }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar
         with:
@@ -74,6 +80,9 @@ jobs:
     needs:
       - resolve-previous-platform-image
     if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform

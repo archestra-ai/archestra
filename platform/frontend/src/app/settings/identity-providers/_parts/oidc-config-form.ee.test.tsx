@@ -19,6 +19,10 @@ vi.mock("./team-sync-config-form.ee", () => ({
   TeamSyncConfigForm: () => <div>Team Sync</div>,
 }));
 
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Archestra",
+}));
+
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -90,11 +94,25 @@ describe("OidcConfigForm", () => {
     );
   });
 
+  it("explains that allowed email domains gate SSO sign-in", () => {
+    render(<TestWrapper />);
+
+    expect(screen.getByLabelText("Allowed Email Domains")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Users can sign in with this provider only when their returned email matches one of these domains/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows the hosted domain field for Google providers", () => {
     render(<TestWrapper providerId="Google" />);
 
     expect(
       screen.getByLabelText("Hosted Domain Hint (Optional)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/This is a Google hint, not the security boundary/i),
     ).toBeInTheDocument();
   });
 

@@ -34,6 +34,7 @@ import {
   initializeMcpSession,
   listMcpTools,
   makeApiRequest,
+  waitForGatewayIdentityProviderReady,
 } from "../utils/mcp-gateway";
 import { expect, test } from "./api-fixtures";
 
@@ -105,6 +106,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
           agentType: "mcp_gateway",
           identityProviderId,
         },
+      });
+      await waitForGatewayIdentityProviderReady({
+        request,
+        profileId: pid,
+        identityProviderId,
+        agentType: "mcp_gateway",
       });
 
       // STEP 5: Register the upstream MCP server as a remote MCP catalog item
@@ -406,6 +413,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
           agentType: "mcp_gateway",
           identityProviderId,
         },
+      });
+      await waitForGatewayIdentityProviderReady({
+        request,
+        profileId: pid,
+        identityProviderId,
+        agentType: "mcp_gateway",
       });
 
       // STEP 4: Register the JWKS MCP server as a LOCAL catalog item

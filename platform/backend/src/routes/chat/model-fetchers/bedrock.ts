@@ -13,8 +13,8 @@ export async function fetchBedrockModels(
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.bedrock.baseUrl;
   if (!baseUrl) {
-    logger.warn("Bedrock base URL not configured");
-    return [];
+    logger.error("Bedrock base URL not configured");
+    throw new Error("Bedrock base URL not configured");
   }
 
   const controlPlaneUrl = baseUrl.replace("-runtime", "");

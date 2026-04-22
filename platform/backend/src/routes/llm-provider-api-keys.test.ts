@@ -20,7 +20,11 @@ vi.mock("@/auth", () => ({
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
-  testProviderApiKey: vi.fn(),
+  testProviderApiKey: vi.fn(async (provider, _, baseUrl) => {
+    if (provider === "bedrock" && !baseUrl) {
+      throw new Error("Bedrock base URL not configured");
+    }
+  }),
 }));
 
 // Mock secrets-manager to use real DB-backed SecretModel for FK integrity
@@ -403,6 +407,83 @@ describe("LLM Provider API Keys CRUD", () => {
       },
     });
     expect(openaiResponse.statusCode).toBe(200);
+  });
+
+  test("prevent creating API keys with empty base URL for providers that require it", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "bedrock",
+        apiKey: "sk-bedrock-create-empty-base-url-test",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(400);
+    expect(createResponse.json().error.message).toContain(
+      "base URL not configured",
+    );
+  });
+
+  test("prevent setting empty base URL to API keys for providers that require it", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "bedrock",
+        apiKey: "sk-bedrock-update-empty-base-url-test",
+        scope: "personal",
+        baseUrl: "https://bedrock.us-east-1.amazonaws.com",
+      },
+    });
+    const createdKey = createResponse.json();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: null,
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(400);
+    expect(updateResponse.json().error.message).toContain(
+      "base URL not configured",
+    );
+  });
+
+  test("should allow to set base URL for providers with optional API key", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Original Name",
+        provider: "ollama",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: null,
+      },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const updateResponse2 = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+    expect(updateResponse2.statusCode).toBe(200);
   });
 });
 

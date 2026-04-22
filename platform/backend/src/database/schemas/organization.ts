@@ -135,6 +135,9 @@ const organizationsTable = pgTable("organization", {
   /** Support contact message shown in chat error cards */
   chatErrorSupportMessage: text("chat_error_support_message"),
 
+  /** When enabled, chat shows only support text plus correlation IDs in error cards */
+  slimChatErrorUi: boolean("slim_chat_error_ui").notNull().default(false),
+
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 
@@ -147,6 +150,30 @@ const organizationsTable = pgTable("organization", {
   )
     .notNull()
     .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
+
+  /**
+   * Admin-selected MCP gateway pre-filled on /connection.
+   * FK to agents(id) ON DELETE SET NULL — enforced by migration only
+   * (same circular-inference issue as defaultAgentId).
+   */
+  connectionDefaultMcpGatewayId: uuid("connection_default_mcp_gateway_id"),
+
+  /**
+   * Admin-selected LLM proxy pre-filled on /connection.
+   * FK to agents(id) ON DELETE SET NULL — enforced by migration only.
+   */
+  connectionDefaultLlmProxyId: uuid("connection_default_llm_proxy_id"),
+
+  /**
+   * Client IDs shown on the /connection client grid. Null = show all.
+   * ("generic" is always shown regardless of this list.)
+   */
+  connectionShownClientIds: text("connection_shown_client_ids").array(),
+
+  /** Providers shown in the /connection proxy step. Null = show all. */
+  connectionShownProviders: text("connection_shown_providers")
+    .$type<SupportedProvider[]>()
+    .array(),
 });
 
 export default organizationsTable;

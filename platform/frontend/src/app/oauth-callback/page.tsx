@@ -25,6 +25,7 @@ import {
   getOAuthReturnUrl,
   getOAuthServerType,
   getOAuthTeamId,
+  getOAuthUserConfigValues,
   isCallbackProcessed,
   markCallbackProcessing,
   setOAuthInstallationCompleteCatalogId,
@@ -111,6 +112,7 @@ function OAuthCallbackContent() {
           const teamId = getOAuthTeamId();
           const serverType = getOAuthServerType();
           const environmentValues = getOAuthEnvironmentValues();
+          const userConfigValues = getOAuthUserConfigValues();
 
           // Install the MCP server with the secret reference
           await installMutation.mutateAsync({
@@ -121,6 +123,8 @@ function OAuthCallbackContent() {
             // For local servers: include environment values collected before OAuth redirect
             ...(serverType === "local" &&
               environmentValues && { environmentValues }),
+            ...(serverType === "local" &&
+              userConfigValues && { userConfigValues }),
           });
 
           const isFirstInstallation = getOAuthIsFirstInstallation();

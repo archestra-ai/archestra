@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, parseVaultReference } from "@shared";
+import { parseVaultReference } from "@shared";
 import { CheckCircle2, Key, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   lazy,
@@ -22,6 +22,7 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
+import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,10 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -115,13 +113,11 @@ export function EnvironmentVariablesFormField<
   useExternalSecretsManager = false,
   envFrom,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
-  // State for external secret dialog
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
     number | null
   >(null);
 
   const handleSecretConfirm = (index: number, value: ExternalSecretValue) => {
-    // Store the value in the form field as path#key format
     if (value.secretPath && value.secretKey) {
       form.setValue(
         `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
@@ -134,7 +130,6 @@ export function EnvironmentVariablesFormField<
     setDialogOpenForEnvIndex(null);
   };
 
-  // Get the env key for the dialog title
   const dialogEnvKey =
     dialogOpenForEnvIndex !== null
       ? form.watch(
@@ -145,7 +140,9 @@ export function EnvironmentVariablesFormField<
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        {showLabel && <FormLabel>Environment Variables</FormLabel>}
+        {showLabel && (
+          <h3 className="font-semibold text-sm">Environment Variables</h3>
+        )}
         <Button
           type="button"
           variant="outline"
@@ -182,309 +179,27 @@ export function EnvironmentVariablesFormField<
         return (
           <>
             {showDescription && (
-              <FormDescription>
+              <FormDescription className="text-xs">
                 Configure environment variables for the MCP server. Use "Secret"
                 type for sensitive values.
               </FormDescription>
             )}
-            <div className="border rounded-lg">
-              <div className="grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2 p-3 bg-muted/50 border-b">
-                <div className="text-xs font-medium">Key</div>
-                <div className="text-xs font-medium">Type</div>
-                <div className="text-xs font-medium">
-                  Prompt on each installation
-                </div>
-                <div className="text-xs font-medium">Required</div>
-                <div className="text-xs font-medium">Value</div>
-                <div className="text-xs font-medium">Description</div>
-                <div className="w-9" />
-              </div>
-              {fields.map((field, index) => {
-                const mounted = form.watch(
-                  `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-                );
-                // Skip mounted secrets - they're rendered in Secret Files section
-                if (mounted) return null;
-                const promptOnInstallation = form.watch(
-                  `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
-                );
-                return (
-                  <div
-                    key={field.id}
-                    className="grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
-                  >
-                    <FormField
-                      control={control}
-                      name={
-                        `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>
-                      }
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              placeholder="API_KEY"
-                              className="font-mono"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={control}
-                      name={
-                        `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>
-                      }
-                      render={({ field }) => (
-                        <FormItem>
-                          <Select
-                            onValueChange={(newType) => {
-                              field.onChange(newType);
-                              // Clear value when type changes
-                              form.setValue(
-                                `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
-                                // biome-ignore lint/suspicious/noExplicitAny: Generic field types require any for setValue
-                                "" as any,
-                              );
-                            }}
-                            value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger
-                                data-testid={
-                                  E2eTestId.SelectEnvironmentVariableType
-                                }
-                              >
-                                <SelectValue placeholder="Type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="plain_text">
-                                Plain text
-                              </SelectItem>
-                              <SelectItem value="secret">Secret</SelectItem>
-                              <SelectItem value="boolean">Boolean</SelectItem>
-                              <SelectItem value="number">Number</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={control}
-                      name={
-                        `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>
-                      }
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <div className="flex items-center h-10">
-                              <Checkbox
-                                data-testid={
-                                  E2eTestId.PromptOnInstallationCheckbox
-                                }
-                                checked={field.value}
-                                onCheckedChange={(checked) => {
-                                  field.onChange(checked);
-                                  // When unchecking "Prompt on installation", also uncheck "Required"
-                                  if (!checked) {
-                                    form.setValue(
-                                      `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
-                                      // biome-ignore lint/suspicious/noExplicitAny: Generic field types require any for setValue
-                                      false as any,
-                                    );
-                                  }
-                                }}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={control}
-                      name={
-                        `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>
-                      }
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <div className="flex items-center h-10">
-                              <Checkbox
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                disabled={!promptOnInstallation}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {(() => {
-                      const envType = form.watch(
-                        `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
-                      );
-
-                      // If prompted at installation, show placeholder text
-                      if (promptOnInstallation) {
-                        return (
-                          <div className="flex items-center h-10">
-                            <p className="text-xs text-muted-foreground">
-                              Prompted at installation
-                            </p>
-                          </div>
-                        );
-                      }
-
-                      // If using external secrets manager and this is a secret type, show Set secret button
-                      if (useExternalSecretsManager && envType === "secret") {
-                        const formValue = form.watch(
-                          `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
-                        ) as string | undefined;
-
-                        return (
-                          <div className="flex items-center h-10">
-                            {formValue ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-xs font-mono text-green-600 hover:text-green-700"
-                                onClick={() => setDialogOpenForEnvIndex(index)}
-                              >
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                <span className="truncate max-w-[120px]">
-                                  {parseVaultReference(formValue).key}
-                                </span>
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-xs"
-                                onClick={() => setDialogOpenForEnvIndex(index)}
-                              >
-                                <Key className="h-3 w-3 mr-1" />
-                                Set secret
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // Otherwise show the value input
-                      return (
-                        <FormField
-                          control={control}
-                          name={
-                            `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
-                          }
-                          render={({ field }) => {
-                            // Boolean type: render checkbox
-                            if (envType === "boolean") {
-                              // Normalize empty/undefined values to "false"
-                              const normalizedValue =
-                                field.value === "true" ? "true" : "false";
-                              if (field.value !== normalizedValue) {
-                                field.onChange(normalizedValue);
-                              }
-
-                              return (
-                                <FormItem>
-                                  <FormControl>
-                                    <div className="flex items-center h-10">
-                                      <Checkbox
-                                        checked={normalizedValue === "true"}
-                                        onCheckedChange={(checked) =>
-                                          field.onChange(
-                                            checked ? "true" : "false",
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              );
-                            }
-
-                            // Number type: render number input
-                            if (envType === "number") {
-                              return (
-                                <FormItem>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      placeholder="0"
-                                      className="font-mono"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              );
-                            }
-
-                            // String/Secret types: render input
-                            return (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    type={
-                                      envType === "secret" ? "password" : "text"
-                                    }
-                                    placeholder="your-value"
-                                    className="font-mono"
-                                    autoComplete={
-                                      envType === "secret"
-                                        ? MCP_SECRET_AUTOCOMPLETE
-                                        : MCP_CONFIG_AUTOCOMPLETE
-                                    }
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      );
-                    })()}
-                    <FormField
-                      control={control}
-                      name={
-                        `${fieldNamePrefix}.${index}.description` as FieldPath<TFieldValues>
-                      }
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Optional description"
-                              className="text-xs resize-y min-h-10"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => remove(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
+            <InstallConfigFieldsTable
+              control={control}
+              form={form}
+              fields={fields}
+              rowIndexes={fields
+                .map((_, index) => index)
+                .filter((index) => {
+                  const mounted = form.watch(
+                    `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
+                  );
+                  return !mounted;
+                })}
+              remove={remove}
+              fieldNamePrefix={fieldNamePrefix}
+              useExternalSecretsManager={useExternalSecretsManager}
+            />
           </>
         );
       })()}
@@ -493,7 +208,9 @@ export function EnvironmentVariablesFormField<
       {envFrom && (
         <div className="space-y-1 mt-6">
           <div className="flex items-center justify-between">
-            <FormLabel>Environment From K8s Secrets / ConfigMaps</FormLabel>
+            <h3 className="font-semibold text-sm">
+              Environment From K8s Secrets / ConfigMaps
+            </h3>
             <Button
               type="button"
               variant="outline"
@@ -506,7 +223,7 @@ export function EnvironmentVariablesFormField<
               Add Source
             </Button>
           </div>
-          <FormDescription>
+          <FormDescription className="text-xs">
             Inject all keys from existing K8s Secrets or ConfigMaps as
             environment variables.
           </FormDescription>
@@ -850,10 +567,9 @@ function AutoResizeSecretTextarea({
     }
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Re-adjust height when value changes
   useEffect(() => {
     adjustHeight();
-  }, [field.value, adjustHeight]);
+  }, [adjustHeight]);
 
   return (
     <FormItem>

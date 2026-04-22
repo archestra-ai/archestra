@@ -197,6 +197,15 @@ export interface LLMResponseAdapter<TResponse> {
   /** Get original response */
   getOriginalResponse(): TResponse;
 
+  /**
+   * Optional hook for adapters whose wire response shape differs from the
+   * shape we want to persist in the interaction log. When present, the proxy
+   * handler stores this value instead of `getOriginalResponse()`. Default
+   * (unimplemented) means log == wire, which is correct for every native
+   * adapter.
+   */
+  getLoggedResponse?(): TResponse;
+
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
   getFinishReasons(): string[];
 

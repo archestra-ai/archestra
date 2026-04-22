@@ -199,26 +199,36 @@ export function ProxyClientInstructions({
         url &&
         providerLabel &&
         originalUrl ? (
-        <div className="rounded-lg border bg-card p-4">
-          <div className="mb-2.5 text-xs text-muted-foreground">
-            Replace the{" "}
-            <span className="font-medium text-foreground">{providerLabel}</span>{" "}
-            base URL:
-          </div>
-          <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-            <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-              <code className="block truncate text-[11.5px] line-through opacity-50">
-                {originalUrl}
-              </code>
+        selectedProvider === "bedrock" ? (
+          <BedrockGenericInstructions
+            baseUrl={baseUrl}
+            profileId={profileId}
+            originalUrl={originalUrl}
+          />
+        ) : (
+          <div className="rounded-lg border bg-card p-4">
+            <div className="mb-2.5 text-xs text-muted-foreground">
+              Replace the{" "}
+              <span className="font-medium text-foreground">
+                {providerLabel}
+              </span>{" "}
+              base URL:
             </div>
-            <span className="text-center text-muted-foreground">→</span>
-            <CopyableCode
-              value={url}
-              variant="primary"
-              toastMessage="Proxy URL copied"
-            />
+            <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+              <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
+                <code className="block truncate text-[11.5px] line-through opacity-50">
+                  {originalUrl}
+                </code>
+              </div>
+              <span className="text-center text-muted-foreground">→</span>
+              <CopyableCode
+                value={url}
+                variant="primary"
+                toastMessage="Proxy URL copied"
+              />
+            </div>
           </div>
-        </div>
+        )
       ) : isCompatible && instruction ? (
         instruction.kind === "snippet" ? (
           <div className="space-y-2">
@@ -260,6 +270,84 @@ export function ProxyClientInstructions({
           reason={`${client.label} doesn't support this provider.`}
         />
       )}
+    </div>
+  );
+}
+
+function BedrockGenericInstructions({
+  baseUrl,
+  profileId,
+  originalUrl,
+}: {
+  baseUrl: string;
+  profileId: string;
+  originalUrl: string;
+}) {
+  const converseUrl = `${baseUrl}/bedrock/${profileId}`;
+  const openaiUrl = `${baseUrl}/bedrock/openai/${profileId}`;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-1 text-[13px] font-medium text-foreground">
+          Bedrock Converse API
+        </div>
+        <div className="mb-2.5 text-xs text-muted-foreground">
+          Replace Bedrock Base URL.
+        </div>
+        <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
+            <code className="block truncate text-[11.5px] line-through opacity-50">
+              {originalUrl}
+            </code>
+          </div>
+          <span className="text-center text-muted-foreground">→</span>
+          <CopyableCode
+            value={converseUrl}
+            variant="primary"
+            toastMessage="Proxy URL copied"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-1 text-[13px] font-medium text-foreground">
+          <a
+            href="https://platform.openai.com/docs/api-reference/chat"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-foreground"
+          >
+            OpenAI Completions API
+          </a>{" "}
+          compatible endpoint
+        </div>
+        <div className="mb-2.5 text-xs text-muted-foreground">
+          Replace your OpenAI endpoint to connect OpenAI Completions API
+          compatible client to{" "}
+          <a
+            href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-foreground"
+          >
+            Bedrock Converse API
+          </a>
+          .
+        </div>
+        <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
+            <code className="block truncate text-[11.5px] line-through opacity-50">
+              https://api.openai.com/v1/
+            </code>
+          </div>
+          <span className="text-center text-muted-foreground">→</span>
+          <CopyableCode
+            value={openaiUrl}
+            variant="primary"
+            toastMessage="Proxy URL copied"
+          />
+        </div>
+      </div>
     </div>
   );
 }

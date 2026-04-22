@@ -269,6 +269,7 @@ const PromptInputContent = ({
     },
     [showFileUploadButton],
   );
+  const submitStatus = status === "error" ? "ready" : status;
 
   return (
     <PromptInput
@@ -599,7 +600,7 @@ const PromptInputContent = ({
           />
           <PromptInputSubmit
             className="!h-8"
-            status={status}
+            status={submitStatus}
             disabled={submitDisabled}
           />
         </div>

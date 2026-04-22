@@ -337,6 +337,7 @@ export function useUpdateAppearanceSettings(
         ogDescription: updatedOrganization.ogDescription,
         footerText: updatedOrganization.footerText,
         chatLinks: updatedOrganization.chatLinks,
+        onboardingWizard: updatedOrganization.onboardingWizard,
         chatErrorSupportMessage: updatedOrganization.chatErrorSupportMessage,
         slimChatErrorUi: updatedOrganization.slimChatErrorUi,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,

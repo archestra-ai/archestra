@@ -130056,6 +130056,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -130142,6 +130179,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -130485,6 +130523,41 @@
                       ]
                     }
                   },
+                  "onboardingWizard": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 25
+                      },
+                      "pages": {
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "content": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "content"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "pages"
+                    ]
+                  },
                   "chatErrorSupportMessage": {
                     "nullable": true,
                     "type": "string",
@@ -130722,6 +130795,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -130808,6 +130918,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -131148,6 +131259,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -131170,6 +131318,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "animateChatPlaceholders"
@@ -131635,6 +131784,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -131721,6 +131907,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -132206,6 +132393,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -132292,6 +132516,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -132795,6 +133020,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -132881,6 +133143,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -133947,6 +134210,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -134033,6 +134333,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -134518,6 +134819,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -134604,6 +134942,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -135056,6 +135395,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -135142,6 +135518,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -135889,6 +136266,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -135975,6 +136389,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",

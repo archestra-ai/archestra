@@ -25,11 +25,51 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to either the organization or a team, and each limit targets one or more specific models.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, a team, an agent, a specific user, or a specific virtual API key. Each limit targets one or more specific models — or every model, using the all-models sentinel described below.
 
-Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps.
+Limits are evaluated from recorded model usage, so [pricing configuration](#model-pricing) affects token-cost limits directly. Read the [pricing caveat](#pricing-caveat) before relying on a limit for billing-critical enforcement.
 
-Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
+### Scopes
+
+The five scopes protect different things and are typically used together:
+
+- **Organization** — shared platform-wide budget. Caps the cumulative spend across every caller in the org, including virtual-key traffic.
+- **Team** — per-team budget. Caps cumulative spend in the team, including virtual-key traffic from the team's keys.
+- **Agent** — per-agent budget on a single gateway or LLM proxy. Useful when one agent drives the bulk of an org's spend.
+- **User (personal budget)** — caps an identifiable human's usage of the chat UI and their personal chat API keys. It does NOT apply to virtual-key traffic, even if the key was created by that user — see the billing table below.
+- **Virtual API Key** — caps the shared integration key itself, regardless of who calls it. Use this for external services (Vercel AI SDK, OpenWebUI, n8n, etc.) where you want a per-integration ceiling.
+
+Who gets billed for a given request is summarised here:
+
+| Caller | Billed user | Billed virtual key |
+|---|---|---|
+| Chat UI (Better-Auth session) | the current user | — |
+| Chat API key, scope = personal | the key's owner | — |
+| Chat API key, scope = team or org | nobody (shared key) | — |
+| Virtual API key (any scope) | nobody (shared key) | the vkey itself |
+| JWKS-authenticated external caller | the local user the JWT maps to (by email) | — |
+
+Important: virtual-key traffic never bills a user — not even the user who created the key. If you want a "per-human" cap inside a shared integration key, use the team or organization scope instead.
+
+Per-user enforcement is only authoritative when the caller's identity is derived from a trusted signal:
+
+- For in-UI chat traffic, the chat route derives the billed user from the scope of the resolved chat-api-key (personal → key owner; team/org → nobody) and propagates that to the LLM proxy over a loopback-only internal channel. External callers reaching the proxy over the network cannot influence this signal.
+- For external API traffic, the JWT from a JWKS-authenticated provider is the authoritative signal.
+- Virtual API keys and raw provider keys carry no identifiable billed user, so their traffic does not consume user-scope budgets.
+
+### Applies to all models
+
+When configuring a token-cost limit, toggle **Apply to all models** to make the limit cover every model, including models that get configured later. Under the hood this stores the limit with a `["*"]` model array (the all-models sentinel) and enforcement counts spend from every incoming model against it. Mixing `"*"` with concrete model names is rejected.
+
+Use all-models when you want a blanket ceiling. Use a concrete model list when one model has significantly different pricing or you want to cap a particular family only. Model-scoped limits are independent: exhausting a Claude-only limit does not block OpenAI requests.
+
+### Pricing caveat
+
+If a model has no pricing configured, Archestra falls back to a default tier (~$30–$50 per million tokens). Budget accuracy in that state is best-effort — the fallback can significantly over- or under-count real spend, and a token-cost limit that relies on it may fire too early or too late. Configure pricing explicitly at **Token Price** (under LLM → Costs) before relying on token-cost limits for critical enforcement.
+
+### Rolling vs calendar resets
+
+Limits reset on a **rolling window** driven by the organization-wide [limit cleanup interval](#limit-cleanup), not on a calendar boundary. A monthly cap resets 30 days after the last reset, not on the 1st of the month. If you need calendar-aligned resets (month, day, week), track this limitation when presenting budgets to stakeholders — calendar reset support is a planned follow-up.
 
 ## Limit Cleanup
 

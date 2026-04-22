@@ -75597,6 +75597,16 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "sessionId": {
                                 "nullable": true,
                                 "type": "string"
@@ -75823,6 +75833,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -75866,6 +75878,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -76207,6 +76229,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -76250,6 +76274,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -76477,6 +76511,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -76520,6 +76556,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -76747,6 +76793,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -76790,6 +76838,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -78729,6 +78787,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -78772,6 +78832,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -78999,6 +79069,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -79042,6 +79114,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -79269,6 +79351,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -79312,6 +79396,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -79539,6 +79633,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -79582,6 +79678,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -79809,6 +79915,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -79852,6 +79960,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -80079,6 +80197,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -80122,6 +80242,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -80349,6 +80479,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -80392,6 +80524,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -80608,6 +80750,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -80651,6 +80795,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -80867,6 +81021,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -80910,6 +81066,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -81137,6 +81303,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -81180,6 +81348,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -81407,6 +81585,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -81450,6 +81630,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -81677,6 +81867,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -81720,6 +81912,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -81947,6 +82149,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -81990,6 +82194,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -82443,6 +82657,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -82486,6 +82702,16 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "billedUserId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualApiKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "sessionId": {
                                 "nullable": true,
@@ -83122,6 +83348,8 @@
                               "externalAgentId",
                               "executionId",
                               "userId",
+                              "billedUserId",
+                              "virtualApiKeyId",
                               "sessionId",
                               "sessionSource",
                               "request",
@@ -84520,6 +84748,16 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessionId": {
                           "nullable": true,
                           "type": "string"
@@ -84746,6 +84984,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -84789,6 +85029,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -85130,6 +85380,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -85173,6 +85425,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -85400,6 +85662,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -85443,6 +85707,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -85670,6 +85944,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -85713,6 +85989,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -87652,6 +87938,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -87695,6 +87983,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -87922,6 +88220,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -87965,6 +88265,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -88192,6 +88502,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -88235,6 +88547,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -88462,6 +88784,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -88505,6 +88829,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -88732,6 +89066,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -88775,6 +89111,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -89002,6 +89348,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -89045,6 +89393,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -89272,6 +89630,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -89315,6 +89675,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -89531,6 +89901,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -89574,6 +89946,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -89790,6 +90172,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -89833,6 +90217,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -90060,6 +90454,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -90103,6 +90499,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -90330,6 +90736,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -90373,6 +90781,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -90600,6 +91018,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -90643,6 +91063,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -90870,6 +91300,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -90913,6 +91345,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -91366,6 +91808,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -91409,6 +91853,16 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "billedUserId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "sessionId": {
                           "nullable": true,
@@ -92045,6 +92499,8 @@
                         "externalAgentId",
                         "executionId",
                         "userId",
+                        "billedUserId",
+                        "virtualApiKeyId",
                         "sessionId",
                         "sessionSource",
                         "request",
@@ -108945,7 +109401,9 @@
               "enum": [
                 "organization",
                 "team",
-                "agent"
+                "agent",
+                "user",
+                "virtual_api_key"
               ]
             },
             "in": "query",
@@ -108994,10 +109452,15 @@
                         "enum": [
                           "organization",
                           "team",
-                          "agent"
+                          "agent",
+                          "user",
+                          "virtual_api_key"
                         ]
                       },
                       "entityId": {
+                        "type": "string"
+                      },
+                      "organizationId": {
                         "type": "string"
                       },
                       "limitType": {
@@ -109075,6 +109538,7 @@
                       "id",
                       "entityType",
                       "entityId",
+                      "organizationId",
                       "limitType",
                       "limitValue",
                       "mcpServerName",
@@ -109325,7 +109789,9 @@
                     "enum": [
                       "organization",
                       "team",
-                      "agent"
+                      "agent",
+                      "user",
+                      "virtual_api_key"
                     ]
                   },
                   "entityId": {
@@ -109393,10 +109859,15 @@
                       "enum": [
                         "organization",
                         "team",
-                        "agent"
+                        "agent",
+                        "user",
+                        "virtual_api_key"
                       ]
                     },
                     "entityId": {
+                      "type": "string"
+                    },
+                    "organizationId": {
                       "type": "string"
                     },
                     "limitType": {
@@ -109447,6 +109918,7 @@
                     "id",
                     "entityType",
                     "entityId",
+                    "organizationId",
                     "limitType",
                     "limitValue",
                     "mcpServerName",
@@ -109716,10 +110188,15 @@
                       "enum": [
                         "organization",
                         "team",
-                        "agent"
+                        "agent",
+                        "user",
+                        "virtual_api_key"
                       ]
                     },
                     "entityId": {
+                      "type": "string"
+                    },
+                    "organizationId": {
                       "type": "string"
                     },
                     "limitType": {
@@ -109770,6 +110247,7 @@
                     "id",
                     "entityType",
                     "entityId",
+                    "organizationId",
                     "limitType",
                     "limitValue",
                     "mcpServerName",
@@ -110019,7 +110497,9 @@
                     "enum": [
                       "organization",
                       "team",
-                      "agent"
+                      "agent",
+                      "user",
+                      "virtual_api_key"
                     ]
                   },
                   "entityId": {
@@ -110093,10 +110573,15 @@
                       "enum": [
                         "organization",
                         "team",
-                        "agent"
+                        "agent",
+                        "user",
+                        "virtual_api_key"
                       ]
                     },
                     "entityId": {
+                      "type": "string"
+                    },
+                    "organizationId": {
                       "type": "string"
                     },
                     "limitType": {
@@ -110147,6 +110632,7 @@
                     "id",
                     "entityType",
                     "entityId",
+                    "organizationId",
                     "limitType",
                     "limitValue",
                     "mcpServerName",
@@ -146277,6 +146763,655 @@
                     "topModel"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmCost:read"
+          ]
+        }
+      }
+    },
+    "/api/statistics/users": {
+      "get": {
+        "operationId": "getUserStatistics",
+        "tags": [
+          "Statistics"
+        ],
+        "description": "Per-user cost breakdown grouped by interactions.billed_user_id\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "30m",
+                    "1h",
+                    "24h",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "12m",
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^custom:[\\s\\S]{0,}_[\\s\\S]{0,}$",
+                  "description": "Custom timeframe must be in format 'custom:startTime_endTime'"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "timeframe",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "userId": {
+                        "type": "string"
+                      },
+                      "userName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "userEmail": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "requests": {
+                        "type": "number"
+                      },
+                      "inputTokens": {
+                        "type": "number"
+                      },
+                      "outputTokens": {
+                        "type": "number"
+                      },
+                      "cost": {
+                        "type": "number"
+                      },
+                      "timeSeries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "timestamp": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "timestamp",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "userId",
+                      "userName",
+                      "userEmail",
+                      "requests",
+                      "inputTokens",
+                      "outputTokens",
+                      "cost",
+                      "timeSeries"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmCost:read"
+          ]
+        }
+      }
+    },
+    "/api/statistics/virtual-keys": {
+      "get": {
+        "operationId": "getVirtualKeyStatistics",
+        "tags": [
+          "Statistics"
+        ],
+        "description": "Per-virtual-key cost breakdown grouped by interactions.virtual_api_key_id\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "30m",
+                    "1h",
+                    "24h",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "12m",
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^custom:[\\s\\S]{0,}_[\\s\\S]{0,}$",
+                  "description": "Custom timeframe must be in format 'custom:startTime_endTime'"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "timeframe",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "virtualKeyId": {
+                        "type": "string"
+                      },
+                      "virtualKeyName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "requests": {
+                        "type": "number"
+                      },
+                      "inputTokens": {
+                        "type": "number"
+                      },
+                      "outputTokens": {
+                        "type": "number"
+                      },
+                      "cost": {
+                        "type": "number"
+                      },
+                      "timeSeries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "timestamp": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "timestamp",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "virtualKeyId",
+                      "virtualKeyName",
+                      "requests",
+                      "inputTokens",
+                      "outputTokens",
+                      "cost",
+                      "timeSeries"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }

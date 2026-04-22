@@ -188,11 +188,12 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "bedrock",
     );
     if (jwksResult) {
+      logger.info("[BedrockOpenai] auth: jwks");
       apiKey = jwksResult.apiKey;
       baseUrl = jwksResult.baseUrl;
     } else if (bearerToken) {
       if (hasArchestraTokenPrefix(bearerToken)) {
-        // 2. Virtual API key.
+        logger.info("[BedrockOpenai] auth: virtual-key");
         await virtualKeyRateLimiter.check(request.ip);
         try {
           const resolved = await validateVirtualApiKey(bearerToken, "bedrock");
@@ -203,9 +204,11 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw err;
         }
       } else {
-        // 3. Raw Bedrock bearer API key — pass through.
+        logger.info("[BedrockOpenai] auth: raw-bearer");
         apiKey = bearerToken;
       }
+    } else if (isBedrockIamAuthEnabled()) {
+      logger.info("[BedrockOpenai] auth: iam");
     }
 
     // 4. If no bearer key was resolved (no token, or a virtual key whose
@@ -220,9 +223,14 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     }
 
-    const models = apiKey
-      ? await fetchBedrockModels(apiKey, baseUrl)
-      : await fetchBedrockModelsViaIam();
+    let models: Awaited<ReturnType<typeof fetchBedrockModels>>;
+    if (apiKey) {
+      logger.info("[BedrockOpenai] fetching models via api key");
+      models = await fetchBedrockModels(apiKey, baseUrl);
+    } else {
+      logger.info("[BedrockOpenai] fetching models via IAM");
+      models = await fetchBedrockModelsViaIam();
+    }
 
     const createdUnix = Math.floor(Date.now() / 1000);
     return {

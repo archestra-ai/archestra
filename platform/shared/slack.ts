@@ -42,9 +42,7 @@ export const SLACK_SLASH_COMMAND_SUFFIXES = {
 
 export type SlackSlashCommandAction = keyof typeof SLACK_SLASH_COMMAND_SUFFIXES;
 
-export const SLACK_SLASH_COMMANDS = {
-  ...buildSlackSlashCommands("Archestra"),
-};
+export const SLACK_SLASH_COMMANDS = buildSlackSlashCommands("Archestra");
 
 export function buildSlackSlashCommands(
   appName: string,

@@ -46,9 +46,6 @@ export const CHATOPS_TEAM_CACHE = {
 };
 
 /**
- * Bot commands recognized by the chatops system
- */
-/**
  * Channel discovery configuration for auto-populating channel bindings
  */
 export const CHATOPS_CHANNEL_DISCOVERY = {

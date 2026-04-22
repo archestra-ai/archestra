@@ -1,10 +1,10 @@
 import { buildSlackSlashCommands, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
 
-export type SlackConnectionMode = "socket" | "webhook";
+type SlackManifestConnectionMode = "socket" | "webhook";
 
 export function buildSlackManifest(params: {
   appName: string;
-  connectionMode: SlackConnectionMode;
+  connectionMode: SlackManifestConnectionMode;
   webhookUrl: string;
   interactiveUrl: string;
   slashCommandUrl: string;

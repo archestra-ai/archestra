@@ -166,7 +166,12 @@ export const MessageSchema = z.object({
 // SYSTEM CONTENT
 // =============================================================================
 
-// System content block (text or guard content)
+// Cache point block — used by Claude models for prompt caching via Bedrock Converse API
+const CachePointBlockSchema = z.object({
+  cachePoint: z.object({ type: z.string() }),
+});
+
+// System content block (text, guard content, or cache point)
 // Also accepts Anthropic-style { type: "text", text: string } blocks (e.g. from @ai-sdk/amazon-bedrock)
 // and normalizes them to Bedrock format { text: string }
 const SystemContentBlockSchema = z.union([
@@ -175,6 +180,7 @@ const SystemContentBlockSchema = z.union([
     .transform(({ text }) => ({ text })),
   z.object({ text: z.string() }),
   GuardContentBlockSchema,
+  CachePointBlockSchema,
 ]);
 
 export const SystemSchema = z.array(SystemContentBlockSchema);

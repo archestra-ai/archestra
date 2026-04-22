@@ -2,6 +2,7 @@ import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { describe, expect, test } from "@/test";
 import type { Bedrock } from "@/types";
+import { ConverseRequestSchema } from "@/types/llm-providers/bedrock/api";
 import { bedrockAdapterFactory, getCommandInput } from "./bedrock";
 
 const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
@@ -366,5 +367,53 @@ describe("Bedrock client creation", () => {
     };
 
     expect(client.config.baseUrl).toBe(customBaseUrl);
+  });
+});
+
+describe("Bedrock system message — cachePoint support", () => {
+  test("ConverseRequestSchema accepts a cachePoint block in the system array", () => {
+    const result = ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      messages: [{ role: "user", content: [{ text: "Hello" }] }],
+      system: [
+        { text: "You are a helpful assistant." },
+        { cachePoint: { type: "default" } },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("getCommandInput passes cachePoint system blocks through to the AWS command", () => {
+    const request = createConverseRequest({
+      system: [
+        { text: "You are a helpful assistant." },
+        { cachePoint: { type: "default" } },
+      ],
+    });
+
+    const { system } = getCommandInput(request);
+
+    expect(system).toEqual([
+      { text: "You are a helpful assistant." },
+      { cachePoint: { type: "default" } },
+    ]);
+  });
+
+  test("ConverseRequestSchema normalizes Anthropic-style { type: 'text' } system blocks alongside cachePoint", () => {
+    const result = ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      messages: [{ role: "user", content: [{ text: "Hello" }] }],
+      system: [
+        { type: "text", text: "You are a helpful assistant." },
+        { cachePoint: { type: "default" } },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.system).toEqual([
+      { text: "You are a helpful assistant." },
+      { cachePoint: { type: "default" } },
+    ]);
   });
 });

@@ -37,10 +37,10 @@
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "test": {
-      "cache": false
+      "cache": true
     },
     "test:e2e": {
-      "cache": false,
+      "cache": true,
       "passThroughEnv": [
         "CI",
         "PLAYWRIGHT_BROWSERS_PATH",
@@ -50,10 +50,10 @@
       ]
     },
     "test:e2e:ui": {
-      "cache": false
+      "cache": true
     },
     "codegen": {
-      "cache": false
+      "cache": true
     },
     "@shared#codegen": {
       "dependsOn": ["@backend#codegen"],

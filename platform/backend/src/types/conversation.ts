@@ -1,4 +1,4 @@
-import { ChatErrorResponseSchema, SupportedProvidersSchema } from "@shared";
+import { SupportedProvidersSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -20,7 +20,6 @@ const ConversationShareSummarySchema = z
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
-  lastChatError: ChatErrorResponseSchema.nullable(),
 };
 
 // For insert/update schema, selectedProvider is optional

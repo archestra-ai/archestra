@@ -37,7 +37,6 @@ describe("ConversationModel", () => {
     expect(conversation.updatedAt).toBeDefined();
     expect(Array.isArray(conversation.messages)).toBe(true);
     expect(conversation.chatErrors).toEqual([]);
-    expect(conversation.lastChatError).toBeNull();
   });
 
   test("can persist chat error events on a conversation", async ({
@@ -95,61 +94,6 @@ describe("ConversationModel", () => {
         traceId: "trace-event-2",
       },
     ]);
-  });
-
-  test("can update and clear the persisted chat error", async ({
-    makeUser,
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const user = await makeUser();
-    const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Error State Agent", teams: [] });
-    const conversation = await ConversationModel.create({
-      userId: user.id,
-      organizationId: org.id,
-      agentId: agent.id,
-      title: "Error State",
-      selectedModel: "claude-3-haiku-20240307",
-    });
-
-    await ConversationModel.updateLastChatError({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-      lastChatError: {
-        code: ChatErrorCode.ServerError,
-        message: "The AI provider is experiencing issues.",
-        isRetryable: true,
-        traceId: "trace-123",
-      },
-    });
-
-    const withError = await ConversationModel.findById({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-    });
-    expect(withError?.lastChatError).toEqual({
-      code: ChatErrorCode.ServerError,
-      message: "The AI provider is experiencing issues.",
-      isRetryable: true,
-      traceId: "trace-123",
-    });
-
-    await ConversationModel.updateLastChatError({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-      lastChatError: null,
-    });
-
-    const cleared = await ConversationModel.findById({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-    });
-    expect(cleared?.lastChatError).toBeNull();
   });
 
   test("can find conversation by id", async ({

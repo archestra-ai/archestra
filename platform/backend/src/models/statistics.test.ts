@@ -17,11 +17,11 @@ describe("StatisticsModel", () => {
       const customTimeframe: StatisticsTimeFrame = `custom:${startTime}_${endTime}`;
 
       // This should not throw an error if parsing works
-      const result = await StatisticsModel.getTeamStatistics(
-        customTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: customTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -38,11 +38,11 @@ describe("StatisticsModel", () => {
         "custom:2024-01-01T00:00:00.000Z" as StatisticsTimeFrame;
 
       // Should not throw but should handle gracefully
-      const result = await StatisticsModel.getTeamStatistics(
-        invalidTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: invalidTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -58,11 +58,11 @@ describe("StatisticsModel", () => {
         "custom:invalid-date_also-invalid" as StatisticsTimeFrame;
 
       // Should not throw but should handle gracefully
-      const result = await StatisticsModel.getTeamStatistics(
-        invalidTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: invalidTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -80,11 +80,11 @@ describe("StatisticsModel", () => {
       const team = await makeTeam(org.id, user.id);
       await makeAgent({ teams: [team.id] });
 
-      const result = await StatisticsModel.getTeamStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -106,11 +106,11 @@ describe("StatisticsModel", () => {
 
       const customTimeframe: StatisticsTimeFrame = `custom:${startTime.toISOString()}_${endTime.toISOString()}`;
 
-      const result = await StatisticsModel.getTeamStatistics(
-        customTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: customTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -127,11 +127,11 @@ describe("StatisticsModel", () => {
       await makeAgent({ teams: [team.id] });
 
       // Test as non-admin (isAgentAdmin = false)
-      const result = await StatisticsModel.getTeamStatistics(
-        "24h",
-        user.id,
-        false,
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: false,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -149,11 +149,11 @@ describe("StatisticsModel", () => {
       const team = await makeTeam(org.id, user.id);
       await makeAgent({ teams: [team.id] });
 
-      const result = await StatisticsModel.getAgentStatistics(
-        "7d",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getAgentStatistics({
+        timeframe: "7d",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -175,11 +175,11 @@ describe("StatisticsModel", () => {
 
       const customTimeframe: StatisticsTimeFrame = `custom:${yesterday.toISOString()}_${today.toISOString()}`;
 
-      const result = await StatisticsModel.getAgentStatistics(
-        customTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getAgentStatistics({
+        timeframe: customTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -195,11 +195,11 @@ describe("StatisticsModel", () => {
       await makeOrganization();
       await makeAgent();
 
-      const result = await StatisticsModel.getModelStatistics(
-        "30d",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getModelStatistics({
+        timeframe: "30d",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -219,11 +219,11 @@ describe("StatisticsModel", () => {
 
       const customTimeframe: StatisticsTimeFrame = `custom:${weekAgo.toISOString()}_${now.toISOString()}`;
 
-      const result = await StatisticsModel.getModelStatistics(
-        customTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getModelStatistics({
+        timeframe: customTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
@@ -237,11 +237,11 @@ describe("StatisticsModel", () => {
       await makeOrganization();
       await makeAgent();
 
-      const result = await StatisticsModel.getModelStatistics(
-        "all",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getModelStatistics({
+        timeframe: "all",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
 
       // Verify percentages add up to 100% (or close to it due to rounding)
       const totalPercentage = result.reduce(
@@ -265,11 +265,11 @@ describe("StatisticsModel", () => {
       await makeOrganization();
       await makeAgent();
 
-      const result = await StatisticsModel.getOverviewStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getOverviewStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(typeof result.totalRequests).toBe("number");
       expect(typeof result.totalTokens).toBe("number");
@@ -294,11 +294,11 @@ describe("StatisticsModel", () => {
 
       const customTimeframe: StatisticsTimeFrame = `custom:${monthAgo.toISOString()}_${now.toISOString()}`;
 
-      const result = await StatisticsModel.getOverviewStatistics(
-        customTimeframe,
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getOverviewStatistics({
+        timeframe: customTimeframe,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(result).toBeDefined();
       expect(typeof result.totalRequests).toBe("number");
       expect(typeof result.totalTokens).toBe("number");
@@ -322,11 +322,11 @@ describe("StatisticsModel", () => {
       const shortEnd = new Date();
       const shortCustom: StatisticsTimeFrame = `custom:${shortStart.toISOString()}_${shortEnd.toISOString()}`;
 
-      const shortResult = await StatisticsModel.getTeamStatistics(
-        shortCustom,
-        user.id,
-        true,
-      );
+      const shortResult = await StatisticsModel.getTeamStatistics({
+        timeframe: shortCustom,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(shortResult).toBeDefined();
 
       // Test long timeframe (should use day/week buckets)
@@ -335,11 +335,11 @@ describe("StatisticsModel", () => {
       const longEnd = new Date();
       const longCustom: StatisticsTimeFrame = `custom:${longStart.toISOString()}_${longEnd.toISOString()}`;
 
-      const longResult = await StatisticsModel.getTeamStatistics(
-        longCustom,
-        user.id,
-        true,
-      );
+      const longResult = await StatisticsModel.getTeamStatistics({
+        timeframe: longCustom,
+        userId: user.id,
+        isAgentAdmin: true,
+      });
       expect(longResult).toBeDefined();
     });
   });
@@ -353,21 +353,21 @@ describe("StatisticsModel", () => {
       await makeOrganization();
 
       // No agents or teams created, should return empty arrays
-      const teamResult = await StatisticsModel.getTeamStatistics(
-        "24h",
-        user.id,
-        true,
-      );
-      const agentResult = await StatisticsModel.getAgentStatistics(
-        "24h",
-        user.id,
-        true,
-      );
-      const modelResult = await StatisticsModel.getModelStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const teamResult = await StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
+      const agentResult = await StatisticsModel.getAgentStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
+      const modelResult = await StatisticsModel.getModelStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: true,
+      });
 
       expect(teamResult).toEqual([]);
       expect(agentResult).toEqual([]);
@@ -387,11 +387,11 @@ describe("StatisticsModel", () => {
 
       // Test as non-admin user (isAgentAdmin = false)
       // Non-admin users should only see agents they have access to through team membership
-      const result = await StatisticsModel.getTeamStatistics(
-        "24h",
-        user.id,
-        false, // isAgentAdmin = false
-      );
+      const result = await StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        isAgentAdmin: false,
+      });
 
       // Result might be empty if user doesn't have access to any agents
       expect(result).toBeDefined();

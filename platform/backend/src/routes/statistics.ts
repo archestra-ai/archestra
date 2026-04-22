@@ -10,6 +10,8 @@ import {
   ModelStatisticsSchema,
   OverviewStatisticsSchema,
   TeamStatisticsSchema,
+  UserStatisticsSchema,
+  VirtualKeyStatisticsSchema,
 } from "@/types";
 
 const StatisticsQuerySchema = z.object({
@@ -34,11 +36,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       return reply.send(
-        await StatisticsModel.getTeamStatistics(
+        await StatisticsModel.getTeamStatistics({
           timeframe,
-          user.id,
+          userId: user.id,
           isAgentAdmin,
-        ),
+        }),
       );
     },
   );
@@ -61,11 +63,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(
-        await StatisticsModel.getAgentStatistics(
+        await StatisticsModel.getAgentStatistics({
           timeframe,
-          user.id,
+          userId: user.id,
           isAgentAdmin,
-        ),
+        }),
       );
     },
   );
@@ -88,11 +90,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(
-        await StatisticsModel.getModelStatistics(
+        await StatisticsModel.getModelStatistics({
           timeframe,
-          user.id,
+          userId: user.id,
           isAgentAdmin,
-        ),
+        }),
       );
     },
   );
@@ -115,11 +117,67 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(
-        await StatisticsModel.getOverviewStatistics(
+        await StatisticsModel.getOverviewStatistics({
           timeframe,
-          user.id,
+          userId: user.id,
           isAgentAdmin,
-        ),
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/users",
+    {
+      schema: {
+        operationId: RouteId.GetUserStatistics,
+        description:
+          "Per-user cost breakdown grouped by interactions.billed_user_id",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(z.array(UserStatisticsSchema)),
+      },
+    },
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await StatisticsModel.getUserStatistics({
+          timeframe,
+          organizationId,
+          userId: user.id,
+          isAgentAdmin,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/virtual-keys",
+    {
+      schema: {
+        operationId: RouteId.GetVirtualKeyStatistics,
+        description:
+          "Per-virtual-key cost breakdown grouped by interactions.virtual_api_key_id",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(z.array(VirtualKeyStatisticsSchema)),
+      },
+    },
+    async ({ query: { timeframe }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await StatisticsModel.getVirtualKeyStatistics({
+          timeframe,
+          userId: user.id,
+          organizationId,
+          isAgentAdmin,
+        }),
       );
     },
   );
@@ -142,11 +200,11 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(
-        await StatisticsModel.getCostSavingsStatistics(
+        await StatisticsModel.getCostSavingsStatistics({
           timeframe,
-          user.id,
+          userId: user.id,
           isAgentAdmin,
-        ),
+        }),
       );
     },
   );

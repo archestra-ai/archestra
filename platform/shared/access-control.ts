@@ -886,6 +886,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
+  [RouteId.GetUserStatistics]: {
+    llmCost: ["read"],
+  },
+  [RouteId.GetVirtualKeyStatistics]: {
+    llmCost: ["read"],
+  },
   // Secrets Routes
   [RouteId.GetSecretsType]: {
     secret: ["read"],

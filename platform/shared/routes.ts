@@ -364,6 +364,8 @@ export const RouteId = {
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
+  GetUserStatistics: "getUserStatistics",
+  GetVirtualKeyStatistics: "getVirtualKeyStatistics",
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",

@@ -12,6 +12,10 @@ vi.mock("@/components/ai-elements/conversation", () => ({
   ConversationScrollButton: () => null,
 }));
 
+vi.mock("use-stick-to-bottom", () => ({
+  useStickToBottomContext: () => ({ scrollToBottom: vi.fn() }),
+}));
+
 vi.mock("@/components/ai-elements/message", () => ({
   Message: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>

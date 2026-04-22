@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import {
   Conversation,
   ConversationContent,
@@ -415,6 +416,7 @@ export function ChatMessages({
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
     >
+      <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
@@ -1251,6 +1253,24 @@ function useStreamingStallDetection(
   }, [status]);
 
   return isStreamingStalled;
+}
+
+// Re-engage stick-to-bottom when the user sends a new message.
+// If the user has scrolled up, the library keeps state.isAtBottom=false and
+// won't auto-scroll on content resize — this resets it on the submit transition.
+function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const prevStatusRef = useRef(status);
+
+  useEffect(() => {
+    if (status === "submitted" && prevStatusRef.current !== "submitted") {
+      scrollToBottom();
+    }
+
+    prevStatusRef.current = status;
+  }, [status, scrollToBottom]);
+
+  return null;
 }
 
 const MessageTool = memo(

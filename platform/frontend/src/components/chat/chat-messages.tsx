@@ -1261,12 +1261,15 @@ function useStreamingStallDetection(
 function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
   const { scrollToBottom } = useStickToBottomContext();
   const prevStatusRef = useRef(status);
+
   useEffect(() => {
     if (status === "submitted" && prevStatusRef.current !== "submitted") {
       scrollToBottom();
     }
+
     prevStatusRef.current = status;
   }, [status, scrollToBottom]);
+
   return null;
 }
 

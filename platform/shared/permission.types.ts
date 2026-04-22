@@ -16,6 +16,7 @@ export const actions = [
   "delete",
   "team-admin",
   "admin",
+  "approve",
   "cancel",
   "enable",
   "query",
@@ -31,6 +32,7 @@ export const resources = [
   "mcpRegistry",
   "mcpServerInstallation",
   "knowledgeSource",
+  "memory",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "chat",
@@ -85,6 +87,7 @@ export const resourceLabels: Record<Resource, string> = {
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
   knowledgeSource: "Knowledge Sources",
+  memory: "Memory",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   team: "Teams",
@@ -141,6 +144,8 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
+  memory:
+    "Durable memory items with scope-aware read, review, and lifecycle controls",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Controls if the simple view of the app is enabled",
@@ -181,7 +186,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeSource", "knowledgeSettings"],
+  Knowledge: ["knowledgeSource", "memory", "knowledgeSettings"],
   Other: [
     "chat",
     "log",

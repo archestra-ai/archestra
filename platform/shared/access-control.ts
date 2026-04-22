@@ -47,6 +47,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
+  memory: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "approve",
+    "team-admin",
+    "admin",
+  ],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -99,6 +108,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
+  memory: ["read", "create", "update", "delete", "approve", "team-admin"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -151,6 +161,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "query"],
+  memory: ["read", "create", "update", "delete", "approve"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -332,6 +343,14 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all knowledge bases and connectors, bypassing visibility restrictions",
+  "memory:read": "View durable memory items in authorized scopes",
+  "memory:create": "Create durable memory candidates",
+  "memory:update": "Update or archive durable memory items",
+  "memory:delete": "Delete durable memory items",
+  "memory:approve": "Approve or reject memory candidates",
+  "memory:team-admin":
+    "Review and manage team-scoped memory for teams you belong to",
+  "memory:admin": "Review and manage organization-scoped memory",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -1005,6 +1024,44 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
+  // Memory Routes
+  [RouteId.ListMemory]: {
+    memory: ["read"],
+  },
+  [RouteId.ListPendingMemory]: {
+    memory: ["approve"],
+  },
+  [RouteId.GetMemory]: {
+    memory: ["read"],
+  },
+  [RouteId.CreateMemory]: {
+    memory: ["create"],
+  },
+  [RouteId.UpdateMemory]: {
+    memory: ["update"],
+  },
+  [RouteId.SupersedeMemory]: {
+    memory: ["update"],
+  },
+  [RouteId.ApproveMemory]: {
+    memory: ["approve"],
+  },
+  [RouteId.RejectMemory]: {
+    memory: ["approve"],
+  },
+  [RouteId.ArchiveMemory]: {
+    memory: ["update"],
+  },
+  [RouteId.UnarchiveMemory]: {
+    memory: ["update"],
+  },
+  [RouteId.DeleteMemory]: {
+    memory: ["delete"],
+  },
+  [RouteId.GetMemoryStats]: {
+    memory: ["read"],
+  },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
@@ -1066,6 +1123,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
+  "/settings/memory": { memory: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },

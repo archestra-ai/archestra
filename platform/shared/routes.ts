@@ -422,6 +422,20 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
+  // Memory Routes
+  ListMemory: "listMemory",
+  ListPendingMemory: "listPendingMemory",
+  GetMemory: "getMemory",
+  CreateMemory: "createMemory",
+  UpdateMemory: "updateMemory",
+  SupersedeMemory: "supersedeMemory",
+  ApproveMemory: "approveMemory",
+  RejectMemory: "rejectMemory",
+  ArchiveMemory: "archiveMemory",
+  UnarchiveMemory: "unarchiveMemory",
+  DeleteMemory: "deleteMemory",
+  GetMemoryStats: "getMemoryStats",
+
   // Invitation Routes
   CheckInvitation: "checkInvitation",
 } as const;

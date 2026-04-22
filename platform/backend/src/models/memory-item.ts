@@ -14,6 +14,10 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import {
+  type MemoryRequesterRole,
+  normalizeMemoryRequesterRole,
+} from "@/memory/policy/requester-role";
 import type {
   InsertMemoryItem,
   MemoryItem,
@@ -460,6 +464,10 @@ class MemoryItemModel {
     requesterRole: string;
     teamIds: string[];
   }): SQL {
+    // Keep requesterRole handling deterministic for review-queue filtering.
+    const normalizedRequesterRole = normalizeMemoryRequesterRole(
+      params.requesterRole,
+    );
     const scopePredicates: SQL[] = [
       and(
         eq(schema.memoryItemsTable.scopeType, "user"),
@@ -468,7 +476,7 @@ class MemoryItemModel {
     ];
 
     if (
-      MemoryItemModel.canReviewTeamScope(params.requesterRole) &&
+      MemoryItemModel.canReviewTeamScope(normalizedRequesterRole) &&
       params.teamIds.length > 0
     ) {
       scopePredicates.push(
@@ -479,7 +487,7 @@ class MemoryItemModel {
       );
     }
 
-    if (MemoryItemModel.canReviewOrganizationScope(params.requesterRole)) {
+    if (MemoryItemModel.canReviewOrganizationScope(normalizedRequesterRole)) {
       scopePredicates.push(
         and(
           eq(schema.memoryItemsTable.scopeType, "organization"),
@@ -492,11 +500,13 @@ class MemoryItemModel {
     return scopePredicate ?? sql`false`;
   }
 
-  private static canReviewTeamScope(role: string): boolean {
+  private static canReviewTeamScope(role: MemoryRequesterRole): boolean {
     return role === "admin" || role === "team-admin";
   }
 
-  private static canReviewOrganizationScope(role: string): boolean {
+  private static canReviewOrganizationScope(
+    role: MemoryRequesterRole,
+  ): boolean {
     return role === "admin";
   }
 

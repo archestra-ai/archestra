@@ -319,6 +319,33 @@ describe("attemptJwksAuth", () => {
     expect(result).toBeNull();
   });
 
+  test("returns null when bearer token is a provider API key rather than a JWT", async ({
+    makeOrganization,
+    makeAgent,
+    makeIdentityProvider,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const spy = vi.spyOn(gatewayUtils, "validateExternalIdpToken");
+
+    const result = await attemptJwksAuth(
+      makeFakeRequest("Bearer sk-provider-key"),
+      agent,
+      "openai",
+    );
+
+    expect(result).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+
   test("throws 401 when JWT validation throws an error", async ({
     makeOrganization,
     makeAgent,

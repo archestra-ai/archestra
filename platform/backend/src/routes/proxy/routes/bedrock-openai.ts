@@ -63,6 +63,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Bedrock OpenAI chat completions (default agent)",
       );
+      await assertBedrockCredentialResolvable(request, undefined);
       const { converseBody, openaiContext } = openaiToConverse(request.body);
       return handleLLMProxy(
         converseBody,
@@ -94,6 +95,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Bedrock OpenAI chat completions (with agent)",
       );
+      await assertBedrockCredentialResolvable(request, request.params.agentId);
       const { converseBody, openaiContext } = openaiToConverse(request.body);
       return handleLLMProxy(
         converseBody,
@@ -122,6 +124,40 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       .optional()
       .describe("Bearer token: Archestra virtual API key for Bedrock"),
   });
+
+  /**
+   * Early auth gate for chat completions. `handleLLMProxy` would otherwise
+   * happily pass `apiKey: undefined` to `bedrockAdapter.createClient` when
+   * neither a bearer nor IAM is available, producing a confusing SigV4 failure
+   * instead of a 401. This mirrors the explicit gate in `handleListModels`:
+   *   - If any Bearer token is present, defer to `handleLLMProxy` (it will
+   *     validate virtual key / raw bearer / reject as appropriate).
+   *   - Otherwise, allow the request only if JWKS resolves, or IAM is enabled.
+   */
+  async function assertBedrockCredentialResolvable(
+    request: FastifyRequestLike,
+    agentId: string | undefined,
+  ): Promise<void> {
+    const rawAuthHeader = request.raw.headers.authorization as
+      | string
+      | undefined;
+    if (/^Bearer\s+.+$/i.test(rawAuthHeader ?? "")) return;
+
+    const resolvedAgent = await resolveAgent(agentId);
+    const jwksResult = await attemptJwksAuth(
+      request as unknown as Parameters<typeof attemptJwksAuth>[0],
+      resolvedAgent,
+      "bedrock",
+    );
+    if (jwksResult) return;
+
+    if (!isBedrockIamAuthEnabled()) {
+      throw new ApiError(
+        401,
+        "Authentication required. Provide a Bedrock API key or virtual API key via Authorization: Bearer <token>.",
+      );
+    }
+  }
 
   /**
    * Resolve Bedrock credentials using the same auth chain as the chat

@@ -5,7 +5,6 @@ import {
   type ArchestraToolShortName,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
-  isChatErrorResponse,
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
@@ -57,16 +56,16 @@ const RETRYABLE_CLIENT_ERRORS = [
 
 function isRetryableError(error: Error): boolean {
   const msg = error.message;
-  // Check client-side patterns
-  if (RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p))) return true;
-  // Check structured backend error
+  // Structured backend chat errors already reached the server and should render
+  // once. Retrying here creates duplicate LLM requests and changes trace IDs.
   try {
-    const parsed = JSON.parse(msg);
-    if (isChatErrorResponse(parsed)) return parsed.isRetryable;
+    JSON.parse(msg);
+    return false;
   } catch {
     // not JSON
   }
-  return false;
+
+  return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
 }
 
 interface ChatSession {

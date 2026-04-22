@@ -225,6 +225,14 @@ export const RouteId = {
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
+  // OpenAI-compatible routes (translate OpenAI chat/completions ↔ Converse)
+  BedrockOpenaiChatCompletionsWithDefaultAgent:
+    "bedrockOpenaiChatCompletionsWithDefaultAgent",
+  BedrockOpenaiChatCompletionsWithAgent:
+    "bedrockOpenaiChatCompletionsWithAgent",
+  BedrockOpenaiListModelsWithDefaultAgent:
+    "bedrockOpenaiListModelsWithDefaultAgent",
+  BedrockOpenaiListModelsWithAgent: "bedrockOpenaiListModelsWithAgent",
 
   // Proxy Routes - MiniMax
   MinimaxChatCompletionsWithDefaultAgent:

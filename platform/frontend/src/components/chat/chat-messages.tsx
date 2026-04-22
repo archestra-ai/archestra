@@ -379,15 +379,6 @@ export function ChatMessages({
     };
   });
 
-  // Only auto-scroll on content resize during streaming.
-  // When idle, user interactions like expanding tool calls should not
-  // trigger scroll — returning the current scrollTop keeps position stable.
-  const preventResizeScroll = useCallback(
-    (_target: number, { scrollElement }: { scrollElement: HTMLElement }) =>
-      scrollElement.scrollTop,
-    [],
-  );
-
   if (messages.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -424,7 +415,6 @@ export function ChatMessages({
     <Conversation
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
-      targetScrollTop={isResponseInProgress ? undefined : preventResizeScroll}
     >
       <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>

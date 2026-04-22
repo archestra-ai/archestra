@@ -1279,7 +1279,11 @@ async function handleNonStreaming<
         providerType: provider.interactionType,
         request: originalRequest,
         processedRequest: request,
-        response: responseAdapter.getOriginalResponse(),
+        // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
+        // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
+        response:
+          responseAdapter.getLoggedResponse?.() ??
+          responseAdapter.getOriginalResponse(),
         actualModel,
         baselineModel,
         usage,

@@ -31,6 +31,7 @@ export { default as organizationRoleRoutes } from "./organization-role";
 export { default as anthropicProxyRoutes } from "./proxy/routes/anthropic";
 export { default as azureProxyRoutes } from "./proxy/routes/azure";
 export { default as bedrockProxyRoutes } from "./proxy/routes/bedrock";
+export { default as bedrockOpenaiProxyRoutes } from "./proxy/routes/bedrock-openai";
 export { default as cerebrasProxyRoutes } from "./proxy/routes/cerebras";
 export { default as cohereProxyRoutes } from "./proxy/routes/cohere";
 export { default as deepseekProxyRoutes } from "./proxy/routes/deepseek";

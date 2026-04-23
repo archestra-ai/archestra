@@ -268,6 +268,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.geminiProxyRoutes);
   fastify.register(routes.azureProxyRoutes);
   fastify.register(routes.bedrockProxyRoutes);
+  fastify.register(routes.bedrockOpenaiProxyRoutes);
   fastify.register(routes.cerebrasProxyRoutes);
   fastify.register(routes.cohereProxyRoutes);
   fastify.register(routes.deepseekProxyRoutes);
@@ -292,6 +293,7 @@ export const createFastifyInstance = () =>
     loggerInstance: logger,
     disableRequestLogging: true,
     trustProxy: config.api.trustProxy,
+    bodyLimit: config.api.bodyLimit,
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)

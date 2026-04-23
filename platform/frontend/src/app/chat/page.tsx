@@ -41,6 +41,7 @@ import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
@@ -840,12 +841,24 @@ export function ChatPageContent({
   // While a conversation tab is open, useChat owns the thread.
   // We only fall back to persisted messages before the session initializes or
   // for read-only shared conversations that do not create a live chat session.
-  const messages = chatSession?.messages ?? persistedConversationMessages;
+  const messages = useMemo(
+    () =>
+      chatSession?.messages
+        ? mergePersistedMessageMetadata({
+            liveMessages: chatSession.messages,
+            persistedMessages: persistedConversationMessages,
+          })
+        : persistedConversationMessages,
+    [chatSession?.messages, persistedConversationMessages],
+  );
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
-  const error = chatSession?.error;
+  const error =
+    status === "submitted" || status === "streaming"
+      ? undefined
+      : chatSession?.error;
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
@@ -1025,6 +1038,7 @@ export function ChatPageContent({
     sendMessage({
       role: "user",
       parts,
+      metadata: { createdAt: new Date().toISOString() },
     });
   }, [
     conversation,
@@ -1156,6 +1170,7 @@ export function ChatPageContent({
     sendMessage?.({
       role: "user",
       parts,
+      metadata: { createdAt: new Date().toISOString() },
     });
   };
 
@@ -1402,6 +1417,7 @@ export function ChatPageContent({
     sendMessage({
       role: "user",
       parts: [{ type: "text", text: pendingReauthResume.message }],
+      metadata: { createdAt: new Date().toISOString() },
     });
   }, [conversationId, sendMessage, status]);
 
@@ -1742,6 +1758,7 @@ export function ChatPageContent({
                     }
                     selectedModel={conversation?.selectedModel ?? initialModel}
                     modelSource={conversationModelSource ?? initialModelSource}
+                    chatErrors={conversation?.chatErrors ?? []}
                     onUserMessageEdit={(
                       editedMessage,
                       updatedMessages,
@@ -1760,6 +1777,7 @@ export function ChatPageContent({
                           sendMessage({
                             role: "user",
                             parts: [{ type: "text", text: editedText }],
+                            metadata: { createdAt: new Date().toISOString() },
                           });
                         }
                       }
@@ -1905,18 +1923,23 @@ export function ChatPageContent({
                   }
                 }}
               >
-                {organization?.chatLinks &&
-                  organization.chatLinks.length > 0 && (
-                    <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                      {organization.chatLinks.map((link) => (
-                        <ChatLinkButton
-                          key={`${link.label}-${link.url}`}
-                          url={link.url}
-                          label={link.label}
-                        />
-                      ))}
-                    </div>
-                  )}
+                {((organization?.chatLinks?.length ?? 0) > 0 ||
+                  organization?.onboardingWizard) && (
+                  <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                    {organization?.chatLinks?.map((link) => (
+                      <ChatLinkButton
+                        key={`link-${link.label}-${link.url}`}
+                        url={link.url}
+                        label={link.label}
+                      />
+                    ))}
+                    {organization?.onboardingWizard && (
+                      <OnboardingWizardButton
+                        wizard={organization.onboardingWizard}
+                      />
+                    )}
+                  </div>
+                )}
                 {isPlaywrightSetupRequired && canUpdateAgent && (
                   <PlaywrightInstallDialog
                     agentId={playwrightSetupAgentId}
@@ -2092,6 +2115,73 @@ export function ChatPageContent({
 
 export default function ChatPage() {
   return <ChatPageContent key="new-chat" />;
+}
+
+function mergePersistedMessageMetadata(params: {
+  liveMessages: UIMessage[];
+  persistedMessages: UIMessage[];
+}): UIMessage[] {
+  const remainingPersistedMessages = [...params.persistedMessages];
+
+  return params.liveMessages.map((liveMessage) => {
+    if (hasCreatedAtMetadata(liveMessage)) {
+      return liveMessage;
+    }
+
+    const persistedIndex = remainingPersistedMessages.findIndex(
+      (persistedMessage) =>
+        messagesHaveSameRenderableContent({
+          liveMessage,
+          persistedMessage,
+        }),
+    );
+
+    if (persistedIndex === -1) {
+      return liveMessage;
+    }
+
+    const [persistedMessage] = remainingPersistedMessages.splice(
+      persistedIndex,
+      1,
+    );
+
+    return {
+      ...liveMessage,
+      metadata: {
+        ...getObjectMetadata(persistedMessage),
+        ...getObjectMetadata(liveMessage),
+      },
+    };
+  });
+}
+
+function messagesHaveSameRenderableContent(params: {
+  liveMessage: UIMessage;
+  persistedMessage: UIMessage;
+}) {
+  return (
+    params.liveMessage.role === params.persistedMessage.role &&
+    getMessageText(params.liveMessage) ===
+      getMessageText(params.persistedMessage)
+  );
+}
+
+function getMessageText(message: UIMessage) {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+}
+
+function hasCreatedAtMetadata(message: UIMessage) {
+  const metadata = getObjectMetadata(message);
+  return typeof metadata.createdAt === "string";
+}
+
+function getObjectMetadata(message: UIMessage): Record<string, unknown> {
+  return typeof message.metadata === "object" && message.metadata !== null
+    ? { ...message.metadata }
+    : {};
 }
 
 // =========================================================================

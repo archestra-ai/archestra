@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ConversationShareVisibilitySchema } from "./conversation-share";
 
 const ConversationShareSummarySchema = z
@@ -41,6 +42,7 @@ export const SelectConversationSchema = createSelectSchema(
     .nullable(),
   share: ConversationShareSummarySchema,
   messages: z.array(z.any()), // UIMessage[] from AI SDK
+  chatErrors: z.array(SelectConversationChatErrorSchema),
   ...selectExtendedFields,
 });
 

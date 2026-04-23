@@ -78,7 +78,11 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     <div>{children}</div>
   ),
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
-  PromptInputSubmit: () => <button type="submit">Submit</button>,
+  PromptInputSubmit: ({ status }: { status?: string }) => (
+    <button data-testid="prompt-submit" type="submit">
+      Submit {status ?? "unset"}
+    </button>
+  ),
   PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
     <textarea placeholder={placeholder} />
   ),
@@ -342,6 +346,20 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(screen.getByTestId("prompt-input")).toBeInTheDocument();
+    });
+
+    it("should show the submit state as ready after an error", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="error"
+          allowFileUploads={true}
+        />,
+      );
+
+      expect(screen.getByTestId("prompt-submit")).toHaveTextContent(
+        "Submit ready",
+      );
     });
 
     it("should render model selector when user has provider settings permission", () => {

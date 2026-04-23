@@ -1,5 +1,7 @@
+import { ChatErrorCode } from "@shared";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 import MessageModel from "./message";
 import TeamModel from "./team";
@@ -222,6 +224,64 @@ describe("ConversationShareModel", () => {
     expect(sharedConversation?.agent?.name).toBe("Test Agent");
     expect(sharedConversation?.messages).toHaveLength(2);
     expect(sharedConversation?.sharedByUserId).toBe(user.id);
+  });
+
+  test("includes persisted chat errors in shared conversations", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Error Share Agent",
+      teams: [],
+      organizationId: org.id,
+    });
+
+    await makeMember(user.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      selectedModel: "gpt-4o",
+    });
+
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
+        code: ChatErrorCode.ServerError,
+        message: "Provider failed while generating a response.",
+        isRetryable: true,
+        traceId: "trace-shared-error",
+      },
+    });
+
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: user.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    const sharedConversation =
+      await ConversationShareModel.getSharedConversation({
+        shareId: share.id,
+        organizationId: org.id,
+        userId: user.id,
+      });
+
+    expect(sharedConversation?.chatErrors).toHaveLength(1);
+    expect(sharedConversation?.chatErrors[0].error).toMatchObject({
+      code: ChatErrorCode.ServerError,
+      message: "Provider failed while generating a response.",
+      isRetryable: true,
+      traceId: "trace-shared-error",
+    });
   });
 
   test("does not allow accessing shared conversation from different org", async ({

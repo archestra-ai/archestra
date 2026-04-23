@@ -40,6 +40,7 @@ import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
+  ConversationChatErrorModel,
   ConversationEnabledToolModel,
   ConversationModel,
   ConversationShareModel,
@@ -449,6 +450,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const errorForFrontend = slimChatErrorUi
                   ? sanitizeChatErrorForFrontend(fullError)
                   : fullError;
+                persistConversationChatError({
+                  conversationId,
+                  error: errorForFrontend,
+                });
 
                 logger.info(
                   {
@@ -705,6 +710,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       const errorForFrontend = slimChatErrorUi
                         ? sanitizeChatErrorForFrontend(fullError)
                         : fullError;
+                      persistConversationChatError({
+                        conversationId,
+                        error: errorForFrontend,
+                      });
 
                       logger.info(
                         {
@@ -2018,6 +2027,31 @@ async function persistNewMessages(
       `Failed to persist messages during ${context}`,
     );
     throw error;
+  }
+}
+
+function persistConversationChatError(params: {
+  conversationId: string;
+  error: ChatErrorResponse;
+}) {
+  const chatError = getSerializableChatError(params.error);
+
+  void ConversationChatErrorModel.create({
+    conversationId: params.conversationId,
+    error: chatError,
+  }).catch((error) => {
+    logger.error(
+      { error, conversationId: params.conversationId },
+      "Failed to persist chat error event on conversation",
+    );
+  });
+}
+
+function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
+  try {
+    return JSON.parse(JSON.stringify(error)) as ChatErrorResponse;
+  } catch {
+    return getMinimalFrontendError(error);
   }
 }
 

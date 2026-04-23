@@ -216,6 +216,7 @@ function makeConversation(
     },
     share: null,
     messages: [],
+    chatErrors: [],
     ...overrides,
   };
 }

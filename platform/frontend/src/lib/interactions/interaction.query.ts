@@ -17,6 +17,12 @@ const {
   getUniqueUserIds,
 } = archestraApiSdk;
 
+function isUuid(value: string): boolean {
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+}
+
 export function useInteractions({
   profileId,
   externalAgentId,
@@ -190,6 +196,12 @@ export function useInteractionSessions({
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
+  // If the search value is a UUID, treat it as an exact sessionId filter instead
+  // of a free-text search. Explicit sessionId from the caller always wins.
+  const searchIsUuid = !!search && isUuid(search);
+  const effectiveSessionId = sessionId ?? (searchIsUuid ? search : undefined);
+  const effectiveSearch = searchIsUuid ? undefined : search;
+
   return useQuery({
     queryKey: [
       "interactions",
@@ -197,10 +209,10 @@ export function useInteractionSessions({
       profileId,
       userId,
       source,
-      sessionId,
+      effectiveSessionId,
       startDate,
       endDate,
-      search,
+      effectiveSearch,
       limit,
       offset,
     ],
@@ -210,10 +222,10 @@ export function useInteractionSessions({
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
           ...(source ? { source } : {}),
-          ...(sessionId ? { sessionId } : {}),
+          ...(effectiveSessionId ? { sessionId: effectiveSessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(search ? { search } : {}),
+          ...(effectiveSearch ? { search: effectiveSearch } : {}),
           limit,
           offset,
         },
@@ -242,11 +254,12 @@ export function useInteractionSessions({
       !profileId &&
       !userId &&
       !source &&
-      !sessionId &&
+      !effectiveSessionId &&
       !startDate &&
       !endDate &&
-      !search
+      !effectiveSearch
         ? initialData
         : undefined,
   });
 }
+

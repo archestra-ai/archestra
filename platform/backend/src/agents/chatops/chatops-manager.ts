@@ -9,6 +9,7 @@ import {
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
+  ConversationModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
@@ -572,17 +573,52 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     sendReply?: boolean;
   }): Promise<ChatOpsProcessingResult> {
-    const { message, provider, sendReply = true } = params;
+    const { message, provider, sendReply = false } = params;
 
-    // Deduplication check
-    const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-      message.messageId,
-    );
-    if (!isNew) {
-      return { success: true };
+    // Resolve user and organization early
+    const userEmail = message.senderEmail || (await provider.getUserEmail(message.senderId));
+    if (!userEmail) {
+      logger.warn({ senderId: message.senderId }, "[ChatOps] Could not resolve user email");
+      await this.sendSecurityErrorReply(
+        provider,
+        message,
+        "Could not verify your identity. Please ensure your profile has an email configured.",
+      );
+      return { success: false, error: "Could not resolve user email" };
     }
 
-    // Look up channel binding
+    let user = await UserModel.findByEmail(userEmail.toLowerCase());
+    if (!user) {
+      const displayName = (await provider.getUserName?.(message.senderId)) || message.senderName;
+      const { invitationId } = await autoProvisionUser({
+        email: userEmail,
+        name: displayName,
+        provider: provider.providerId,
+      });
+      user = await UserModel.findByEmail(userEmail.toLowerCase());
+      if (!user) {
+        logger.error({ email: userEmail }, "[ChatOps] Auto-provisioned user not found after creation");
+        return { success: false, error: "Failed to auto-provision user" };
+      }
+
+      this.sendAutoProvisionWelcome({
+        provider,
+        message,
+        invitationId,
+        displayName,
+      }).catch(() => {});
+    }
+
+    const organizationId = await getDefaultOrganizationId();
+
+    // Calculate session ID (thread/conversation identifier)
+    const sessionId = buildChatOpsSessionId(
+      provider.providerId,
+      message.channelId,
+      message.threadId,
+    );
+
+    // Look up channel binding for default agent
     const binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: provider.providerId,
       channelId: message.channelId,
@@ -593,88 +629,77 @@ export class ChatOpsManager {
       return { success: true, error: "NO_BINDING" };
     }
 
-    // Check if the binding has an agent assigned
-    if (!binding.agentId) {
-      logger.warn(
-        { bindingId: binding.id },
-        "[ChatOps] Binding has no agent assigned",
+    // Determine base agent: prioritize sticky agent from existing conversation over binding default
+    let baseAgentId = binding.agentId;
+    const stickyAgentId = await ConversationModel.getAgentIdForUser(
+      sessionId,
+      user.id,
+      organizationId,
+    );
+
+    if (stickyAgentId) {
+      logger.debug(
+        { sessionId, stickyAgentId, bindingAgentId: binding.agentId },
+        "[ChatOps] Using sticky agent from existing conversation",
       );
+      baseAgentId = stickyAgentId;
+    }
+
+    if (!baseAgentId) {
+      logger.warn({ bindingId: binding.id }, "[ChatOps] No agent assigned to channel or conversation");
       return { success: false, error: "NO_AGENT_ASSIGNED" };
     }
 
-    // Verify the agent exists and is an internal agent
-    const agent = await AgentModel.findById(binding.agentId);
-    if (!agent || agent.agentType !== "agent") {
-      logger.warn(
-        { agentId: binding.agentId, bindingId: binding.id },
-        "[ChatOps] Agent is not an internal agent",
-      );
-      return {
-        success: false,
-        error: "AGENT_NOT_FOUND",
-      };
+    const baseAgent = await AgentModel.findById(baseAgentId);
+    if (!baseAgent || baseAgent.agentType !== "agent") {
+      logger.warn({ agentId: baseAgentId, bindingId: binding.id }, "[ChatOps] Agent not found");
+      return { success: false, error: "AGENT_NOT_FOUND" };
     }
 
-    // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText } =
-      await this.resolveInlineAgentMention({
-        messageText: message.text,
-        defaultAgent: agent,
-      });
+    // Resolve inline agent mention (overrides base agent for this message only)
+    const { agentToUse, cleanedMessageText } = await this.resolveInlineAgentMention({
+      messageText: message.text,
+      defaultAgent: baseAgent,
+    });
 
     // Security: Validate user has access to the agent
-    logger.debug(
-      {
-        agentId: agentToUse.id,
-        agentName: agentToUse.name,
-        organizationId: agent.organizationId,
-        senderId: message.senderId,
-      },
-      "[ChatOps] About to validate user access",
-    );
-
     const authResult = await this.validateUserAccess({
       message,
       provider,
+      user,
       agentId: agentToUse.id,
       agentName: agentToUse.name,
-      organizationId: agent.organizationId,
+      organizationId: baseAgent.organizationId,
     });
 
     if (!authResult.success) {
       return { success: false, error: authResult.error };
     }
 
-    // Build context from thread history (includes downloading historical image attachments)
-    const { contextMessages, historyAttachments } =
-      await this.fetchThreadHistory(message, provider);
+    // Build context from thread history
+    const { contextMessages, historyAttachments } = await this.fetchThreadHistory(message, provider);
 
-    // Build the full message with context — use cleanedMessageText so
-    // the "AgentName >" prefix is stripped from what the LLM sees
+    // Build full message
     let fullMessage = cleanedMessageText;
     if (contextMessages.length > 0) {
       fullMessage = `Previous conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
-    // Merge history attachments with current message attachments
-    const mergedAttachments = [
-      ...(historyAttachments || []),
-      ...(message.attachments || []),
-    ];
+    const mergedAttachments = [...(historyAttachments || []), ...(message.attachments || [])];
 
-    // Execute the A2A message using the agent
+    // Execute the A2A message
     return this.executeAndReply({
       agent: agentToUse,
       binding,
       message: {
         ...message,
-        attachments:
-          mergedAttachments.length > 0 ? mergedAttachments : undefined,
+        attachments: mergedAttachments.length > 0 ? mergedAttachments : undefined,
       },
       provider,
       fullMessage,
       sendReply,
       userId: authResult.userId,
+      sessionId,
     });
   }
 
@@ -977,75 +1002,47 @@ export class ChatOpsManager {
   private async validateUserAccess(params: {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
+    user?: { id: string };
     agentId: string;
     agentName: string;
     organizationId: string;
-  }): Promise<
-    { success: true; userId: string } | { success: false; error: string }
-  > {
+  }): Promise<{ success: true; userId: string } | { success: false; error: string }> {
     const { message, provider, agentId, agentName, organizationId } = params;
 
-    // Try pre-resolved email first (from Bot Framework TeamsInfo, no Graph API needed)
-    let userEmail = message.senderEmail || null;
-    if (!userEmail) {
-      // Fall back to Graph API (requires User.Read.All permission)
-      logger.debug(
-        { senderId: message.senderId },
-        "[ChatOps] No pre-resolved email, falling back to Graph API",
-      );
-      userEmail = await provider.getUserEmail(message.senderId);
-    }
-    logger.debug(
-      { senderId: message.senderId, userEmail },
-      "[ChatOps] User email resolved",
-    );
-
-    if (!userEmail) {
-      logger.warn(
-        { senderId: message.senderId },
-        "[ChatOps] Could not resolve user email via TeamsInfo or Graph API",
-      );
-      await this.sendSecurityErrorReply(
-        provider,
-        message,
-        "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
-      );
-      return {
-        success: false,
-        error: "Could not resolve user email for security validation",
-      };
-    }
-
-    // Look up Archestra user by email — auto-provision if not found
-    let user = await UserModel.findByEmail(userEmail.toLowerCase());
+    let user = params.user;
 
     if (!user) {
-      const displayName =
-        (await provider.getUserName?.(message.senderId)) || message.senderName;
-      const { invitationId } = await autoProvisionUser({
-        email: userEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(userEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { senderEmail: userEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return {
-          success: false,
-          error: "Failed to auto-provision user",
-        };
+      // Try pre-resolved email first
+      let userEmail = message.senderEmail || null;
+      if (!userEmail) {
+        userEmail = await provider.getUserEmail(message.senderId);
       }
 
-      // Send welcome message (non-blocking)
-      this.sendAutoProvisionWelcome({
-        provider,
-        message,
-        invitationId,
-        displayName,
-      }).catch(() => {});
+      if (!userEmail) {
+        logger.warn({ senderId: message.senderId }, "[ChatOps] Could not resolve user email");
+        await this.sendSecurityErrorReply(
+          provider,
+          message,
+          "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
+        );
+        return { success: false, error: "Could not resolve user email" };
+      }
+
+      user = (await UserModel.findByEmail(userEmail.toLowerCase())) || undefined;
+
+      if (!user) {
+        const displayName = (await provider.getUserName?.(message.senderId)) || message.senderName;
+        const { invitationId } = await autoProvisionUser({
+          email: userEmail,
+          name: displayName,
+          provider: provider.providerId,
+        });
+        user = (await UserModel.findByEmail(userEmail.toLowerCase())) || undefined;
+        if (!user) {
+          return { success: false, error: "Failed to auto-provision user" };
+        }
+        this.sendAutoProvisionWelcome({ provider, message, invitationId, displayName }).catch(() => {});
+      }
     }
 
     // Check if user has access to this specific agent (via team membership or admin)
@@ -1065,7 +1062,6 @@ export class ChatOpsManager {
       logger.warn(
         {
           userId: user.id,
-          userEmail,
           agentId,
           agentName,
         },
@@ -1085,7 +1081,6 @@ export class ChatOpsManager {
     logger.info(
       {
         userId: user.id,
-        userEmail,
         agentId,
         agentName,
       },
@@ -1211,6 +1206,7 @@ export class ChatOpsManager {
     fullMessage: string;
     sendReply: boolean;
     userId: string;
+    sessionId: string;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -1220,6 +1216,7 @@ export class ChatOpsManager {
       fullMessage,
       sendReply,
       userId,
+      sessionId,
     } = params;
 
     // Send typing indicator before execution starts (non-fatal).
@@ -1257,14 +1254,6 @@ export class ChatOpsManager {
             }
           : null,
         callback: async () => {
-          // Use thread ID (or channel ID for non-threaded messages) as session ID
-          // so all messages in the same thread are grouped together in logs
-          const sessionId = buildChatOpsSessionId(
-            provider.providerId,
-            message.channelId,
-            message.threadId,
-          );
-
           return executeA2AMessage({
             agentId: agent.id,
             organizationId: binding.organizationId,

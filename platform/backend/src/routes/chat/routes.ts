@@ -40,6 +40,7 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import { memoryInjectionBuilder } from "@/memory/injection/injection-builder";
+import { reportMemoryScopeViolationBlocked } from "@/memory/telemetry/metrics";
 import {
   AgentModel,
   ConversationChatErrorModel,
@@ -268,10 +269,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? ((await AgentModel.findById(agentId))?.considerContextUntrusted ??
               true)
             : false;
-          const memoryInjectionEnabled = shouldInjectMemory({
+          const memoryInjectionBlockReason = getMemoryInjectionBlockReason({
             featureFlagEnabled: config.memory.injectionEnabled,
             considerContextUntrusted,
           });
+          const memoryInjectionEnabled = memoryInjectionBlockReason === null;
+
+          if (memoryInjectionBlockReason === "untrusted_context") {
+            reportMemoryScopeViolationBlocked({
+              scopeType: "user",
+              reason: "untrusted_context",
+            });
+            logger.info(
+              {
+                event: "memory_injection_blocked",
+                reason: "untrusted_context",
+                conversationId,
+                userId: user.id,
+                organizationId,
+                agentId,
+              },
+              "[memory] injection: memory_injection_blocked",
+            );
+          }
 
           const shouldFetchUserTeams = promptNeedsRendering(agent.systemPrompt);
           const userTeams = shouldFetchUserTeams
@@ -2252,11 +2272,22 @@ function shouldInjectMemory(params: {
   featureFlagEnabled: boolean;
   considerContextUntrusted: boolean;
 }): boolean {
+  return getMemoryInjectionBlockReason(params) === null;
+}
+
+function getMemoryInjectionBlockReason(params: {
+  featureFlagEnabled: boolean;
+  considerContextUntrusted: boolean;
+}): "untrusted_context" | "feature_flag_off" | null {
   if (params.considerContextUntrusted) {
-    return false;
+    return "untrusted_context";
   }
 
-  return params.featureFlagEnabled;
+  if (!params.featureFlagEnabled) {
+    return "feature_flag_off";
+  }
+
+  return null;
 }
 
 /**
@@ -2361,6 +2392,7 @@ async function validateChatApiKeyAccess(
 export const __test = {
   getMessagesNotYetPersisted,
   prepareMessagesForProvider,
+  getMemoryInjectionBlockReason,
   shouldInjectMemory,
 };
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { reportMemoryPolicyBlocked } from "@/memory/telemetry/metrics";
 import { ConversationModel, MemoryItemModel, TaskModel } from "@/models";
 import type { ChatMessage } from "@/types";
 import { hasExternalContextBoundary, memoryExtractor } from "./extractor";
@@ -23,7 +24,7 @@ export async function handleExtractMemoryCandidates(
         conversationId: parsedPayload.conversationId,
         organizationId: parsedPayload.organizationId,
       },
-      "[MemoryExtractorTask] Extraction disabled by feature flag, skipping",
+      "[memory] extract: skipped (feature flag disabled)",
     );
     return;
   }
@@ -37,7 +38,7 @@ export async function handleExtractMemoryCandidates(
       {
         conversationId: parsedPayload.conversationId,
       },
-      "[MemoryExtractorTask] Pending duplicate task exists, skipping",
+      "[memory] extract: skipped (pending duplicate task)",
     );
     return;
   }
@@ -52,17 +53,18 @@ export async function handleExtractMemoryCandidates(
       {
         conversationId: parsedPayload.conversationId,
       },
-      "[MemoryExtractorTask] Conversation not found, skipping",
+      "[memory] extract: skipped (conversation not found)",
     );
     return;
   }
 
   if (hasExternalContextBoundary(conversation.messages as ChatMessage[])) {
+    reportMemoryPolicyBlocked("external_context");
     logger.info(
       {
         conversationId: parsedPayload.conversationId,
       },
-      "[MemoryExtractorTask] External-context conversation, skipping extraction",
+      "[memory] extract: skipped (external context boundary)",
     );
     return;
   }
@@ -73,7 +75,7 @@ export async function handleExtractMemoryCandidates(
   if (archivedCount > 0) {
     logger.info(
       { archivedCount, conversationId: parsedPayload.conversationId },
-      "[MemoryExtractorTask] Archived stale candidates before extraction",
+      "[memory] extract: archived stale candidates before run",
     );
   }
 
@@ -84,7 +86,7 @@ export async function handleExtractMemoryCandidates(
         conversationId: parsedPayload.conversationId,
         result,
       },
-      "[MemoryExtractorTask] Extraction finished",
+      "[memory] extract: finished",
     );
   } catch (error) {
     logger.error(
@@ -92,7 +94,7 @@ export async function handleExtractMemoryCandidates(
         conversationId: parsedPayload.conversationId,
         error: error instanceof Error ? error.message : String(error),
       },
-      "[MemoryExtractorTask] Extraction failed",
+      "[memory] extract: failed",
     );
     throw error;
   }

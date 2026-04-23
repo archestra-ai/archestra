@@ -1,4 +1,5 @@
 import config from "@/config";
+import logger from "@/logging";
 import { canApproveMemory } from "@/memory/policy/can-approve";
 import { canDeleteMemory } from "@/memory/policy/can-delete";
 import { canReadMemory } from "@/memory/policy/can-read";
@@ -6,6 +7,11 @@ import {
   type MemoryRequesterRole,
   normalizeMemoryRequesterRole,
 } from "@/memory/policy/requester-role";
+import { reportMemoryReviewed } from "@/memory/telemetry/metrics";
+import {
+  setMemorySpanAttributes,
+  withMemorySpan,
+} from "@/memory/telemetry/spans";
 import MemoryItemModel from "@/models/memory-item";
 import MemoryTombstoneModel from "@/models/memory-tombstone";
 import type {
@@ -67,85 +73,130 @@ export type ProposeSupersedingEditParams = {
 export async function approve(
   params: ApproveMemoryParams,
 ): Promise<MemoryItem | null> {
-  const accessContext = await getAccessContext({
-    itemId: params.itemId,
-    organizationId: params.organizationId,
-    requester: params.reviewer,
-    teamIds: params.teamIds ?? [],
-  });
-  if (!accessContext) {
-    return null;
-  }
-
-  if (
-    !canApproveMemory({
-      requesterUserId: params.reviewer.id,
-      requesterRole: accessContext.requesterRole,
+  return withMemorySpan("approve", async (span) => {
+    const accessContext = await getAccessContext({
+      itemId: params.itemId,
       organizationId: params.organizationId,
-      requesterTeamIds: accessContext.teamIds,
-      item: accessContext.item,
-    })
-  ) {
-    return null;
-  }
+      requester: params.reviewer,
+      teamIds: params.teamIds ?? [],
+    });
+    if (!accessContext) {
+      return null;
+    }
 
-  return await MemoryItemModel.transitionStatus({
-    id: params.itemId,
-    organizationId: params.organizationId,
-    newStatus: "approved",
-    reviewerId: params.reviewer.id,
+    setMemorySpanAttributes(span, {
+      scopeType: accessContext.item.scopeType,
+      scopeId: accessContext.item.scopeId,
+    });
+
+    if (
+      !canApproveMemory({
+        requesterUserId: params.reviewer.id,
+        requesterRole: accessContext.requesterRole,
+        organizationId: params.organizationId,
+        requesterTeamIds: accessContext.teamIds,
+        item: accessContext.item,
+      })
+    ) {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+        },
+        "[memory] approve: blocked by authorization",
+      );
+      return null;
+    }
+
+    const approved = await MemoryItemModel.transitionStatus({
+      id: params.itemId,
+      organizationId: params.organizationId,
+      newStatus: "approved",
+      reviewerId: params.reviewer.id,
+    });
+
+    if (approved) {
+      reportMemoryReviewed({
+        scopeType: approved.scopeType,
+        outcome: "approved",
+      });
+    }
+
+    return approved;
   });
 }
 
 export async function reject(
   params: RejectMemoryParams,
 ): Promise<MemoryItem | null> {
-  const accessContext = await getAccessContext({
-    itemId: params.itemId,
-    organizationId: params.organizationId,
-    requester: params.reviewer,
-    teamIds: params.teamIds ?? [],
-  });
-  if (!accessContext) {
-    return null;
-  }
-
-  if (
-    !canApproveMemory({
-      requesterUserId: params.reviewer.id,
-      requesterRole: accessContext.requesterRole,
+  return withMemorySpan("reject", async (span) => {
+    const accessContext = await getAccessContext({
+      itemId: params.itemId,
       organizationId: params.organizationId,
-      requesterTeamIds: accessContext.teamIds,
-      item: accessContext.item,
-    })
-  ) {
-    return null;
-  }
+      requester: params.reviewer,
+      teamIds: params.teamIds ?? [],
+    });
+    if (!accessContext) {
+      return null;
+    }
 
-  const updatedItem = await MemoryItemModel.transitionStatus({
-    id: params.itemId,
-    organizationId: params.organizationId,
-    newStatus: "rejected",
-    reviewerId: params.reviewer.id,
-    rejectionReason: params.rejectionReason,
-    rejectionComment: params.rejectionComment,
-  });
-  if (!updatedItem) {
-    return null;
-  }
-
-  if (shouldCreateRejectionTombstone(params.rejectionReason)) {
-    await MemoryTombstoneModel.record({
-      organizationId: accessContext.item.organizationId,
+    setMemorySpanAttributes(span, {
       scopeType: accessContext.item.scopeType,
       scopeId: accessContext.item.scopeId,
-      content: accessContext.item.content,
-      reason: "rejected",
-      ttlDays: config.memory.tombstoneTtlDays,
+      rejectionReason: params.rejectionReason,
     });
-  }
 
-  return updatedItem;
+    if (
+      !canApproveMemory({
+        requesterUserId: params.reviewer.id,
+        requesterRole: accessContext.requesterRole,
+        organizationId: params.organizationId,
+        requesterTeamIds: accessContext.teamIds,
+        item: accessContext.item,
+      })
+    ) {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+          rejectionReason: params.rejectionReason,
+        },
+        "[memory] reject: blocked by authorization",
+      );
+      return null;
+    }
+
+    const updatedItem = await MemoryItemModel.transitionStatus({
+      id: params.itemId,
+      organizationId: params.organizationId,
+      newStatus: "rejected",
+      reviewerId: params.reviewer.id,
+      rejectionReason: params.rejectionReason,
+      rejectionComment: params.rejectionComment,
+    });
+    if (!updatedItem) {
+      return null;
+    }
+
+    if (shouldCreateRejectionTombstone(params.rejectionReason)) {
+      await MemoryTombstoneModel.record({
+        organizationId: accessContext.item.organizationId,
+        scopeType: accessContext.item.scopeType,
+        scopeId: accessContext.item.scopeId,
+        content: accessContext.item.content,
+        reason: "rejected",
+        ttlDays: config.memory.tombstoneTtlDays,
+      });
+    }
+
+    reportMemoryReviewed({
+      scopeType: updatedItem.scopeType,
+      outcome: "rejected",
+      rejectionReason: params.rejectionReason,
+    });
+
+    return updatedItem;
+  });
 }
 
 export async function manualCreate(
@@ -231,97 +282,157 @@ export async function proposeSupersedingEdit(
 export async function archive(
   params: ApproveMemoryParams,
 ): Promise<MemoryItem | null> {
-  const accessContext = await getAccessContext({
-    itemId: params.itemId,
-    organizationId: params.organizationId,
-    requester: params.reviewer,
-    teamIds: params.teamIds ?? [],
-  });
-  if (!accessContext) {
-    return null;
-  }
-
-  if (
-    !canApproveMemory({
-      requesterUserId: params.reviewer.id,
-      requesterRole: accessContext.requesterRole,
+  return withMemorySpan("archive", async (span) => {
+    const accessContext = await getAccessContext({
+      itemId: params.itemId,
       organizationId: params.organizationId,
-      requesterTeamIds: accessContext.teamIds,
-      item: accessContext.item,
-    })
-  ) {
-    return null;
-  }
+      requester: params.reviewer,
+      teamIds: params.teamIds ?? [],
+    });
+    if (!accessContext) {
+      return null;
+    }
 
-  return await MemoryItemModel.transitionStatus({
-    id: params.itemId,
-    organizationId: params.organizationId,
-    newStatus: "archived",
-    reviewerId: params.reviewer.id,
+    setMemorySpanAttributes(span, {
+      scopeType: accessContext.item.scopeType,
+      scopeId: accessContext.item.scopeId,
+    });
+
+    if (
+      !canApproveMemory({
+        requesterUserId: params.reviewer.id,
+        requesterRole: accessContext.requesterRole,
+        organizationId: params.organizationId,
+        requesterTeamIds: accessContext.teamIds,
+        item: accessContext.item,
+      })
+    ) {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+        },
+        "[memory] archive: blocked by authorization",
+      );
+      return null;
+    }
+
+    const archived = await MemoryItemModel.transitionStatus({
+      id: params.itemId,
+      organizationId: params.organizationId,
+      newStatus: "archived",
+      reviewerId: params.reviewer.id,
+    });
+
+    if (archived) {
+      reportMemoryReviewed({
+        scopeType: archived.scopeType,
+        outcome: "archived",
+      });
+    }
+
+    return archived;
   });
 }
 
 export async function unarchive(
   params: ApproveMemoryParams,
 ): Promise<MemoryItem | null> {
-  const accessContext = await getAccessContext({
-    itemId: params.itemId,
-    organizationId: params.organizationId,
-    requester: params.reviewer,
-    teamIds: params.teamIds ?? [],
-  });
-  if (!accessContext) {
-    return null;
-  }
-
-  if (
-    !canApproveMemory({
-      requesterUserId: params.reviewer.id,
-      requesterRole: accessContext.requesterRole,
+  return withMemorySpan("unarchive", async (span) => {
+    const accessContext = await getAccessContext({
+      itemId: params.itemId,
       organizationId: params.organizationId,
-      requesterTeamIds: accessContext.teamIds,
-      item: accessContext.item,
-    })
-  ) {
-    return null;
-  }
+      requester: params.reviewer,
+      teamIds: params.teamIds ?? [],
+    });
+    if (!accessContext) {
+      return null;
+    }
 
-  return await MemoryItemModel.transitionStatus({
-    id: params.itemId,
-    organizationId: params.organizationId,
-    newStatus: "approved",
-    reviewerId: params.reviewer.id,
+    setMemorySpanAttributes(span, {
+      scopeType: accessContext.item.scopeType,
+      scopeId: accessContext.item.scopeId,
+    });
+
+    if (
+      !canApproveMemory({
+        requesterUserId: params.reviewer.id,
+        requesterRole: accessContext.requesterRole,
+        organizationId: params.organizationId,
+        requesterTeamIds: accessContext.teamIds,
+        item: accessContext.item,
+      })
+    ) {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+        },
+        "[memory] unarchive: blocked by authorization",
+      );
+      return null;
+    }
+
+    const restored = await MemoryItemModel.transitionStatus({
+      id: params.itemId,
+      organizationId: params.organizationId,
+      newStatus: "approved",
+      reviewerId: params.reviewer.id,
+    });
+
+    if (restored) {
+      reportMemoryReviewed({
+        scopeType: restored.scopeType,
+        outcome: "unarchived",
+      });
+    }
+
+    return restored;
   });
 }
 
 export async function hardDelete(
   params: ApproveMemoryParams,
 ): Promise<boolean> {
-  const accessContext = await getAccessContext({
-    itemId: params.itemId,
-    organizationId: params.organizationId,
-    requester: params.reviewer,
-    teamIds: params.teamIds ?? [],
-  });
-  if (!accessContext) {
-    return false;
-  }
-
-  if (
-    !canDeleteMemory({
-      requesterUserId: params.reviewer.id,
-      requesterRole: accessContext.requesterRole,
+  return withMemorySpan("delete", async (span) => {
+    const accessContext = await getAccessContext({
+      itemId: params.itemId,
       organizationId: params.organizationId,
-      requesterTeamIds: accessContext.teamIds,
-      item: accessContext.item,
-    })
-  ) {
-    return false;
-  }
+      requester: params.reviewer,
+      teamIds: params.teamIds ?? [],
+    });
+    if (!accessContext) {
+      return false;
+    }
 
-  return await MemoryItemModel.hardDelete({
-    id: params.itemId,
-    organizationId: params.organizationId,
+    setMemorySpanAttributes(span, {
+      scopeType: accessContext.item.scopeType,
+      scopeId: accessContext.item.scopeId,
+    });
+
+    if (
+      !canDeleteMemory({
+        requesterUserId: params.reviewer.id,
+        requesterRole: accessContext.requesterRole,
+        organizationId: params.organizationId,
+        requesterTeamIds: accessContext.teamIds,
+        item: accessContext.item,
+      })
+    ) {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+        },
+        "[memory] delete: blocked by authorization",
+      );
+      return false;
+    }
+
+    return await MemoryItemModel.hardDelete({
+      id: params.itemId,
+      organizationId: params.organizationId,
+    });
   });
 }
 

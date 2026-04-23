@@ -9,6 +9,18 @@ import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import logger from "@/logging";
 import { screenSensitiveData } from "@/memory/policy/sensitive-data-screen";
 import {
+  type MemoryExtractionOutcome,
+  type MemoryExtractionUnavailableReason,
+  reportMemoryCandidates,
+  reportMemoryExtractionDuration,
+  reportMemoryExtractionUnavailable,
+  reportMemoryPolicyBlocked,
+} from "@/memory/telemetry/metrics";
+import {
+  setMemorySpanAttributes,
+  withMemorySpan,
+} from "@/memory/telemetry/spans";
+import {
   ConversationModel,
   MemoryItemModel,
   MemoryTombstoneModel,
@@ -43,153 +55,237 @@ class MemoryExtractor {
     organizationId: string;
     agentId: string;
   }): Promise<ExtractionResult> {
-    const conversation = await ConversationModel.findById({
-      id: params.conversationId,
-      userId: params.userId,
-      organizationId: params.organizationId,
-    });
-    if (!conversation) {
-      return { status: "skipped", reason: "conversation_not_found" };
-    }
-    if (!conversation.agentId || !conversation.agent) {
-      return { status: "skipped", reason: "agent_not_found" };
-    }
+    const extractionStartMs = Date.now();
 
-    const messages = asChatMessages(conversation.messages);
-    const transcript = buildTranscript(messages);
-    if (!transcript) {
-      return { status: "skipped", reason: "transcript_empty" };
-    }
+    return withMemorySpan(
+      "extract",
+      async (span) => {
+        setMemorySpanAttributes(span, {
+          scopeType: "user",
+          scopeId: params.userId,
+        });
 
-    const modelConfig = await this.resolveModelConfig({
-      organizationId: params.organizationId,
-    });
-    if (!modelConfig) {
-      return { status: "skipped", reason: "model_unavailable" };
-    }
+        const finish = (
+          result: ExtractionResult,
+          outcome: MemoryExtractionOutcome,
+        ): ExtractionResult => {
+          reportMemoryExtractionDuration({
+            scopeType: "user",
+            outcome,
+            durationSeconds: getDurationSeconds(extractionStartMs),
+          });
+          return result;
+        };
 
-    let extractorModel: ReturnType<typeof createDirectLLMModel>;
-    try {
-      extractorModel = createDirectLLMModel({
-        provider: modelConfig.provider,
-        apiKey: modelConfig.apiKey,
-        modelName: modelConfig.modelName,
-        baseUrl: modelConfig.baseUrl,
-      });
-    } catch (error) {
-      logger.info(
-        {
-          conversationId: params.conversationId,
-          organizationId: params.organizationId,
-          agentId: params.agentId,
-          modelName: modelConfig.modelName,
-          provider: modelConfig.provider,
-          source: modelConfig.source,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "[MemoryExtractor] Model unavailable for extraction",
-      );
-      return { status: "skipped", reason: "model_unavailable" };
-    }
+        try {
+          const conversation = await ConversationModel.findById({
+            id: params.conversationId,
+            userId: params.userId,
+            organizationId: params.organizationId,
+          });
+          if (!conversation) {
+            return finish(
+              { status: "skipped", reason: "conversation_not_found" },
+              "skipped",
+            );
+          }
+          if (!conversation.agentId || !conversation.agent) {
+            return finish(
+              { status: "skipped", reason: "agent_not_found" },
+              "skipped",
+            );
+          }
 
-    logger.info(
-      {
-        conversationId: params.conversationId,
-        organizationId: params.organizationId,
-        agentId: params.agentId,
-        modelName: modelConfig.modelName,
-        provider: modelConfig.provider,
-        source: modelConfig.source,
+          const messages = asChatMessages(conversation.messages);
+          const transcript = buildTranscript(messages);
+          if (!transcript) {
+            return finish(
+              { status: "skipped", reason: "transcript_empty" },
+              "skipped",
+            );
+          }
+
+          const modelConfig = await this.resolveModelConfig({
+            organizationId: params.organizationId,
+          });
+          if (!modelConfig) {
+            reportMemoryExtractionUnavailable("missing_model");
+            return finish(
+              { status: "skipped", reason: "model_unavailable" },
+              "skipped",
+            );
+          }
+
+          let extractorModel: ReturnType<typeof createDirectLLMModel>;
+          try {
+            extractorModel = createDirectLLMModel({
+              provider: modelConfig.provider,
+              apiKey: modelConfig.apiKey,
+              modelName: modelConfig.modelName,
+              baseUrl: modelConfig.baseUrl,
+            });
+          } catch (error) {
+            reportMemoryExtractionUnavailable(
+              inferExtractionUnavailableReason(error),
+            );
+            logger.info(
+              {
+                conversationId: params.conversationId,
+                organizationId: params.organizationId,
+                agentId: params.agentId,
+                modelName: modelConfig.modelName,
+                provider: modelConfig.provider,
+                source: modelConfig.source,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "[memory] extract: model unavailable",
+            );
+            return finish(
+              { status: "skipped", reason: "model_unavailable" },
+              "skipped",
+            );
+          }
+
+          logger.info(
+            {
+              conversationId: params.conversationId,
+              organizationId: params.organizationId,
+              agentId: params.agentId,
+              modelName: modelConfig.modelName,
+              provider: modelConfig.provider,
+              source: modelConfig.source,
+            },
+            "[memory] extract: started",
+          );
+
+          const extraction = await generateObject({
+            model: extractorModel,
+            schema: ExtractorOutputSchema,
+            prompt: buildExtractionPrompt({
+              transcript,
+              maxCandidates: Math.min(
+                config.memory.maxCandidatesPerExtraction,
+                5,
+              ),
+            }),
+          });
+          const parsedOutput = ExtractorOutputSchema.parse(extraction.object);
+
+          const approvedHashes = new Set(
+            await MemoryItemModel.listApprovedContentHashesForScope({
+              organizationId: params.organizationId,
+              scopeType: "user",
+              scopeId: params.userId,
+            }),
+          );
+
+          const seenHashes = new Set<string>();
+          const sourceMessageIds = collectSourceMessageIds(messages);
+          const candidates = parsedOutput.candidates.slice(
+            0,
+            Math.min(config.memory.maxCandidatesPerExtraction, 5),
+          );
+
+          let insertedCount = 0;
+          let skippedCount = 0;
+          let acceptedByPolicyScreenCount = 0;
+
+          for (const candidate of candidates) {
+            const preparedCandidate = prepareCandidate(candidate);
+            if (!preparedCandidate) {
+              skippedCount += 1;
+              continue;
+            }
+
+            const contentHash = MemoryTombstoneModel.getContentHash(
+              preparedCandidate.content,
+            );
+            if (
+              seenHashes.has(contentHash) ||
+              approvedHashes.has(contentHash)
+            ) {
+              skippedCount += 1;
+              continue;
+            }
+
+            const tombstoned = await MemoryTombstoneModel.exists({
+              organizationId: params.organizationId,
+              scopeType: "user",
+              scopeId: params.userId,
+              contentHash,
+            });
+            if (tombstoned) {
+              skippedCount += 1;
+              continue;
+            }
+
+            const sensitivity = screenSensitiveData({
+              content: preparedCandidate.content,
+            });
+            if (sensitivity.blocked) {
+              reportMemoryPolicyBlocked(
+                sensitivity.blockReason === "high_risk_pii"
+                  ? "high_risk_pii"
+                  : "sensitive",
+              );
+              skippedCount += 1;
+              continue;
+            }
+            acceptedByPolicyScreenCount += 1;
+
+            await MemoryItemModel.create({
+              organizationId: params.organizationId,
+              scopeType: "user",
+              scopeId: params.userId,
+              kind: preparedCandidate.kind,
+              status: "candidate",
+              content: preparedCandidate.content,
+              createdBy: null,
+              extractorVersion: EXTRACTOR_PROMPT_VERSION,
+              policyFlags: sensitivity.policyFlags,
+              sourceConversationId: params.conversationId,
+              sourceMessageIds:
+                sourceMessageIds.length > 0 ? sourceMessageIds : null,
+              confidenceBand: preparedCandidate.confidenceBand,
+            });
+
+            reportMemoryCandidates({
+              scopeType: "user",
+              extractorVersion: EXTRACTOR_PROMPT_VERSION,
+              policyFlags: sensitivity.policyFlags,
+            });
+
+            seenHashes.add(contentHash);
+            insertedCount += 1;
+          }
+
+          setMemorySpanAttributes(span, {
+            candidatesProposed: candidates.length,
+            candidatesAcceptedByPolicyScreen: acceptedByPolicyScreenCount,
+          });
+
+          return finish(
+            {
+              status: "completed",
+              insertedCount,
+              skippedCount,
+            },
+            "success",
+          );
+        } catch (error) {
+          reportMemoryExtractionDuration({
+            scopeType: "user",
+            outcome: "error",
+            durationSeconds: getDurationSeconds(extractionStartMs),
+          });
+          throw error;
+        }
       },
-      "[MemoryExtractor] Starting candidate extraction",
-    );
-
-    const extraction = await generateObject({
-      model: extractorModel,
-      schema: ExtractorOutputSchema,
-      prompt: buildExtractionPrompt({
-        transcript,
-        maxCandidates: Math.min(config.memory.maxCandidatesPerExtraction, 5),
-      }),
-    });
-    const parsedOutput = ExtractorOutputSchema.parse(extraction.object);
-
-    const approvedHashes = new Set(
-      await MemoryItemModel.listApprovedContentHashesForScope({
-        organizationId: params.organizationId,
+      {
         scopeType: "user",
         scopeId: params.userId,
-      }),
+      },
     );
-
-    const seenHashes = new Set<string>();
-    const sourceMessageIds = collectSourceMessageIds(messages);
-    const candidates = parsedOutput.candidates.slice(
-      0,
-      Math.min(config.memory.maxCandidatesPerExtraction, 5),
-    );
-
-    let insertedCount = 0;
-    let skippedCount = 0;
-
-    for (const candidate of candidates) {
-      const preparedCandidate = prepareCandidate(candidate);
-      if (!preparedCandidate) {
-        skippedCount += 1;
-        continue;
-      }
-
-      const contentHash = MemoryTombstoneModel.getContentHash(
-        preparedCandidate.content,
-      );
-      if (seenHashes.has(contentHash) || approvedHashes.has(contentHash)) {
-        skippedCount += 1;
-        continue;
-      }
-
-      const tombstoned = await MemoryTombstoneModel.exists({
-        organizationId: params.organizationId,
-        scopeType: "user",
-        scopeId: params.userId,
-        contentHash,
-      });
-      if (tombstoned) {
-        skippedCount += 1;
-        continue;
-      }
-
-      const sensitivity = screenSensitiveData({
-        content: preparedCandidate.content,
-      });
-      if (sensitivity.blocked) {
-        skippedCount += 1;
-        continue;
-      }
-
-      await MemoryItemModel.create({
-        organizationId: params.organizationId,
-        scopeType: "user",
-        scopeId: params.userId,
-        kind: preparedCandidate.kind,
-        status: "candidate",
-        content: preparedCandidate.content,
-        createdBy: null,
-        extractorVersion: EXTRACTOR_PROMPT_VERSION,
-        policyFlags: sensitivity.policyFlags,
-        sourceConversationId: params.conversationId,
-        sourceMessageIds: sourceMessageIds.length > 0 ? sourceMessageIds : null,
-        confidenceBand: preparedCandidate.confidenceBand,
-      });
-
-      seenHashes.add(contentHash);
-      insertedCount += 1;
-    }
-
-    return {
-      status: "completed",
-      insertedCount,
-      skippedCount,
-    };
   }
 
   private async resolveModelConfig(params: {
@@ -437,4 +533,23 @@ function containsUnsafeContextBoundary(value: unknown): boolean {
 
 function isUnsafeBoundary(value: unknown): boolean {
   return UnsafeContextBoundarySchema.safeParse(value).success;
+}
+
+function inferExtractionUnavailableReason(
+  error: unknown,
+): MemoryExtractionUnavailableReason {
+  if (!(error instanceof Error)) {
+    return "missing_model";
+  }
+
+  const message = error.message.toLowerCase();
+  if (message.includes("api key")) {
+    return "missing_api_key";
+  }
+
+  return "missing_model";
+}
+
+function getDurationSeconds(startedAtMs: number): number {
+  return Math.max(0, (Date.now() - startedAtMs) / 1000);
 }

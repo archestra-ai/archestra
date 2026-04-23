@@ -1,4 +1,4 @@
-import { context, trace } from "@opentelemetry/api";
+import { context, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import type { MemoryItem } from "@/types/memory-item";
@@ -21,7 +21,7 @@ describe("memory injection builder", () => {
     mockListForInjection.mockReset();
     setAttribute.mockReset();
 
-    vi.spyOn(context, "active").mockReturnValue({} as never);
+    vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
     vi.spyOn(trace, "getSpan").mockReturnValue({
       setAttribute,
     } as never);

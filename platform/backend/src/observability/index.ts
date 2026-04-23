@@ -19,6 +19,7 @@ export async function initializeObservabilityMetrics(params?: {
     metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
   }
 
+  metrics.memory.initializeMemoryMetrics();
   metrics.rag.initializeRagMetrics();
   metrics.scheduleTrigger.initializeScheduleTriggerMetrics();
   metrics.taskQueue.initializeTaskQueueMetrics();

@@ -138,6 +138,35 @@ describe("shouldInjectMemory", () => {
   });
 });
 
+describe("getMemoryInjectionBlockReason", () => {
+  it("returns untrusted_context when context is untrusted", () => {
+    const reason = __test.getMemoryInjectionBlockReason({
+      featureFlagEnabled: true,
+      considerContextUntrusted: true,
+    });
+
+    expect(reason).toBe("untrusted_context");
+  });
+
+  it("returns feature_flag_off when the flag is disabled in trusted context", () => {
+    const reason = __test.getMemoryInjectionBlockReason({
+      featureFlagEnabled: false,
+      considerContextUntrusted: false,
+    });
+
+    expect(reason).toBe("feature_flag_off");
+  });
+
+  it("returns null when injection is allowed", () => {
+    const reason = __test.getMemoryInjectionBlockReason({
+      featureFlagEnabled: true,
+      considerContextUntrusted: false,
+    });
+
+    expect(reason).toBeNull();
+  });
+});
+
 describe("getMessagesNotYetPersisted", () => {
   it("keeps new messages even when the incoming thread is shorter than the persisted thread", () => {
     const newMessages = __test.getMessagesNotYetPersisted({

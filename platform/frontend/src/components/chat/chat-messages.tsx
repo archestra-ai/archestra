@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import {
   Conversation,
   ConversationContent,
@@ -126,6 +127,7 @@ interface ChatMessagesProps {
     editedPartIndex: number,
   ) => void;
   error?: Error | null;
+  chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   /** Callback for tool approval responses (approve/deny) */
   onToolApprovalResponse?: (params: {
     id: string;
@@ -137,6 +139,13 @@ interface ChatMessagesProps {
   modelSource?: ModelSource | null;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
+
+type PersistedChatError =
+  archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"][number];
+
+type TimelineItem =
+  | { kind: "message"; message: UIMessage; messageIndex: number }
+  | { kind: "chat-error"; chatError: PersistedChatError };
 
 // Type guards for tool parts
 // biome-ignore lint/suspicious/noExplicitAny: AI SDK message parts have dynamic structure
@@ -170,6 +179,7 @@ export function ChatMessages({
   onMessagesUpdate,
   onUserMessageEdit,
   error = null,
+  chatErrors = [],
   onToolApprovalResponse,
   agentName,
   selectedModel,
@@ -378,7 +388,7 @@ export function ChatMessages({
     };
   });
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && chatErrors.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
       return null;
@@ -409,12 +419,20 @@ export function ChatMessages({
     const nextMessage = messages[idx + 1];
     return nextMessage.role !== "assistant";
   });
+  const timelineItems = buildMessageTimeline({ messages, chatErrors });
+  const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
+  const hasRenderedLiveError =
+    !!error &&
+    chatErrors.some(
+      (chatError) => chatError.error.message === liveErrorMessage,
+    );
 
   return (
     <Conversation
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
     >
+      <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
@@ -423,7 +441,23 @@ export function ChatMessages({
           {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
             <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
           )}
-          {messages.map((message, idx) => {
+          {timelineItems.map((item) => {
+            if (item.kind === "chat-error") {
+              return (
+                <InlineChatError
+                  key={`chat-error-${item.chatError.id}`}
+                  error={new Error(JSON.stringify(item.chatError.error))}
+                  conversationId={conversationId}
+                  supportMessage={organization?.chatErrorSupportMessage}
+                  slimChatErrorUi={organization?.slimChatErrorUi ?? false}
+                  agentName={agentName}
+                  selectedModel={selectedModel}
+                  modelSource={modelSource}
+                />
+              );
+            }
+
+            const { message, messageIndex: idx } = item;
             // Hide the auto-poke message sent after agent swap
             if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
 
@@ -943,6 +977,9 @@ export function ChatMessages({
                                 session?.sendMessage({
                                   role: "user",
                                   parts: [{ type: "text", text }],
+                                  metadata: {
+                                    createdAt: new Date().toISOString(),
+                                  },
                                 })
                               }
                             />
@@ -1023,6 +1060,9 @@ export function ChatMessages({
                                   session?.sendMessage({
                                     role: "user",
                                     parts: [{ type: "text", text }],
+                                    metadata: {
+                                      createdAt: new Date().toISOString(),
+                                    },
                                   })
                                 }
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
@@ -1095,6 +1135,9 @@ export function ChatMessages({
                                   session?.sendMessage({
                                     role: "user",
                                     parts: [{ type: "text", text }],
+                                    metadata: {
+                                      createdAt: new Date().toISOString(),
+                                    },
                                   })
                                 }
                               />
@@ -1119,7 +1162,7 @@ export function ChatMessages({
             );
           })}
           {/* Inline error display */}
-          {error && (
+          {error && !hasRenderedLiveError && (
             <InlineChatError
               error={error}
               conversationId={conversationId}
@@ -1251,6 +1294,24 @@ function useStreamingStallDetection(
   }, [status]);
 
   return isStreamingStalled;
+}
+
+// Re-engage stick-to-bottom when the user sends a new message.
+// If the user has scrolled up, the library keeps state.isAtBottom=false and
+// won't auto-scroll on content resize — this resets it on the submit transition.
+function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const prevStatusRef = useRef(status);
+
+  useEffect(() => {
+    if (status === "submitted" && prevStatusRef.current !== "submitted") {
+      scrollToBottom();
+    }
+
+    prevStatusRef.current = status;
+  }, [status, scrollToBottom]);
+
+  return null;
 }
 
 const MessageTool = memo(
@@ -2170,6 +2231,76 @@ function hasMessageAuthToolError(message: UIMessage): boolean {
       ];
     }),
   );
+}
+
+function buildMessageTimeline(params: {
+  messages: UIMessage[];
+  chatErrors: PersistedChatError[];
+}): TimelineItem[] {
+  const sortedChatErrors = [...params.chatErrors].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+  const timelineItems: TimelineItem[] = [];
+  let errorIndex = 0;
+
+  params.messages.forEach((message, messageIndex) => {
+    const messageCreatedAt = getMessageCreatedAt(message);
+    while (
+      errorIndex < sortedChatErrors.length &&
+      messageCreatedAt !== null &&
+      Date.parse(sortedChatErrors[errorIndex].createdAt) <= messageCreatedAt
+    ) {
+      timelineItems.push({
+        kind: "chat-error",
+        chatError: sortedChatErrors[errorIndex],
+      });
+      errorIndex++;
+    }
+
+    timelineItems.push({ kind: "message", message, messageIndex });
+  });
+
+  for (; errorIndex < sortedChatErrors.length; errorIndex++) {
+    timelineItems.push({
+      kind: "chat-error",
+      chatError: sortedChatErrors[errorIndex],
+    });
+  }
+
+  return timelineItems;
+}
+
+function getMessageCreatedAt(message: UIMessage): number | null {
+  const metadata = message.metadata;
+  if (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    "createdAt" in metadata &&
+    typeof metadata.createdAt === "string"
+  ) {
+    const createdAt = Date.parse(metadata.createdAt);
+    return Number.isNaN(createdAt) ? null : createdAt;
+  }
+
+  return null;
+}
+
+function getInlineErrorMessage(error: Error): string {
+  try {
+    const parsed = JSON.parse(error.message);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "message" in parsed &&
+      typeof parsed.message === "string"
+    ) {
+      return parsed.message;
+    }
+  } catch {
+    // Plain client-side errors are not JSON-encoded.
+  }
+
+  return error.message;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure

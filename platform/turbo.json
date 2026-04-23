@@ -36,6 +36,9 @@
     "type-check": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
+    "type-check:tsc": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "e2e-tests/**/*.ts", "shared/**/*.ts"]
+    },
     "test": {
       "cache": false
     },

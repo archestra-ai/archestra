@@ -61,7 +61,8 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 tilt up                                 # Start full development environment
 pnpm dev                                # Start all workspaces
 pnpm lint                               # Lint and auto-fix
-pnpm type-check                         # Check TypeScript types
+pnpm type-check                         # Check TypeScript types with tsgo (TS 7 beta, fast)
+pnpm type-check:tsc                     # Check TypeScript types with tsc (TS 6, authoritative — run this to reproduce CI locally if type-check passes but CI fails)
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 

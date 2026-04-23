@@ -17,6 +17,7 @@
     "lint:fix": "turbo lint:fix",
     "lint:fix:unsafe": "turbo lint:fix:unsafe",
     "type-check": "turbo type-check",
+    "type-check:tsc": "turbo type-check:tsc",
     "test": "turbo test",
     "knip": "turbo knip",
     "test:e2e": "turbo test:e2e",

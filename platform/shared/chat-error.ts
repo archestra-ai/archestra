@@ -188,6 +188,7 @@ export const ZhipuaiErrorTypes = {
   NO_PERMISSION: "1220",
   API_OFFLINE: "1221",
   NETWORK_ERROR: "1234",
+  CONTEXT_LENGTH_EXCEEDED: "1261", // "Prompt exceeds max length"
 
   // Policy block errors (1300-1309)
   CONTENT_FILTERED: "1301", // Unsafe or sensitive content detected

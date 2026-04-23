@@ -527,6 +527,14 @@ export const perplexityAdapterFactory: LLMProvider<
     };
   },
 
+  extractInternalCode(error: unknown): string | undefined {
+    const code = get(error, "error.code");
+    if (typeof code === "string") {
+      return code;
+    }
+    return undefined;
+  },
+
   extractErrorMessage(error: unknown): string {
     // OpenAI SDK error structure
     const perplexityMessage = get(error, "error.message");

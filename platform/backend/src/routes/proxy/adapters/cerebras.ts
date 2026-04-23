@@ -1150,6 +1150,14 @@ export const cerebrasAdapterFactory: LLMProvider<
     };
   },
 
+  extractInternalCode(error: unknown): string | undefined {
+    const code = get(error, "error.code");
+    if (typeof code === "string") {
+      return code;
+    }
+    return undefined;
+  },
+
   extractErrorMessage(error: unknown): string {
     // OpenAI SDK error structure (same for Cerebras)
     const openaiMessage = get(error, "error.message");

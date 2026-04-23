@@ -269,6 +269,14 @@ export const groqAdapterFactory: LLMProvider<
     };
   },
 
+  extractInternalCode(error: unknown): string | undefined {
+    const code = get(error, "error.code");
+    if (typeof code === "string") {
+      return code;
+    }
+    return undefined;
+  },
+
   extractErrorMessage(error: unknown): string {
     const groqMessage = get(error, "error.message");
     if (typeof groqMessage === "string") {

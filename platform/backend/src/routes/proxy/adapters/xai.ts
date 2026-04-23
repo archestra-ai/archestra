@@ -267,6 +267,14 @@ export const xaiAdapterFactory: LLMProvider<
     };
   },
 
+  extractInternalCode(error: unknown): string | undefined {
+    const code = get(error, "error.code");
+    if (typeof code === "string") {
+      return code;
+    }
+    return undefined;
+  },
+
   extractErrorMessage(error: unknown): string {
     const xaiMessage = get(error, "error.message");
     if (typeof xaiMessage === "string") {

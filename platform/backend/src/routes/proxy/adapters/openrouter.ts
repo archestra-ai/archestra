@@ -300,6 +300,14 @@ export const openrouterAdapterFactory: LLMProvider<
     };
   },
 
+  extractInternalCode(error: unknown): string | undefined {
+    const code = get(error, "error.code");
+    if (typeof code === "string") {
+      return code;
+    }
+    return undefined;
+  },
+
   extractErrorMessage(error: unknown): string {
     const message = get(error, "error.message");
     if (typeof message === "string") {

@@ -6,6 +6,7 @@ import {
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
+  ZhipuaiErrorTypes,
 } from "@shared";
 import { describe, expect, it } from "@/test";
 import {
@@ -356,6 +357,20 @@ describe("mapProviderError - Anthropic", () => {
     });
   });
 
+  describe("400 - invalid_request_error with prompt-is-too-long message", () => {
+    it("should map to ContextTooLong", () => {
+      const error = createAnthropicError(
+        400,
+        AnthropicErrorTypes.INVALID_REQUEST,
+        "prompt is too long: 250000 tokens > 200000 maximum",
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
   describe("429 - rate_limit_error", () => {
     it("should map to RateLimit", () => {
       const error = createAnthropicError(
@@ -449,6 +464,18 @@ describe("mapProviderError - Gemini (Google AI Studio)", () => {
       expect(result.code).toBe(ChatErrorCode.InvalidRequest);
       expect(result.isRetryable).toBe(false);
       expect(result.originalError?.provider).toBe("gemini");
+    });
+
+    it("should map to ContextTooLong when message indicates input token count exceeds maximum", () => {
+      const error = createGeminiError(
+        400,
+        GeminiErrorCodes.INVALID_ARGUMENT,
+        "The input token count (1500000) exceeds the maximum number of tokens allowed (1048576).",
+      );
+      const result = mapProviderError(error, "gemini");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
     });
   });
 
@@ -1055,6 +1082,41 @@ describe("mapProviderError - Bedrock", () => {
       expect(result.code).toBe(ChatErrorCode.ContextTooLong);
       expect(result.isRetryable).toBe(false);
     });
+
+    it("should map to ContextTooLong when message says input is too long", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "Input is too long for requested model.",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+
+    it("should map to ContextTooLong when Claude on Bedrock returns 'prompt is too long'", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "prompt is too long: 250000 tokens > 200000 maximum",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+
+    it("should still map unrelated ValidationException to InvalidRequest", () => {
+      const error = createBedrockError(
+        400,
+        BedrockErrorTypes.VALIDATION,
+        "Malformed input request: missing required field 'messages'.",
+      );
+      const result = mapProviderError(error, "bedrock");
+
+      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    });
   });
 
   describe("fallback to HTTP status code", () => {
@@ -1081,6 +1143,149 @@ describe("mapProviderError - Bedrock", () => {
       const result = mapProviderError(error, "bedrock");
 
       expect(result.originalError?.provider).toBe("bedrock");
+    });
+  });
+});
+
+// =============================================================================
+// Context window exceeded — OpenAI-compat cohort (structured code path)
+// =============================================================================
+
+// Each of these providers routes through the shared OpenAI parser + mapper.
+// Without per-provider assertions, a wiring change that accidentally
+// unhooked one of them from the OpenAI mapper would silently regress
+// ContextTooLong detection. These tests lock the contract.
+describe("mapProviderError - context window exceeded (OpenAI-compat cohort)", () => {
+  const openaiCompatProviders = [
+    "azure",
+    "groq",
+    "cerebras",
+    "deepseek",
+    "mistral",
+    "perplexity",
+    "xai",
+    "openrouter",
+  ] as const;
+
+  for (const provider of openaiCompatProviders) {
+    it(`should map to ContextTooLong for ${provider} when error.code is context_length_exceeded`, () => {
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          error: {
+            type: OpenAIErrorTypes.INVALID_REQUEST,
+            code: OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED,
+            message: "This model's maximum context length is 8192 tokens",
+          },
+        }),
+        isRetryable: false,
+      };
+      const result = mapProviderError(error, provider);
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.originalError?.provider).toBe(provider);
+    });
+  }
+});
+
+// =============================================================================
+// Context window exceeded — Cohere, vLLM, Ollama, MiniMax, Zhipu
+// =============================================================================
+
+describe("mapProviderError - context window exceeded (other providers)", () => {
+  describe("Cohere", () => {
+    it("should map to ContextTooLong when message starts with 'too many tokens'", () => {
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          message:
+            "too many tokens: total number of tokens in the prompt cannot exceed 4081 - received 4292.",
+        }),
+        isRetryable: false,
+      };
+      const result = mapProviderError(error, "cohere");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
+  describe("vLLM", () => {
+    it("should map to ContextTooLong when message contains 'maximum context length'", () => {
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          error: {
+            type: "BadRequestError",
+            code: 400,
+            message:
+              "This model's maximum context length is 4096 tokens. However, you requested 5000 tokens.",
+          },
+        }),
+        isRetryable: false,
+      };
+      const result = mapProviderError(error, "vllm");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    });
+  });
+
+  describe("Ollama", () => {
+    it("should map to ContextTooLong when message contains 'exceeded max context length'", () => {
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          error: {
+            type: "invalid_request_error",
+            message: "prompt too long; exceeded max context length by 1024 tokens",
+          },
+        }),
+        isRetryable: false,
+      };
+      const result = mapProviderError(error, "ollama");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    });
+  });
+
+  describe("MiniMax", () => {
+    it("should map to ContextTooLong when message reports 'context window exceeds limit'", () => {
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          error: {
+            message: "context window exceeds limit (2013)",
+          },
+        }),
+        isRetryable: false,
+      };
+      const result = mapProviderError(error, "minimax");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    });
+  });
+
+  describe("Zhipu", () => {
+    it("should map to ContextTooLong for error.code 1261", () => {
+      const error = {
+        name: "AI_APICallError",
+        statusCode: 400,
+        responseBody: JSON.stringify({
+          error: {
+            code: ZhipuaiErrorTypes.CONTEXT_LENGTH_EXCEEDED,
+            message: "Prompt exceeds max length",
+          },
+        }),
+        isRetryable: false,
+      };
+      const result = mapProviderError(error, "zhipuai");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
     });
   });
 });

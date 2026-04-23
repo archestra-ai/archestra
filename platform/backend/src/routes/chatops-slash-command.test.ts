@@ -182,6 +182,21 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
+  test("slugified app-name slash commands are accepted", async () => {
+    const app = await createApp();
+
+    const response = await injectSlashCommand(app, "/archestra-staging-help");
+
+    expect(response.statusCode).toBe(200);
+    const json = response.json();
+    expect(json.response_type).toBe("ephemeral");
+    expect(json.text).toContain("/archestra-staging-select-agent");
+    expect(json.text).toContain("/archestra-staging-status");
+    expect(json.text).toContain("/archestra-staging-help");
+
+    await app.close();
+  });
+
   test("/archestra-status returns ephemeral status when no binding", async () => {
     const app = await createApp();
 

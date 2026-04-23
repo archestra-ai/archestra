@@ -1,5 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@shared";
+import {
+  buildSlackSlashCommandsForCommand,
+  getSlackSlashCommandAction,
+  SLACK_REQUIRED_BOT_SCOPES,
+  SLACK_SLASH_COMMANDS,
+  TimeInMs,
+} from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import {
@@ -32,7 +38,6 @@ import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
-  SLACK_SLASH_COMMANDS,
 } from "./constants";
 import { EventDedupMap, errorMessage, isSlackDmChannel } from "./utils";
 
@@ -377,7 +382,11 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Available commands:*\n`/archestra-select-agent` — Change the default agent handling requests in the channel\n`/archestra-status` — Check the current agent handling requests in the channel\n`/archestra-help` — Show available commands",
+              text:
+                "*Available commands:*\n" +
+                `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
+                `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
+                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands`,
             },
           },
           { type: "divider" },
@@ -677,6 +686,8 @@ class SlackProvider implements ChatOpsProvider {
     trigger_id?: string;
   }): Promise<{ response_type: string; text: string } | null> {
     const command = body.command;
+    const commandAction = getSlackSlashCommandAction(command);
+    const slashCommands = buildSlackSlashCommandsForCommand(command);
     const channelId = body.channel_id || "";
     const workspaceId = body.team_id || null;
     const userId = body.user_id || "unknown";
@@ -724,19 +735,19 @@ class SlackProvider implements ChatOpsProvider {
       }
     }
 
-    switch (command) {
-      case SLACK_SLASH_COMMANDS.HELP:
+    switch (commandAction) {
+      case "HELP":
         return {
           response_type: "ephemeral",
           text:
             "*Available commands:*\n" +
-            "`/archestra-select-agent` — Change the default agent\n" +
-            "`/archestra-status` — Show current agent binding\n" +
-            "`/archestra-help` — Show this help message\n\n" +
+            `\`${slashCommands.SELECT_AGENT}\` — Change the default agent\n` +
+            `\`${slashCommands.STATUS}\` — Show current agent binding\n` +
+            `\`${slashCommands.HELP}\` — Show this help message\n\n` +
             "Or just send a message to interact with the assigned agent.",
         };
 
-      case SLACK_SLASH_COMMANDS.STATUS: {
+      case "STATUS": {
         const binding = await ChatOpsChannelBindingModel.findByChannel({
           provider: "slack",
           channelId,
@@ -750,7 +761,7 @@ class SlackProvider implements ChatOpsProvider {
             text:
               `This channel is assigned to agent: *${agent?.name || binding.agentId}*\n\n` +
               "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
-              "Use `/archestra-select-agent` to change the default agent.",
+              `Use \`${slashCommands.SELECT_AGENT}\` to change the default agent.`,
           };
         }
 
@@ -760,7 +771,7 @@ class SlackProvider implements ChatOpsProvider {
         };
       }
 
-      case SLACK_SLASH_COMMANDS.SELECT_AGENT: {
+      case "SELECT_AGENT": {
         // Send agent selection card (visible to all in channel)
         const isDm = isSlackDmChannel(channelId);
         const message: IncomingChatMessage = {
@@ -801,7 +812,7 @@ class SlackProvider implements ChatOpsProvider {
       default:
         return {
           response_type: "ephemeral",
-          text: "Unknown command. Use `/archestra-help` to see available commands.",
+          text: `Unknown command. Use \`${slashCommands.HELP}\` to see available commands.`,
         };
     }
   }

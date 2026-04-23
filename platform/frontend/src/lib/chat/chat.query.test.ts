@@ -73,7 +73,6 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     hasCustomToolSelection: false,
     todoList: null,
     artifact: null,
-    lastChatError: null,
     pinnedAt: null,
     createdAt: "2026-03-17T00:00:00.000Z",
     updatedAt: "2026-03-17T00:00:00.000Z",
@@ -86,5 +85,6 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     },
     share: null,
     messages: [],
+    chatErrors: [],
   };
 }

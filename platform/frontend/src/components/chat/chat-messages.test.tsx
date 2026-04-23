@@ -67,7 +67,9 @@ vi.mock("@/components/chat/editable-user-message", () => ({
 }));
 
 vi.mock("@/components/chat/inline-chat-error", () => ({
-  InlineChatError: () => null,
+  InlineChatError: ({ error }: { error: Error }) => (
+    <div data-testid="inline-chat-error">{error.message}</div>
+  ),
 }));
 
 vi.mock("@/components/chat/mcp-install-dialogs", () => ({
@@ -217,6 +219,91 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
+  });
+
+  it("renders persisted chat errors between messages by timestamp", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        metadata: { createdAt: "2026-04-22T12:00:00.000Z" },
+        parts: [{ type: "text", text: "first try" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        metadata: { createdAt: "2026-04-22T12:02:00.000Z" },
+        parts: [{ type: "text", text: "try again" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        chatErrors={[
+          {
+            id: "error-1",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "server_error",
+              message: "Provider failed",
+              isRetryable: true,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const firstTry = screen.getByText("first try");
+    const error = screen.getByTestId("inline-chat-error");
+    const retry = screen.getByText("try again");
+
+    expect(firstTry.compareDocumentPosition(error)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(error.compareDocumentPosition(retry)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("does not render persisted chat errors before live messages without timestamps", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "live retry" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        chatErrors={[
+          {
+            id: "error-1",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "server_error",
+              message: "Provider failed",
+              isRetryable: true,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const retry = screen.getByText("live retry");
+    const error = screen.getByTestId("inline-chat-error");
+
+    expect(retry.compareDocumentPosition(error)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {

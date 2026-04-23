@@ -3,3 +3,6 @@ packages:
   - "frontend"
   - "shared"
   - "e2e-tests"
+
+catalog:
+  typescript: ^6.0.2

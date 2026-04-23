@@ -4,8 +4,13 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    typescript:
+      specifier: ^6.0.2
+      version: 6.0.2
+
 overrides:
-  typescript: ^6.0.2
   '@fastify/reply-from': '>=12.6.2'
   '@fastify/http-proxy': '>=11.4.4'
   protobufjs: '>=7.5.5'
@@ -66,9 +71,6 @@ importers:
       turbo:
         specifier: ^2.8.13
         version: 2.8.17
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
 
   backend:
     dependencies:
@@ -422,7 +424,7 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.2
       vitest:
         specifier: ^4.1.0
@@ -449,6 +451,9 @@ importers:
       knip:
         specifier: ^5.85.0
         version: 5.86.0(@types/node@25.5.0)(typescript@6.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.2
 
   frontend:
     dependencies:
@@ -739,7 +744,7 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.2
       vite-tsconfig-paths:
         specifier: ^6.1.1
@@ -770,7 +775,7 @@ importers:
         specifier: ^5.85.0
         version: 5.86.0(@types/node@25.5.0)(typescript@6.0.2)
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.2
       vitest:
         specifier: ^4.1.0
@@ -1886,7 +1891,7 @@ packages:
     resolution: {integrity: sha512-nWEyUNbc1O7R5FHMwPh24+127jCbIs6vT89ncHqFSprE0tUVNemGO3cZflZCeGw8XhJAk6O18TcruUbMmwv0Rg==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      typescript: ^6.0.2
+      typescript: '>=5.5.3'
 
   '@hey-api/json-schema-ref-parser@1.3.1':
     resolution: {integrity: sha512-7atnpUkT8TyUPHYPLk91j/GyaqMuwTEHanLOe50Dlx0EEvNuQqFD52Yjg8x4KU0UFL1mWlyhE+sUE/wAtQ1N2A==}
@@ -1897,18 +1902,18 @@ packages:
     engines: {node: '>=20.19.0'}
     hasBin: true
     peerDependencies:
-      typescript: ^6.0.2
+      typescript: '>=5.5.3'
 
   '@hey-api/shared@0.2.3':
     resolution: {integrity: sha512-XQsI/VmQeoHJFdZmBshQnMLGRq6kvSIXFgpxsb8k4F8nuKZ+54GAnq0DuTZcgnL6egAO/pN0KBaFbyl/yl9WFg==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      typescript: ^6.0.2
+      typescript: '>=5.5.3'
 
   '@hey-api/types@0.1.3':
     resolution: {integrity: sha512-mZaiPOWH761yD4GjDQvtjS2ZYLu5o5pI1TVSvV/u7cmbybv51/FVtinFBeaE1kFQCKZ8OQpn2ezjLBJrKsGATw==}
     peerDependencies:
-      typescript: ^6.0.2
+      typescript: '>=5.5.3'
 
   '@hono/node-server@1.19.11':
     resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
@@ -7576,7 +7581,7 @@ packages:
     hasBin: true
     peerDependencies:
       '@types/node': '>=18'
-      typescript: ^6.0.2
+      typescript: '>=5.0.4 <7'
 
   kysely@0.28.14:
     resolution: {integrity: sha512-SU3lgh0rPvq7upc6vvdVrCsSMUG1h3ChvHVOY7wJ2fw4C9QEB7X3d5eyYEyULUX7UQtxZJtZXGuT6U2US72UYA==}
@@ -8775,7 +8780,7 @@ packages:
       '@ts-macro/tsc': ^0.3.6
       '@typescript/native-preview': '>=7.0.0-dev.20250601.1'
       rolldown: ^1.0.0-rc.3
-      typescript: ^6.0.2
+      typescript: ^5.0.0 || ^6.0.0-beta
       vue-tsc: ~3.2.0
     peerDependenciesMeta:
       '@ts-macro/tsc':
@@ -9253,7 +9258,7 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
     peerDependencies:
-      typescript: ^6.0.2
+      typescript: ^5.0.0
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -9268,7 +9273,7 @@ packages:
       '@tsdown/exe': 0.21.3
       '@vitejs/devtools': '*'
       publint: ^0.3.0
-      typescript: ^6.0.2
+      typescript: ^5.0.0
       unplugin-unused: ^0.5.0
     peerDependenciesMeta:
       '@arethetypeswrong/core':

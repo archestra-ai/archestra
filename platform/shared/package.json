@@ -33,7 +33,7 @@
     "@hey-api/openapi-ts": "^0.94.0",
     "@types/node": "^25",
     "knip": "^5.85.0",
-    "typescript": "^5.9.2",
+    "typescript": "catalog:",
     "vitest": "^4.1.0"
   }
 }

@@ -46,11 +46,13 @@ import {
   ConversationShareModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  MemoryItemModel,
   MessageModel,
   OrganizationModel,
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { taskQueueService } from "@/task-queue";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -778,6 +780,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           );
                         }
                       }
+                      try {
+                        await taskQueueService.enqueue({
+                          taskType: "memory_extract_candidates",
+                          payload: {
+                            conversationId,
+                            userId: user.id,
+                            organizationId,
+                            agentId,
+                          },
+                        });
+                      } catch (error) {
+                        logger.warn(
+                          {
+                            error,
+                            conversationId,
+                            organizationId,
+                            userId: user.id,
+                            agentId,
+                          },
+                          "[Chat] Failed to enqueue memory extraction task (non-fatal)",
+                        );
+                      }
                     },
                   }),
                 );
@@ -1199,6 +1223,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Failed to close browser tab on conversation deletion",
           );
         }
+      }
+
+      if (conversation) {
+        await MemoryItemModel.markSourceDeletedByConversation({
+          organizationId,
+          conversationId: id,
+        });
       }
 
       await ConversationModel.delete(id, user.id, organizationId);

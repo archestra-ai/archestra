@@ -1,6 +1,6 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTask, Task } from "@/types";
+import type { InsertTask, Task, TaskType } from "@/types";
 
 class TaskModel {
   static async create(data: InsertTask): Promise<Task> {
@@ -177,6 +177,22 @@ class TaskModel {
           AND status IN ('pending', 'processing')
       ) AS exists
     `);
+    return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
+  }
+
+  static async hasPendingByTypeAndPayload(params: {
+    taskType: TaskType;
+    conversationId: string;
+  }): Promise<boolean> {
+    const { rows } = await db.execute<{ exists: boolean }>(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM tasks
+        WHERE task_type = ${params.taskType}
+          AND status = 'pending'
+          AND payload->>'conversationId' = ${params.conversationId}
+      ) AS exists
+    `);
+
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
   }
 }

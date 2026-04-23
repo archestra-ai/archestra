@@ -276,4 +276,37 @@ describe("TaskModel", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("hasPendingByTypeAndPayload", () => {
+    test("returns true when matching pending task exists", async () => {
+      await TaskModel.create({
+        taskType: "memory_extract_candidates",
+        payload: { conversationId: "conv-123" },
+      });
+
+      const result = await TaskModel.hasPendingByTypeAndPayload({
+        taskType: "memory_extract_candidates",
+        conversationId: "conv-123",
+      });
+
+      expect(result).toBe(true);
+    });
+
+    test("returns false when matching task is processing", async () => {
+      const task = await TaskModel.create({
+        taskType: "memory_extract_candidates",
+        payload: { conversationId: "conv-456" },
+      });
+
+      await TaskModel.dequeue();
+
+      const result = await TaskModel.hasPendingByTypeAndPayload({
+        taskType: "memory_extract_candidates",
+        conversationId: "conv-456",
+      });
+
+      expect(task).toBeDefined();
+      expect(result).toBe(false);
+    });
+  });
 });

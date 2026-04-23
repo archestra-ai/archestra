@@ -1,3 +1,4 @@
+import { handleExtractMemoryCandidates } from "@/memory/extractor/extractor-task-handler";
 import type { TaskQueueService } from "../task-queue";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
@@ -19,5 +20,9 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "schedule_trigger_run_execute",
     handleScheduleTriggerRunExecution,
+  );
+  taskQueueService.registerHandler(
+    "memory_extract_candidates",
+    handleExtractMemoryCandidates,
   );
 }

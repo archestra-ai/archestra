@@ -414,6 +414,28 @@ class MemoryItemModel {
     return Number(result?.total ?? 0);
   }
 
+  static async listApprovedContentHashesForScope(params: {
+    organizationId: string;
+    scopeType: MemoryScopeType;
+    scopeId: string;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({
+        content: schema.memoryItemsTable.content,
+      })
+      .from(schema.memoryItemsTable)
+      .where(
+        and(
+          eq(schema.memoryItemsTable.organizationId, params.organizationId),
+          eq(schema.memoryItemsTable.scopeType, params.scopeType),
+          eq(schema.memoryItemsTable.scopeId, params.scopeId),
+          eq(schema.memoryItemsTable.status, "approved"),
+        ),
+      );
+
+    return rows.map((row) => MemoryTombstoneModel.getContentHash(row.content));
+  }
+
   static async listApprovedForRetrieval(params: {
     userId: string;
     organizationId: string;

@@ -22,6 +22,7 @@ export const TaskTypeSchema = z.enum([
   "check_due_connectors",
   "check_due_schedule_triggers",
   "schedule_trigger_run_execute",
+  "memory_extract_candidates",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 

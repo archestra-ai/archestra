@@ -933,7 +933,7 @@ function extractInternalCode(
   // Cohere 400 bodies are `{ message: string }` and the context-overflow
   // messages start with "too many tokens: total number of tokens in the
   // prompt cannot exceed N". No structured code in the public error schema.
-  const message = get(error, "error.message") ?? get(error, "message");
+  const message: unknown = get(error, "error.message") ?? get(error, "message");
   if (
     typeof message === "string" &&
     message.toLowerCase().includes("too many tokens")

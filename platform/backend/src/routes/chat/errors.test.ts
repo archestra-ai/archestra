@@ -200,49 +200,6 @@ describe("mapProviderError - OpenAI", () => {
     });
   });
 
-  describe("context_length_exceeded", () => {
-    it("should map to ContextTooLong for context_length_exceeded code", () => {
-      const error = createOpenAIError(
-        400,
-        OpenAIErrorTypes.INVALID_REQUEST,
-        "This model's maximum context length is 8192 tokens",
-        OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED,
-      );
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
-      expect(result.isRetryable).toBe(false);
-    });
-
-    it("should map to ContextTooLong for api_validation_error with context_length_exceeded internal_code", () => {
-      const error = createOpenAIError(
-        400,
-        OpenAIErrorTypes.API_VALIDATION_ERROR,
-        "This model's maximum context length is 8192 tokens. However, your messages resulted in 8904 tokens.",
-        undefined,
-        OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED,
-      );
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
-      expect(result.message).toBe(
-        ChatErrorMessages[ChatErrorCode.ContextTooLong],
-      );
-      expect(result.isRetryable).toBe(false);
-    });
-
-    it("should map api_validation_error without internal_code to InvalidRequest", () => {
-      const error = createOpenAIError(
-        400,
-        OpenAIErrorTypes.API_VALIDATION_ERROR,
-        "Invalid parameter: temperature must be between 0 and 2",
-      );
-      const result = mapProviderError(error, "openai");
-
-      expect(result.code).toBe(ChatErrorCode.InvalidRequest);
-    });
-  });
-
   describe("connection timeout", () => {
     it("should map to Unknown when no status code and no responseBody", () => {
       const error = {
@@ -1294,6 +1251,7 @@ describe("mapProviderError - context window exceeded (other providers)", () => {
           error: {
             code: ZhipuaiErrorTypes.CONTEXT_LENGTH_EXCEEDED,
             message: "Prompt exceeds max length",
+            internal_code: "context_length_exceeded",
           },
         }),
         isRetryable: false,

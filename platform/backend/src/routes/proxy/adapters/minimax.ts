@@ -1109,7 +1109,7 @@ export const minimaxAdapterFactory: LLMProvider<
     if (nativeStatus === 1039) {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    const message = get(error, "error.message");
+    const message: unknown = get(error, "error.message");
     if (
       typeof message === "string" &&
       message.toLowerCase().includes("context window exceeds limit")

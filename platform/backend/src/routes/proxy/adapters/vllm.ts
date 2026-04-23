@@ -1205,7 +1205,7 @@ export const vllmAdapterFactory: LLMProvider<
     // vLLM returns `type: "BadRequestError"` with no structured code for
     // context overflow; the signal is the OpenAI-style "maximum context
     // length" phrasing in the message.
-    const message = get(error, "error.message");
+    const message: unknown = get(error, "error.message");
     if (
       typeof message === "string" &&
       message.toLowerCase().includes("maximum context length")

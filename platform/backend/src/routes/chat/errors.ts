@@ -100,7 +100,6 @@ interface ParsedOpenAIError {
   code?: string;
   message?: string;
   param?: string;
-  internal_code?: string;
 }
 
 interface ParsedAnthropicError {
@@ -195,7 +194,6 @@ function parseOpenAIError(responseBody: string): ParsedOpenAIError | null {
         code: parsed.error.code,
         message: parsed.error.message,
         param: parsed.error.param,
-        internal_code: parsed.error.internal_code,
       };
     }
     return null;
@@ -697,14 +695,6 @@ function mapOpenAIErrorToCode(
       case OpenAIErrorTypes.UNPROCESSABLE_ENTITY:
       case OpenAIErrorTypes.CONFLICT:
         return ChatErrorCode.InvalidRequest;
-      case OpenAIErrorTypes.API_VALIDATION_ERROR:
-        if (
-          parsedError?.internal_code ===
-          OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED
-        ) {
-          return ChatErrorCode.ContextTooLong;
-        }
-        return ChatErrorCode.InvalidRequest;
     }
   }
 
@@ -822,10 +812,6 @@ function mapZhipuaiErrorToCode(
       case ZhipuaiErrorTypes.NETWORK_ERROR:
       case ZhipuaiErrorTypes.API_OFFLINE:
         return ChatErrorCode.ServerError;
-
-      // Context length errors
-      case ZhipuaiErrorTypes.CONTEXT_LENGTH_EXCEEDED:
-        return ChatErrorCode.ContextTooLong;
     }
   }
 

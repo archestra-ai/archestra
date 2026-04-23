@@ -1208,7 +1208,7 @@ export const ollamaAdapterFactory: LLMProvider<
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
     // Ollama returns a plain message for context overflow — typical phrasing
     // is "prompt too long; exceeded max context length by N tokens".
-    const message = get(error, "error.message");
+    const message: unknown = get(error, "error.message");
     if (typeof message === "string") {
       const msg = message.toLowerCase();
       if (

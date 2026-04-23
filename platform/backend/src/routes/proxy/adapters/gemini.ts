@@ -1418,9 +1418,9 @@ export const geminiAdapterFactory: LLMProvider<
     // reason for this case, so message sniffing is the only signal. The
     // status and message can appear at the top level or nested under
     // `error`.
-    const status = get(error, "error.status") ?? get(error, "status");
+    const status: unknown = get(error, "error.status") ?? get(error, "status");
     if (status !== "INVALID_ARGUMENT") return undefined;
-    const message = get(error, "error.message") ?? get(error, "message");
+    const message: unknown = get(error, "error.message") ?? get(error, "message");
     if (typeof message !== "string") return undefined;
     const msg = message.toLowerCase();
     if (

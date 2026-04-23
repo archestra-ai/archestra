@@ -423,7 +423,7 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * Returns `undefined` when the error doesn't match any known normalized
    * category, in which case no `internal_code` is added to the envelope.
    */
-  extractInternalCode?(error: unknown): ArchestraInternalErrorCode | undefined;
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined;
 }
 
 /**

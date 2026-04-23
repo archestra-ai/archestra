@@ -1198,7 +1198,7 @@ export const anthropicAdapterFactory: LLMProvider<
     // the model's context window, with a message like "prompt is too long:
     // X tokens > Y maximum". There is no structured code — message sniffing
     // is the only signal.
-    const message =
+    const message: unknown =
       get(error, "error.error.message") ?? get(error, "error.message");
     if (
       typeof message === "string" &&

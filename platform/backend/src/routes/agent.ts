@@ -16,7 +16,6 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
-  AgentToolModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
@@ -559,47 +558,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Omit teams if scope is not 'team' — scope takes precedence
-      const cloneTeams =
-        sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
-
-      const created = await AgentModel.create(
-        {
-          organizationId: sourceAgent.organizationId,
-          agentType: sourceAgent.agentType,
-          scope: sourceAgent.scope,
-          teams: cloneTeams,
-          labels: sourceAgent.labels,
-          knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
-          connectorIds: sourceAgent.connectorIds ?? [],
-          suggestedPrompts: sourceAgent.suggestedPrompts ?? [],
-          name: `Copy of ${sourceAgent.name}`,
-          systemPrompt: sourceAgent.systemPrompt,
-          description: sourceAgent.description,
-          icon: sourceAgent.icon,
-          considerContextUntrusted: sourceAgent.considerContextUntrusted,
-          incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
-          incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
-          incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
-          llmApiKeyId: sourceAgent.llmApiKeyId,
-          llmModel: sourceAgent.llmModel,
-          identityProviderId: sourceAgent.identityProviderId,
-          passthroughHeaders: sourceAgent.passthroughHeaders,
-        },
-        sourceAgent.scope === "personal" ? user.id : undefined,
-      );
-
-      // Clone tool assignments (including delegation/subagent tools)
-      await AgentToolModel.cloneAssignments({
-        fromAgentId: sourceAgent.id,
-        toAgentId: created.id,
+      // Delegate cloning logic to the model
+      const clonedAgent = await AgentModel.cloneAgent({
+        sourceId: sourceAgent.id,
+        userId: user.id,
       });
-
-      // Return a fully hydrated agent with tools/teams/labels/knowledge assignments
-      const clonedAgent = await AgentModel.findById(created.id, user.id, true);
-      if (!clonedAgent) {
-        throw new ApiError(500, "Failed to load cloned agent");
-      }
 
       return reply.send(clonedAgent);
     },

@@ -1,16 +1,16 @@
 import { BUILT_IN_AGENT_IDS } from "@shared";
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
-import db, { schema } from "@/database";
 import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
 } from "@/auth";
+import db, { schema } from "@/database";
 import { ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { ApiError, type Agent, type User } from "@/types";
+import { type Agent, ApiError, type User } from "@/types";
 
 vi.mock("@/auth", () => ({
   getAgentTypePermissionChecker: vi.fn(),
@@ -21,8 +21,7 @@ vi.mock("@/auth", () => ({
   hasAnyAgentTypeAdminPermission: vi.fn().mockResolvedValue(true),
 }));
 
-const mockGetAgentTypePermissionChecker =
-  getAgentTypePermissionChecker as Mock;
+const mockGetAgentTypePermissionChecker = getAgentTypePermissionChecker as Mock;
 const mockRequireAgentModifyPermission = requireAgentModifyPermission as Mock;
 
 describe("clone agent route", () => {
@@ -136,7 +135,8 @@ describe("clone agent route", () => {
     const clonedAssignments = await db
       .select({
         toolId: schema.agentToolsTable.toolId,
-        credentialResolutionMode: schema.agentToolsTable.credentialResolutionMode,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
       })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.agentId, cloned.id));
@@ -210,7 +210,7 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  test("returns 403 when scope-based modify permission is denied", async ({
+  test("non-admin cannot clone org-scoped agent", async ({
     makeInternalAgent,
   }) => {
     const sourceAgent = await makeInternalAgent({
@@ -223,8 +223,85 @@ describe("clone agent route", () => {
       connectorIds: [],
     });
 
+    mockGetAgentTypePermissionChecker.mockResolvedValueOnce({
+      require: vi.fn(),
+      isAdmin: vi.fn().mockReturnValue(false), // Not an admin
+      isTeamAdmin: vi.fn().mockReturnValue(false),
+      hasAnyReadPermission: vi.fn().mockReturnValue(true),
+      hasAnyAdminPermission: vi.fn().mockReturnValue(false),
+    });
+
     mockRequireAgentModifyPermission.mockImplementationOnce(() => {
       throw new ApiError(403, "Only admins can manage org-scoped agents");
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("personal agent cloning only by owner", async ({
+    makeInternalAgent,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser();
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: otherUser.id, // Owned by different user
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    mockRequireAgentModifyPermission.mockImplementationOnce(() => {
+      throw new ApiError(403, "You can only manage your own personal agents");
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("team-scoped cloning requires team-admin membership", async ({
+    makeInternalAgent,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id, { role: "member" }); // Not team-admin
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Team Agent",
+      scope: "team",
+      teams: [team.id],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    mockGetAgentTypePermissionChecker.mockResolvedValueOnce({
+      require: vi.fn(),
+      isAdmin: vi.fn().mockReturnValue(false),
+      isTeamAdmin: vi.fn().mockReturnValue(false), // Not team-admin
+      hasAnyReadPermission: vi.fn().mockReturnValue(true),
+      hasAnyAdminPermission: vi.fn().mockReturnValue(false),
+    });
+
+    mockRequireAgentModifyPermission.mockImplementationOnce(() => {
+      throw new ApiError(
+        403,
+        "You need team-admin permission to manage team-scoped agents",
+      );
     });
 
     const response = await app.inject({

@@ -106,6 +106,7 @@ export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_SWAP_AGENT_SHORT_NAME = "swap_agent";
 export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
 export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
+export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -169,6 +170,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =

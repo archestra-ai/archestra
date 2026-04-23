@@ -1537,6 +1537,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `tools[].inputParameters[].required` | `boolean` | Yes | Whether the parameter is required. |
 | `tools[].inputParameters[].description` | `string \| null` | Yes | Parameter description, if available. |
 
+
 #### run_tool
 
 Required RBAC permission: None (no additional RBAC permission required)

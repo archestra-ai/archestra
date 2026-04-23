@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-04-21
+lastUpdated: 2026-04-22
 ---
 
 <!--
@@ -255,9 +255,9 @@ The Outline connector syncs published documents from an [Outline](https://www.ge
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
 
-Authentication uses an Outline API key. Create one under **Settings → API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
+Authentication uses an Outline API key. Create one under **Settings -> API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
 
-Incremental sync records the time the run starts (`syncStart`) and advances the checkpoint to that value only after every collection in the sweep has been fully processed. The next run's cutoff is the previous run's `syncStart`, so any document edited while the previous run was in flight is guaranteed to be re-ingested. Documents are iterated in ascending `createdAt` order — this gives stable pagination under concurrent edits (existing documents do not shift positions when updated) and lets interrupted runs resume from a `lastCollectionId` / `lastDocumentId` bookmark. Updates to already-swept collections that happen mid-run are accepted as the cost of correctness; deduplication on the ingest side handles the small overlap. Documents are fetched from the Outline `documents.list` API in pages of 25. The page size is fixed in the UI but can be overridden via the `batchSize` field when a connector is created through the Archestra HTTP API.
+Incremental sync uses the previous completed run as the cutoff and re-ingests documents edited while a sync was in progress. Interrupted runs resume from the last processed collection and document. The UI uses the default Outline page size of 25; API-created connectors may override `batchSize` for rate-limit tuning.
 
 ## Managing Connectors
 

@@ -51,43 +51,7 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "Invalid limit configuration for the specified limit type",
-    );
-  });
-
-  test("create_limit returns error when mcp_server_calls limit missing mcp_server_name", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
-      {
-        entity_type: "agent",
-        entity_id: testAgent.id,
-        limit_type: "mcp_server_calls",
-        limit_value: 100,
-      },
-      mockContext,
-    );
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "Invalid limit configuration for the specified limit type",
-    );
-  });
-
-  test("create_limit returns error when tool_calls limit missing fields", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
-      {
-        entity_type: "agent",
-        entity_id: testAgent.id,
-        limit_type: "tool_calls",
-        limit_value: 50,
-      },
-      mockContext,
-    );
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "Invalid limit configuration for the specified limit type",
-    );
+    expect((result.content[0] as any).text).toContain("model:");
   });
 
   test("get_limits returns empty when no limits exist", async () => {
@@ -225,50 +189,6 @@ describe("limit tool execution", () => {
     );
     expect(verifyResult.isError).toBe(false);
     expect((verifyResult.content[0] as any).text).toContain("No limits found");
-  });
-
-  test("create_limit succeeds for mcp_server_calls type", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
-      {
-        entity_type: "agent",
-        entity_id: testAgent.id,
-        limit_type: "mcp_server_calls",
-        limit_value: 100,
-        mcp_server_name: "test-server",
-      },
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain(
-      "MCP Server: test-server",
-    );
-  });
-
-  test("create_limit succeeds for tool_calls type", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
-      {
-        entity_type: "agent",
-        entity_id: testAgent.id,
-        limit_type: "tool_calls",
-        limit_value: 50,
-        mcp_server_name: "test-server",
-        tool_name: "test-tool",
-      },
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain(
-      "MCP Server: test-server",
-    );
-    expect((result.content[0] as any).text).toContain("Tool: test-tool");
   });
 
   test("update_limit returns error for nonexistent limit", async () => {

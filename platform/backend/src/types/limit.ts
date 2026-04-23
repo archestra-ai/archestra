@@ -1,4 +1,4 @@
-import { validateLimitShape } from "@shared";
+import { LimitTypeSchema, validateLimitShape } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -7,7 +7,8 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-export { validateLimitShape } from "@shared";
+export { LimitTypeSchema, validateLimitShape } from "@shared";
+export type { LimitType } from "@shared";
 
 /**
  * Entity types that can have limits applied.
@@ -16,8 +17,8 @@ export { validateLimitShape } from "@shared";
  * personal chat-api-keys, JWKS-authenticated external callers). Shared
  * resources like virtual API keys, team/org chat-api-keys never bill a user.
  *
- * `virtual_api_key` scopes a limit to a specific vkey regardless of which
- * downstream caller uses it — caps the integration key itself.
+ * `virtual_api_key` scopes a limit to a specific virtual API key regardless
+ * of which downstream caller uses it — caps the integration key itself.
  */
 // TODO: need to make a database migration to migrate agent -> profile
 export const LimitEntityTypeSchema = z.enum([
@@ -32,19 +33,18 @@ export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
 /**
  * Types of limits that can be applied
  */
-export const LimitTypeSchema = z.enum([
+export const PersistedLimitTypeSchema = z.enum([
   "token_cost",
   "mcp_server_calls",
   "tool_calls",
 ]);
-export type LimitType = z.infer<typeof LimitTypeSchema>;
 
 /**
  * Base database schema derived from Drizzle
  */
 export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
-  limitType: LimitTypeSchema,
+  limitType: PersistedLimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
@@ -61,6 +61,8 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   createdAt: true,
   updatedAt: true,
   organizationId: true,
+  mcpServerName: true,
+  toolName: true,
 });
 
 /**
@@ -71,6 +73,8 @@ export const CreateLimitApiSchema = InsertLimitSchema.omit({
   createdAt: true,
   updatedAt: true,
   organizationId: true,
+  mcpServerName: true,
+  toolName: true,
 }).refine(validateLimitShape, {
   message: "Invalid limit configuration for the specified limit type",
 });

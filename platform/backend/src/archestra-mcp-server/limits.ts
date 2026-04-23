@@ -13,6 +13,7 @@ import { LimitModel } from "@/models";
 import {
   LimitEntityTypeSchema,
   LimitTypeSchema,
+  PersistedLimitTypeSchema,
   UuidIdSchema,
   validateLimitShape,
 } from "@/types";
@@ -31,23 +32,13 @@ const LimitOutputItemSchema = z.object({
   id: z.string().describe("The limit ID."),
   entityType: LimitEntityTypeSchema.describe("The limited entity type."),
   entityId: z.string().describe("The limited entity ID."),
-  limitType: LimitTypeSchema.describe("The kind of limit."),
+  limitType: PersistedLimitTypeSchema.describe("The kind of limit."),
   limitValue: z.number().describe("The configured limit value."),
   model: z
     .array(z.string())
     .nullable()
     .optional()
     .describe("Models targeted by a token_cost limit, if any."),
-  mcpServerName: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("MCP server name for MCP-specific limits, if any."),
-  toolName: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("Tool name for tool-specific limits, if any."),
 });
 
 const CreateLimitToolArgsSchema = z
@@ -58,29 +49,14 @@ const CreateLimitToolArgsSchema = z
     entity_id: z
       .string()
       .min(1)
-      .describe(
-        "The ID of the entity. UUIDs for agent / virtual_api_key, text IDs for organization / team / user.",
-      ),
+      .describe("The ID of the entity."),
     limit_type: LimitTypeSchema.describe("The type of limit to apply."),
-    limit_value: z
-      .number()
-      .describe("The limit value (tokens or count depending on limit type)."),
+    limit_value: z.number().describe("The limit value in tokens."),
     model: z
       .array(z.string())
-      .optional()
       .describe(
-        'Array of model names for token_cost limits. Use ["*"] as the sole element to cover every model (ALL_MODELS_SENTINEL). Mixing "*" with concrete model names is rejected.',
+        'Array of model names to apply the limit to. Use ["*"] as the sole element to apply the limit to every model; mixing "*" with concrete model names is rejected.',
       ),
-    mcp_server_name: z
-      .string()
-      .optional()
-      .describe(
-        "MCP server name. Required for mcp_server_calls and tool_calls limits.",
-      ),
-    tool_name: z
-      .string()
-      .optional()
-      .describe("Tool name. Required for tool_calls limits."),
   })
   .strict()
   .refine(
@@ -88,8 +64,6 @@ const CreateLimitToolArgsSchema = z
       validateLimitShape({
         limitType: args.limit_type,
         model: args.model,
-        mcpServerName: args.mcp_server_name,
-        toolName: args.tool_name,
       }),
     { message: "Invalid limit configuration for the specified limit type" },
   );
@@ -99,7 +73,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_LIMIT_SHORT_NAME,
     title: "Create Limit",
     description:
-      "Create a new cost or usage limit for an organization, team, agent, LLM proxy, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
+      "Create a new token-cost limit for an organization, team, agent, user, or virtual API key.",
     schema: CreateLimitToolArgsSchema,
     outputSchema: z.object({
       limit: LimitOutputItemSchema,
@@ -126,8 +100,6 @@ const registry = defineArchestraTools([
           limitType: args.limit_type,
           limitValue: args.limit_value,
           model: args.model,
-          mcpServerName: args.mcp_server_name,
-          toolName: args.tool_name,
         });
 
         return structuredSuccessResult(
@@ -138,9 +110,7 @@ const registry = defineArchestraTools([
             limit.entityId
           }\nLimit Type: ${limit.limitType}\nLimit Value: ${
             limit.limitValue
-          }${limit.model ? `\nModel: ${limit.model}` : ""}${
-            limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
-          }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
+          }${limit.model ? `\nModel: ${limit.model}` : ""}`,
         );
       } catch (error) {
         return catchError(error, "creating limit");
@@ -161,9 +131,7 @@ const registry = defineArchestraTools([
           .string()
           .min(1)
           .optional()
-          .describe(
-            "Optional filter by entity ID (UUID for agent/virtual_api_key, text for organization/team/user).",
-          ),
+          .describe("Optional filter by entity ID."),
       })
       .strict(),
     outputSchema: z.object({
@@ -211,9 +179,6 @@ const registry = defineArchestraTools([
             result += `\n  Limit Type: ${limit.limitType}`;
             result += `\n  Limit Value: ${limit.limitValue}`;
             if (limit.model) result += `\n  Model: ${limit.model}`;
-            if (limit.mcpServerName)
-              result += `\n  MCP Server: ${limit.mcpServerName}`;
-            if (limit.toolName) result += `\n  Tool: ${limit.toolName}`;
             if (limit.lastCleanup)
               result += `\n  Last Cleanup: ${limit.lastCleanup}`;
             return result;

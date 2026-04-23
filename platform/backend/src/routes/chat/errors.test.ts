@@ -200,6 +200,22 @@ describe("mapProviderError - OpenAI", () => {
     });
   });
 
+  describe("context_length_exceeded", () => {
+    it("should map to ContextTooLong when envelope carries internal_code", () => {
+      const error = createOpenAIError(
+        400,
+        OpenAIErrorTypes.API_VALIDATION_ERROR,
+        "This model's maximum context length is 8192 tokens. However, your messages resulted in 8904 tokens.",
+        undefined,
+        OpenAIErrorTypes.CONTEXT_LENGTH_EXCEEDED,
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.isRetryable).toBe(false);
+    });
+  });
+
   describe("connection timeout", () => {
     it("should map to Unknown when no status code and no responseBody", () => {
       const error = {

@@ -970,7 +970,10 @@ test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
     browser,
     goToPage,
   }) => {
-    test.skip(true, "Currently failing in CI (identity-providers.ee.spec.ts:968 SAML/Keycloak flow)");
+    test.skip(
+      true,
+      "Currently failing in CI (identity-providers.ee.spec.ts:968 SAML/Keycloak flow)",
+    );
     test.slow();
 
     // Fetch IdP metadata dynamically (Keycloak regenerates certs on restart)

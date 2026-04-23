@@ -1,4 +1,4 @@
-import type { ChatErrorResponse, SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@shared";
 import {
   boolean,
   jsonb,
@@ -42,7 +42,6 @@ const conversationsTable = pgTable("conversations", {
       }>
     >(),
   artifact: text("artifact"),
-  lastChatError: jsonb("last_chat_error").$type<ChatErrorResponse>(),
   pinnedAt: timestamp("pinned_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })

@@ -136,7 +136,10 @@ test.describe("MCP Install", () => {
     });
 
     test("Bearer Token", async ({ adminPage, extractCookieHeaders }) => {
-      test.skip(true, "Currently failing in CI (mcp-install.spec.ts:138 Custom remote Bearer Token)");
+      test.skip(
+        true,
+        "Currently failing in CI (mcp-install.spec.ts:138 Custom remote Bearer Token)",
+      );
       await deleteCatalogItem(
         adminPage,
         extractCookieHeaders,

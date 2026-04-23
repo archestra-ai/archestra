@@ -3,7 +3,7 @@ title: Knowledge Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-04-14
+lastUpdated: 2026-04-22
 ---
 
 <!--
@@ -121,10 +121,10 @@ Authentication supports both basic auth (username + password) and OAuth bearer t
 
 Ingests pages from Notion workspaces using the Notion API. Page content is fetched from Notion blocks and converted to plain text.
 
-| Field        | Description                                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages)      |
-| Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)       |
+| Field        | Description                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages) |
+| Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
 
 Authentication uses a [Notion integration token](https://www.notion.so/my-integrations) (starts with `secret_`). Create an internal integration in your Notion workspace and share the relevant pages or databases with it. Incremental sync uses the `last_edited_time` field to fetch only pages modified since the last run.
 
@@ -132,16 +132,16 @@ Authentication uses a [Notion integration token](https://www.notion.so/my-integr
 
 Ingests documents and site pages from SharePoint Online via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. Site pages are synced with content extracted from web parts. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
-| Field         | Description                                                                                         |
-| ------------- | --------------------------------------------------------------------------------------------------- |
+| Field         | Description                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------- |
 | Tenant ID     | Your Azure AD (Entra ID) tenant ID or domain (e.g., `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)       |
 | Site URL      | Your SharePoint site URL (e.g., `https://your-tenant.sharepoint.com/sites/your-site`)             |
-| Client ID     | Azure AD app registration Application (client) ID                                                  |
-| Client Secret | Azure AD app registration client secret value                                                      |
-| Drive IDs     | Comma-separated document library IDs to sync (optional -- leave blank to sync all site libraries)   |
-| Folder Path   | Restrict sync to a specific folder path within each drive (optional)                                |
-| Recursive     | Traverse subfolders within each drive or Folder Path (default: on)                                  |
-| Include Pages | Toggle to sync site pages and their web part content (default: on)                                  |
+| Client ID     | Azure AD app registration Application (client) ID                                                 |
+| Client Secret | Azure AD app registration client secret value                                                     |
+| Drive IDs     | Comma-separated document library IDs to sync (optional -- leave blank to sync all site libraries) |
+| Folder Path   | Restrict sync to a specific folder path within each drive (optional)                              |
+| Recursive     | Traverse subfolders within each drive or Folder Path (default: on)                                |
+| Include Pages | Toggle to sync site pages and their web part content (default: on)                                |
 
 The `maxDepth` field is available via the API for programmatic connector creation but is not exposed in the UI. When Recursive is enabled, traversal descends up to 50 levels by default (range: 1--100).
 
@@ -160,12 +160,12 @@ Incremental sync uses the `lastModifiedDateTime` field to fetch only items modif
 
 Ingests files from Google Drive (My Drive and Shared Drives) via the Google Drive API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. Google Workspace files (Docs, Sheets, Slides) are exported as plain text. When a multimodal embedding model is configured, image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) are also ingested and embedded directly.
 
-| Field                 | Description                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------- |
-| Drive IDs             | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
-| Folder ID             | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)      |
-| File Types            | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)  |
-| Recursive Traversal   | Sync files from all nested subfolders when a Folder ID is set (default: on)                        |
+| Field               | Description                                                                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drive IDs           | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
+| Folder ID           | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)                                                               |
+| File Types          | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
+| Recursive Traversal | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
 
 Authentication supports two modes via the **Service Account Key / OAuth Token** field:
 
@@ -192,10 +192,10 @@ Incremental sync uses the `modifiedTime` field with a 5-minute safety buffer to 
 
 Ingests files from Dropbox accounts or team folders using the Dropbox API v2. Text is extracted from `.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, and `.conf` files.
 
-| Field       | Description                                                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------ |
-| Root Path   | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.     |
-| File Types  | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
+| Field      | Description                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------------------- |
+| Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
+| File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
 
 The `recursive` and `maxDepth` fields are available via the API for programmatic connector creation but are not exposed in the UI. By default all subfolders are traversed recursively up to 50 levels deep.
 
@@ -207,15 +207,15 @@ Incremental sync uses the `list_folder/continue` cursor API. After the first ful
 
 Ingests Linear issues by default, with optional project and cycle sync in advanced settings. Content includes issue descriptions, optional comment threads, project content/updates, and cycle summaries.
 
-| Field            | Description                                                               |
-| ---------------- | ------------------------------------------------------------------------- |
-| Linear API URL   | GraphQL API base URL (default: `https://api.linear.app`)                 |
-| Team IDs         | Comma-separated team IDs to scope sync (optional)                        |
-| Project IDs      | Comma-separated project IDs to scope sync (optional)                     |
-| Issue States     | Comma-separated issue state names (e.g. `Todo, In Progress, Done`)       |
-| Include Comments | Include issue comments in indexed content (default: on)                  |
-| Include Projects | Sync projects and recent project updates as documents (default: off)     |
-| Include Cycles   | Sync cycles as documents (default: off)                                  |
+| Field            | Description                                                                |
+| ---------------- | -------------------------------------------------------------------------- |
+| Linear API URL   | GraphQL API base URL (default: `https://api.linear.app`)                   |
+| Team IDs         | Comma-separated team IDs to scope sync (optional)                          |
+| Project IDs      | Comma-separated project IDs to scope sync (optional)                       |
+| Issue States     | Comma-separated issue state names (e.g. `Todo, In Progress, Done`)         |
+| Include Comments | Include issue comments in indexed content (default: on)                    |
+| Include Projects | Sync projects and recent project updates as documents (default: off)       |
+| Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
 
 Authentication uses a Linear personal API key passed as a bearer token in connector credentials.
@@ -244,6 +244,20 @@ Operational notes:
 - Keep `Batch Size` moderate if your workspace has high activity to reduce GraphQL rate-limit pressure.
 - If both project and cycle toggles are enabled, connector runs issue sync first, then projects, then cycles.
 - Updating connector config resets checkpoint and triggers a full resync on the next run.
+
+## Outline
+
+The Outline connector syncs published documents from an [Outline](https://www.getoutline.com/) workspace. It supports both the Outline cloud service (`https://app.getoutline.com`) and self-hosted Outline instances.
+
+| Field          | Description                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------ |
+| Instance URL   | The base URL of your Outline workspace (e.g. `https://app.getoutline.com` or your self-hosted URL).    |
+| API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
+| Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
+
+Authentication uses an Outline API key. Create one under **Settings -> API & Apps** in your Outline workspace. Only published documents accessible to the API key are synced.
+
+Incremental sync uses the previous completed run as the cutoff and re-ingests documents edited while a sync was in progress. Interrupted runs resume from the last processed collection and document. The UI uses the default Outline page size of 25; API-created connectors may override `batchSize` for rate-limit tuning.
 
 ## Managing Connectors
 

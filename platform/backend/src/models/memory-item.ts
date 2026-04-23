@@ -607,13 +607,20 @@ class MemoryItemModel {
     nextStatus: MemoryStatus,
   ): boolean {
     if (currentStatus === "candidate") {
-      return nextStatus === "approved" || nextStatus === "rejected";
+      return (
+        nextStatus === "approved" ||
+        nextStatus === "rejected" ||
+        nextStatus === "archived"
+      );
     }
     if (currentStatus === "approved") {
       return nextStatus === "archived";
     }
+    if (currentStatus === "rejected") {
+      return nextStatus === "archived";
+    }
     if (currentStatus === "archived") {
-      return nextStatus === "approved";
+      return nextStatus === "candidate";
     }
 
     return false;

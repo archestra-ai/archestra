@@ -449,7 +449,7 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ArchiveMemory,
-        description: "Archive an approved memory item",
+        description: "Archive an active memory item",
         tags: ["Memory"],
         params: z.object({ id: z.string() }),
         response: constructResponseSchema(SelectMemoryItemSchema),
@@ -471,7 +471,7 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!archived) {
         throw new ApiError(
           409,
-          "Cannot archive this memory item — it may not be approved or you lack access",
+          "Cannot archive this memory item — it may already be archived or you lack access",
         );
       }
 
@@ -484,7 +484,7 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UnarchiveMemory,
-        description: "Restore an archived memory item to approved status",
+        description: "Restore an archived memory item to candidate status",
         tags: ["Memory"],
         params: z.object({ id: z.string() }),
         response: constructResponseSchema(SelectMemoryItemSchema),

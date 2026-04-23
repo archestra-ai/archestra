@@ -1,5 +1,5 @@
 import type { Permissions } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -90,7 +90,10 @@ describe("RolePermissionBuilder", () => {
 
     await user.click(screen.getByRole("button", { name: "Knowledge" }));
 
-    const createCheckbox = screen.getByLabelText("Create");
+    const knowledgeSourcesCard = screen
+      .getByText("Knowledge Sources")
+      .closest("div.rounded-md") as HTMLElement;
+    const createCheckbox = within(knowledgeSourcesCard).getByLabelText("Create");
     expect(createCheckbox).toBeDisabled();
 
     expect(

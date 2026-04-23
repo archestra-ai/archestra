@@ -376,7 +376,7 @@ export async function unarchive(
     const restored = await MemoryItemModel.transitionStatus({
       id: params.itemId,
       organizationId: params.organizationId,
-      newStatus: "approved",
+      newStatus: "candidate",
       reviewerId: params.reviewer.id,
     });
 

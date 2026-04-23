@@ -1109,3 +1109,93 @@ describe("parseTrustProxy", () => {
     expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
   });
 });
+
+describe("memory config parsing", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = {
+      ...originalEnv,
+      ARCHESTRA_DATABASE_URL:
+        originalEnv.ARCHESTRA_DATABASE_URL ??
+        "postgresql://test:test@localhost:5432/test",
+    };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("parses memory flags, limits and optional overrides from environment", async () => {
+    process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED = "false";
+    process.env.ARCHESTRA_MEMORY_INJECTION_ENABLED = "true";
+    process.env.ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS = "120";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS = "2048";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MODEL_OVERRIDE = "gpt-4o-mini";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_API_KEY_ID_OVERRIDE = "key-override";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_MODEL = "claude-haiku-4-5";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_API_KEY_ID = "key-fallback";
+    process.env.ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET = "750";
+    process.env.ARCHESTRA_MEMORY_INJECTION_TOP_K = "8";
+    process.env.ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS = "45";
+    process.env.ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS = "14";
+    process.env.ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH = "640";
+    process.env.ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION = "4";
+
+    const { default: dynamicConfig } = await import("./config");
+
+    expect(dynamicConfig.memory).toEqual({
+      extractionEnabled: false,
+      injectionEnabled: true,
+      idleDelaySeconds: 120,
+      extractorMaxTokens: 2048,
+      extractorModelOverride: "gpt-4o-mini",
+      extractorApiKeyIdOverride: "key-override",
+      extractorFallbackModel: "claude-haiku-4-5",
+      extractorFallbackApiKeyId: "key-fallback",
+      injectionTokenBudget: 750,
+      injectionTopK: 8,
+      tombstoneTtlDays: 45,
+      candidateTtlDays: 14,
+      maxContentLength: 640,
+      maxCandidatesPerExtraction: 4,
+    });
+  });
+
+  test("uses defaults for invalid positive ints and trims empty optional overrides", async () => {
+    process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED = "true";
+    process.env.ARCHESTRA_MEMORY_INJECTION_ENABLED = "false";
+    process.env.ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS = "-1";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS = "0";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MODEL_OVERRIDE = "   ";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_API_KEY_ID_OVERRIDE = "";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_MODEL = " ";
+    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_API_KEY_ID = " ";
+    process.env.ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET = "NaN";
+    process.env.ARCHESTRA_MEMORY_INJECTION_TOP_K = "0";
+    process.env.ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS = "-5";
+    process.env.ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS = "abc";
+    process.env.ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH = "0";
+    process.env.ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION = "-2";
+
+    const { default: dynamicConfig } = await import("./config");
+
+    expect(dynamicConfig.memory).toEqual({
+      extractionEnabled: true,
+      injectionEnabled: false,
+      idleDelaySeconds: 300,
+      extractorMaxTokens: 800,
+      extractorModelOverride: undefined,
+      extractorApiKeyIdOverride: undefined,
+      extractorFallbackModel: undefined,
+      extractorFallbackApiKeyId: undefined,
+      injectionTokenBudget: 600,
+      injectionTopK: 10,
+      tombstoneTtlDays: 30,
+      candidateTtlDays: 30,
+      maxContentLength: 500,
+      maxCandidatesPerExtraction: 5,
+    });
+  });
+});

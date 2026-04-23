@@ -61,6 +61,7 @@ const apiTestMatch = [
   "**/chat-api.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/image-pull-secrets.spec.ts",
+  "**/memory.spec.ts",
   "**/mcp-enterprise-managed.ee.spec.ts",
   "**/mcp-gateway-auth-at-call-time.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",

@@ -25,7 +25,7 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, a team, an agent, a specific user, or a specific virtual API key. Each limit targets one or more specific models — or every model, using the all-models sentinel described below.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, a team, an agent, a specific user, or a specific virtual API key. Each limit targets one or more specific models — or every model, via the **Apply to all models** toggle described below.
 
 Limits are evaluated from recorded model usage, so [pricing configuration](#model-pricing) affects token-cost limits directly. Read the [pricing caveat](#pricing-caveat) before relying on a limit for billing-critical enforcement.
 
@@ -33,11 +33,11 @@ Limits are evaluated from recorded model usage, so [pricing configuration](#mode
 
 The five scopes protect different things and are typically used together:
 
-- **Organization** — shared platform-wide budget. Caps the cumulative spend across every caller in the org, including virtual-key traffic.
-- **Team** — per-team budget. Caps cumulative spend in the team, including virtual-key traffic from the team's keys.
+- **Organization** — shared platform-wide budget. Caps the cumulative spend across every caller in the org, including traffic from virtual API keys.
+- **Team** — per-team budget. Caps cumulative spend in the team, including traffic from virtual API keys assigned to the team.
 - **Agent** — per-agent budget on a single gateway or LLM proxy. Useful when one agent drives the bulk of an org's spend.
-- **User (personal budget)** — caps an identifiable human's usage of the chat UI and their personal chat API keys. It does NOT apply to virtual-key traffic, even if the key was created by that user — see the billing table below.
-- **Virtual API Key** — caps the shared integration key itself, regardless of who calls it. Use this for external services (Vercel AI SDK, OpenWebUI, n8n, etc.) where you want a per-integration ceiling.
+- **User (personal budget)** — caps an identifiable human's usage. Applies to the chat UI, their personal chat API keys, and personal-scope virtual API keys they own. Team- and org-scope virtual keys do not bill a user.
+- **Virtual API Key** — caps the integration key itself, regardless of who calls it. Use this for external services (Vercel AI SDK, OpenWebUI, n8n, etc.) where you want a per-integration ceiling. A personal-scope virtual key additionally bills its owner under the user scope.
 
 Who gets billed for a given request is summarised here:
 
@@ -46,20 +46,23 @@ Who gets billed for a given request is summarised here:
 | Chat UI (signed-in session) | the current user | — |
 | Chat API key, scope = personal | the key's owner | — |
 | Chat API key, scope = team or org | nobody (shared key) | — |
-| Virtual API key (any scope) | nobody (shared key) | the vkey itself |
+| Virtual API key, scope = personal | the key's owner | the virtual API key itself |
+| Virtual API key, scope = team or org | nobody (shared key) | the virtual API key itself |
 | JWKS-authenticated external caller | the local user the JWT maps to (by email) | — |
 
-Important: virtual-key traffic never bills a user — not even the user who created the key. A virtual key is a shared credential; the individual humans calling through it are not identifiable to Archestra, so user-scope budgets cannot be enforced on that traffic. Use a virtual-key-scope budget to cap the key itself, or a team/organization-scope budget to cap the surrounding group.
+A personal-scope virtual API key has a single declared owner, so its spend is charged to both the key and the owner — both budgets enforce on the same request. Team- and org-scope virtual API keys are shared credentials with no single human owner, so only the virtual-API-key, team, and organization budgets apply to their traffic.
 
-Per-user enforcement is only authoritative when the caller's identity is derived from a trusted signal:
+Per-user enforcement relies on a trusted identity:
 
-- For in-UI chat traffic, the chat route derives the billed user from the scope of the resolved chat-api-key (personal → key owner; team/org → nobody) and propagates that to the LLM proxy over a loopback-only internal channel. External callers reaching the proxy over the network cannot influence this signal.
-- For external API traffic, the JWT from a JWKS-authenticated provider is the authoritative signal.
-- Virtual API keys and raw provider keys carry no identifiable billed user, so their traffic does not consume user-scope budgets.
+- Chat UI sessions identify the signed-in user.
+- Personal chat API keys identify their owner.
+- Personal-scope virtual API keys identify their owner.
+- JWKS-authenticated external callers are identified by the JWT, mapped to a local user by email.
+- Team- and org-scope virtual API keys and raw provider keys carry no identifiable user, so their traffic does not consume user-scope budgets.
 
 ### Applies to all models
 
-When configuring a token-cost limit, toggle **Apply to all models** to make the limit cover every model, including models that get configured later. Under the hood this stores the limit with a `["*"]` model array (the all-models sentinel) and enforcement counts spend from every incoming model against it. Mixing `"*"` with concrete model names is rejected.
+When configuring a token-cost limit, toggle **Apply to all models** to make the limit cover every model, including models added later. This is mutually exclusive with a concrete model list — pick one or the other.
 
 Use all-models when you want a blanket ceiling. Use a concrete model list when one model has significantly different pricing or you want to cap a particular family only. Model-scoped limits are independent: exhausting a Claude-only limit does not block OpenAI requests.
 

@@ -5,7 +5,11 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { hasArchestraTokenPrefix, isSupportedProvider } from "@shared";
+import {
+  hasArchestraTokenPrefix,
+  isSupportedProvider,
+  type ResourceVisibilityScope,
+} from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -49,6 +53,8 @@ export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
   virtualKeyId: string;
+  scope: ResourceVisibilityScope;
+  authorId: string | null;
 }
 
 /**
@@ -109,6 +115,8 @@ export async function validateVirtualApiKey(
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
     virtualKeyId: resolved.virtualKey.id,
+    scope: resolved.virtualKey.scope,
+    authorId: resolved.virtualKey.authorId,
   };
 }
 

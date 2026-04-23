@@ -127,4 +127,49 @@ describe("LLM Proxy — loopback BILLED_USER_ID_HEADER guard", () => {
       expect(call[0].billedUserId).toBeUndefined();
     }
   });
+
+  test("personal-scope virtual key attributes spend to its author", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser({ email: "vkey-owner@test.com" });
+    const agent = await makeAgent({ organizationId: org.id, name: "personal" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-upstream" } });
+    const chatKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      scope: "personal",
+    });
+    const { value: vkey } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatKey.id,
+      name: "personal-test-vkey",
+      scope: "personal",
+      authorId: author.id,
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "203.0.113.7",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${vkey}`,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "hi" }],
+        stream: false,
+      },
+    });
+
+    expect(checkLimitsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        billedUserId: author.id,
+        virtualKeyId: expect.any(String),
+      }),
+    );
+  });
 });

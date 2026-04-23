@@ -296,6 +296,10 @@ export async function handleLLMProxy<
       perKeyBaseUrl = virtualResult.baseUrl;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+
+      if (virtualResult.scope === "personal" && virtualResult.authorId) {
+        billedUserId = virtualResult.authorId;
+      }
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure(request.ip);

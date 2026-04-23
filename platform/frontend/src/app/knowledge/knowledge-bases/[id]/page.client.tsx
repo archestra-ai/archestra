@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
+import { DocumentsTab } from "@/app/knowledge/knowledge-bases/[id]/_parts/documents-tab";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -27,6 +28,7 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useAssignConnectorToKnowledgeBases,
   useConnectors,
@@ -256,34 +258,47 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
           )}
         </Card>
 
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Connectors</h2>
-          <PermissionButton
-            permissions={{ knowledgeSource: ["create"] }}
-            onClick={() => setIsAddConnectorOpen(true)}
-            size="sm"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Connector
-          </PermissionButton>
-        </div>
+        <Tabs defaultValue="connectors" className="w-full">
+          <TabsList>
+            <TabsTrigger value="connectors">Connectors</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
+          </TabsList>
 
-        <LoadingWrapper
-          isPending={isConnectorsPending}
-          loadingFallback={<LoadingSpinner />}
-        >
-          {connectorItems.length === 0 ? (
-            <div className="text-muted-foreground">
-              No connectors yet. Add one to start syncing data.
+          <TabsContent value="connectors" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Connectors</h2>
+              <PermissionButton
+                permissions={{ knowledgeSource: ["create"] }}
+                onClick={() => setIsAddConnectorOpen(true)}
+                size="sm"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Connector
+              </PermissionButton>
             </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={connectorItems}
-              onRowClick={handleRowClick}
-            />
-          )}
-        </LoadingWrapper>
+
+            <LoadingWrapper
+              isPending={isConnectorsPending}
+              loadingFallback={<LoadingSpinner />}
+            >
+              {connectorItems.length === 0 ? (
+                <div className="text-muted-foreground">
+                  No connectors yet. Add one to start syncing data.
+                </div>
+              ) : (
+                <DataTable
+                  columns={columns}
+                  data={connectorItems}
+                  onRowClick={handleRowClick}
+                />
+              )}
+            </LoadingWrapper>
+          </TabsContent>
+
+          <TabsContent value="documents">
+            <DocumentsTab knowledgeBaseId={id} />
+          </TabsContent>
+        </Tabs>
 
         <AddConnectorDialog
           knowledgeBaseId={id}

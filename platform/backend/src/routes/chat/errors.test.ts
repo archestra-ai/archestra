@@ -268,6 +268,7 @@ describe("mapProviderError - Anthropic", () => {
     statusCode: number,
     errorType: string,
     message: string,
+    internalCode?: string,
   ) {
     return {
       name: "AI_APICallError",
@@ -276,6 +277,7 @@ describe("mapProviderError - Anthropic", () => {
         error: {
           type: errorType,
           message,
+          internal_code: internalCode,
         },
       }),
       isRetryable:
@@ -363,6 +365,7 @@ describe("mapProviderError - Anthropic", () => {
         400,
         AnthropicErrorTypes.INVALID_REQUEST,
         "prompt is too long: 250000 tokens > 200000 maximum",
+        "context_length_exceeded",
       );
       const result = mapProviderError(error, "anthropic");
 
@@ -437,6 +440,7 @@ describe("mapProviderError - Gemini (Google AI Studio)", () => {
     statusCode: number,
     grpcStatus: string,
     message: string,
+    internalCode?: string,
   ) {
     return {
       name: "AI_APICallError",
@@ -446,6 +450,7 @@ describe("mapProviderError - Gemini (Google AI Studio)", () => {
           code: statusCode,
           status: grpcStatus,
           message,
+          internal_code: internalCode,
         },
       }),
       isRetryable: statusCode >= 500 || statusCode === 429,
@@ -471,6 +476,7 @@ describe("mapProviderError - Gemini (Google AI Studio)", () => {
         400,
         GeminiErrorCodes.INVALID_ARGUMENT,
         "The input token count (1500000) exceeds the maximum number of tokens allowed (1048576).",
+        "context_length_exceeded",
       );
       const result = mapProviderError(error, "gemini");
 
@@ -931,6 +937,7 @@ describe("mapProviderError - Bedrock", () => {
     statusCode: number,
     awsType: string,
     message: string,
+    internalCode?: string,
   ) {
     return {
       name: "Error",
@@ -938,6 +945,7 @@ describe("mapProviderError - Bedrock", () => {
       responseBody: JSON.stringify({
         message,
         __type: awsType,
+        ...(internalCode ? { error: { internal_code: internalCode } } : {}),
       }),
     };
   }
@@ -1076,6 +1084,7 @@ describe("mapProviderError - Bedrock", () => {
         400,
         BedrockErrorTypes.VALIDATION,
         "model_context_window_exceeded: The input is too long for the model",
+        "context_length_exceeded",
       );
       const result = mapProviderError(error, "bedrock");
 
@@ -1088,6 +1097,7 @@ describe("mapProviderError - Bedrock", () => {
         400,
         BedrockErrorTypes.VALIDATION,
         "Input is too long for requested model.",
+        "context_length_exceeded",
       );
       const result = mapProviderError(error, "bedrock");
 
@@ -1100,6 +1110,7 @@ describe("mapProviderError - Bedrock", () => {
         400,
         BedrockErrorTypes.VALIDATION,
         "prompt is too long: 250000 tokens > 200000 maximum",
+        "context_length_exceeded",
       );
       const result = mapProviderError(error, "bedrock");
 
@@ -1202,6 +1213,7 @@ describe("mapProviderError - context window exceeded (other providers)", () => {
         responseBody: JSON.stringify({
           message:
             "too many tokens: total number of tokens in the prompt cannot exceed 4081 - received 4292.",
+          error: { internal_code: "context_length_exceeded" },
         }),
         isRetryable: false,
       };
@@ -1223,6 +1235,7 @@ describe("mapProviderError - context window exceeded (other providers)", () => {
             code: 400,
             message:
               "This model's maximum context length is 4096 tokens. However, you requested 5000 tokens.",
+            internal_code: "context_length_exceeded",
           },
         }),
         isRetryable: false,
@@ -1242,6 +1255,7 @@ describe("mapProviderError - context window exceeded (other providers)", () => {
           error: {
             type: "invalid_request_error",
             message: "prompt too long; exceeded max context length by 1024 tokens",
+            internal_code: "context_length_exceeded",
           },
         }),
         isRetryable: false,
@@ -1260,6 +1274,7 @@ describe("mapProviderError - context window exceeded (other providers)", () => {
         responseBody: JSON.stringify({
           error: {
             message: "context window exceeds limit (2013)",
+            internal_code: "context_length_exceeded",
           },
         }),
         isRetryable: false,

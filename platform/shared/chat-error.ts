@@ -5,6 +5,29 @@ import {
 } from "./model-constants";
 
 // =============================================================================
+// Archestra-Normalized Internal Error Codes
+// =============================================================================
+
+/**
+ * Archestra-normalized error codes emitted by an adapter's
+ * `extractInternalCode` classifier. The value flows through
+ * `ApiError.internalCode` → the `internal_code` field on the error response
+ * body → the chat-error mapper, which uses it as a uniform cross-provider
+ * signal.
+ *
+ * Providers differ in how they surface categories like "context too long":
+ * some return a structured `error.code`, others only a message. Classifying
+ * in the adapter and emitting a normalized code keeps the mapper a simple
+ * lookup and lets each provider's idiosyncrasies stay local to its adapter.
+ */
+export const ArchestraInternalErrorCode = {
+  ContextLengthExceeded: "context_length_exceeded",
+} as const;
+
+export type ArchestraInternalErrorCode =
+  (typeof ArchestraInternalErrorCode)[keyof typeof ArchestraInternalErrorCode];
+
+// =============================================================================
 // Provider-Specific Error Types (from official documentation)
 // =============================================================================
 

@@ -5,6 +5,7 @@ import {
 } from "@opentelemetry/api";
 import {
   AnthropicErrorTypes,
+  ArchestraInternalErrorCode,
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
@@ -144,6 +145,34 @@ interface ParsedGeminiError {
   details?: unknown[];
   /** Extracted ErrorInfo from details array, if present */
   errorInfo?: GeminiErrorInfo;
+}
+
+// =============================================================================
+// Archestra Envelope Reader
+// =============================================================================
+
+/**
+ * Read the Archestra-normalized `internal_code` field from the LLM-proxy
+ * error envelope. The envelope has shape `{ error: { message, type,
+ * internal_code } }` and is produced by the Fastify error handler from
+ * `ApiError.internalCode`, which in turn is populated by the adapter's
+ * `extractInternalCode` classifier. Provider-agnostic — any provider whose
+ * adapter emits a code can be short-circuited here.
+ */
+function extractArchestraInternalCode(
+  responseBody: string | undefined,
+): ArchestraInternalErrorCode | undefined {
+  if (!responseBody) return undefined;
+  try {
+    const parsed = JSON.parse(responseBody);
+    const code = parsed?.error?.internal_code;
+    if (code === ArchestraInternalErrorCode.ContextLengthExceeded) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+  } catch {
+    // Not JSON — fall through.
+  }
+  return undefined;
 }
 
 // =============================================================================
@@ -492,13 +521,6 @@ function mapCohereErrorToCode(
   statusCode: number | undefined,
   _parsedError: ParsedCohereError | null,
 ): ChatErrorCode {
-  // Cohere returns bodies shaped `{ message: string }` with no structured
-  // code for context-window overflow. The consistent signal is the
-  // "too many tokens" prefix (e.g. "too many tokens: total number of
-  // tokens in the prompt cannot exceed 4081 - received 4292.").
-  if (_parsedError?.message?.toLowerCase().includes("too many tokens")) {
-    return ChatErrorCode.ContextTooLong;
-  }
   // Cohere uses standard HTTP status codes
   return mapStatusCodeToErrorCode(statusCode);
 }
@@ -584,12 +606,6 @@ function mapBedrockErrorToCode(
   parsedError: ParsedBedrockError | null,
 ): ChatErrorCode {
   const errorType = parsedError?.type;
-  const errorMessage = parsedError?.message;
-
-  // Check for context window exceeded in message
-  if (errorMessage?.toLowerCase().includes("model_context_window_exceeded")) {
-    return ChatErrorCode.ContextTooLong;
-  }
 
   if (errorType) {
     switch (errorType) {
@@ -609,20 +625,8 @@ function mapBedrockErrorToCode(
         return ChatErrorCode.ServerError;
       case BedrockErrorTypes.THROTTLING:
         return ChatErrorCode.RateLimit;
-      case BedrockErrorTypes.VALIDATION: {
-        // Bedrock surfaces context-window overflow as a ValidationException
-        // with per-model messages like "Input is too long for requested model."
-        // or "prompt is too long: X tokens > Y maximum" (Claude on Bedrock).
-        // There is no structured code — message sniffing is the only signal.
-        const msg = parsedError?.message?.toLowerCase() ?? "";
-        if (
-          msg.includes("too long") ||
-          msg.includes("model_context_window_exceeded")
-        ) {
-          return ChatErrorCode.ContextTooLong;
-        }
+      case BedrockErrorTypes.VALIDATION:
         return ChatErrorCode.InvalidRequest;
-      }
     }
   }
 
@@ -747,13 +751,6 @@ function mapAnthropicErrorToCode(
       case AnthropicErrorTypes.OVERLOADED:
         return ChatErrorCode.ServerError;
       case AnthropicErrorTypes.INVALID_REQUEST:
-        // Anthropic returns 400 invalid_request_error when the prompt
-        // exceeds the model's context window, with a message like
-        // "prompt is too long: X tokens > Y maximum". There is no structured
-        // code — message sniffing is the only signal.
-        if (parsedError?.message?.toLowerCase().includes("prompt is too long")) {
-          return ChatErrorCode.ContextTooLong;
-        }
         return ChatErrorCode.InvalidRequest;
     }
   }
@@ -916,21 +913,7 @@ function mapGeminiErrorToCode(
         return ChatErrorCode.RateLimit;
       case GeminiErrorCodes.NOT_FOUND:
         return ChatErrorCode.NotFound;
-      case GeminiErrorCodes.INVALID_ARGUMENT: {
-        // Gemini surfaces context-window overflow as INVALID_ARGUMENT with
-        // messages like "The input token count (X) exceeds the maximum
-        // number of tokens allowed (Y)." ErrorInfo details do not carry a
-        // structured reason for this case — message sniffing is the only
-        // signal.
-        const msg = parsedError?.message?.toLowerCase() ?? "";
-        if (
-          msg.includes("exceeds the maximum number of tokens") ||
-          msg.includes("input token count")
-        ) {
-          return ChatErrorCode.ContextTooLong;
-        }
-        return ChatErrorCode.InvalidRequest;
-      }
+      case GeminiErrorCodes.INVALID_ARGUMENT:
       case GeminiErrorCodes.FAILED_PRECONDITION:
       case GeminiErrorCodes.OUT_OF_RANGE:
         return ChatErrorCode.InvalidRequest;
@@ -1093,13 +1076,6 @@ function mapMinimaxErrorToCode(
     }
   }
 
-  // MiniMax's Anthropic-compatible path surfaces context overflow only via
-  // the message (e.g. "context window exceeds limit (2013)"); there is no
-  // matching `context_length_exceeded` type on that shape.
-  if (parsedError?.message?.toLowerCase().includes("context window exceeds limit")) {
-    return ChatErrorCode.ContextTooLong;
-  }
-
   // Use http_code from MiniMax response if available
   const effectiveStatus = httpCode ? Number.parseInt(httpCode, 10) : statusCode;
   return mapStatusCodeToErrorCode(effectiveStatus);
@@ -1166,13 +1142,6 @@ function mapVllmErrorToCode(
     if (errorCode === VllmErrorTypes.MODEL_NOT_LOADED) {
       return ChatErrorCode.NotFound;
     }
-  }
-
-  // vLLM returns `type: "BadRequestError"` with no structured code for
-  // context overflow; the signal is the OpenAI-style "maximum context
-  // length" phrasing in the message.
-  if (parsedError?.message?.toLowerCase().includes("maximum context length")) {
-    return ChatErrorCode.ContextTooLong;
   }
 
   // Then check error.type
@@ -1246,16 +1215,6 @@ function mapOllamaErrorToCode(
     if (errorCode === OllamaErrorTypes.MODEL_NOT_FOUND) {
       return ChatErrorCode.NotFound;
     }
-  }
-
-  // Ollama returns a plain message for context overflow — typical phrasing
-  // is "prompt too long; exceeded max context length by N tokens".
-  const message = parsedError?.message?.toLowerCase() ?? "";
-  if (
-    message.includes("exceeded max context length") ||
-    message.includes("prompt too long")
-  ) {
-    return ChatErrorCode.ContextTooLong;
   }
 
   // Then check error.type
@@ -1557,7 +1516,16 @@ export function mapProviderError(
   }
 
   // Map to error code using provider-specific mapper
-  const errorCode = mapError(statusCode, parsedError);
+  let errorCode = mapError(statusCode, parsedError);
+
+  // An Archestra-normalized `internal_code` emitted by the adapter's
+  // extractInternalCode takes precedence over the per-provider mapper. This
+  // is how cross-provider categories (context_length_exceeded, ...) are
+  // surfaced uniformly without each mapper re-implementing the detection.
+  const normalizedCode = extractArchestraInternalCode(responseBody);
+  if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
+    errorCode = ChatErrorCode.ContextTooLong;
+  }
 
   // Extract the most meaningful error message
   const errorMessage = extractErrorMessage(parsedError, responseBody, error);

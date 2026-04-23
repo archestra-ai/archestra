@@ -1,24 +1,26 @@
 "use client";
 
 import { DocsPage, E2eTestId, getDocsUrl } from "@shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   BookOpen,
   Check,
   MoreHorizontal,
   PackageMinus,
   PackageOpen,
+  RotateCcw,
   SquareArrowOutUpRight,
+  Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   DropdownMenu,
@@ -27,13 +29,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -52,11 +47,14 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
+  useApproveMemory,
   useArchiveMemory,
+  useCreateMemory,
   useDeleteMemory,
   useMemoryExtractionAvailable,
   useMemoryInjectionEnabled,
   useMemoryPaginated,
+  useRejectMemory,
   useUnarchiveMemory,
 } from "@/lib/memory.query";
 import {
@@ -65,8 +63,10 @@ import {
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { useSetSettingsAction } from "../../layout";
-import { MemoryApproveDialog } from "./memory-approve-dialog";
-import { MemoryCreateDialog } from "./memory-create-dialog";
+import {
+  MemoryCreateDialog,
+  type MemoryCreateInitialValues,
+} from "./memory-create-dialog";
 import { MemoryDetailDrawer } from "./memory-detail-drawer";
 import { MemoryRejectDialog } from "./memory-reject-dialog";
 import {
@@ -102,9 +102,12 @@ export function MemoryList() {
   });
   const memoryInjectionEnabled = useMemoryInjectionEnabled();
   const memoryExtractionAvailable = useMemoryExtractionAvailable();
+  const approveMemory = useApproveMemory();
   const archiveMemory = useArchiveMemory();
   const unarchiveMemory = useUnarchiveMemory();
   const deleteMemory = useDeleteMemory();
+  const rejectMemory = useRejectMemory();
+  const createMemory = useCreateMemory();
 
   const {
     searchParams,
@@ -116,11 +119,15 @@ export function MemoryList() {
   } = useDataTableQueryParams();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [approveTarget, setApproveTarget] = useState<MemoryListItem | null>(
-    null,
-  );
+  const [createDialogInitialValues, setCreateDialogInitialValues] = useState<
+    MemoryCreateInitialValues | undefined
+  >(undefined);
   const [rejectTarget, setRejectTarget] = useState<MemoryListItem | null>(null);
+  const [bulkRejectTargets, setBulkRejectTargets] = useState<MemoryListItem[]>(
+    [],
+  );
   const [detailMemoryId, setDetailMemoryId] = useState<string | null>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const selectedStatus = getSelectedStatusTab({
     statusParam: searchParams.get("status"),
@@ -146,7 +153,14 @@ export function MemoryList() {
   const memoryItems = memoryResponse?.data ?? [];
   const totalItems = memoryResponse?.pagination.total ?? 0;
 
+  const selectedItems = useMemo(
+    () => memoryItems.filter((item) => rowSelection[item.id]),
+    [memoryItems, rowSelection],
+  );
+
   const currentUserId = session?.user?.id;
+  const currentUserDisplayName =
+    session?.user?.name ?? session?.user?.email ?? null;
   const reviewerRole = activeMemberRole ?? "member";
   const currentTeamIds = useMemo(() => teams.map((team) => team.id), [teams]);
   const hasActiveFilters = Boolean(searchTerm || selectedScopeFilter);
@@ -166,20 +180,88 @@ export function MemoryList() {
     return () => setSettingsAction(null);
   }, [setSettingsAction]);
 
+  const [isBulkOperating, setIsBulkOperating] = useState(false);
+
+  const handleBulkApprove = async () => {
+    setIsBulkOperating(true);
+    try {
+      for (const item of selectedItems.filter(
+        (i) => i.status === "candidate",
+      )) {
+        await approveMemory.mutateAsync(item.id);
+      }
+      setRowSelection({});
+    } finally {
+      setIsBulkOperating(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkOperating(true);
+    try {
+      for (const item of selectedItems) {
+        await deleteMemory.mutateAsync(item.id);
+      }
+      setRowSelection({});
+    } finally {
+      setIsBulkOperating(false);
+    }
+  };
+
+  const handleBulkRepropose = async () => {
+    setIsBulkOperating(true);
+    try {
+      for (const item of selectedItems) {
+        const created = await createMemory.mutateAsync({
+          scopeType: item.scopeType,
+          scopeId: item.scopeId,
+          kind: item.kind,
+          content: item.content,
+        });
+        if (!created) return;
+      }
+      setRowSelection({});
+    } finally {
+      setIsBulkOperating(false);
+    }
+  };
+
   const columns = useMemo<ColumnDef<MemoryListItem>[]>(
     () => [
+      {
+        id: "select",
+        size: 40,
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() ? "indeterminate" : false)
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label="Select row"
+          />
+        ),
+      },
       {
         accessorKey: "scopeType",
         header: "Scope",
         cell: ({ row }) => (
-          <div className="space-y-1">
-            <Badge variant="outline">
-              {getMemoryScopeLabel(row.original.scopeType)}
-            </Badge>
-            <div className="font-mono text-[11px] text-muted-foreground">
-              {row.original.scopeId}
-            </div>
-          </div>
+          <Badge variant="outline">
+            {getMemoryScopeLabel(row.original.scopeType)}
+          </Badge>
         ),
       },
       {
@@ -196,9 +278,16 @@ export function MemoryList() {
         header: "Content",
         cell: ({ row }) => (
           <div className="space-y-1">
-            <p className="max-w-[420px] truncate text-sm">
-              {row.original.content}
-            </p>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="max-w-[420px] cursor-default truncate text-sm">
+                  {row.original.content}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[400px] whitespace-pre-wrap break-words">
+                {row.original.content}
+              </TooltipContent>
+            </Tooltip>
             <div className="flex flex-wrap gap-1">
               {row.original.policyFlags.map((flag) => (
                 <Badge
@@ -268,11 +357,25 @@ export function MemoryList() {
       {
         accessorKey: "reviewedBy",
         header: "Reviewer",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-muted-foreground">
-            {row.original.reviewedBy ?? "Not reviewed"}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const reviewedBy = row.original.reviewedBy;
+          if (!reviewedBy) {
+            return <span className="text-sm text-muted-foreground">—</span>;
+          }
+          if (reviewedBy === currentUserId && currentUserDisplayName) {
+            return <span className="text-sm">{currentUserDisplayName}</span>;
+          }
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-default font-mono text-xs text-muted-foreground">
+                  {reviewedBy.slice(0, 8)}…
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{reviewedBy}</TooltipContent>
+            </Tooltip>
+          );
+        },
       },
       {
         id: "actions",
@@ -292,91 +395,178 @@ export function MemoryList() {
           const deleteDisabled = !canDeletePermission || !canApproveByScope;
 
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Open memory actions"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setDetailMemoryId(item.id)}>
-                  View details
-                </DropdownMenuItem>
+            <div
+              role="none"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Open memory actions"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setDetailMemoryId(item.id)}>
+                    View details
+                  </DropdownMenuItem>
 
-                {item.status === "candidate" ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={() => setApproveTarget(item)}
-                      disabled={approveDisabled}
-                      data-testid={E2eTestId.MemoryApproveButton}
-                    >
-                      <Check className="h-4 w-4" />
-                      Approve
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => setRejectTarget(item)}
-                      disabled={approveDisabled}
-                      data-testid={E2eTestId.MemoryRejectButton}
-                    >
-                      <X className="h-4 w-4" />
-                      Reject
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
+                  {item.status === "candidate" ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => void approveMemory.mutateAsync(item.id)}
+                        disabled={approveDisabled}
+                        data-testid={E2eTestId.MemoryApproveButton}
+                      >
+                        <Check className="h-4 w-4" />
+                        Approve
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => setRejectTarget(item)}
+                        disabled={approveDisabled}
+                        data-testid={E2eTestId.MemoryRejectButton}
+                      >
+                        <X className="h-4 w-4" />
+                        Reject
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => void archiveMemory.mutateAsync(item.id)}
+                        disabled={lifecycleDisabled || archiveMemory.isPending}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        Archive
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
 
-                {item.status === "approved" ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={() => void archiveMemory.mutateAsync(item.id)}
-                      disabled={lifecycleDisabled || archiveMemory.isPending}
-                    >
-                      <PackageMinus className="h-4 w-4" />
-                      Archive
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
+                  {item.status === "approved" ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => void archiveMemory.mutateAsync(item.id)}
+                        disabled={lifecycleDisabled || archiveMemory.isPending}
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        Archive
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setCreateDialogInitialValues({
+                            scopeType: item.scopeType,
+                            scopeId: item.scopeId,
+                            kind: item.kind,
+                            content: item.content,
+                          });
+                          setIsCreateDialogOpen(true);
+                        }}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Re-propose
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => setRejectTarget(item)}
+                        disabled={approveDisabled}
+                      >
+                        <X className="h-4 w-4" />
+                        Reject
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
 
-                {item.status === "archived" ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={() => void unarchiveMemory.mutateAsync(item.id)}
-                      disabled={lifecycleDisabled || unarchiveMemory.isPending}
-                    >
-                      <PackageOpen className="h-4 w-4" />
-                      Restore
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
+                  {item.status === "archived" ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          void unarchiveMemory.mutateAsync(item.id)
+                        }
+                        disabled={
+                          lifecycleDisabled || unarchiveMemory.isPending
+                        }
+                      >
+                        <PackageOpen className="h-4 w-4" />
+                        Restore
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setCreateDialogInitialValues({
+                            scopeType: item.scopeType,
+                            scopeId: item.scopeId,
+                            kind: item.kind,
+                            content: item.content,
+                          });
+                          setIsCreateDialogOpen(true);
+                        }}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Re-propose
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => void deleteMemory.mutateAsync(item.id)}
+                        disabled={deleteDisabled || deleteMemory.isPending}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
 
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => void deleteMemory.mutateAsync(item.id)}
-                  disabled={deleteDisabled || deleteMemory.isPending}
-                  className="text-destructive focus:text-destructive"
-                >
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  {item.status === "rejected" ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setCreateDialogInitialValues({
+                            scopeType: item.scopeType,
+                            scopeId: item.scopeId,
+                            kind: item.kind,
+                            content: item.content,
+                          });
+                          setIsCreateDialogOpen(true);
+                        }}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Re-propose
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => void archiveMemory.mutateAsync(item.id)}
+                        disabled={lifecycleDisabled || archiveMemory.isPending}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        Archive
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           );
         },
       },
     ],
     [
       activeOrganization?.id,
+      approveMemory,
       archiveMemory,
       canApprovePermission,
       canDeletePermission,
       canUpdatePermission,
       currentTeamIds,
       currentUserId,
+      currentUserDisplayName,
       deleteMemory,
       reviewerRole,
       unarchiveMemory,
@@ -388,11 +578,13 @@ export function MemoryList() {
       <Alert>
         <AlertTitle>Injection policy state</AlertTitle>
         <AlertDescription>
-          Automatic prompt injection is{" "}
-          <span className="font-medium">
-            {memoryInjectionEnabled ? "enabled" : "disabled"}
+          <span>
+            Automatic prompt injection is{" "}
+            <span className="font-medium">
+              {memoryInjectionEnabled ? "enabled" : "disabled"}
+            </span>
+            . Team and organization scopes are review-only.
           </span>
-          . Team and organization scopes are review-only.
         </AlertDescription>
       </Alert>
 
@@ -409,12 +601,10 @@ export function MemoryList() {
       <TableFilters className="gap-y-2">
         <Tabs
           value={selectedStatus}
-          onValueChange={(value) =>
-            updateQueryParams({
-              status: value,
-              page: "1",
-            })
-          }
+          onValueChange={(value) => {
+            setRowSelection({});
+            updateQueryParams({ status: value, page: "1" });
+          }}
         >
           <TabsList data-testid={E2eTestId.MemoryStatusTabs}>
             {MEMORY_STATUS_TABS.map((tab) => (
@@ -427,12 +617,13 @@ export function MemoryList() {
 
         <Select
           value={selectedScopeFilter ?? "all"}
-          onValueChange={(value) =>
+          onValueChange={(value) => {
+            setRowSelection({});
             updateQueryParams({
               scopeType: value === "all" ? null : value,
               page: "1",
-            })
-          }
+            });
+          }}
         >
           <SelectTrigger
             className="w-[180px]"
@@ -441,7 +632,7 @@ export function MemoryList() {
             <SelectValue placeholder="Scope" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All accessible scopes</SelectItem>
+            <SelectItem value="all">All scopes</SelectItem>
             <SelectItem value="user">User scope</SelectItem>
             <SelectItem value="team">Team scope</SelectItem>
             <SelectItem value="organization">Organization scope</SelectItem>
@@ -452,6 +643,7 @@ export function MemoryList() {
           objectNamePlural="memory items"
           searchFields={["content"]}
           paramName="search"
+          onSearchChange={() => setRowSelection({})}
         />
 
         <div className="ml-auto flex items-center gap-2">
@@ -472,6 +664,73 @@ export function MemoryList() {
           </Tooltip>
         </div>
       </TableFilters>
+
+      {selectedItems.length > 0 && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+          <span className="text-sm text-muted-foreground">
+            {selectedItems.length} selected
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {selectedStatus === "candidate" && (
+              <>
+                <Button
+                  size="sm"
+                  disabled={isBulkOperating}
+                  onClick={() => void handleBulkApprove()}
+                >
+                  Approve selected
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isBulkOperating || rejectMemory.isPending}
+                  onClick={() => setBulkRejectTargets(selectedItems)}
+                >
+                  Reject selected
+                </Button>
+              </>
+            )}
+            {selectedStatus === "approved" && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isBulkOperating}
+                  onClick={() => void handleBulkRepropose()}
+                >
+                  Re-propose selected
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isBulkOperating || rejectMemory.isPending}
+                  onClick={() => setBulkRejectTargets(selectedItems)}
+                >
+                  Reject selected
+                </Button>
+              </>
+            )}
+            {selectedStatus === "rejected" && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isBulkOperating}
+                onClick={() => void handleBulkRepropose()}
+              >
+                Re-propose selected
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={isBulkOperating}
+              onClick={() => void handleBulkDelete()}
+            >
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div data-testid={E2eTestId.MemoryTable}>
         <DataTable
@@ -495,64 +754,35 @@ export function MemoryList() {
             })
           }
           emptyMessage="No memory items found."
+          onRowClick={(item) => setDetailMemoryId(item.id)}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.id}
+          hideSelectedCount
         />
       </div>
 
-      {!isPending &&
-      !isFetching &&
-      memoryItems.length === 0 &&
-      !hasActiveFilters ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <BookOpen className="h-5 w-5" />
-            </EmptyMedia>
-            <EmptyTitle>No memory items yet</EmptyTitle>
-            <EmptyDescription>
-              Start by proposing a memory candidate or review extraction output.{" "}
-              <ExternalDocsLink href={docsUrl} showIcon={false}>
-                Review queue docs
-              </ExternalDocsLink>
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : null}
-
       <MemoryCreateDialog
         open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) setCreateDialogInitialValues(undefined);
+        }}
+        initialValues={createDialogInitialValues}
         currentUserId={currentUserId}
         organizationId={activeOrganization?.id}
         teams={teams.map((team) => ({ id: team.id, name: team.name }))}
       />
 
-      <MemoryApproveDialog
-        item={approveTarget}
-        open={!!approveTarget}
-        onOpenChange={(open) => {
-          if (!open) {
-            setApproveTarget(null);
-          }
-        }}
-        disabled={
-          !approveTarget
-            ? true
-            : !canApproveMemoryByScope({
-                item: approveTarget,
-                currentUserId,
-                currentRole: reviewerRole,
-                organizationId: activeOrganization?.id,
-                teamIds: currentTeamIds,
-              })
-        }
-      />
-
       <MemoryRejectDialog
         item={rejectTarget}
-        open={!!rejectTarget}
+        items={bulkRejectTargets.length > 0 ? bulkRejectTargets : undefined}
+        open={!!rejectTarget || bulkRejectTargets.length > 0}
         onOpenChange={(open) => {
           if (!open) {
             setRejectTarget(null);
+            setBulkRejectTargets([]);
+            if (bulkRejectTargets.length > 0) setRowSelection({});
           }
         }}
       />
@@ -561,9 +791,21 @@ export function MemoryList() {
         memoryId={detailMemoryId}
         open={!!detailMemoryId}
         onOpenChange={(open) => {
-          if (!open) {
-            setDetailMemoryId(null);
-          }
+          if (!open) setDetailMemoryId(null);
+        }}
+        onReject={(item) => {
+          setDetailMemoryId(null);
+          setRejectTarget(item);
+        }}
+        onRepropose={(item) => {
+          setDetailMemoryId(null);
+          setCreateDialogInitialValues({
+            scopeType: item.scopeType,
+            scopeId: item.scopeId,
+            kind: item.kind,
+            content: item.content,
+          });
+          setIsCreateDialogOpen(true);
         }}
       />
     </div>

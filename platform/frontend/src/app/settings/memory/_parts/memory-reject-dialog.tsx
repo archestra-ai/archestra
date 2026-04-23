@@ -33,10 +33,12 @@ type RejectDialogFormValues = {
 
 export function MemoryRejectDialog({
   item,
+  items,
   open,
   onOpenChange,
 }: {
-  item: MemoryListItem | null;
+  item?: MemoryListItem | null;
+  items?: MemoryListItem[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -57,18 +59,21 @@ export function MemoryRejectDialog({
     }
   }, [open, form]);
 
-  const handleSubmit = form.handleSubmit(async (values) => {
-    if (!item || !values.rejectionReason) return;
-    const rejected = await rejectMemory.mutateAsync({
-      id: item.id,
-      body: {
-        rejectionReason: values.rejectionReason,
-        rejectionComment: values.rejectionComment.trim() || undefined,
-      },
-    });
+  const isBulk = items && items.length > 1;
+  const targets = items && items.length > 0 ? items : item ? [item] : [];
 
-    if (!rejected) {
-      return;
+  const handleSubmit = form.handleSubmit(async (values) => {
+    if (targets.length === 0 || !values.rejectionReason) return;
+
+    for (const target of targets) {
+      const rejected = await rejectMemory.mutateAsync({
+        id: target.id,
+        body: {
+          rejectionReason: values.rejectionReason,
+          rejectionComment: values.rejectionComment.trim() || undefined,
+        },
+      });
+      if (!rejected) return;
     }
 
     onOpenChange(false);
@@ -78,8 +83,12 @@ export function MemoryRejectDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Reject memory"
-      description="Rejection reason is required to keep review decisions auditable."
+      title={isBulk ? `Reject ${items.length} items` : "Reject memory"}
+      description={
+        isBulk
+          ? `Rejection reason will be applied to all ${items.length} selected items.`
+          : "Rejection reason is required to keep review decisions auditable."
+      }
       size="medium"
     >
       <DialogForm onSubmit={handleSubmit}>
@@ -134,7 +143,7 @@ export function MemoryRejectDialog({
             disabled={!form.watch("rejectionReason") || rejectMemory.isPending}
             data-testid={E2eTestId.MemoryRejectButton}
           >
-            Reject
+            {isBulk ? `Reject ${items.length}` : "Reject"}
           </Button>
         </DialogStickyFooter>
       </DialogForm>

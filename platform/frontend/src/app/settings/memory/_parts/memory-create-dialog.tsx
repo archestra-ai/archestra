@@ -1,6 +1,7 @@
 "use client";
 
 import { E2eTestId } from "@shared";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,8 @@ type CreateDialogFormValues = {
   content: string;
 };
 
+export type MemoryCreateInitialValues = Partial<CreateDialogFormValues>;
+
 const MEMORY_KIND_OPTIONS: ReadonlyArray<MemoryKind> = [
   "preference",
   "profile_fact",
@@ -53,12 +56,14 @@ export function MemoryCreateDialog({
   currentUserId,
   organizationId,
   teams,
+  initialValues,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentUserId: string | null | undefined;
   organizationId: string | null | undefined;
   teams: Array<{ id: string; name: string }>;
+  initialValues?: MemoryCreateInitialValues;
 }) {
   const createMemory = useCreateMemory();
   const form = useForm<CreateDialogFormValues>({
@@ -69,6 +74,16 @@ export function MemoryCreateDialog({
       content: "",
     },
   });
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset({
+      scopeType: initialValues?.scopeType ?? "user",
+      scopeId: initialValues?.scopeId ?? currentUserId ?? "",
+      kind: initialValues?.kind ?? "preference",
+      content: initialValues?.content ?? "",
+    });
+  }, [open, initialValues, currentUserId, form]);
 
   const selectedScopeType = form.watch("scopeType");
 
@@ -144,7 +159,7 @@ export function MemoryCreateDialog({
                 onValueChange={handleScopeTypeChange}
                 disabled={createMemory.isPending}
               >
-                <SelectTrigger id="memory-create-scope">
+                <SelectTrigger id="memory-create-scope" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,7 +180,7 @@ export function MemoryCreateDialog({
                 }
                 disabled={createMemory.isPending}
               >
-                <SelectTrigger id="memory-create-kind">
+                <SelectTrigger id="memory-create-kind" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

@@ -1,7 +1,17 @@
 "use client";
 
+import {
+  Check,
+  PackageMinus,
+  PackageOpen,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -10,25 +20,89 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useMemory } from "@/lib/memory.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useApproveMemory,
+  useArchiveMemory,
+  useDeleteMemory,
+  useMemory,
+  useUnarchiveMemory,
+} from "@/lib/memory.query";
+import {
+  useActiveMemberRole,
+  useActiveOrganization,
+} from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
+  canApproveMemoryByScope,
   getMemoryKindLabel,
   getMemoryPolicyFlagLabel,
   getMemoryScopeLabel,
   getMemoryStatusLabel,
+  type MemoryListItem,
 } from "./memory-utils";
 
 export function MemoryDetailDrawer({
   memoryId,
   open,
   onOpenChange,
+  onReject,
+  onRepropose,
 }: {
   memoryId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onReject?: (item: MemoryListItem) => void;
+  onRepropose?: (item: MemoryListItem) => void;
 }) {
   const { data: memory, isPending } = useMemory(memoryId ?? "");
+  const { data: session } = useSession();
+  const { data: activeOrganization } = useActiveOrganization();
+  const { data: activeMemberRole } = useActiveMemberRole(
+    activeOrganization?.id,
+  );
+  const { data: teams = [] } = useTeams();
+  const { data: canApprovePermission = false } = useHasPermissions({
+    memory: ["approve"],
+  });
+  const { data: canUpdatePermission = false } = useHasPermissions({
+    memory: ["update"],
+  });
+  const { data: canDeletePermission = false } = useHasPermissions({
+    memory: ["delete"],
+  });
+
+  const approveMemory = useApproveMemory();
+  const archiveMemory = useArchiveMemory();
+  const unarchiveMemory = useUnarchiveMemory();
+  const deleteMemory = useDeleteMemory();
+
+  const currentUserId = session?.user?.id;
+  const currentUserDisplayName =
+    session?.user?.name ?? session?.user?.email ?? null;
+  const reviewerRole = activeMemberRole ?? "member";
+  const currentTeamIds = useMemo(() => teams.map((t) => t.id), [teams]);
+
+  const scopeGuard = memory
+    ? canApproveMemoryByScope({
+        item: memory,
+        currentUserId,
+        currentRole: reviewerRole,
+        organizationId: activeOrganization?.id,
+        teamIds: currentTeamIds,
+      })
+    : false;
+
+  const canApproveAction = canApprovePermission && scopeGuard;
+  const canLifecycleAction = canUpdatePermission && scopeGuard;
+  const canDeleteAction = canDeletePermission && scopeGuard;
+
+  const reviewerDisplay = memory?.reviewedBy
+    ? memory.reviewedBy === currentUserId && currentUserDisplayName
+      ? currentUserDisplayName
+      : `${memory.reviewedBy.slice(0, 8)}…`
+    : "—";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -168,9 +242,7 @@ export function MemoryDetailDrawer({
                   </span>
 
                   <span className="text-muted-foreground">Reviewer</span>
-                  <span className="font-mono text-xs">
-                    {memory.reviewedBy ?? "—"}
-                  </span>
+                  <span>{reviewerDisplay}</span>
 
                   <span className="text-muted-foreground">Last Verified</span>
                   <span>
@@ -195,6 +267,156 @@ export function MemoryDetailDrawer({
                       <span>{memory.rejectionComment}</span>
                     </>
                   ) : null}
+                </div>
+              </section>
+
+              <Separator />
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">Actions</h3>
+                <div className="flex flex-wrap gap-2">
+                  {memory.status === "candidate" && (
+                    <>
+                      <Button
+                        size="sm"
+                        disabled={!canApproveAction || approveMemory.isPending}
+                        onClick={() =>
+                          void approveMemory.mutateAsync(memory.id)
+                        }
+                      >
+                        <Check className="h-4 w-4" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!canApproveAction || !onReject}
+                        onClick={() => onReject?.(memory as MemoryListItem)}
+                      >
+                        <X className="h-4 w-4" />
+                        Reject
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          !canLifecycleAction || archiveMemory.isPending
+                        }
+                        onClick={() =>
+                          void archiveMemory.mutateAsync(memory.id)
+                        }
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        Archive
+                      </Button>
+                    </>
+                  )}
+
+                  {memory.status === "approved" && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          !canLifecycleAction || archiveMemory.isPending
+                        }
+                        onClick={() =>
+                          void archiveMemory.mutateAsync(memory.id)
+                        }
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        Archive
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!onRepropose}
+                        onClick={() => onRepropose?.(memory as MemoryListItem)}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Re-propose
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!canApproveAction || !onReject}
+                        onClick={() => onReject?.(memory as MemoryListItem)}
+                      >
+                        <X className="h-4 w-4" />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+
+                  {memory.status === "archived" && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          !canLifecycleAction || unarchiveMemory.isPending
+                        }
+                        onClick={() =>
+                          void unarchiveMemory.mutateAsync(memory.id)
+                        }
+                      >
+                        <PackageOpen className="h-4 w-4" />
+                        Restore
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!onRepropose}
+                        onClick={() => onRepropose?.(memory as MemoryListItem)}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Re-propose
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={!canDeleteAction || deleteMemory.isPending}
+                        onClick={async () => {
+                          const result = await deleteMemory.mutateAsync(
+                            memory.id,
+                          );
+                          if (result) onOpenChange(false);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                    </>
+                  )}
+
+                  {memory.status === "rejected" && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!onRepropose}
+                        onClick={() => onRepropose?.(memory as MemoryListItem)}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Re-propose
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          !canLifecycleAction || archiveMemory.isPending
+                        }
+                        onClick={() =>
+                          void archiveMemory.mutateAsync(memory.id)
+                        }
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        Archive
+                      </Button>
+                    </>
+                  )}
                 </div>
               </section>
             </>

@@ -1,3 +1,4 @@
+import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   KbChunkModel,
@@ -431,6 +432,48 @@ describe("knowledge base routes", () => {
         "At least one team must be selected for team-scoped connectors",
       );
     });
+
+    test("rejects team-scoped connector creation without enterprise license", async () => {
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Enterprise Scoped Connector",
+            connectorType: "jira",
+            visibility: "team-scoped",
+            teamIds: [crypto.randomUUID()],
+            config: {
+              type: "jira",
+              jiraBaseUrl: "https://test.atlassian.net",
+              isCloud: true,
+              projectKey: "TEST",
+            },
+            credentials: {
+              email: "user@example.com",
+              apiToken: "token",
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "Team-scoped connectors require an enterprise license",
+        );
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
   });
 
   describe("GET /api/connectors", () => {
@@ -632,17 +675,31 @@ describe("knowledge base routes", () => {
         "refreshConnectorDocumentAccessControlLists",
       );
 
-      const response = await app.inject({
-        method: "PUT",
-        url: `/api/connectors/${connector.id}`,
-        payload: {
-          visibility: "team-scoped",
-          teamIds: [crypto.randomUUID()],
-        },
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: true,
+        writable: true,
+        configurable: true,
       });
+      try {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            visibility: "team-scoped",
+            teamIds: [crypto.randomUUID()],
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      expect(refreshSpy).toHaveBeenCalledWith(connector.id);
+        expect(response.statusCode).toBe(200);
+        expect(refreshSpy).toHaveBeenCalledWith(connector.id);
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
     });
 
     test("returns 404 for non-existent connector", async () => {
@@ -683,6 +740,98 @@ describe("knowledge base routes", () => {
       expect(response.json().error.message).toContain(
         "At least one team must be selected for team-scoped connectors",
       );
+    });
+
+    test("rejects changing visibility to team-scoped without enterprise license", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Org-Wide Connector",
+        connectorType: "jira",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      try {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            visibility: "team-scoped",
+            teamIds: [crypto.randomUUID()],
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "Team-scoped connectors require an enterprise license",
+        );
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
+    test("allows updating existing team-scoped connector without enterprise license", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, user.id, {
+        name: "Scoped Team",
+      });
+      await makeTeamMember(team.id, user.id);
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Team Connector",
+        connectorType: "jira",
+        visibility: "team-scoped",
+        teamIds: [team.id],
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      try {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            name: "Renamed Connector",
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().name).toBe("Renamed Connector");
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
     });
   });
 
@@ -1432,14 +1581,30 @@ describe("knowledge base permission configuration", () => {
         },
       ]);
 
-      const response = await app.inject({
-        method: "PUT",
-        url: `/api/connectors/${connector.id}`,
-        payload: {
-          visibility: "team-scoped",
-          teamIds: [team.id],
-        },
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: true,
+        writable: true,
+        configurable: true,
       });
+
+      let response: Awaited<ReturnType<typeof app.inject>>;
+      try {
+        response = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            visibility: "team-scoped",
+            teamIds: [team.id],
+          },
+        });
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
 
       expect(response.statusCode).toBe(200);
       const refreshedDocument = await KbDocumentModel.findById(document.id);

@@ -98,3 +98,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Hetsavani
 - @jnilrac
 - @VitaliyaIoffe
+- @eleijonmarck
+- @kyleskutt-hub
+- @ssiddus
+- @PalakB09
+- @saifeldeen911
+- @Harsh9485

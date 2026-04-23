@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.22](https://github.com/archestra-ai/archestra/compare/platform-v1.2.21...platform-v1.2.22) (2026-04-22)
+
+
+### Features
+
+* add sampling rate ENV VAR for OTEL collector ([#3670](https://github.com/archestra-ai/archestra/issues/3670)) ([2ebe27d](https://github.com/archestra-ai/archestra/commit/2ebe27dffaec4346277517e5d9a5dd33fb846021))
+
+
+### Bug Fixes
+
+* restore scroll-to-bottom button for old conversations ([#4001](https://github.com/archestra-ai/archestra/issues/4001)) ([35b4398](https://github.com/archestra-ai/archestra/commit/35b43984e47fdb10d327410a9f9d1f8a33dffc9e))
+
 ## [1.2.21](https://github.com/archestra-ai/archestra/compare/platform-v1.2.20...platform-v1.2.21) (2026-04-22)
 
 

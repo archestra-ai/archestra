@@ -6,6 +6,7 @@ import type {
   ConversationShareVisibility,
   ConversationShareWithTargets,
 } from "@/types";
+import ConversationChatErrorModel from "./conversation-chat-error";
 
 class ConversationShareModel {
   static async findByConversationId(params: {
@@ -237,6 +238,9 @@ class ConversationShareModel {
     if (rows.length === 0) return null;
 
     const firstRow = rows[0];
+    const chatErrors = await ConversationChatErrorModel.findByConversation(
+      share.conversationId,
+    );
     const messages = [];
 
     for (const row of rows) {
@@ -256,6 +260,7 @@ class ConversationShareModel {
         visibility: share.visibility,
       },
       messages,
+      chatErrors,
       sharedByUserId: share.createdByUserId,
     };
   }

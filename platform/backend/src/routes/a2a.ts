@@ -75,7 +75,7 @@ const A2AJsonRpcRequestSchema = z.object({
 
 const A2AJsonRpcResponseSchema = z.object({
   jsonrpc: z.literal("2.0"),
-  id: z.union([z.string(), z.number(), z.null()]),
+  id: z.union([z.string(), z.number()]),
   result: A2AMessageSchema.optional(),
   error: z
     .object({
@@ -197,10 +197,8 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Detect JSON-RPC envelope; otherwise treat body as a pass-through payload.
       const envelopeParse = A2AJsonRpcRequestSchema.safeParse(body);
       const isJsonRpc = envelopeParse.success;
-      const id: string | number | null = isJsonRpc
-        ? envelopeParse.data.id
-        : null;
-      const params = isJsonRpc ? envelopeParse.data.params : undefined;
+      const id: string | number = isJsonRpc ? envelopeParse.data.id : 1;
+      const params = isJsonRpc ? envelopeParse.data.params : {};
 
       // Fetch the internal agent
       const agent = await AgentModel.findById(agentId);

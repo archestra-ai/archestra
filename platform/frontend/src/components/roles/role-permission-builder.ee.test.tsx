@@ -93,7 +93,8 @@ describe("RolePermissionBuilder", () => {
     const knowledgeSourcesCard = screen
       .getByText("Knowledge Sources")
       .closest("div.rounded-md") as HTMLElement;
-    const createCheckbox = within(knowledgeSourcesCard).getByLabelText("Create");
+    const createCheckbox =
+      within(knowledgeSourcesCard).getByLabelText("Create");
     expect(createCheckbox).toBeDisabled();
 
     expect(

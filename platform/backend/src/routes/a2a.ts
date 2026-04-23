@@ -63,6 +63,28 @@ const A2AJsonRpcRequestSchema = z.object({
     .optional(),
 });
 
+const A2AMessageSchema = z.object({
+  messageId: z.string(),
+  role: z.enum(["user", "agent"]),
+  parts: z.array(A2AMessagePartSchema),
+  contextId: z.string().optional(),
+  taskId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const A2AJsonRpcResponseSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: z.union([z.string(), z.number(), z.null()]),
+  result: A2AMessageSchema.optional(),
+  error: z
+    .object({
+      code: z.number(),
+      message: z.string(),
+      data: z.unknown().optional(),
+    })
+    .optional(),
+});
+
 const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.a2aGateway;
 
@@ -152,18 +174,22 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // POST endpoint for A2A message execution
   // Supports both JSON-RPC envelope (standard A2A) and arbitrary JSON payloads
-  // (passed through to the agent as a stringified message).
+  // (passed through to the agent as a stringified message). Always returns a
+  // JSON-RPC response envelope.
   fastify.post(
     `${endpoint}/:agentId`,
     {
       schema: {
         description:
-          "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-envelope payloads are passed through to the agent.",
+          "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-envelope payloads are passed through to the agent. Always returns a JSON-RPC response.",
         tags: ["A2A"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: z.unknown(),
+        body: z.union([A2AJsonRpcRequestSchema, z.unknown()]),
+        response: {
+          200: A2AJsonRpcResponseSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -173,32 +199,22 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Detect JSON-RPC envelope; otherwise treat body as a pass-through payload.
       const envelopeParse = A2AJsonRpcRequestSchema.safeParse(body);
       const isJsonRpc = envelopeParse.success;
-      const rpcId = isJsonRpc ? envelopeParse.data.id : null;
+      const rpcId: string | number | null = isJsonRpc
+        ? envelopeParse.data.id
+        : null;
 
-      const sendError = (params: {
-        code: number;
-        message: string;
-        httpStatus: number;
-      }) => {
-        if (isJsonRpc) {
-          return reply.send({
-            jsonrpc: "2.0" as const,
-            id: rpcId as string | number,
-            error: { code: params.code, message: params.message },
-          });
-        }
-        throw new ApiError(params.httpStatus, params.message);
-      };
+      const sendError = (params: { code: number; message: string }) =>
+        reply.send({
+          jsonrpc: "2.0" as const,
+          id: rpcId,
+          error: { code: params.code, message: params.message },
+        });
 
       // Fetch the internal agent
       const agent = await AgentModel.findById(agentId);
 
       if (!agent) {
-        return sendError({
-          code: -32602,
-          message: "Agent not found",
-          httpStatus: 404,
-        });
+        return sendError({ code: -32602, message: "Agent not found" });
       }
 
       // Only internal agents can be used for A2A
@@ -207,7 +223,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           code: -32602,
           message:
             "Agent is not an internal agent (A2A requires agents with agentType='agent')",
-          httpStatus: 400,
         });
       }
 
@@ -217,7 +232,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return sendError({
           code: -32600,
           message: "Authorization header required. Use: Bearer <platform_token>",
-          httpStatus: 401,
         });
       }
 
@@ -226,7 +240,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return sendError({
           code: -32600,
           message: "Invalid or unauthorized token",
-          httpStatus: 401,
         });
       }
 
@@ -242,7 +255,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return sendError({
             code: -32600,
             message: "User not found for token",
-            httpStatus: 404,
           });
         }
       } else {
@@ -265,7 +277,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return sendError({
             code: -32602,
             message: "No message content provided",
-            httpStatus: 400,
           });
         }
       } else {
@@ -313,39 +324,27 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
 
-        if (isJsonRpc) {
-          return reply.send({
-            jsonrpc: "2.0" as const,
-            id: rpcId as string | number,
-            result: {
-              messageId: result.messageId,
-              role: "agent" as const,
-              parts: [{ kind: "text" as const, text: result.text }],
-            },
-          });
-        }
         return reply.send({
-          messageId: result.messageId,
-          text: result.text,
+          jsonrpc: "2.0" as const,
+          id: rpcId,
+          result: {
+            messageId: result.messageId,
+            role: "agent" as const,
+            parts: [{ kind: "text" as const, text: result.text }],
+          },
         });
       } catch (error) {
         const chatError =
           error instanceof ProviderError ? error.chatErrorResponse : undefined;
-        if (isJsonRpc) {
-          return reply.send({
-            jsonrpc: "2.0" as const,
-            id: rpcId as string | number,
-            error: {
-              code: -32603,
-              message: error instanceof Error ? error.message : "Internal error",
-              data: chatError,
-            },
-          });
-        }
-        throw new ApiError(
-          500,
-          error instanceof Error ? error.message : "Internal error",
-        );
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id: rpcId,
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : "Internal error",
+            data: chatError,
+          },
+        });
       }
     },
   );

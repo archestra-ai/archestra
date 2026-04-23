@@ -19,6 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "ai": "^6.0.82",
     "@shared": "workspace:*",
     "dotenv": "^17.3.1"
   },

@@ -444,6 +444,9 @@ importers:
       '@shared':
         specifier: workspace:*
         version: link:../shared
+      ai:
+        specifier: ^6.0.82
+        version: 6.0.116(zod@4.3.6)
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1

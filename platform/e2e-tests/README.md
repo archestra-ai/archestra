@@ -37,6 +37,15 @@
 
 <img src="readme-images/e2e7.png" width="600" />
 
+For the mocked chat playback suite specifically, select the `chat-scenarios`
+project. It drives the real `/chat` page with deterministic mocked responses,
+which makes it useful for manually stepping through rendering states in
+Playwright UI mode:
+
+```bash
+pnpm --dir platform/e2e-tests test:e2e:ui --project=chat-scenarios
+```
+
 ## WireMock
 
 Some tests require WireMock to mock HTTP responses from LLM providers. To start it, trigger the `e2e-test-dependencies` resource in Tilt.

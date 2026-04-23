@@ -10,6 +10,7 @@ const projectNames = {
   setupTeams: "setup-teams",
   credentialsWithVault: "credentials-with-vault",
   quickstart: "quickstart",
+  chatScenarios: "chat-scenarios",
   chromium: "chromium",
   firefox: "firefox",
   webkit: "webkit",
@@ -41,6 +42,7 @@ const uiTestMatch = [
   "**/auth-redirect.spec.ts",
   "**/auth.spec.ts",
   "**/chat-auth-required.spec.ts",
+  "**/chat-scenarios.spec.ts",
   "**/chat-localstorage.spec.ts",
   "**/chat-permissions.spec.ts",
   "**/chat.spec.ts",
@@ -186,10 +188,22 @@ export default defineConfig({
     },
     // Main UI tests on Chrome
     {
+      name: projectNames.chatScenarios,
+      testDir: "./tests",
+      testMatch: "**/chat-scenarios.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+      fullyParallel: false,
+      workers: 1,
+    },
+    {
       name: projectNames.chromium,
       testDir: "./tests",
       testMatch: uiTestMatch,
-      testIgnore: browserTestIgnore,
+      testIgnore: [...browserTestIgnore, "**/chat-scenarios.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

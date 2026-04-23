@@ -312,7 +312,9 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test("clones agent with empty associations", async ({ makeInternalAgent }) => {
+  test("clones agent with empty associations", async ({
+    makeInternalAgent,
+  }) => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Minimal Agent",
@@ -671,7 +673,9 @@ describe("clone agent route", () => {
     // Compare labels by key-value pairs (API response includes keyId/valueId)
     const clonedKeyValues = cloned.labels
       .map((l) => ({ key: l.key, value: l.value }))
-      .sort((a, b) => `${a.key}:${a.value}`.localeCompare(`${b.key}:${b.value}`));
+      .sort((a, b) =>
+        `${a.key}:${a.value}`.localeCompare(`${b.key}:${b.value}`),
+      );
     const expectedKeyValues = [...labels].sort((a, b) =>
       `${a.key}:${a.value}`.localeCompare(`${b.key}:${b.value}`),
     );

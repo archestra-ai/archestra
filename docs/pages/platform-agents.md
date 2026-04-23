@@ -90,6 +90,21 @@ Response:
 }
 ```
 
+### Pass-Through Payloads (Webhooks)
+
+The `POST /v1/a2a/:promptId` endpoint also accepts arbitrary JSON payloads that are not wrapped in a JSON-RPC envelope. This is useful when integrating with webhook sources whose payload shape cannot be customized.
+
+When the body is not a valid JSON-RPC 2.0 request, the entire payload is JSON-stringified and forwarded to the agent as the user message. The response is still returned as a JSON-RPC envelope, with `id` defaulting to `1`.
+
+```bash
+curl -X POST "https://api.example.com/v1/a2a/<promptId>" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "event": "issue.opened", "issue": { "id": 42, "title": "Bug" } }'
+```
+
+The agent receives the literal string `{"event":"issue.opened","issue":{"id":42,"title":"Bug"}}` as its user message and can parse/route on it as needed.
+
 ### Delegation Chain
 
 When an agent delegates work to another agent, Archestra tracks that call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state so downstream tool policy enforcement does not reset mid-run.

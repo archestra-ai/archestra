@@ -48,16 +48,6 @@ const A2AMessagePartSchema = z.object({
   text: z.string(),
 });
 
-// A2A Message schema for message/send response
-const A2AMessageSchema = z.object({
-  messageId: z.string(),
-  role: z.enum(["user", "agent"]),
-  parts: z.array(A2AMessagePartSchema),
-  contextId: z.string().optional(),
-  taskId: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
-
 const A2AJsonRpcRequestSchema = z.object({
   jsonrpc: z.literal("2.0"),
   id: z.union([z.string(), z.number()]),
@@ -69,19 +59,6 @@ const A2AJsonRpcRequestSchema = z.object({
           parts: z.array(A2AMessagePartSchema).optional(),
         })
         .optional(),
-    })
-    .optional(),
-});
-
-const A2AJsonRpcResponseSchema = z.object({
-  jsonrpc: z.literal("2.0"),
-  id: z.union([z.string(), z.number()]),
-  result: A2AMessageSchema.optional(),
-  error: z
-    .object({
-      code: z.number(),
-      message: z.string(),
-      data: z.unknown().optional(),
     })
     .optional(),
 });
@@ -173,77 +150,83 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // POST JSON-RPC endpoint for A2A message execution
+  // POST endpoint for A2A message execution
+  // Supports both JSON-RPC envelope (standard A2A) and arbitrary JSON payloads
+  // (passed through to the agent as a stringified message).
   fastify.post(
     `${endpoint}/:agentId`,
     {
       schema: {
         description:
-          "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
+          "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-envelope payloads are passed through to the agent.",
         tags: ["A2A"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: A2AJsonRpcRequestSchema,
-        response: {
-          200: A2AJsonRpcResponseSchema,
-        },
+        body: z.unknown(),
       },
     },
     async (request, reply) => {
       const { agentId } = request.params;
-      const { id, params } = request.body;
+      const body = request.body;
+
+      // Detect JSON-RPC envelope; otherwise treat body as a pass-through payload.
+      const envelopeParse = A2AJsonRpcRequestSchema.safeParse(body);
+      const isJsonRpc = envelopeParse.success;
+      const rpcId = isJsonRpc ? envelopeParse.data.id : null;
+
+      const sendError = (params: {
+        code: number;
+        message: string;
+        httpStatus: number;
+      }) => {
+        if (isJsonRpc) {
+          return reply.send({
+            jsonrpc: "2.0" as const,
+            id: rpcId as string | number,
+            error: { code: params.code, message: params.message },
+          });
+        }
+        throw new ApiError(params.httpStatus, params.message);
+      };
 
       // Fetch the internal agent
       const agent = await AgentModel.findById(agentId);
 
       if (!agent) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32602,
-            message: "Agent not found",
-          },
+        return sendError({
+          code: -32602,
+          message: "Agent not found",
+          httpStatus: 404,
         });
       }
 
       // Only internal agents can be used for A2A
       if (agent.agentType !== "agent") {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32602,
-            message:
-              "Agent is not an internal agent (A2A requires agents with agentType='agent')",
-          },
+        return sendError({
+          code: -32602,
+          message:
+            "Agent is not an internal agent (A2A requires agents with agentType='agent')",
+          httpStatus: 400,
         });
       }
 
       // Validate token authentication (reuse MCP Gateway utilities)
       const token = extractBearerToken(request);
       if (!token) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32600,
-            message:
-              "Authorization header required. Use: Bearer <platform_token>",
-          },
+        return sendError({
+          code: -32600,
+          message: "Authorization header required. Use: Bearer <platform_token>",
+          httpStatus: 401,
         });
       }
 
       const tokenAuth = await validateMCPGatewayToken(agent.id, token);
       if (!tokenAuth) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32600,
-            message: "Invalid or unauthorized token",
-          },
+        return sendError({
+          code: -32600,
+          message: "Invalid or unauthorized token",
+          httpStatus: 401,
         });
       }
 
@@ -256,13 +239,10 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId = tokenAuth.userId;
         const user = await UserModel.getById(userId);
         if (!user) {
-          return reply.send({
-            jsonrpc: "2.0" as const,
-            id,
-            error: {
-              code: -32600,
-              message: "User not found for token",
-            },
+          return sendError({
+            code: -32600,
+            message: "User not found for token",
+            httpStatus: 404,
           });
         }
       } else {
@@ -271,22 +251,25 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId = "system";
       }
 
-      // Extract user message from A2A message parts
-      const userMessage =
-        params?.message?.parts
-          ?.filter((p) => p.kind === "text")
-          .map((p) => p.text)
-          .join("\n") || "";
+      // Extract user message: from JSON-RPC message parts when enveloped,
+      // otherwise stringify the raw payload and pass it through to the agent.
+      let userMessage: string;
+      if (isJsonRpc) {
+        userMessage =
+          envelopeParse.data.params?.message?.parts
+            ?.filter((p) => p.kind === "text")
+            .map((p) => p.text)
+            .join("\n") || "";
 
-      if (!userMessage) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
+        if (!userMessage) {
+          return sendError({
             code: -32602,
             message: "No message content provided",
-          },
-        });
+            httpStatus: 400,
+          });
+        }
+      } else {
+        userMessage = typeof body === "string" ? body : JSON.stringify(body);
       }
 
       try {
@@ -330,27 +313,39 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
 
+        if (isJsonRpc) {
+          return reply.send({
+            jsonrpc: "2.0" as const,
+            id: rpcId as string | number,
+            result: {
+              messageId: result.messageId,
+              role: "agent" as const,
+              parts: [{ kind: "text" as const, text: result.text }],
+            },
+          });
+        }
         return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          result: {
-            messageId: result.messageId,
-            role: "agent" as const,
-            parts: [{ kind: "text" as const, text: result.text }],
-          },
+          messageId: result.messageId,
+          text: result.text,
         });
       } catch (error) {
         const chatError =
           error instanceof ProviderError ? error.chatErrorResponse : undefined;
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32603,
-            message: error instanceof Error ? error.message : "Internal error",
-            data: chatError,
-          },
-        });
+        if (isJsonRpc) {
+          return reply.send({
+            jsonrpc: "2.0" as const,
+            id: rpcId as string | number,
+            error: {
+              code: -32603,
+              message: error instanceof Error ? error.message : "Internal error",
+              data: chatError,
+            },
+          });
+        }
+        throw new ApiError(
+          500,
+          error instanceof Error ? error.message : "Internal error",
+        );
       }
     },
   );

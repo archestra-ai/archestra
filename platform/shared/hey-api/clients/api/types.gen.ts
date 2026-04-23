@@ -34503,6 +34503,1218 @@ export type GetMembersResponses = {
 
 export type GetMembersResponse = GetMembersResponses[keyof GetMembersResponses];
 
+export type ListMemoryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        scopeType?: 'user' | 'team' | 'organization';
+        status?: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        search?: string;
+    };
+    url: '/api/memory';
+};
+
+export type ListMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListMemoryError = ListMemoryErrors[keyof ListMemoryErrors];
+
+export type ListMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            scopeType: 'user' | 'team' | 'organization';
+            scopeId: string;
+            kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+            status: 'candidate' | 'approved' | 'rejected' | 'archived';
+            content: string;
+            createdBy: string | null;
+            reviewedBy: string | null;
+            reviewedAt: string | null;
+            rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+            rejectionComment: string | null;
+            extractorVersion: string | null;
+            policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+            sourceConversationId: string | null;
+            sourceMessageIds: Array<string> | null;
+            supersedesMemoryId: string | null;
+            confidenceBand: 'low' | 'medium' | 'high';
+            language: string | null;
+            lastVerifiedAt: string | null;
+            expiresAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type ListMemoryResponse = ListMemoryResponses[keyof ListMemoryResponses];
+
+export type CreateMemoryData = {
+    body: {
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        content: string;
+        policyFlags?: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        confidenceBand?: 'low' | 'medium' | 'high';
+        expiresAt?: unknown;
+        language?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/memory';
+};
+
+export type CreateMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateMemoryError = CreateMemoryErrors[keyof CreateMemoryErrors];
+
+export type CreateMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateMemoryResponse = CreateMemoryResponses[keyof CreateMemoryResponses];
+
+export type GetMemoryStatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/memory/stats';
+};
+
+export type GetMemoryStatsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetMemoryStatsError = GetMemoryStatsErrors[keyof GetMemoryStatsErrors];
+
+export type GetMemoryStatsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        candidate: number;
+        approved: number;
+        rejected: number;
+        archived: number;
+    };
+};
+
+export type GetMemoryStatsResponse = GetMemoryStatsResponses[keyof GetMemoryStatsResponses];
+
+export type ListPendingMemoryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/memory/pending';
+};
+
+export type ListPendingMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListPendingMemoryError = ListPendingMemoryErrors[keyof ListPendingMemoryErrors];
+
+export type ListPendingMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            scopeType: 'user' | 'team' | 'organization';
+            scopeId: string;
+            kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+            status: 'candidate' | 'approved' | 'rejected' | 'archived';
+            content: string;
+            createdBy: string | null;
+            reviewedBy: string | null;
+            reviewedAt: string | null;
+            rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+            rejectionComment: string | null;
+            extractorVersion: string | null;
+            policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+            sourceConversationId: string | null;
+            sourceMessageIds: Array<string> | null;
+            supersedesMemoryId: string | null;
+            confidenceBand: 'low' | 'medium' | 'high';
+            language: string | null;
+            lastVerifiedAt: string | null;
+            expiresAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type ListPendingMemoryResponse = ListPendingMemoryResponses[keyof ListPendingMemoryResponses];
+
+export type DeleteMemoryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}';
+};
+
+export type DeleteMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteMemoryError = DeleteMemoryErrors[keyof DeleteMemoryErrors];
+
+export type DeleteMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMemoryResponse = DeleteMemoryResponses[keyof DeleteMemoryResponses];
+
+export type GetMemoryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}';
+};
+
+export type GetMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetMemoryError = GetMemoryErrors[keyof GetMemoryErrors];
+
+export type GetMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMemoryResponse = GetMemoryResponses[keyof GetMemoryResponses];
+
+export type UpdateMemoryData = {
+    body: {
+        content?: string;
+        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        expiresAt?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}';
+};
+
+export type UpdateMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateMemoryError = UpdateMemoryErrors[keyof UpdateMemoryErrors];
+
+export type UpdateMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
+
+export type SupersedeMemoryData = {
+    body: {
+        content: string;
+        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}/supersede';
+};
+
+export type SupersedeMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SupersedeMemoryError = SupersedeMemoryErrors[keyof SupersedeMemoryErrors];
+
+export type SupersedeMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SupersedeMemoryResponse = SupersedeMemoryResponses[keyof SupersedeMemoryResponses];
+
+export type ApproveMemoryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}/approve';
+};
+
+export type ApproveMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ApproveMemoryError = ApproveMemoryErrors[keyof ApproveMemoryErrors];
+
+export type ApproveMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type ApproveMemoryResponse = ApproveMemoryResponses[keyof ApproveMemoryResponses];
+
+export type RejectMemoryData = {
+    body: {
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}/reject';
+};
+
+export type RejectMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RejectMemoryError = RejectMemoryErrors[keyof RejectMemoryErrors];
+
+export type RejectMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RejectMemoryResponse = RejectMemoryResponses[keyof RejectMemoryResponses];
+
+export type ArchiveMemoryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}/archive';
+};
+
+export type ArchiveMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ArchiveMemoryError = ArchiveMemoryErrors[keyof ArchiveMemoryErrors];
+
+export type ArchiveMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type ArchiveMemoryResponse = ArchiveMemoryResponses[keyof ArchiveMemoryResponses];
+
+export type UnarchiveMemoryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/memory/{id}/unarchive';
+};
+
+export type UnarchiveMemoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UnarchiveMemoryError = UnarchiveMemoryErrors[keyof UnarchiveMemoryErrors];
+
+export type UnarchiveMemoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        scopeType: 'user' | 'team' | 'organization';
+        scopeId: string;
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        content: string;
+        createdBy: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
+        rejectionComment: string | null;
+        extractorVersion: string | null;
+        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        sourceConversationId: string | null;
+        sourceMessageIds: Array<string> | null;
+        supersedesMemoryId: string | null;
+        confidenceBand: 'low' | 'medium' | 'high';
+        language: string | null;
+        lastVerifiedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UnarchiveMemoryResponse = UnarchiveMemoryResponses[keyof UnarchiveMemoryResponses];
+
 export type MinimaxChatCompletionsWithDefaultAgentData = {
     body: MinimaxChatCompletionRequestInput;
     headers?: {
@@ -36127,7 +37339,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -36151,7 +37363,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
         };
     };
     path?: never;
@@ -36235,7 +37447,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -36421,7 +37633,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -36436,7 +37648,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
         };
     };
     path: {
@@ -36525,7 +37737,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -42387,7 +43599,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
     };
 };
 

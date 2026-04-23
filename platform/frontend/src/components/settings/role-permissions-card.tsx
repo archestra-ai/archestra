@@ -33,6 +33,7 @@ const actionLabels: Record<Action, string> = {
   delete: "Delete",
   "team-admin": "Team Admin",
   admin: "Admin",
+  approve: "Approve",
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",

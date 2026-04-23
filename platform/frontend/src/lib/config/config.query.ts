@@ -7,6 +7,12 @@ const { getConfig } = archestraApiSdk;
 
 export type ConfigResponse = archestraApiTypes.GetConfigResponses["200"];
 export type FeaturesResponse = ConfigResponse["features"];
+type MemoryFeatures = {
+  memoryExtractionEnabled?: boolean;
+  memoryInjectionEnabled?: boolean;
+  memoryExtractionAvailable?: boolean;
+};
+type ExtendedFeaturesResponse = FeaturesResponse & MemoryFeatures;
 export type PublicConfigResponse =
   archestraApiTypes.GetPublicConfigResponses["200"];
 
@@ -45,12 +51,12 @@ export function useProviderBaseUrls() {
   return { data: data?.providerBaseUrls ?? null, ...rest };
 }
 
-export function useFeature<K extends keyof FeaturesResponse>(
+export function useFeature<K extends keyof ExtendedFeaturesResponse>(
   flag: K,
-): FeaturesResponse[K] | undefined {
+): ExtendedFeaturesResponse[K] | undefined {
   const { data } = useConfig();
   if (!data) return undefined;
-  return data.features[flag];
+  return (data.features as ExtendedFeaturesResponse)[flag];
 }
 
 type EnterpriseFeatures = ConfigResponse["enterpriseFeatures"];

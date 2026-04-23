@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-04-16
+lastUpdated: 2026-04-23
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -52,6 +52,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
+| Memory | `read`, `create`, `update`, `delete`, `approve`, `team-admin` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
@@ -86,6 +87,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
 | Knowledge Sources | `read`, `query` |
+| Memory | `read`, `create`, `update`, `delete`, `approve` |
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
@@ -193,6 +195,13 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
+| `memory:read` | View durable memory items in authorized scopes |
+| `memory:create` | Create durable memory candidates |
+| `memory:update` | Update or archive durable memory items |
+| `memory:delete` | Delete durable memory items |
+| `memory:approve` | Approve or reject memory candidates |
+| `memory:team-admin` | Review and manage team-scoped memory for teams you belong to |
+| `memory:admin` | Review and manage organization-scoped memory |
 | `optimizationRule:read` | View optimization rules |
 | `optimizationRule:create` | Create new optimization rules |
 | `optimizationRule:update` | Modify optimization rules |

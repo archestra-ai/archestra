@@ -641,6 +641,12 @@ export function AgentDialog({
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
+  const toolExposureDocsUrl = getDocsUrl(
+    agentType === "mcp_gateway"
+      ? DocsPage.PlatformMcpGateway
+      : DocsPage.PlatformAgents,
+    "search-and-run-tool-mode",
+  );
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -1450,34 +1456,6 @@ export function AgentDialog({
                         for you
                       </p>
                     )}
-                    <div className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="search-and-run-tool-mode">
-                            Search-and-run tool mode
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            Expose only the built-in search and dispatch tools.
-                            Other assigned tools stay hidden from MCP
-                            `tools/list`, but remain searchable and runnable.
-                          </p>
-                        </div>
-                        <Switch
-                          id="search-and-run-tool-mode"
-                          checked={toolExposureMode === "search_and_run_only"}
-                          onCheckedChange={(checked) =>
-                            setToolExposureMode(
-                              checked ? "search_and_run_only" : "full",
-                            )
-                          }
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {toolExposureMode === "search_and_run_only"
-                          ? "The built-in search_tools and run_tool tools are enabled implicitly by this mode."
-                          : "All assigned tools are exposed directly through tools/list."}
-                      </p>
-                    </div>
                     <AgentToolsEditor
                       ref={agentToolsEditorRef}
                       agentId={agent?.id}
@@ -1498,6 +1476,48 @@ export function AgentDialog({
                       onSelectionChange={setSelectedDelegationTargetIds}
                       currentAgentId={agent?.id}
                     />
+                  </div>
+
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="search-and-run-tool-mode"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="search-and-run-tool-mode"
+                          className="font-medium"
+                        >
+                          Search-and-run tool mode
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Expose only the built-in `search_tools` and `run_tool`
+                          tools. Other assigned tools stay hidden from MCP
+                          `tools/list`, but remain searchable and runnable.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
+                        {toolExposureMode === "search_and_run_only" && (
+                          <p className="text-xs text-muted-foreground">
+                            `search_tools` and `run_tool` are enabled implicitly
+                            by this mode and do not appear in the built-in tool
+                            picker.
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Knowledge Sources */}

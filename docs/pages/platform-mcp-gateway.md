@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-04-20
+lastUpdated: 2026-04-23
 ---
 
 <!--
@@ -93,6 +93,19 @@ Gateway access depends on both the caller and the gateway configuration. A user 
 If a gateway is scoped to one team, members outside that team cannot use it even if the underlying MCP server exists in the registry. This lets admins approve MCP servers centrally while still exposing different tool sets to different teams or clients.
 
 See [Access Control](/docs/platform-access-control) for the permission model.
+
+## Search-and-Run Tool Mode
+
+By default, a gateway exposes every assigned tool through MCP `tools/list`.
+
+For larger toolsets, you can enable **Search-and-run tool mode** in the gateway dialog. In that mode, clients only see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools.
+
+Those two tools are enabled implicitly by the mode and do not appear in the built-in tool picker. The rest of the gateway's assigned tools stay available behind the scenes:
+
+- `search_tools` can discover them
+- `run_tool` can execute them
+
+Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
 ## Custom Headers
 

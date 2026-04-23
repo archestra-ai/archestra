@@ -52,6 +52,10 @@ A2A is a JSON-RPC 2.0 gateway for invoking agents programmatically from external
 
 All A2A requests require Bearer token authentication. You can use a personal token from **Settings > Your Account**, a team token from **Settings > Teams**, or the organization token from **Settings > Organization**, as long as that token has access to the target agent.
 
+### Agent Card
+
+The discovery endpoint returns an Agent Card describing the agent's name, description, URL, and basic input/output capabilities. Use it when an external client needs to discover an agent before sending `message/send` requests.
+
 ### Sending Messages
 
 Send JSON-RPC 2.0 requests to execute the agent:
@@ -86,6 +90,9 @@ Response:
 }
 ```
 
+### Delegation Chain
+
+When an agent delegates work to another agent, Archestra tracks that call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state so downstream tool policy enforcement does not reset mid-run.
 ### Configuration
 
 A2A uses the same LLM configuration as Chat. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.

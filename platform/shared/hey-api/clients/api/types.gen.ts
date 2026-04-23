@@ -29311,7 +29311,7 @@ export type GetLimitsData = {
     query?: {
         entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_api_key';
         entityId?: string;
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType?: 'token_cost';
     };
     url: '/api/limits';
 };
@@ -29407,10 +29407,8 @@ export type CreateLimitData = {
     body: {
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_api_key';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost';
         limitValue: number;
-        mcpServerName?: string | null;
-        toolName?: string | null;
         model?: Array<string> | null;
         lastCleanup?: unknown;
     };
@@ -29673,10 +29671,8 @@ export type UpdateLimitData = {
     body: {
         entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_api_key';
         entityId?: string;
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType?: 'token_cost';
         limitValue?: number;
-        mcpServerName?: string | null;
-        toolName?: string | null;
         model?: Array<string> | null;
         lastCleanup?: unknown;
     };
@@ -35051,6 +35047,181 @@ export type GetRolesResponses = {
 
 export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
 
+export type CreateRoleData = {
+    body: {
+        name: string;
+        description?: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type CreateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
+
+export type CreateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        role: string;
+        name: string;
+        description: string | null;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
+
+export type DeleteRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Custom role ID (base62)
+         */
+        roleId: string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type DeleteRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
+
+export type DeleteRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
+
 export type GetRoleData = {
     body?: never;
     path: {
@@ -35142,6 +35313,104 @@ export type GetRoleResponses = {
 };
 
 export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
+
+export type UpdateRoleData = {
+    body: {
+        name?: string;
+        description?: string;
+        permission?: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+        };
+    };
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        role: string;
+        name: string;
+        description: string | null;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
 
 export type GetOrganizationData = {
     body?: never;
@@ -42063,3 +42332,1771 @@ export type ZhipuaiChatCompletionsWithAgentResponses = {
 };
 
 export type ZhipuaiChatCompletionsWithAgentResponse = ZhipuaiChatCompletionsWithAgentResponses[keyof ZhipuaiChatCompletionsWithAgentResponses];
+
+export type GetPublicIdentityProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/identity-providers/public';
+};
+
+export type GetPublicIdentityProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPublicIdentityProvidersError = GetPublicIdentityProvidersErrors[keyof GetPublicIdentityProvidersErrors];
+
+export type GetPublicIdentityProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        providerId: string;
+    }>;
+};
+
+export type GetPublicIdentityProvidersResponse = GetPublicIdentityProvidersResponses[keyof GetPublicIdentityProvidersResponses];
+
+export type GetIdentityProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/identity-providers';
+};
+
+export type GetIdentityProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetIdentityProvidersError = GetIdentityProvidersErrors[keyof GetIdentityProvidersErrors];
+
+export type GetIdentityProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            skipDiscovery?: boolean;
+            pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
+            hd?: string;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+            jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    }>;
+};
+
+export type GetIdentityProvidersResponse = GetIdentityProvidersResponses[keyof GetIdentityProvidersResponses];
+
+export type CreateIdentityProviderData = {
+    body: {
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            skipDiscovery?: boolean;
+            pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
+            hd?: string;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+            jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId?: string | null;
+        providerId: string;
+        domain: string;
+        domainVerified?: boolean | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/identity-providers';
+};
+
+export type CreateIdentityProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateIdentityProviderError = CreateIdentityProviderErrors[keyof CreateIdentityProviderErrors];
+
+export type CreateIdentityProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            skipDiscovery?: boolean;
+            pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
+            hd?: string;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+            jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type CreateIdentityProviderResponse = CreateIdentityProviderResponses[keyof CreateIdentityProviderResponses];
+
+export type GetIdentityProviderIdpLogoutUrlData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/identity-providers/idp-logout-url';
+};
+
+export type GetIdentityProviderIdpLogoutUrlErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetIdentityProviderIdpLogoutUrlError = GetIdentityProviderIdpLogoutUrlErrors[keyof GetIdentityProviderIdpLogoutUrlErrors];
+
+export type GetIdentityProviderIdpLogoutUrlResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        url: string | null;
+    };
+};
+
+export type GetIdentityProviderIdpLogoutUrlResponse = GetIdentityProviderIdpLogoutUrlResponses[keyof GetIdentityProviderIdpLogoutUrlResponses];
+
+export type DeleteIdentityProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}';
+};
+
+export type DeleteIdentityProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteIdentityProviderError = DeleteIdentityProviderErrors[keyof DeleteIdentityProviderErrors];
+
+export type DeleteIdentityProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteIdentityProviderResponse = DeleteIdentityProviderResponses[keyof DeleteIdentityProviderResponses];
+
+export type GetIdentityProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}';
+};
+
+export type GetIdentityProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetIdentityProviderError = GetIdentityProviderErrors[keyof GetIdentityProviderErrors];
+
+export type GetIdentityProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            skipDiscovery?: boolean;
+            pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
+            hd?: string;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+            jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type GetIdentityProviderResponse = GetIdentityProviderResponses[keyof GetIdentityProviderResponses];
+
+export type UpdateIdentityProviderData = {
+    body: {
+        issuer?: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            skipDiscovery?: boolean;
+            pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
+            hd?: string;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+            jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        providerId?: string;
+        domain?: string;
+        domainVerified?: boolean | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}';
+};
+
+export type UpdateIdentityProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateIdentityProviderError = UpdateIdentityProviderErrors[keyof UpdateIdentityProviderErrors];
+
+export type UpdateIdentityProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            skipDiscovery?: boolean;
+            pkce: boolean;
+            enableRpInitiatedLogout?: boolean;
+            hd?: string;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+            jwksEndpoint?: string;
+            enterpriseManagedCredentials?: {
+                exchangeStrategy?: 'rfc8693' | 'okta_managed' | 'entra_obo';
+                clientId?: string;
+                clientSecret?: string;
+                tokenEndpoint?: string;
+                tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic' | 'private_key_jwt';
+                privateKeyPem?: string;
+                privateKeyId?: string;
+                clientAssertionAudience?: string;
+                subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
+        teamSyncConfig?: {
+            groupsExpression?: string;
+            enabled?: boolean;
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+        domainVerified: boolean | null;
+    };
+};
+
+export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[keyof UpdateIdentityProviderResponses];
+
+export type DeleteTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type DeleteTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
+
+export type DeleteTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
+
+export type GetTeamVaultFolderData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type GetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
+
+export type GetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    } | null;
+};
+
+export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
+
+export type SetTeamVaultFolderData = {
+    body: {
+        vaultPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder';
+};
+
+export type SetTeamVaultFolderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
+
+export type SetTeamVaultFolderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        vaultPath: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
+
+export type CheckTeamVaultFolderConnectivityData = {
+    body: {
+        vaultPath?: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
+};
+
+export type CheckTeamVaultFolderConnectivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
+
+export type CheckTeamVaultFolderConnectivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        connected: boolean;
+        secretCount: number;
+        error?: string;
+    };
+};
+
+export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
+
+export type ListTeamVaultFolderSecretsData = {
+    body?: never;
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets';
+};
+
+export type ListTeamVaultFolderSecretsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
+
+export type ListTeamVaultFolderSecretsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        path: string;
+    }>;
+};
+
+export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
+
+export type GetTeamVaultSecretKeysData = {
+    body: {
+        secretPath: string;
+    };
+    path: {
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
+};
+
+export type GetTeamVaultSecretKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
+
+export type GetTeamVaultSecretKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        keys: Array<string>;
+    };
+};
+
+export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];

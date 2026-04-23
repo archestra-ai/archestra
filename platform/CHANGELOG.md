@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.2.23](https://github.com/archestra-ai/archestra/compare/platform-v1.2.22...platform-v1.2.23) (2026-04-23)
+
+
+### Features
+
+* **a2a:** accept arbitrary JSON payloads in addition to JSON-RPC envelope ([#4037](https://github.com/archestra-ai/archestra/issues/4037)) ([6d15f0c](https://github.com/archestra-ai/archestra/commit/6d15f0c614de13f5f1020369a51c3a7a7a6d9445))
+* add onboarding wizard ([#4013](https://github.com/archestra-ai/archestra/issues/4013)) ([12f8a5a](https://github.com/archestra-ai/archestra/commit/12f8a5aff66cff636c5101a4f1a55239a5031dd6))
+* add Outline knowledge connector ([#3938](https://github.com/archestra-ai/archestra/issues/3938)) ([0bd17f3](https://github.com/archestra-ai/archestra/commit/0bd17f39354515a36bef08d1874cdca219fd923e))
+* interweave persisted chat errors ([#4002](https://github.com/archestra-ai/archestra/issues/4002)) ([e5e3fec](https://github.com/archestra-ai/archestra/commit/e5e3fecff9d29b1a4ab2cd32451b4c66bb5c7cf9))
+
+
+### Bug Fixes
+
+* include scheduled- prefixed session IDs in sessionId search ([#4040](https://github.com/archestra-ai/archestra/issues/4040)) ([a1822eb](https://github.com/archestra-ai/archestra/commit/a1822eb9a304c66855cac44c0eead0ee4b2128c3))
+* scroll to bottom when user sends a message ([#4005](https://github.com/archestra-ai/archestra/issues/4005)) ([2ac31a6](https://github.com/archestra-ai/archestra/commit/2ac31a6c3db7052ccdb5cab82c3364ee5cecab71))
+* Slack setup slash command slugs ([#4014](https://github.com/archestra-ai/archestra/issues/4014)) ([0570258](https://github.com/archestra-ai/archestra/commit/0570258ded28750c2feeadf70e330297ad5e6952))
+* treat UUID search input as sessionId filter on sessions list ([#4029](https://github.com/archestra-ai/archestra/issues/4029)) ([e580151](https://github.com/archestra-ai/archestra/commit/e580151441160767c226ebac7b3aa773e11ebf43))
+
+
+### Documentation
+
+* fix stale mcpServer:admin reference in access-control docs ([#3994](https://github.com/archestra-ai/archestra/issues/3994)) ([a1fc7bf](https://github.com/archestra-ai/archestra/commit/a1fc7bf36c08c2f907e14f7f11704e669e5ee5d4))
+* update agent docs ([#4038](https://github.com/archestra-ai/archestra/issues/4038)) ([315ffeb](https://github.com/archestra-ai/archestra/commit/315ffebd1f6769739b65b3ebdb8430f5f6eba0b4))
+
+
+### Miscellaneous Chores
+
+* clear agent identity provider config ([#4020](https://github.com/archestra-ai/archestra/issues/4020)) ([0bb5954](https://github.com/archestra-ai/archestra/commit/0bb5954c789044873c4e4b194127e6bcbed3c6b9))
+* knowledge base - make advanced-access control an enterprise feature ([#3783](https://github.com/archestra-ai/archestra/issues/3783)) ([10b4ff0](https://github.com/archestra-ai/archestra/commit/10b4ff03d32d0c7d09e9681ff501252e60ec6f4b))
+* remove deprecated downlevelIteration from tsconfig ([#4027](https://github.com/archestra-ai/archestra/issues/4027)) ([77bae6a](https://github.com/archestra-ai/archestra/commit/77bae6a951b843f7ffb097d416f072b981b9e0e5))
+* upgrade TypeScript 5.9 -&gt; 6.x ([#4035](https://github.com/archestra-ai/archestra/issues/4035)) ([2b7737e](https://github.com/archestra-ai/archestra/commit/2b7737e420ed210d3c06624ffce294d631ec3139))
+
 ## [1.2.22](https://github.com/archestra-ai/archestra/compare/platform-v1.2.21...platform-v1.2.22) (2026-04-22)
 
 

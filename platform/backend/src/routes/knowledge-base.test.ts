@@ -137,6 +137,240 @@ describe("knowledge base routes", () => {
     });
   });
 
+  describe("GET /api/knowledge-bases/:id/documents", () => {
+    test("lists documents for a knowledge base with pagination metadata", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Docs KB",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Docs Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://docs.atlassian.net",
+          isCloud: true,
+          projectKey: "DOC",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connector.id,
+        kb.id,
+      );
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "source-1",
+        connectorId: connector.id,
+        title: "Alpha Document",
+        content: "alpha-content",
+        contentHash: "hash-alpha",
+        sourceUrl: "https://example.com/alpha",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "source-2",
+        connectorId: connector.id,
+        title: "Beta Document",
+        content: "beta-content",
+        contentHash: "hash-beta",
+        sourceUrl: "https://example.com/beta",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kb.id}/documents?limit=1&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string; connectorType: string }>;
+        pagination: { total: number; hasNext: boolean };
+      };
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toHaveProperty("connectorType", "jira");
+      expect(body.pagination.total).toBe(2);
+      expect(body.pagination.hasNext).toBe(true);
+    });
+
+    test("filters documents by title search", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Search Docs KB",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Search Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://search.atlassian.net",
+          isCloud: true,
+          projectKey: "SEA",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connector.id,
+        kb.id,
+      );
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "search-1",
+        connectorId: connector.id,
+        title: "Budget Planning",
+        content: "budget-content",
+        contentHash: "hash-budget",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "search-2",
+        connectorId: connector.id,
+        title: "Release Notes",
+        content: "release-content",
+        contentHash: "hash-release",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kb.id}/documents?limit=20&offset=0&search=budget`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(1);
+      expect(body.data.map((d) => d.title)).toEqual(["Budget Planning"]);
+    });
+
+    test("returns 404 for non-existent knowledge base", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${crypto.randomUUID()}/documents?limit=10&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("DELETE /api/knowledge-bases/:id/documents/:docId", () => {
+    test("deletes a knowledge base document and cascades to chunks", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Delete Docs KB",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Delete Docs Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://delete.atlassian.net",
+          isCloud: true,
+          projectKey: "DEL",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connector.id,
+        kb.id,
+      );
+
+      const document = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "delete-1",
+        connectorId: connector.id,
+        title: "Delete Me",
+        content: "delete-content",
+        contentHash: "hash-delete",
+        acl: ["org:*"],
+      });
+      await KbChunkModel.insertMany([
+        {
+          documentId: document.id,
+          content: "chunk-delete",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-bases/${kb.id}/documents/${document.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(await KbDocumentModel.findById(document.id)).toBeNull();
+      expect(await KbChunkModel.findByDocument(document.id)).toEqual([]);
+    });
+
+    test("returns 404 when document does not belong to the knowledge base", async () => {
+      const kbA = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "KB A",
+      });
+      const kbB = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "KB B",
+      });
+      const connectorA = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector A",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://a.atlassian.net",
+          isCloud: true,
+          projectKey: "A",
+        },
+      });
+      const connectorB = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector B",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://b.atlassian.net",
+          isCloud: true,
+          projectKey: "B",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connectorA.id,
+        kbA.id,
+      );
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connectorB.id,
+        kbB.id,
+      );
+
+      const docInKbB = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "kb-b-doc",
+        connectorId: connectorB.id,
+        title: "KB B Doc",
+        content: "kb-b-content",
+        contentHash: "hash-kb-b",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-bases/${kbA.id}/documents/${docInKbB.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(await KbDocumentModel.findById(docInKbB.id)).not.toBeNull();
+    });
+  });
+
   describe("GET /api/knowledge-bases", () => {
     test("lists knowledge bases with pagination", async () => {
       await KnowledgeBaseModel.create({ organizationId, name: "KB A" });
@@ -1265,6 +1499,11 @@ describe("knowledge base permission configuration", () => {
       knowledgeSource: ["read"],
     });
     expect(
+      requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseDocuments],
+    ).toEqual({
+      knowledgeSource: ["read"],
+    });
+    expect(
       requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseHealth],
     ).toEqual({ knowledgeSource: ["read"] });
 
@@ -1282,6 +1521,9 @@ describe("knowledge base permission configuration", () => {
     expect(requiredEndpointPermissionsMap[RouteId.DeleteKnowledgeBase]).toEqual(
       { knowledgeSource: ["delete"] },
     );
+    expect(
+      requiredEndpointPermissionsMap[RouteId.DeleteKnowledgeBaseDocument],
+    ).toEqual({ knowledgeSource: ["delete"] });
 
     // Connector read routes require knowledgeSource:read
     expect(requiredEndpointPermissionsMap[RouteId.GetConnectors]).toEqual({
@@ -1322,6 +1564,7 @@ describe("knowledge base permission configuration", () => {
       RouteId.CreateKnowledgeBase,
       RouteId.UpdateKnowledgeBase,
       RouteId.DeleteKnowledgeBase,
+      RouteId.DeleteKnowledgeBaseDocument,
       RouteId.CreateConnector,
       RouteId.UpdateConnector,
       RouteId.DeleteConnector,
@@ -1341,6 +1584,7 @@ describe("knowledge base permission configuration", () => {
     const readRoutes = [
       RouteId.GetKnowledgeBases,
       RouteId.GetKnowledgeBase,
+      RouteId.GetKnowledgeBaseDocuments,
       RouteId.GetKnowledgeBaseHealth,
       RouteId.GetConnectors,
       RouteId.GetConnector,

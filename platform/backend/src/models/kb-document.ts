@@ -1,11 +1,16 @@
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AclEntry,
+  ConnectorType,
   InsertKbDocument,
   KbDocument,
   UpdateKbDocument,
 } from "@/types";
+
+type KbDocumentListItem = KbDocument & {
+  connectorType: ConnectorType;
+};
 
 class KbDocumentModel {
   static async findById(id: string): Promise<KbDocument | null> {
@@ -30,7 +35,9 @@ class KbDocumentModel {
     knowledgeBaseId: string;
     limit?: number;
     offset?: number;
+    search?: string;
   }): Promise<KbDocument[]> {
+    const normalizedSearch = params.search?.trim();
     let query = db
       .select({
         id: schema.kbDocumentsTable.id,
@@ -57,12 +64,81 @@ class KbDocumentModel {
         ),
       )
       .where(
-        eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          params.knowledgeBaseId,
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            params.knowledgeBaseId,
+          ),
+          normalizedSearch
+            ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
+            : undefined,
         ),
       )
       .orderBy(desc(schema.kbDocumentsTable.createdAt))
+      .$dynamic();
+
+    if (params.limit !== undefined) {
+      query = query.limit(params.limit);
+    }
+    if (params.offset !== undefined) {
+      query = query.offset(params.offset);
+    }
+
+    return await query;
+  }
+
+  static async findListItemsByKnowledgeBase(params: {
+    knowledgeBaseId: string;
+    limit?: number;
+    offset?: number;
+    search?: string;
+  }): Promise<KbDocumentListItem[]> {
+    const normalizedSearch = params.search?.trim();
+    let query = db
+      .select({
+        id: schema.kbDocumentsTable.id,
+        organizationId: schema.kbDocumentsTable.organizationId,
+        sourceId: schema.kbDocumentsTable.sourceId,
+        connectorId: schema.kbDocumentsTable.connectorId,
+        connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
+        title: schema.kbDocumentsTable.title,
+        content: schema.kbDocumentsTable.content,
+        contentHash: schema.kbDocumentsTable.contentHash,
+        sourceUrl: schema.kbDocumentsTable.sourceUrl,
+        acl: schema.kbDocumentsTable.acl,
+        metadata: schema.kbDocumentsTable.metadata,
+        embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
+        chunkCount: schema.kbDocumentsTable.chunkCount,
+        createdAt: schema.kbDocumentsTable.createdAt,
+        updatedAt: schema.kbDocumentsTable.updatedAt,
+      })
+      .from(schema.kbDocumentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorAssignmentsTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorsTable.id,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            params.knowledgeBaseId,
+          ),
+          normalizedSearch
+            ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
+            : undefined,
+        ),
+      )
+      .orderBy(desc(schema.kbDocumentsTable.updatedAt))
       .$dynamic();
 
     if (params.limit !== undefined) {
@@ -132,6 +208,16 @@ class KbDocumentModel {
   }
 
   static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
+    return KbDocumentModel.countByKnowledgeBaseWithSearch({
+      knowledgeBaseId,
+    });
+  }
+
+  static async countByKnowledgeBaseWithSearch(params: {
+    knowledgeBaseId: string;
+    search?: string;
+  }): Promise<number> {
+    const normalizedSearch = params.search?.trim();
     const [result] = await db
       .select({ count: count() })
       .from(schema.kbDocumentsTable)
@@ -143,13 +229,61 @@ class KbDocumentModel {
         ),
       )
       .where(
-        eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseId,
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            params.knowledgeBaseId,
+          ),
+          normalizedSearch
+            ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
+            : undefined,
         ),
       );
 
     return result?.count ?? 0;
+  }
+
+  static async findByIdAndKnowledgeBase(params: {
+    documentId: string;
+    knowledgeBaseId: string;
+  }): Promise<KbDocument | null> {
+    const [result] = await db
+      .select({
+        id: schema.kbDocumentsTable.id,
+        organizationId: schema.kbDocumentsTable.organizationId,
+        sourceId: schema.kbDocumentsTable.sourceId,
+        connectorId: schema.kbDocumentsTable.connectorId,
+        title: schema.kbDocumentsTable.title,
+        content: schema.kbDocumentsTable.content,
+        contentHash: schema.kbDocumentsTable.contentHash,
+        sourceUrl: schema.kbDocumentsTable.sourceUrl,
+        acl: schema.kbDocumentsTable.acl,
+        metadata: schema.kbDocumentsTable.metadata,
+        embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
+        chunkCount: schema.kbDocumentsTable.chunkCount,
+        createdAt: schema.kbDocumentsTable.createdAt,
+        updatedAt: schema.kbDocumentsTable.updatedAt,
+      })
+      .from(schema.kbDocumentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorAssignmentsTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.id, params.documentId),
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            params.knowledgeBaseId,
+          ),
+        ),
+      )
+      .limit(1);
+
+    return result ?? null;
   }
 
   static async deleteByConnector(connectorId: string): Promise<number> {

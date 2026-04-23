@@ -398,8 +398,10 @@ export const RouteId = {
   GetKnowledgeBases: "getKnowledgeBases",
   CreateKnowledgeBase: "createKnowledgeBase",
   GetKnowledgeBase: "getKnowledgeBase",
+  GetKnowledgeBaseDocuments: "getKnowledgeBaseDocuments",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  DeleteKnowledgeBaseDocument: "deleteKnowledgeBaseDocument",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
 
   // Knowledge Base Connector Routes

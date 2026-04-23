@@ -27359,6 +27359,195 @@ export type UpdateKnowledgeBaseResponses = {
 
 export type UpdateKnowledgeBaseResponse = UpdateKnowledgeBaseResponses[keyof UpdateKnowledgeBaseResponses];
 
+export type GetKnowledgeBaseDocumentsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/knowledge-bases/{id}/documents';
+};
+
+export type GetKnowledgeBaseDocumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetKnowledgeBaseDocumentsError = GetKnowledgeBaseDocumentsErrors[keyof GetKnowledgeBaseDocumentsErrors];
+
+export type GetKnowledgeBaseDocumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            sourceId: string | null;
+            connectorId: string;
+            title: string;
+            content: string;
+            contentHash: string;
+            sourceUrl: string | null;
+            acl: Array<string>;
+            metadata: {
+                [key: string]: unknown;
+            } | null;
+            embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            chunkCount: number;
+            createdAt: string;
+            updatedAt: string;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetKnowledgeBaseDocumentsResponse = GetKnowledgeBaseDocumentsResponses[keyof GetKnowledgeBaseDocumentsResponses];
+
+export type DeleteKnowledgeBaseDocumentData = {
+    body?: never;
+    path: {
+        id: string;
+        docId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-bases/{id}/documents/{docId}';
+};
+
+export type DeleteKnowledgeBaseDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteKnowledgeBaseDocumentError = DeleteKnowledgeBaseDocumentErrors[keyof DeleteKnowledgeBaseDocumentErrors];
+
+export type DeleteKnowledgeBaseDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteKnowledgeBaseDocumentResponse = DeleteKnowledgeBaseDocumentResponses[keyof DeleteKnowledgeBaseDocumentResponses];
+
 export type GetKnowledgeBaseHealthData = {
     body?: never;
     path: {

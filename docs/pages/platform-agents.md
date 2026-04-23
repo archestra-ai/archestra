@@ -50,7 +50,7 @@ A2A is a JSON-RPC 2.0 gateway for invoking agents programmatically from external
 
 ### Authentication
 
-All A2A requests require Bearer token authentication. Generate tokens from the agent's API key settings or use team tokens for shared access.
+All A2A requests require Bearer token authentication. You can use a personal token from **Settings > Your Account**, a team token from **Settings > Teams**, or the organization token from **Settings > Organization**, as long as that token has access to the target agent.
 
 ### Sending Messages
 

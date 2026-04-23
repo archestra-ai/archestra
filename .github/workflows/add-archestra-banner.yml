@@ -35,7 +35,7 @@ jobs:
         run: |
           MARKER='<!-- archestra-banner:v1 -->'
 
-          BANNER=$'\n\n---\n<!-- archestra-banner:v1 -->\n<a href="https://archestra.ai/contributor-onboard" rel="nofollow noreferrer noopener" target="_blank">\n\n<img alt="Image" src="https://github.com/user-attachments/assets/1f9497f2-96ad-4334-b3a4-c63ff38abdb9"/>\n\n</a>'
+          BANNER=$'\n\n---\n<!-- archestra-banner:v1 -->\n<a href="https://archestra.ai/contributor-onboard" rel="nofollow noreferrer noopener" target="_blank">\n\n<img alt="Archestra Contributor" src="https://raw.githubusercontent.com/archestra-ai/archestra/main/docs/assets/archestra-contributor-banner.webp"/>\n\n</a>'
 
           # Fetch current body via API (avoids YAML/template injection from user-controlled body)
           CURRENT_BODY=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '.body // ""')

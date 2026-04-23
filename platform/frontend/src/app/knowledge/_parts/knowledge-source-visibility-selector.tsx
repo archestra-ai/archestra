@@ -7,6 +7,7 @@ import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 export type KnowledgeSourceVisibility = "org-wide" | "team-scoped";
@@ -48,16 +49,24 @@ export function KnowledgeSourceVisibilitySelector({
   showTeamRequired?: boolean;
 }) {
   const { data: teams } = useTeams();
+  const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
 
-  const options = visibilityEntries.map(([value, option]) => ({
-    ...option,
-    value,
-    disabled: value === "team-scoped" && (teams ?? []).length === 0,
-    disabledLabel:
-      value === "team-scoped" && (teams ?? []).length === 0
-        ? "No teams available"
-        : undefined,
-  }));
+  const options = visibilityEntries
+    .filter(
+      ([value]) =>
+        value !== "team-scoped" ||
+        knowledgeBaseEnterprise ||
+        visibility === "team-scoped",
+    )
+    .map(([value, option]) => ({
+      ...option,
+      value,
+      disabled: value === "team-scoped" && (teams ?? []).length === 0,
+      disabledLabel:
+        value === "team-scoped" && (teams ?? []).length === 0
+          ? "No teams available"
+          : undefined,
+    }));
 
   return (
     <SharedVisibilitySelector

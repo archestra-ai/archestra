@@ -60,7 +60,7 @@ export function resolveEffectiveId(params: {
   return (
     selected ??
     fromUrl ??
-    (skipAdminDefault ? null : (adminDefault ?? null)) ??
+    (skipAdminDefault ? null : adminDefault) ??
     systemDefault ??
     firstAvailable ??
     null

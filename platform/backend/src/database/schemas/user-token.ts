@@ -12,7 +12,7 @@ import secretsTable from "./secret";
 import usersTable from "./user";
 
 /**
- * UserToken table - stores personal authentication tokens for MCP Gateway access
+ * UserToken table - stores personal authentication tokens for agent and MCP Gateway access
  * Each token is scoped to a specific user within an organization
  * Token values are stored via secretsManager for Vault integration
  */

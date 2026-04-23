@@ -101,3 +101,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @eleijonmarck
 - @kyleskutt-hub
 - @ssiddus
+- @PalakB09
+- @saifeldeen911

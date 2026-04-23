@@ -2,17 +2,27 @@
 title: Overview
 category: Agents
 order: 1
-description: Agent overview, A2A protocol, and trigger configuration
-lastUpdated: 2026-03-27
+description: Agent overview, invocation paths, knowledge sources, and prompt templating
+lastUpdated: 2026-04-23
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-![Agent Platform Swarm](/docs/platform-agents-swarm.webp)
+Agents are reusable AI workers with instructions, tool access, and optional knowledge retrieval. You can invoke the same agent from chat, external integrations, or automation without rebuilding the workflow each time.
 
-Agents in Archestra provide a comprehensive no-code solution for building autonomous and semi-autonomous agents that can access your data and work together in swarms. Each agent consists of a User Prompt, System Prompt, assigned tools, and sub-agents, and can be triggered via:
+An agent can include:
+
+- a system prompt that defines behavior
+- suggested prompts for common tasks in chat
+- one or more assigned tools
+- optional delegation targets to other agents
+- one or more assigned knowledge sources
+
+## Invocation Paths
+
+Agents can be triggered through:
 
 - Archestra Chat UI
 - A2A (Agent-to-Agent) protocol
@@ -23,35 +33,24 @@ Agents in Archestra provide a comprehensive no-code solution for building autono
 
 Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
+## Knowledge Sources
+
+Agents can be assigned one or more knowledge bases or knowledge connectors. This gives the agent retrieval access to your internal docs and connected systems without hardcoding those sources into the prompt.
+
+When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
+
+See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
+
 ## A2A (Agent-to-Agent)
 
-A2A is a JSON-RPC 2.0 gateway that allows external systems to invoke agents programmatically. Each Prompt exposes two endpoints:
+A2A is a JSON-RPC 2.0 gateway for invoking agents programmatically from external systems. Each agent exposes two endpoints:
 
 - **Agent Card Discovery**: `GET /v1/a2a/:promptId/.well-known/agent.json`
 - **Message Execution**: `POST /v1/a2a/:promptId`
 
 ### Authentication
 
-All A2A requests require Bearer token authentication. Generate tokens via the Profile's API key settings or use team tokens for organization-wide access.
-
-### Agent Card
-
-The discovery endpoint returns an AgentCard describing the agent's capabilities:
-
-```json
-{
-  "name": "My Agent",
-  "description": "Agent description from prompt",
-  "version": "1.0.0",
-  "capabilities": {
-    "streaming": false,
-    "pushNotifications": false
-  },
-  "defaultInputModes": ["text"],
-  "defaultOutputModes": ["text"],
-  "skills": [{ "id": "default", "name": "Default Skill" }]
-}
-```
+All A2A requests require Bearer token authentication. Generate tokens from the agent's API key settings or use team tokens for shared access.
 
 ### Sending Messages
 
@@ -86,12 +85,6 @@ Response:
   }
 }
 ```
-
-### Delegation Chain
-
-A2A supports nested agent-to-agent calls. When one agent invokes another, the delegation chain tracks the call path for observability. This enables multi-step agent workflows where agents can use other agents as tools.
-
-Delegated sub-agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state. If the parent agent has already crossed a sensitive-context boundary, the child starts in that same unsafe state, so downstream tool call policies continue to enforce the stricter rules instead of resetting during delegation.
 
 ### Configuration
 

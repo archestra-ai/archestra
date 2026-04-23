@@ -52,7 +52,12 @@ export function KnowledgeSourceVisibilitySelector({
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
 
   const options = visibilityEntries
-    .filter(([value]) => value !== "team-scoped" || knowledgeBaseEnterprise)
+    .filter(
+      ([value]) =>
+        value !== "team-scoped" ||
+        knowledgeBaseEnterprise ||
+        visibility === "team-scoped",
+    )
     .map(([value, option]) => ({
       ...option,
       value,

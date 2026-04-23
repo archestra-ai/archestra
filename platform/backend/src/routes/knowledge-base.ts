@@ -6,6 +6,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import {
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
@@ -458,6 +459,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (
+        visibility === "team-scoped" &&
+        !config.enterpriseFeatures.knowledgeBase
+      ) {
+        throw new ApiError(
+          403,
+          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+        );
+      }
+
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -597,6 +608,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           "At least one team must be selected for team-scoped connectors",
+        );
+      }
+
+      if (
+        nextVisibility === "team-scoped" &&
+        connector.visibility !== "team-scoped" &&
+        !config.enterpriseFeatures.knowledgeBase
+      ) {
+        throw new ApiError(
+          403,
+          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
         );
       }
 

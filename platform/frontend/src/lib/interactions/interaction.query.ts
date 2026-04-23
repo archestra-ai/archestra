@@ -17,11 +17,12 @@ const {
   getUniqueUserIds,
 } = archestraApiSdk;
 
-function isUuid(value: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(value);
-}
+const isSessionId = (value: string): boolean => {
+  // Either <UUID>, or scheduled-<UUID>
+  const sessionIdRegex =
+    /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return sessionIdRegex.test(value);
+};
 
 export function useInteractions({
   profileId,
@@ -196,11 +197,11 @@ export function useInteractionSessions({
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
-  // If the search value is a UUID, treat it as an exact sessionId filter instead
-  // of a free-text search. Explicit sessionId from the caller always wins.
-  const searchIsUuid = !!search && isUuid(search);
-  const effectiveSessionId = sessionId ?? (searchIsUuid ? search : undefined);
-  const effectiveSearch = searchIsUuid ? undefined : search;
+  // If the search value is a sessionId, we want to treat it as a sessionId search instead
+  const isSessionIdSearch = search ? isSessionId(search) : false;
+  const effectiveSessionId =
+    sessionId ?? (isSessionIdSearch ? search : undefined);
+  const effectiveSearch = isSessionIdSearch ? undefined : search;
 
   return useQuery({
     queryKey: [

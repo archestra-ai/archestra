@@ -13,6 +13,7 @@ const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
 const DROPBOX = z.literal("dropbox");
 const ASANA = z.literal("asana");
+const OUTLINE = z.literal("outline");
 const LINEAR = z.literal("linear");
 const SALESFORCE = z.literal("salesforce");
 
@@ -28,6 +29,7 @@ export const ConnectorTypeSchema = z.union([
   DROPBOX,
   ASANA,
   LINEAR,
+  OUTLINE,
   SALESFORCE,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
@@ -341,6 +343,25 @@ export const DropboxCheckpointSchema = z.object({
 });
 export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
 
+// ===== Outline Config & Checkpoint =====
+
+export const OutlineConfigSchema = z.object({
+  type: OUTLINE,
+  outlineUrl: connectorUrlSchema,
+  collectionIds: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+});
+export type OutlineConfig = z.infer<typeof OutlineConfigSchema>;
+
+export const OutlineCheckpointSchema = z.object({
+  type: OUTLINE,
+  syncStart: z.string().optional(),
+  lastCollectionId: z.string().optional(),
+  lastDocumentId: z.string().optional(),
+  lastSyncedAt: z.string().optional(),
+});
+export type OutlineCheckpoint = z.infer<typeof OutlineCheckpointSchema>;
+
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
@@ -353,6 +374,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   DropboxConfigSchema,
   AsanaConfigSchema,
   LinearConfigSchema,
+  OutlineConfigSchema,
   SalesforceConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
@@ -369,6 +391,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   DropboxCheckpointSchema,
   AsanaCheckpointSchema,
   LinearCheckpointSchema,
+  OutlineCheckpointSchema,
   SalesforceCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;

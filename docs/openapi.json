@@ -99442,6 +99442,12 @@
                                     {
                                       "type": "string",
                                       "enum": [
+                                        "outline"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
                                         "salesforce"
                                       ]
                                     }
@@ -101285,6 +101291,12 @@
                 {
                   "type": "string",
                   "enum": [
+                    "outline"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
                     "salesforce"
                   ]
                 }
@@ -101402,6 +101414,12 @@
                                 "type": "string",
                                 "enum": [
                                   "linear"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "outline"
                                 ]
                               },
                               {
@@ -101865,6 +101883,32 @@
                                 "required": [
                                   "type",
                                   "linearApiUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "outline"
+                                    ]
+                                  },
+                                  "outlineUrl": {},
+                                  "collectionIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "outlineUrl"
                                 ],
                                 "additionalProperties": false
                               },
@@ -102397,6 +102441,12 @@
                       {
                         "type": "string",
                         "enum": [
+                          "outline"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
                           "salesforce"
                         ]
                       }
@@ -102864,6 +102914,33 @@
                           "type": {
                             "type": "string",
                             "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
                               "salesforce"
                             ]
                           },
@@ -103031,6 +103108,12 @@
                           "type": "string",
                           "enum": [
                             "linear"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         },
                         {
@@ -103494,6 +103577,32 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         },
@@ -103974,6 +104083,12 @@
                         {
                           "type": "string",
                           "enum": [
+                            "outline"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
                             "salesforce"
                           ]
                         }
@@ -104432,6 +104547,32 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         },
@@ -105287,6 +105428,33 @@
                           "type": {
                             "type": "string",
                             "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
                               "salesforce"
                             ]
                           },
@@ -105452,6 +105620,12 @@
                           "type": "string",
                           "enum": [
                             "linear"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         },
                         {
@@ -105915,6 +106089,32 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         },

@@ -311,4 +311,370 @@ describe("clone agent route", () => {
 
     expect(response.statusCode).toBe(403);
   });
+
+  test("clones agent with empty associations", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Minimal Agent",
+      scope: "personal",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.id).not.toBe(sourceAgent.id);
+    expect(cloned.name).toBe(`Copy of ${sourceAgent.name}`);
+    expect(cloned.labels).toEqual([]);
+    expect(cloned.knowledgeBaseIds).toEqual([]);
+    expect(cloned.connectorIds).toEqual([]);
+    expect(cloned.tools).toEqual([]);
+  });
+
+  test("clones agent with multiple teams", async ({
+    makeInternalAgent,
+    makeTeam,
+  }) => {
+    const team1 = await makeTeam(organizationId, user.id);
+    const team2 = await makeTeam(organizationId, user.id);
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Multi-Team Agent",
+      scope: "team",
+      teams: [team1.id, team2.id],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.teams.map((t) => t.id)).toEqual(
+      expect.arrayContaining([team1.id, team2.id]),
+    );
+  });
+
+  test("clones all three built-in agent types", async ({
+    makeInternalAgent,
+  }) => {
+    const agentTypes = ["profile", "mcp_gateway", "llm_proxy"] as const;
+
+    for (const agentType of agentTypes) {
+      const sourceAgent = await makeInternalAgent({
+        organizationId,
+        name: `${agentType} Agent`,
+        agentType,
+        scope: "org",
+        teams: [],
+        labels: [],
+        knowledgeBaseIds: [],
+        connectorIds: [],
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/agents/${sourceAgent.id}/clone`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const cloned = response.json() as Agent;
+
+      expect(cloned.agentType).toBe(agentType);
+      expect(cloned.name).toBe(`Copy of ${sourceAgent.name}`);
+    }
+  });
+
+  test("returns 404 for non-existent agent", async () => {
+    // Use a valid, non-nil UUID so the request passes params validation and
+    // reaches the handler (nil UUIDs may be rejected as invalid).
+    const fakeId = "11111111-1111-4111-8111-111111111111";
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${fakeId}/clone`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("clones passthroughHeaders", async ({ makeInternalAgent }) => {
+    const headers = ["X-Custom-Header", "X-Another-Header"];
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Headers Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      passthroughHeaders: headers,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.passthroughHeaders).toEqual(headers);
+  });
+
+  test("clones incoming email settings", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Email Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "private",
+      incomingEmailAllowedDomain: "example.com",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.incomingEmailEnabled).toBe(true);
+    expect(cloned.incomingEmailSecurityMode).toBe("private");
+    expect(cloned.incomingEmailAllowedDomain).toBe("example.com");
+  });
+
+  test("clones LLM API key and model", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "LLM Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      llmApiKeyId: null,
+      llmModel: "gpt-4",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.llmApiKeyId).toBeNull();
+    expect(cloned.llmModel).toBe("gpt-4");
+  });
+
+  test("clones identityProviderId for MCP gateway", async ({
+    makeInternalAgent,
+  }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "MCP Gateway",
+      agentType: "mcp_gateway",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      identityProviderId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.identityProviderId).toBeNull();
+  });
+
+  test("clones agent with all suggested prompts", async ({
+    makeInternalAgent,
+  }) => {
+    const suggestedPrompts = [
+      { summaryTitle: "Summarize", prompt: "Summarize this" },
+      { summaryTitle: "Analyze", prompt: "Analyze this" },
+      { summaryTitle: "Explain", prompt: "Explain this" },
+    ];
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Prompts Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.suggestedPrompts).toEqual(suggestedPrompts);
+  });
+
+  test("clones agent with icon", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Icon Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      icon: "robot",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.icon).toBe("robot");
+  });
+
+  test("clones agent with description", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Described Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      description: "This is a test agent with a description",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.description).toBe("This is a test agent with a description");
+  });
+
+  test("clones agent with system prompt", async ({ makeInternalAgent }) => {
+    const systemPrompt = "You are a helpful assistant.";
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Prompt Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      systemPrompt,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.systemPrompt).toBe(systemPrompt);
+  });
+
+  test("clones agent with considerContextUntrusted", async ({
+    makeInternalAgent,
+  }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Untrusted Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      considerContextUntrusted: true,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.considerContextUntrusted).toBe(true);
+  });
+
+  test("clones agent with multiple labels", async ({ makeInternalAgent }) => {
+    const labels = [
+      { key: "env", value: "test" },
+      { key: "team", value: "backend" },
+      { key: "priority", value: "high" },
+    ];
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Labeled Agent",
+      scope: "org",
+      teams: [],
+      labels,
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    // Compare labels by key-value pairs (API response includes keyId/valueId)
+    const clonedKeyValues = cloned.labels
+      .map((l) => ({ key: l.key, value: l.value }))
+      .sort((a, b) => `${a.key}:${a.value}`.localeCompare(`${b.key}:${b.value}`));
+    const expectedKeyValues = [...labels].sort((a, b) =>
+      `${a.key}:${a.value}`.localeCompare(`${b.key}:${b.value}`),
+    );
+    expect(clonedKeyValues).toEqual(expectedKeyValues);
+  });
 });

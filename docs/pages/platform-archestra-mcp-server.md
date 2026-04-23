@@ -1436,6 +1436,74 @@ Required RBAC permission: `knowledgeSource:update`
 | `agent_id` | `string` | Yes | Agent ID. |
 
 
+### Memory
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `list_my_memory` | List approved user-scope memory items for the current user only. | `memory:read` |
+| `propose_memory_candidate` | Propose a new user-scope memory candidate. | `memory:create` |
+
+#### list_my_memory
+
+Required RBAC permission: `memory:read`
+
+This tool takes no arguments.
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `memoryItems` | `object[]` | Yes | Approved user-scope memory items owned by the current user. |
+| `memoryItems[].id` | `string` | Yes | Memory item id. |
+| `memoryItems[].scopeType` | `"user" \| "team" \| "organization"` | Yes | Memory scope type. |
+| `memoryItems[].scopeId` | `string` | Yes | Memory scope id. |
+| `memoryItems[].kind` | `"preference" \| "profile_fact" \| "instruction" \| "team_convention" \| "org_fact"` | Yes | Memory kind. |
+| `memoryItems[].status` | `"candidate" \| "approved" \| "rejected" \| "archived"` | Yes | Memory status. |
+| `memoryItems[].content` | `string` | Yes | Memory content. |
+| `memoryItems[].policyFlags` | `string[]` | Yes | Policy flags associated with the memory item. |
+| `memoryItems[].createdBy` | `string \| null` | Yes | User id that created the candidate, if set. |
+| `memoryItems[].reviewedBy` | `string \| null` | Yes | User id that reviewed the candidate, if set. |
+| `memoryItems[].confidenceBand` | `"low" \| "medium" \| "high" \| null` | Yes | Confidence band, if available. |
+| `memoryItems[].language` | `string \| null` | Yes | Language tag, if available. |
+| `memoryItems[].createdAt` | `string` | Yes | Creation timestamp in ISO format. |
+| `memoryItems[].updatedAt` | `string` | Yes | Update timestamp in ISO format. |
+| `memoryItems[].reviewedAt` | `string \| null` | Yes | Review timestamp in ISO format, if available. |
+| `memoryItems[].lastVerifiedAt` | `string \| null` | Yes | Verification timestamp in ISO format, if available. |
+| `memoryItems[].expiresAt` | `string \| null` | Yes | Expiry timestamp in ISO format, if available. |
+
+#### propose_memory_candidate
+
+Required RBAC permission: `memory:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `kind` | `"preference" \| "profile_fact" \| "instruction" \| "team_convention" \| "org_fact"` | Yes | Candidate memory kind. |
+| `content` | `string` | Yes | Proposed durable memory content. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `memoryItem` | `object` | Yes | Created candidate memory item. |
+| `memoryItem.id` | `string` | Yes | Memory item id. |
+| `memoryItem.scopeType` | `"user" \| "team" \| "organization"` | Yes | Memory scope type. |
+| `memoryItem.scopeId` | `string` | Yes | Memory scope id. |
+| `memoryItem.kind` | `"preference" \| "profile_fact" \| "instruction" \| "team_convention" \| "org_fact"` | Yes | Memory kind. |
+| `memoryItem.status` | `"candidate" \| "approved" \| "rejected" \| "archived"` | Yes | Memory status. |
+| `memoryItem.content` | `string` | Yes | Memory content. |
+| `memoryItem.policyFlags` | `string[]` | Yes | Policy flags associated with the memory item. |
+| `memoryItem.createdBy` | `string \| null` | Yes | User id that created the candidate, if set. |
+| `memoryItem.reviewedBy` | `string \| null` | Yes | User id that reviewed the candidate, if set. |
+| `memoryItem.confidenceBand` | `"low" \| "medium" \| "high" \| null` | Yes | Confidence band, if available. |
+| `memoryItem.language` | `string \| null` | Yes | Language tag, if available. |
+| `memoryItem.createdAt` | `string` | Yes | Creation timestamp in ISO format. |
+| `memoryItem.updatedAt` | `string` | Yes | Update timestamp in ISO format. |
+| `memoryItem.reviewedAt` | `string \| null` | Yes | Review timestamp in ISO format, if available. |
+| `memoryItem.lastVerifiedAt` | `string \| null` | Yes | Verification timestamp in ISO format, if available. |
+| `memoryItem.expiresAt` | `string \| null` | Yes | Expiry timestamp in ISO format, if available. |
+
 ### Chat
 
 | Tool | Description | Required RBAC Permission |

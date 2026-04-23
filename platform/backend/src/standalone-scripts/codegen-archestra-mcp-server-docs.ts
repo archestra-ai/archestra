@@ -28,6 +28,7 @@ enum ToolGroup {
   Policies = "Policies",
   ToolAssignment = "Tool Assignment",
   KnowledgeManagement = "Knowledge Management",
+  Memory = "Memory",
   Chat = "Chat",
   Meta = "Meta",
 }
@@ -42,8 +43,9 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Policies]: 6,
   [ToolGroup.ToolAssignment]: 7,
   [ToolGroup.KnowledgeManagement]: 8,
-  [ToolGroup.Chat]: 9,
-  [ToolGroup.Meta]: 10,
+  [ToolGroup.Memory]: 9,
+  [ToolGroup.Chat]: 10,
+  [ToolGroup.Meta]: 11,
 };
 
 /**
@@ -118,6 +120,9 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   unassign_knowledge_base_from_agent: ToolGroup.KnowledgeManagement,
   assign_knowledge_connector_to_agent: ToolGroup.KnowledgeManagement,
   unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
+
+  list_my_memory: ToolGroup.Memory,
+  propose_memory_candidate: ToolGroup.Memory,
 
   todo_write: ToolGroup.Chat,
   artifact_write: ToolGroup.Chat,

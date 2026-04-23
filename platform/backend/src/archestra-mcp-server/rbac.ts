@@ -116,6 +116,10 @@ export const TOOL_PERMISSIONS: Record<
     action: "update",
   },
 
+  // Memory
+  list_my_memory: { resource: "memory", action: "read" },
+  propose_memory_candidate: { resource: "memory", action: "create" },
+
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
   artifact_write: null,

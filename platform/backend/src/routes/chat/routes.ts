@@ -650,10 +650,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                 }
 
+                // toUIMessageStream invokes onError twice for the same upstream
+                // error (once when formatting the error chunk's errorText, once
+                // as a notification when the chunk is walked downstream). Guard
+                // so we don't persist or log the same error twice.
+                let chatErrorHandled = false;
+
                 writer.merge(
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
+                      if (chatErrorHandled) {
+                        return error instanceof Error ? error.message : "";
+                      }
+                      chatErrorHandled = true;
                       // Claim persistence before the async work below starts,
                       // otherwise onFinish can race and also persist (duplicates).
                       const shouldPersist =

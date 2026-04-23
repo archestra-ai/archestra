@@ -179,7 +179,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         description:
-          "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
+          "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         tags: ["A2A"],
         params: z.object({
           agentId: UuidIdSchema,

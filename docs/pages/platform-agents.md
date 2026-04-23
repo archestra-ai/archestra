@@ -45,8 +45,8 @@ See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works an
 
 A2A is a JSON-RPC 2.0 gateway for invoking agents programmatically from external systems. Each agent exposes two endpoints:
 
-- **Agent Card Discovery**: `GET /v1/a2a/:promptId/.well-known/agent.json`
-- **Message Execution**: `POST /v1/a2a/:promptId`
+- **Agent Card Discovery**: `GET /v1/a2a/:agentId/.well-known/agent.json`
+- **Message Execution**: `POST /v1/a2a/:agentId`
 
 ### Authentication
 
@@ -61,7 +61,7 @@ The discovery endpoint returns an Agent Card describing the agent's name, descri
 Send JSON-RPC 2.0 requests to execute the agent:
 
 ```bash
-curl -X POST "https://api.example.com/v1/a2a/<promptId>" \
+curl -X POST "https://api.example.com/v1/a2a/<agentId>" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{

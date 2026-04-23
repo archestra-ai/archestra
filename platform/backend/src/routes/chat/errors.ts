@@ -490,13 +490,13 @@ function parseCohereError(responseBody: string): ParsedCohereError | null {
 
 function mapCohereErrorToCode(
   statusCode: number | undefined,
-  parsedError: ParsedCohereError | null,
+  _parsedError: ParsedCohereError | null,
 ): ChatErrorCode {
   // Cohere returns bodies shaped `{ message: string }` with no structured
   // code for context-window overflow. The consistent signal is the
   // "too many tokens" prefix (e.g. "too many tokens: total number of
   // tokens in the prompt cannot exceed 4081 - received 4292.").
-  if (parsedError?.message?.toLowerCase().includes("too many tokens")) {
+  if (_parsedError?.message?.toLowerCase().includes("too many tokens")) {
     return ChatErrorCode.ContextTooLong;
   }
   // Cohere uses standard HTTP status codes

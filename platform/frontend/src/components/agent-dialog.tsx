@@ -154,6 +154,7 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
     };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type ToolExposureMode = "full" | "search_and_run_only";
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
@@ -622,6 +623,8 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [toolExposureMode, setToolExposureMode] =
+    useState<ToolExposureMode>("full");
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
@@ -680,6 +683,7 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
+        setToolExposureMode(agentData.toolExposureMode ?? "full");
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -712,6 +716,7 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
+        setToolExposureMode("full");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -935,6 +940,7 @@ export function AgentDialog({
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
               connectorIds: connectorIds,
+              toolExposureMode,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -971,6 +977,7 @@ export function AgentDialog({
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
             connectorIds: connectorIds,
+            toolExposureMode,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1071,6 +1078,7 @@ export function AgentDialog({
     supportsIdentityProvider,
     passthroughHeaders,
     deleteAgent,
+    toolExposureMode,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1442,6 +1450,34 @@ export function AgentDialog({
                         for you
                       </p>
                     )}
+                    <div className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="search-and-run-tool-mode">
+                            Search-and-run tool mode
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Expose only the built-in search and dispatch tools.
+                            Other assigned tools stay hidden from MCP
+                            `tools/list`, but remain searchable and runnable.
+                          </p>
+                        </div>
+                        <Switch
+                          id="search-and-run-tool-mode"
+                          checked={toolExposureMode === "search_and_run_only"}
+                          onCheckedChange={(checked) =>
+                            setToolExposureMode(
+                              checked ? "search_and_run_only" : "full",
+                            )
+                          }
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {toolExposureMode === "search_and_run_only"
+                          ? "The built-in search_tools and run_tool tools are enabled implicitly by this mode."
+                          : "All assigned tools are exposed directly through tools/list."}
+                      </p>
+                    </div>
                     <AgentToolsEditor
                       ref={agentToolsEditorRef}
                       agentId={agent?.id}

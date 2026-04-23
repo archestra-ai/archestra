@@ -4,6 +4,7 @@ import {
 } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
+  filterSelectableCatalogTools,
   getDefaultArchestraToolIds,
   sortAndFilterTools,
   sortCatalogItems,
@@ -105,6 +106,47 @@ describe("getDefaultArchestraToolIds", () => {
     expect(result?.toolIds).toEqual(
       new Set(brandedDefaultTools.map((tool) => tool.id)),
     );
+  });
+});
+
+describe("filterSelectableCatalogTools", () => {
+  it("hides search_tools and run_tool from the Archestra catalog", () => {
+    const tools = [
+      makeTool("search-tool-id", "archestra__search_tools"),
+      makeTool("run-tool-id", "archestra__run_tool"),
+      makeTool("other-tool-id", "archestra__whoami"),
+    ];
+
+    expect(
+      filterSelectableCatalogTools(ARCHESTRA_MCP_CATALOG_ID, tools).map(
+        (tool) => tool.id,
+      ),
+    ).toEqual(["other-tool-id"]);
+  });
+
+  it("hides branded search_tools and run_tool from the Archestra catalog", () => {
+    const tools = [
+      makeTool("search-tool-id", "sparky__search_tools"),
+      makeTool("run-tool-id", "sparky__run_tool"),
+      makeTool("other-tool-id", "sparky__whoami"),
+    ];
+
+    expect(
+      filterSelectableCatalogTools(ARCHESTRA_MCP_CATALOG_ID, tools).map(
+        (tool) => tool.id,
+      ),
+    ).toEqual(["other-tool-id"]);
+  });
+
+  it("does not hide similarly named third-party tools", () => {
+    const tools = [
+      makeTool("third-party-search", "context7__search_tools"),
+      makeTool("third-party-run", "context7__run_tool"),
+    ];
+
+    expect(
+      filterSelectableCatalogTools("context7", tools).map((tool) => tool.id),
+    ).toEqual(["third-party-search", "third-party-run"]);
   });
 });
 

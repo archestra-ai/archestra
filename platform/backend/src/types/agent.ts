@@ -40,6 +40,9 @@ export type AgentType = z.infer<typeof AgentTypeSchema>;
 export const AgentScopeSchema = ResourceVisibilityScopeSchema;
 export type AgentScope = ResourceVisibilityScope;
 
+export const ToolExposureModeSchema = z.enum(["full", "search_and_run_only"]);
+export type ToolExposureMode = z.infer<typeof ToolExposureModeSchema>;
+
 export const AgentScopeFilterSchema = z.enum([
   "personal",
   "team",
@@ -114,6 +117,7 @@ const selectExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
+  toolExposureMode: ToolExposureModeSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
 };
@@ -122,6 +126,7 @@ const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
+  toolExposureMode: ToolExposureModeSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
 };

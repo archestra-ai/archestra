@@ -17,8 +17,20 @@ An agent can include:
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
 - one or more assigned tools
+- a tool exposure mode that can either expose every assigned tool or only `search_tools` and `run_tool`
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
+
+## Tool Exposure
+
+By default, an agent exposes every assigned tool through MCP `tools/list`.
+
+For larger toolsets, you can switch the agent to **search and run only** mode. In that mode, MCP clients only see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools. Those two tools are enabled implicitly by the mode and do not need normal tool assignment. All other assigned tools stay available behind the scenes:
+
+- `search_tools` can still discover them
+- `run_tool` can still execute them
+
+Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
 
 ## Invocation Paths
 

@@ -1,6 +1,9 @@
 import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -298,6 +301,125 @@ describe("MCP Gateway (stateless mode)", () => {
           type: "text",
           text: expect.stringContaining(agent.id),
         }),
+      ]),
+    );
+  });
+
+  test("hides directly assigned tools from tools/list when toolExposureMode is search_and_run_only", async ({
+    makeAgent,
+    makeOrganization,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/list",
+        params: {},
+        id: 2,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const toolNames = response
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name);
+    expect(toolNames.sort()).toEqual(
+      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+    );
+    expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+  });
+
+  test("exposes implicit search_tools and run_tool without manual assignment when toolExposureMode is search_and_run_only", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const listResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/list",
+        params: {},
+        id: 2,
+      },
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(
+      listResponse
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name),
+    ).toEqual(
+      expect.arrayContaining([
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
       ]),
     );
   });

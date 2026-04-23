@@ -10,7 +10,12 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
+import type {
+  AgentScope,
+  AgentType,
+  BuiltInAgentConfig,
+  ToolExposureMode,
+} from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import usersTable from "./user";
@@ -94,6 +99,12 @@ const agentsTable = pgTable(
 
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),
+
+    /** Whether tools/list exposes the full tool menu or only meta-discovery tools */
+    toolExposureMode: text("tool_exposure_mode")
+      .$type<ToolExposureMode>()
+      .notNull()
+      .default("full"),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(

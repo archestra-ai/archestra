@@ -33,6 +33,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "LLM",
     description: "Configure platform-wide LLM defaults and behavior.",
   },
+  "/settings/memory": {
+    title: "Memory",
+    description:
+      "Review, approve, and manage durable memory candidates across user, team, and organization scopes.",
+  },
   "/settings/mcp": {
     title: "MCP",
     description:

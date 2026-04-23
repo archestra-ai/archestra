@@ -117,6 +117,13 @@ export const E2eTestId = {
   ImpersonationBanner: "impersonation-banner",
   ImpersonationStopButton: "impersonation-stop-button",
   ImpersonationViewAsButton: "impersonation-view-as-button",
+  // Memory
+  MemoryTable: "memory-table",
+  MemoryApproveButton: "memory-approve-button",
+  MemoryRejectButton: "memory-reject-button",
+  MemoryCreateButton: "memory-create-button",
+  MemoryScopeFilter: "memory-scope-filter",
+  MemoryStatusTabs: "memory-status-tabs",
 } as const;
 
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];

@@ -93,6 +93,7 @@ describe("useSettingsTabs", () => {
       apiKey: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
+      memory: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -105,6 +106,7 @@ describe("useSettingsTabs", () => {
       expect(labels).toContain("Agents");
       expect(labels).toContain("MCP");
       expect(labels).toContain("LLM");
+      expect(labels).toContain("Memory");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
       expect(labels).toContain("Roles");
@@ -115,6 +117,7 @@ describe("useSettingsTabs", () => {
   it("shows LLM tab when user has llmSettings:read permission", async () => {
     mockPermissions = {
       llmSettings: ["read"],
+      memory: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -137,6 +140,7 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).not.toContain("LLM");
+      expect(labels).not.toContain("Memory");
     });
   });
 
@@ -253,6 +257,7 @@ describe("useSettingsTabs", () => {
       apiKey: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
+      memory: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -268,6 +273,7 @@ describe("useSettingsTabs", () => {
         "MCP",
         "LLM",
         "Connection",
+        "Memory",
         "Users",
         "Teams",
         "Roles",

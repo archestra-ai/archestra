@@ -46,7 +46,10 @@ test("can create and delete an agent", {
 test("can create and delete an LLM proxy", {
   tag: ["@firefox", "@webkit"],
 }, async ({ page, makeRandomString, goToPage }) => {
-  test.skip(true, "Currently failing: 'Connect via ...' dialog not visible after create (agents.spec.ts:65)");
+  test.skip(
+    true,
+    "Currently failing: 'Connect via ...' dialog not visible after create (agents.spec.ts:65)",
+  );
   test.setTimeout(120_000);
 
   const PROXY_NAME = makeRandomString(10, "Test LLM Proxy");
@@ -96,7 +99,10 @@ test("can create and delete an LLM proxy", {
 test("can create and delete an MCP gateway", {
   tag: ["@firefox", "@webkit"],
 }, async ({ page, makeRandomString, goToPage }) => {
-  test.skip(true, "Currently failing in CI (agents.spec.ts:95 MCP gateway create/delete)");
+  test.skip(
+    true,
+    "Currently failing in CI (agents.spec.ts:95 MCP gateway create/delete)",
+  );
   test.setTimeout(120_000);
 
   const GATEWAY_NAME = makeRandomString(10, "Test MCP Gateway");

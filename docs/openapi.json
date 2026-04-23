@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.21"
+    "version": "1.2.22"
   },
   "components": {
     "schemas": {
@@ -60879,86 +60879,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "lastChatError": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "code": {
-                            "type": "string",
-                            "enum": [
-                              "rate_limit",
-                              "authentication",
-                              "permission_denied",
-                              "invalid_request",
-                              "not_found",
-                              "context_too_long",
-                              "content_filtered",
-                              "server_error",
-                              "network_error",
-                              "unknown"
-                            ]
-                          },
-                          "message": {
-                            "type": "string"
-                          },
-                          "isRetryable": {
-                            "type": "boolean"
-                          },
-                          "sessionId": {
-                            "type": "string"
-                          },
-                          "traceId": {
-                            "type": "string"
-                          },
-                          "spanId": {
-                            "type": "string"
-                          },
-                          "originalError": {
-                            "type": "object",
-                            "properties": {
-                              "provider": {
-                                "type": "string",
-                                "enum": [
-                                  "openai",
-                                  "gemini",
-                                  "anthropic",
-                                  "bedrock",
-                                  "cohere",
-                                  "cerebras",
-                                  "mistral",
-                                  "perplexity",
-                                  "groq",
-                                  "xai",
-                                  "openrouter",
-                                  "vllm",
-                                  "ollama",
-                                  "zhipuai",
-                                  "deepseek",
-                                  "minimax",
-                                  "azure"
-                                ]
-                              },
-                              "status": {
-                                "type": "number"
-                              },
-                              "message": {
-                                "type": "string"
-                              },
-                              "type": {
-                                "type": "string"
-                              },
-                              "raw": {}
-                            },
-                            "additionalProperties": false
-                          }
-                        },
-                        "required": [
-                          "code",
-                          "message",
-                          "isRetryable"
-                        ],
-                        "additionalProperties": false
-                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -61036,6 +60956,114 @@
                       "messages": {
                         "type": "array",
                         "items": {}
+                      },
+                      "chatErrors": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "conversationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "code": {
+                                  "type": "string",
+                                  "enum": [
+                                    "rate_limit",
+                                    "authentication",
+                                    "permission_denied",
+                                    "invalid_request",
+                                    "not_found",
+                                    "context_too_long",
+                                    "content_filtered",
+                                    "server_error",
+                                    "network_error",
+                                    "unknown"
+                                  ]
+                                },
+                                "message": {
+                                  "type": "string"
+                                },
+                                "isRetryable": {
+                                  "type": "boolean"
+                                },
+                                "sessionId": {
+                                  "type": "string"
+                                },
+                                "traceId": {
+                                  "type": "string"
+                                },
+                                "spanId": {
+                                  "type": "string"
+                                },
+                                "originalError": {
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "anthropic",
+                                        "bedrock",
+                                        "cohere",
+                                        "cerebras",
+                                        "mistral",
+                                        "perplexity",
+                                        "groq",
+                                        "xai",
+                                        "openrouter",
+                                        "vllm",
+                                        "ollama",
+                                        "zhipuai",
+                                        "deepseek",
+                                        "minimax",
+                                        "azure"
+                                      ]
+                                    },
+                                    "status": {
+                                      "type": "number"
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "raw": {}
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "code",
+                                "message",
+                                "isRetryable"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "conversationId",
+                            "error",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -61050,13 +61078,13 @@
                       "hasCustomToolSelection",
                       "todoList",
                       "artifact",
-                      "lastChatError",
                       "pinnedAt",
                       "createdAt",
                       "updatedAt",
                       "agent",
                       "share",
-                      "messages"
+                      "messages",
+                      "chatErrors"
                     ],
                     "additionalProperties": false
                   }
@@ -61444,86 +61472,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -61601,6 +61549,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -61615,13 +61671,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }
@@ -61967,86 +62023,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -62124,6 +62100,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -62138,13 +62222,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }
@@ -62550,86 +62634,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -62707,6 +62711,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -62721,13 +62833,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }
@@ -64494,86 +64606,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -64652,6 +64684,114 @@
                       "type": "array",
                       "items": {}
                     },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "sharedByUserId": {
                       "type": "string"
                     }
@@ -64668,13 +64808,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
                     "messages",
+                    "chatErrors",
                     "sharedByUserId"
                   ],
                   "additionalProperties": false
@@ -65041,86 +65181,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -65198,6 +65258,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -65212,13 +65380,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }
@@ -65580,86 +65748,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -65737,6 +65825,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -65751,13 +65947,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }
@@ -66129,86 +66325,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -66286,6 +66402,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -66300,13 +66524,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }
@@ -99220,6 +99444,12 @@
                                       "enum": [
                                         "slack"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "outline"
+                                      ]
                                     }
                                   ]
                                 }
@@ -101063,6 +101293,12 @@
                   "enum": [
                     "slack"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "outline"
+                  ]
                 }
               ]
             },
@@ -101184,6 +101420,12 @@
                                 "type": "string",
                                 "enum": [
                                   "slack"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "outline"
                                 ]
                               }
                             ]
@@ -101674,6 +101916,32 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "outline"
+                                    ]
+                                  },
+                                  "outlineUrl": {},
+                                  "collectionIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "outlineUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -102174,6 +102442,12 @@
                         "enum": [
                           "slack"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "outline"
+                        ]
                       }
                     ]
                   },
@@ -102664,6 +102938,33 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
                       }
                     ]
                   },
@@ -102812,6 +103113,12 @@
                           "type": "string",
                           "enum": [
                             "slack"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         }
                       ]
@@ -103302,6 +103609,32 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -103750,6 +104083,12 @@
                           "enum": [
                             "slack"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
+                          ]
                         }
                       ]
                     },
@@ -104239,6 +104578,32 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -105085,6 +105450,33 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
                       }
                     ]
                   },
@@ -105231,6 +105623,12 @@
                           "type": "string",
                           "enum": [
                             "slack"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         }
                       ]
@@ -105721,6 +106119,32 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -131620,6 +132044,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -131706,6 +132167,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -132049,6 +132511,41 @@
                       ]
                     }
                   },
+                  "onboardingWizard": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 25
+                      },
+                      "pages": {
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "content": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "content"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "pages"
+                    ]
+                  },
                   "chatErrorSupportMessage": {
                     "nullable": true,
                     "type": "string",
@@ -132286,6 +132783,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -132372,6 +132906,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -132712,6 +133247,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -132734,6 +133306,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "animateChatPlaceholders"
@@ -133199,6 +133772,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -133285,6 +133895,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -133770,6 +134381,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -133856,6 +134504,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -134359,6 +135008,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -134445,6 +135131,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -134956,6 +135643,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -135042,6 +135766,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -135511,6 +136236,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -135597,6 +136359,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -136082,6 +136845,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -136168,6 +136968,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -136620,6 +137421,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -136706,6 +137544,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -137453,6 +138292,43 @@
                         "additionalProperties": false
                       }
                     },
+                    "onboardingWizard": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 25
+                        },
+                        "pages": {
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "pages"
+                      ],
+                      "additionalProperties": false
+                    },
                     "chatPlaceholders": {
                       "nullable": true,
                       "type": "array",
@@ -137539,6 +138415,7 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
+                    "onboardingWizard",
                     "chatPlaceholders",
                     "animateChatPlaceholders",
                     "iconLogo",
@@ -143361,86 +144238,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "lastChatError": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "enum": [
-                            "rate_limit",
-                            "authentication",
-                            "permission_denied",
-                            "invalid_request",
-                            "not_found",
-                            "context_too_long",
-                            "content_filtered",
-                            "server_error",
-                            "network_error",
-                            "unknown"
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "isRetryable": {
-                          "type": "boolean"
-                        },
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "traceId": {
-                          "type": "string"
-                        },
-                        "spanId": {
-                          "type": "string"
-                        },
-                        "originalError": {
-                          "type": "object",
-                          "properties": {
-                            "provider": {
-                              "type": "string",
-                              "enum": [
-                                "openai",
-                                "gemini",
-                                "anthropic",
-                                "bedrock",
-                                "cohere",
-                                "cerebras",
-                                "mistral",
-                                "perplexity",
-                                "groq",
-                                "xai",
-                                "openrouter",
-                                "vllm",
-                                "ollama",
-                                "zhipuai",
-                                "deepseek",
-                                "minimax",
-                                "azure"
-                              ]
-                            },
-                            "status": {
-                              "type": "number"
-                            },
-                            "message": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "raw": {}
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "isRetryable"
-                      ],
-                      "additionalProperties": false
-                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -143518,6 +144315,114 @@
                     "messages": {
                       "type": "array",
                       "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "not_found",
+                                  "context_too_long",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "azure"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -143532,13 +144437,13 @@
                     "hasCustomToolSelection",
                     "todoList",
                     "artifact",
-                    "lastChatError",
                     "pinnedAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
                     "share",
-                    "messages"
+                    "messages",
+                    "chatErrors"
                   ],
                   "additionalProperties": false
                 }

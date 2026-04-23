@@ -95,3 +95,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @xenohunter
 - @mohitjeswani01
 - @reverb256
+- @Hetsavani
+- @jnilrac
+- @VitaliyaIoffe
+- @eleijonmarck
+- @kyleskutt-hub
+- @ssiddus

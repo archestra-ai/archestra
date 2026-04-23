@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   GlobalToolPolicy,
+  OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
@@ -120,6 +121,9 @@ const organizationsTable = pgTable("organization", {
 
   /** Optional quick links shown on the new chat page */
   chatLinks: jsonb("chat_links").$type<OrganizationChatLink[]>(),
+
+  /** Optional multi-step onboarding wizard rendered beside chat links on the new chat page */
+  onboardingWizard: jsonb("onboarding_wizard").$type<OnboardingWizard>(),
 
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),

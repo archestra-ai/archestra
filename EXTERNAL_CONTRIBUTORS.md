@@ -86,3 +86,12 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @tigranl
 - @garvae
 - @silentworker101
+- @sasha-ilatovskii
+- @ruslan-korneev
+- @gentlementlegen
+- @janfaiengineer
+- @Aqil-Ahmad
+- @mjkvyjn5wn-ctrl
+- @xenohunter
+- @mohitjeswani01
+- @reverb256

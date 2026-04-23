@@ -40,6 +40,7 @@ import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
+import { OutlineConfigFields } from "./outline-config-fields";
 import { SchedulePicker } from "./schedule-picker";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -116,6 +117,27 @@ export function EditConnectorDialog({
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const emailRequired = needsEmail && isCloud !== false;
+
+  const jiraConfluenceApiTokenLabel = emailRequired
+    ? "API Token"
+    : "API Token / Personal Access Token";
+
+  const apiTokenLabels: Record<ConnectorType, string> = {
+    servicenow: "Password",
+    notion: "Integration Token",
+    sharepoint: "Client Secret",
+    gdrive: "Service Account Key / OAuth Token",
+    dropbox: "Access Token",
+    outline: "API Key",
+    jira: jiraConfluenceApiTokenLabel,
+    confluence: jiraConfluenceApiTokenLabel,
+    github: "Personal Access Token",
+    gitlab: "Personal Access Token",
+    linear: "Personal Access Token",
+    asana: "Personal Access Token",
+  };
+
+  const apiTokenLabel = apiTokenLabels[connectorType];
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     const hasCredentials = values.apiToken.length > 0;
@@ -401,23 +423,7 @@ export function EditConnectorDialog({
             name="apiToken"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>
-                  {connectorType === "servicenow"
-                    ? "Password"
-                    : connectorType === "notion"
-                      ? "Integration Token"
-                      : connectorType === "sharepoint"
-                        ? "Client Secret"
-                        : connectorType === "gdrive"
-                          ? "Service Account Key / OAuth Token"
-                          : connectorType === "dropbox"
-                            ? "Access Token"
-                            : needsEmail
-                              ? emailRequired
-                                ? "API Token"
-                                : "API Token / Personal Access Token"
-                              : "Personal Access Token"}
-                </FormLabel>
+                <FormLabel>{apiTokenLabel}</FormLabel>
                 <FormControl>
                   <Input
                     type="password"
@@ -483,6 +489,9 @@ export function EditConnectorDialog({
                 <DropboxConfigFields control={form.control} />
               )}
               {connectorType === "asana" && <AsanaConfigFields form={form} />}
+              {connectorType === "outline" && (
+                <OutlineConfigFields form={form} />
+              )}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -555,16 +564,6 @@ function getEditUrlConfig(type: ConnectorType): {
           description: "Your ServiceNow instance URL.",
         },
       };
-    case "linear":
-      return {
-        typeLabel: "Linear",
-        urlFields: {
-          fieldName: "config.linearApiUrl",
-          label: "Linear API URL",
-          placeholder: "https://api.linear.app",
-          description: "Linear GraphQL API base URL.",
-        },
-      };
     case "notion":
       return { typeLabel: "Notion", urlFields: null };
     case "gdrive":
@@ -581,8 +580,28 @@ function getEditUrlConfig(type: ConnectorType): {
           description: "Your SharePoint site URL.",
         },
       };
+    case "linear":
+      return {
+        typeLabel: "Linear",
+        urlFields: {
+          fieldName: "config.linearApiUrl",
+          label: "Linear API URL",
+          placeholder: "https://api.linear.app",
+          description: "Linear GraphQL API base URL.",
+        },
+      };
     case "dropbox":
       return { typeLabel: "Dropbox", urlFields: null };
+    case "outline":
+      return {
+        typeLabel: "Outline",
+        urlFields: {
+          fieldName: "config.outlineUrl",
+          label: "Instance URL",
+          placeholder: "https://app.getoutline.com",
+          description: "Your Outline instance URL.",
+        },
+      };
     default:
       return {
         typeLabel: type,

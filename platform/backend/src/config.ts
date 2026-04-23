@@ -760,6 +760,10 @@ const config = {
       contentMaxLength: parseContentMaxLength(
         process.env.ARCHESTRA_OTEL_CONTENT_MAX_LENGTH,
       ),
+      tracesSampleRate: parseSampleRate(
+        process.env.ARCHESTRA_OTEL_TRACES_SAMPLE_RATE,
+        1.0,
+      ),
       verboseTracing: process.env.ARCHESTRA_OTEL_VERBOSE_TRACING === "true",
       traceExporter: {
         url: getOtelExporterOtlpEndpoint(),

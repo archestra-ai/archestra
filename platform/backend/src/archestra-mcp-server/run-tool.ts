@@ -40,7 +40,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
     description:
-      "Dispatch to any tool available to this agent — built-in Archestra tools (e.g. 'whoami', 'get_agent'), agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list. Target-tool RBAC, argument validation, and output validation all still apply.",
+      "Dispatch to any tool available to this agent — built-in Archestra tools (e.g. 'whoami', 'get_agent'), agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Prefer using search_tools first when you need to discover the right exact tool name. Target-tool RBAC, argument validation, and output validation all still apply.",
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;

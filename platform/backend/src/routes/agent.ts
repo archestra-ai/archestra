@@ -16,6 +16,7 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentToolModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
@@ -458,6 +459,149 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(agent);
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/clone",
+    {
+      schema: {
+        operationId: RouteId.CloneAgent,
+        description: "Clone an agent and all its associations",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type for permission checks
+      const sourceAgent = await AgentModel.findById(id, user.id, true);
+      if (!sourceAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Disallow cloning built-in agents (Phase 1 policy)
+      if (sourceAgent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be cloned");
+      }
+
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read + create permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(sourceAgent.agentType, "read");
+        checker.require(sourceAgent.agentType, "create");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions on the source agent
+      const userTeamIds = !checker.isAdmin(sourceAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: sourceAgent.agentType,
+        agentScope: sourceAgent.scope,
+        agentAuthorId: sourceAgent.authorId,
+        agentTeamIds: sourceAgent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Validate knowledgeBaseIds if provided
+      if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
+        if (sourceAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of sourceAgent.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if ((sourceAgent.connectorIds?.length ?? 0) > 0) {
+        if (sourceAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of sourceAgent.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Omit teams if scope is not 'team' — scope takes precedence
+      const cloneTeams =
+        sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
+
+      const created = await AgentModel.create(
+        {
+          organizationId: sourceAgent.organizationId,
+          agentType: sourceAgent.agentType,
+          scope: sourceAgent.scope,
+          teams: cloneTeams,
+          labels: sourceAgent.labels,
+          knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
+          connectorIds: sourceAgent.connectorIds ?? [],
+          suggestedPrompts: sourceAgent.suggestedPrompts ?? [],
+          name: `Copy of ${sourceAgent.name}`,
+          systemPrompt: sourceAgent.systemPrompt,
+          description: sourceAgent.description,
+          icon: sourceAgent.icon,
+          considerContextUntrusted: sourceAgent.considerContextUntrusted,
+          incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
+          incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
+          incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
+          llmApiKeyId: sourceAgent.llmApiKeyId,
+          llmModel: sourceAgent.llmModel,
+          identityProviderId: sourceAgent.identityProviderId,
+          passthroughHeaders: sourceAgent.passthroughHeaders,
+        },
+        sourceAgent.scope === "personal" ? user.id : undefined,
+      );
+
+      // Clone tool assignments (including delegation/subagent tools)
+      await AgentToolModel.cloneAssignments({
+        fromAgentId: sourceAgent.id,
+        toAgentId: created.id,
+      });
+
+      // Return a fully hydrated agent with tools/teams/labels/knowledge assignments
+      const clonedAgent = await AgentModel.findById(created.id, user.id, true);
+      if (!clonedAgent) {
+        throw new ApiError(500, "Failed to load cloned agent");
+      }
+
+      return reply.send(clonedAgent);
     },
   );
 

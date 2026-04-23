@@ -42,6 +42,37 @@ class AgentToolModel {
   // DELEGATION METHODS
   // ============================================================================
 
+  static async cloneAssignments(params: {
+    fromAgentId: string;
+    toAgentId: string;
+  }): Promise<void> {
+    const { fromAgentId, toAgentId } = params;
+
+    const rows = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, fromAgentId));
+
+    if (rows.length === 0) return;
+
+    await db
+      .insert(schema.agentToolsTable)
+      .values(
+        rows.map((r) => ({
+          agentId: toAgentId,
+          toolId: r.toolId,
+          mcpServerId: r.mcpServerId,
+          credentialResolutionMode: r.credentialResolutionMode,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
   /**
    * Assign a delegation to a target agent.
    * Creates the delegation tool if it doesn't exist, then creates the agent_tool assignment.

@@ -49,6 +49,10 @@ No extractor output becomes active memory without human approval. Agents/tools c
 - `conflicts_with_existing`
 - `policy_violation`
 
+## HTTP Client Integration Notes
+
+Endpoints with no request body (`POST /api/memory/:id/approve`, `POST /api/memory/:id/archive`, `POST /api/memory/:id/unarchive`) must NOT include a `Content-Type: application/json` header. Fastify rejects any request that carries `Content-Type: application/json` but has an absent or empty body with a `500` parse error. The generated SDK (via `pnpm codegen:api-client`) handles this correctly because the OpenAPI spec declares no body for those operations; custom HTTP clients must follow the same rule.
+
 ## Out of Scope (Rollout 1)
 - Semantic/vector retrieval for memory
 - Autonomous self-editing of approved memory

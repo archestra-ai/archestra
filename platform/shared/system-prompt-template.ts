@@ -46,6 +46,14 @@ export const SYSTEM_PROMPT_HELPER_EXPRESSIONS = {
   currentTime: toTemplateExpression(SYSTEM_PROMPT_HELPER_NAMES.currentTime),
 } as const;
 
+/**
+ * Appended to rendered system prompts to inject approved durable memory.
+ * The block is omitted when no memory payload is available.
+ */
+export const USER_SYSTEM_PROMPT_MEMORY_BLOCK_TEMPLATE = `{{#if memory}}
+{{memory}}
+{{/if}}`;
+
 export const SYSTEM_PROMPT_HELPERS = [
   {
     expression: SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentDate,
@@ -138,12 +146,14 @@ export interface UserSystemPromptContext {
     email: string;
     teams: string[];
   };
+  memory?: string | null;
 }
 
 export function buildUserSystemPromptContext(params: {
   userName: string;
   userEmail: string;
   userTeams: string[];
+  memory?: string | null;
 }): UserSystemPromptContext {
   return {
     [USER_SYSTEM_PROMPT_CONTEXT_KEY]: {
@@ -151,6 +161,7 @@ export function buildUserSystemPromptContext(params: {
       email: params.userEmail,
       teams: params.userTeams,
     },
+    memory: params.memory ?? null,
   };
 }
 

@@ -6,6 +6,7 @@ import {
   type SupportedProvider,
   TimeInMs,
   type TokenUsage,
+  USER_SYSTEM_PROMPT_MEMORY_BLOCK_TEMPLATE,
 } from "@shared";
 import {
   convertToModelMessages,
@@ -38,6 +39,7 @@ import config from "@/config";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
+import { memoryInjectionBuilder } from "@/memory/injection/injection-builder";
 import {
   AgentModel,
   ConversationChatErrorModel,
@@ -235,25 +237,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         getChatMcpToolUiResourceUris(conversation.agentId),
       ]);
 
-      // Build system prompt from agent's systemPrompt field
-      let systemPrompt: string | undefined;
-
-      // Build template context only when prompts use Handlebars syntax
-      let promptContext: UserSystemPromptContext | null = null;
-      if (promptNeedsRendering(agent.systemPrompt)) {
-        const userTeams = await TeamModel.getUserTeams(user.id);
-        promptContext = buildUserSystemPromptContext({
-          userName: user.name,
-          userEmail: user.email,
-          userTeams: userTeams.map((t) => t.name),
-        });
-      }
-
-      const renderedPrompt = renderSystemPrompt(
-        agent.systemPrompt,
-        promptContext,
-      );
-
       let toolResultInstructions: string = "";
       // Add MCP UI instruction when tools are available
       if (Object.keys(mcpTools).length > 0) {
@@ -264,35 +247,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const toolDenialInstruction =
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
-      systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
-          .filter(Boolean)
-          .join("\n\n") || undefined;
-
       // Use stored provider if available, otherwise detect from model name for backward compatibility
       // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
       // so we can safely use detectProviderFromModel for them.
       const provider = isSupportedProvider(conversation.selectedProvider)
         ? conversation.selectedProvider
         : detectProviderFromModel(conversation.selectedModel);
-
-      logger.info(
-        {
-          conversationId,
-          agentId,
-          userId: user.id,
-          orgId: organizationId,
-          toolCount: Object.keys(mcpTools).length,
-          hasCustomToolSelection: hasCustomSelection,
-          enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
-          model: conversation.selectedModel,
-          provider,
-          providerSource: conversation.selectedProvider ? "stored" : "detected",
-          hasSystemPrompt: !!systemPrompt,
-          externalAgentId,
-        },
-        "Starting chat stream",
-      );
 
       // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
       // and MCP tool executions appear as children of a single trace.
@@ -302,6 +262,81 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sessionId: conversationId,
         user: { id: user.id, email: user.email, name: user.name },
         callback: async () => {
+          // Build system prompt from agent's systemPrompt field.
+          // Memory injection is explicitly disabled for untrusted context.
+          const considerContextUntrusted = config.memory.injectionEnabled
+            ? ((await AgentModel.findById(agentId))?.considerContextUntrusted ??
+              true)
+            : false;
+          const memoryInjectionEnabled = shouldInjectMemory({
+            featureFlagEnabled: config.memory.injectionEnabled,
+            considerContextUntrusted,
+          });
+
+          const shouldFetchUserTeams = promptNeedsRendering(agent.systemPrompt);
+          const userTeams = shouldFetchUserTeams
+            ? await TeamModel.getUserTeams(user.id)
+            : [];
+          const memoryTeamIds = memoryInjectionEnabled
+            ? shouldFetchUserTeams
+              ? userTeams.map((team) => team.id)
+              : await TeamModel.getUserTeamIds(user.id)
+            : [];
+
+          const injectedMemory = await memoryInjectionBuilder.build({
+            userId: user.id,
+            organizationId,
+            teamIds: memoryTeamIds,
+            enabled: memoryInjectionEnabled,
+          });
+
+          const userSystemPromptTemplate = injectedMemory
+            ? [agent.systemPrompt, USER_SYSTEM_PROMPT_MEMORY_BLOCK_TEMPLATE]
+                .filter(Boolean)
+                .join("\n\n")
+            : agent.systemPrompt;
+
+          let promptContext: UserSystemPromptContext | null = null;
+          if (promptNeedsRendering(userSystemPromptTemplate)) {
+            promptContext = buildUserSystemPromptContext({
+              userName: user.name,
+              userEmail: user.email,
+              userTeams: userTeams.map((team) => team.name),
+              memory: injectedMemory,
+            });
+          }
+
+          const renderedPrompt = renderSystemPrompt(
+            userSystemPromptTemplate,
+            promptContext,
+          );
+          const systemPrompt =
+            [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+              .filter(Boolean)
+              .join("\n\n") || undefined;
+
+          logger.info(
+            {
+              conversationId,
+              agentId,
+              userId: user.id,
+              orgId: organizationId,
+              toolCount: Object.keys(mcpTools).length,
+              hasCustomToolSelection: hasCustomSelection,
+              enabledToolCount: hasCustomSelection
+                ? enabledToolIds.length
+                : "all",
+              model: conversation.selectedModel,
+              provider,
+              providerSource: conversation.selectedProvider
+                ? "stored"
+                : "detected",
+              hasSystemPrompt: !!systemPrompt,
+              externalAgentId,
+            },
+            "Starting chat stream",
+          );
+
           // Create LLM model using shared service
           // Pass conversationId as sessionId to group all requests in this chat session
           // Pass agent's llmApiKeyId so it can be used without user access check
@@ -2213,6 +2248,17 @@ function normalizeDataUrlMediaType(params: {
   return url.replace(`data:${fromMediaType};`, `data:${toMediaType};`);
 }
 
+function shouldInjectMemory(params: {
+  featureFlagEnabled: boolean;
+  considerContextUntrusted: boolean;
+}): boolean {
+  if (params.considerContextUntrusted) {
+    return false;
+  }
+
+  return params.featureFlagEnabled;
+}
+
 /**
  * Listens for HTTP connection close and checks the distributed cache to determine
  * whether the close was caused by the stop button (abort) or by navigating away (ignore).
@@ -2315,6 +2361,7 @@ async function validateChatApiKeyAccess(
 export const __test = {
   getMessagesNotYetPersisted,
   prepareMessagesForProvider,
+  shouldInjectMemory,
 };
 
 export default chatRoutes;

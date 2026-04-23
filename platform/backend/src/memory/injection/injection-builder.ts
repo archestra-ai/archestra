@@ -1,5 +1,6 @@
 import { context, trace } from "@opentelemetry/api";
 import config from "@/config";
+import logger from "@/logging";
 import { listForInjection } from "@/memory/retrieval/retrieval-service";
 import type { MemoryItem } from "@/types/memory-item";
 import { applyBudget } from "./injection-budget";
@@ -15,33 +16,54 @@ export async function build(
   params: BuildInjectionParams,
 ): Promise<string | null> {
   if (params.enabled === false) {
+    setInjectionSpanAttributes({
+      injectedCount: 0,
+      injectedTokensApprox: 0,
+    });
     return null;
   }
 
-  const topK = config.memory.injectionTopK;
-  const memoryCandidates = await listForInjection({
-    userId: params.userId,
-    organizationId: params.organizationId,
-    teamIds: params.teamIds ?? [],
-    scopesEnabled: ["user"], // Rollout-1 hard limit.
-  });
+  try {
+    const topK = config.memory.injectionTopK;
+    const memoryCandidates = await listForInjection({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      teamIds: params.teamIds ?? [],
+      scopesEnabled: ["user"], // Rollout-1 hard limit.
+    });
 
-  const budgetResult = applyBudget({
-    items: memoryCandidates,
-    maxTokens: config.memory.injectionTokenBudget,
-    topK,
-  });
+    const budgetResult = applyBudget({
+      items: memoryCandidates,
+      maxTokens: config.memory.injectionTokenBudget,
+      topK,
+    });
 
-  setInjectionSpanAttributes({
-    injectedCount: budgetResult.items.length,
-    injectedTokensApprox: budgetResult.totalTokensApprox,
-  });
+    setInjectionSpanAttributes({
+      injectedCount: budgetResult.items.length,
+      injectedTokensApprox: budgetResult.totalTokensApprox,
+    });
 
-  if (budgetResult.items.length === 0) {
+    if (budgetResult.items.length === 0) {
+      return null;
+    }
+
+    return renderMemoryBlock(budgetResult.items);
+  } catch (error) {
+    logger.warn(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        userId: params.userId,
+        organizationId: params.organizationId,
+      },
+      "Memory injection build failed; continuing without memory context",
+    );
+
+    setInjectionSpanAttributes({
+      injectedCount: 0,
+      injectedTokensApprox: 0,
+    });
     return null;
   }
-
-  return renderMemoryBlock(budgetResult.items);
 }
 
 export const memoryInjectionBuilder = {

@@ -111,6 +111,33 @@ describe("prepareMessagesForProvider", () => {
   });
 });
 
+describe("shouldInjectMemory", () => {
+  it("returns false for untrusted context even when feature flag is enabled", () => {
+    const result = __test.shouldInjectMemory({
+      featureFlagEnabled: true,
+      considerContextUntrusted: true,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it("returns true only for trusted context with enabled feature flag", () => {
+    expect(
+      __test.shouldInjectMemory({
+        featureFlagEnabled: true,
+        considerContextUntrusted: false,
+      }),
+    ).toBe(true);
+
+    expect(
+      __test.shouldInjectMemory({
+        featureFlagEnabled: false,
+        considerContextUntrusted: false,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("getMessagesNotYetPersisted", () => {
   it("keeps new messages even when the incoming thread is shorter than the persisted thread", () => {
     const newMessages = __test.getMessagesNotYetPersisted({

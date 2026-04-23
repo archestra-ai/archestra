@@ -93,6 +93,7 @@ Response:
 ### Delegation Chain
 
 When an agent delegates work to another agent, Archestra tracks that call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state so downstream tool policy enforcement does not reset mid-run.
+
 ### Configuration
 
 A2A uses the same LLM configuration as Chat. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.

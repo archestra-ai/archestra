@@ -17,7 +17,7 @@ This page focuses on connector-specific setup. Every connector also shares a few
 
 - **Name** -- a label for your team
 - **Description** -- optional context for other admins
-- **Visibility** -- whether the connector is org-wide or team-scoped
+- **Visibility** -- whether the connector is org-wide or team-scoped (team-scoped requires an enterprise license)
 - **Schedule** -- when sync runs automatically
 
 Most connector-specific filters live under **Advanced** in the create/edit dialogs.

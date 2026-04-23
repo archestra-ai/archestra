@@ -121,6 +121,9 @@ export const TOOL_PERMISSIONS: Record<
   artifact_write: null,
   swap_agent: { resource: "agent", action: "read" },
   swap_to_default_agent: null,
+
+  // Meta — permission is enforced on the target tool, not on run_tool itself
+  run_tool: null,
 };
 
 /**

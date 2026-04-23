@@ -44,6 +44,10 @@ import {
 } from "./policies";
 import { checkToolPermission } from "./rbac";
 import {
+  toolEntries as runToolEntries,
+  tools as runToolTools,
+} from "./run-tool";
+import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
@@ -67,6 +71,7 @@ const toolEntries: Partial<
   ...toolAssignmentToolEntries,
   ...knowledgeManagementToolEntries,
   ...chatToolEntries,
+  ...runToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -81,6 +86,7 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
+    ...runToolTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

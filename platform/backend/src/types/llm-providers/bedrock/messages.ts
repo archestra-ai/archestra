@@ -167,9 +167,17 @@ export const MessageSchema = z.object({
 // =============================================================================
 
 // Cache point block — used by Claude models for prompt caching via Bedrock Converse API
+// https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CachePointBlock.html
 const CachePointBlockSchema = z.object({
-  cachePoint: z.object({ type: z.string() }),
-});
+    cachePoint: z.object({
+      type: z.string(),
+      ttl: z.enum(["5m", "1h"]).optional(),
+    }),
+  })
+  .describe(
+    "Prompt cache checkpoint for Claude models (Bedrock Runtime Converse API). " +
+      "See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CachePointBlock.html",
+  );
 
 // System content block (text, guard content, or cache point)
 // Also accepts Anthropic-style { type: "text", text: string } blocks (e.g. from @ai-sdk/amazon-bedrock)

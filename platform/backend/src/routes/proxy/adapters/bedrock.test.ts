@@ -416,4 +416,18 @@ describe("Bedrock system message — cachePoint support", () => {
       { cachePoint: { type: "default" } },
     ]);
   });
+
+  test("ConverseRequestSchema accepts optional ttl on cachePoint (runtime API extended TTL)", () => {
+    const result = ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      messages: [{ role: "user", content: [{ text: "Hello" }] }],
+      system: [
+        { text: "You are a helpful assistant." },
+        { cachePoint: { type: "default", ttl: "1h" } },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.system?.[1]).toEqual({ cachePoint: { type: "default", ttl: "1h" } });
+  });
 });

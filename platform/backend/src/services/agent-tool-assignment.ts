@@ -379,7 +379,16 @@ export async function isMcpServerAssignableToTarget(params: {
   const { mcpServer, target } = params;
 
   if (mcpServer.teamId) {
-    return target.scope === "team" && target.teamIds.includes(mcpServer.teamId);
+    if (target.scope === "team") {
+      return target.teamIds.includes(mcpServer.teamId);
+    }
+    if (target.scope === "personal" && target.authorId) {
+      return TeamModel.isUserInAnyTeam(
+        [mcpServer.teamId],
+        target.authorId,
+      );
+    }
+    return false;
   }
 
   if (!mcpServer.ownerId) {

@@ -1362,8 +1362,7 @@ export function McpCatalogForm({
                                       />
                                     </FormControl>
                                     <FormDescription>
-                                      Comma-separated list of OAuth scopes
-                                      (defaults to read, write)
+                                      Comma-separated list of OAuth scopes.
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>

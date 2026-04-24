@@ -26,6 +26,7 @@
     "@kubernetes/client-node": "^1.4.0",
     "@playwright/test": "^1.58.2",
     "@types/node": "^25.5.0",
-    "knip": "^5.85.0"
+    "knip": "^5.85.0",
+    "typescript": "catalog:"
   }
 }

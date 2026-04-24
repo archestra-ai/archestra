@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.2.22",
+  "version": "1.2.23",
   "description": "",
   "author": "",
   "private": true,
@@ -149,7 +149,7 @@
     "knip": "^5.85.0",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.2",
+    "typescript": "catalog:",
     "vitest": "^4.1.0"
   }
 }

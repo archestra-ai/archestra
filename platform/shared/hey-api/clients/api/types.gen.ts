@@ -27368,6 +27368,7 @@ export type GetKnowledgeBaseDocumentsData = {
         limit?: number;
         offset?: number;
         search?: string;
+        connectorId?: string;
     };
     url: '/api/knowledge-bases/{id}/documents';
 };

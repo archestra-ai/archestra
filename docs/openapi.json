@@ -100914,7 +100914,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List indexed documents for a knowledge base with pagination and title search\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List documents for a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
         "parameters": [
           {
             "schema": {
@@ -100944,6 +100944,14 @@
             },
             "in": "query",
             "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "connectorId",
             "required": false
           },
           {
@@ -101404,7 +101412,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete an indexed document from a knowledge base (chunks are removed by cascade)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a knowledge base document\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete knowledge bases and connectors",
         "parameters": [
           {
             "schema": {

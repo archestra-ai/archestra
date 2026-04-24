@@ -2112,7 +2112,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * List indexed documents for a knowledge base with pagination and title search
+ * List documents for a knowledge base
  *
  * Authentication:
  *
@@ -2125,7 +2125,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 export const getKnowledgeBaseDocuments = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseDocumentsData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseDocumentsResponses, GetKnowledgeBaseDocumentsErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/documents', ...options });
 
 /**
- * Delete an indexed document from a knowledge base (chunks are removed by cascade)
+ * Delete a knowledge base document
  *
  * Authentication:
  *

@@ -655,11 +655,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // as a notification when the chunk is walked downstream). Guard
                 // so we don't persist or log the same error twice.
                 let chatErrorHandled = false;
+                let serializedChatError = "";
 
                 writer.merge(
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
                     onError: (error) => {
+                      if (chatErrorHandled) {
+                        return serializedChatError;
+                      }
+                      chatErrorHandled = true;
+
                       const traceContext = getActiveTraceContext();
                       const correlationLogFields =
                         getCorrelationLogFields(traceContext);
@@ -676,9 +682,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         : fullError;
 
                       // mapProviderError safely serializes raw errors, but add defensive try-catch
-                      let serialized: string;
                       try {
-                        serialized = JSON.stringify(errorForFrontend);
+                        serializedChatError = JSON.stringify(errorForFrontend);
                       } catch (stringifyError) {
                         logger.error(
                           {
@@ -688,15 +693,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           },
                           "Failed to stringify mapped error, returning minimal error",
                         );
-                        serialized = JSON.stringify(
+                        serializedChatError = JSON.stringify(
                           getMinimalFrontendError(errorForFrontend),
                         );
                       }
-
-                      if (chatErrorHandled) {
-                        return serialized;
-                      }
-                      chatErrorHandled = true;
 
                       // Claim persistence before the async work below starts,
                       // otherwise onFinish can race and also persist (duplicates).
@@ -757,7 +757,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         "Returning mapped error to frontend via stream",
                       );
 
-                      return serialized;
+                      return serializedChatError;
                     },
                     onFinish: async ({ messages: finalMessages }) => {
                       removeAbortListeners();

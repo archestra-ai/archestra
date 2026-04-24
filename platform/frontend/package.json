@@ -61,7 +61,7 @@
     "croner": "^10.0.1",
     "cronstrue": "^3.13.0",
     "date-fns": "^4.1.0",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.0",
     "elkjs": "^0.11.1",
     "embla-carousel-react": "^8.6.0",
     "import-in-the-middle": "3.0.0",

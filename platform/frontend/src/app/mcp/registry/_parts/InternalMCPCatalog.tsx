@@ -1017,10 +1017,10 @@ export function InternalMCPCatalog({
     ),
   ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
 
-  const draftItems = allFilteredItems.filter(
+  const personalItems = allFilteredItems.filter(
     (item) => item.scope === "personal",
   );
-  const publishedItems = allFilteredItems.filter(
+  const sharedItems = allFilteredItems.filter(
     (item) => item.scope !== "personal",
   );
 
@@ -1099,13 +1099,13 @@ export function InternalMCPCatalog({
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
       )}
       <div className="space-y-6">
-        {draftItems.length > 0 && (
+        {personalItems.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              Unpublished
+              Personal
             </h3>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {draftItems.map((item) => {
+              {personalItems.map((item) => {
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
@@ -1154,15 +1154,15 @@ export function InternalMCPCatalog({
           </div>
         )}
 
-        {publishedItems.length > 0 ? (
+        {sharedItems.length > 0 ? (
           <div className="space-y-3">
-            {draftItems.length > 0 && (
+            {personalItems.length > 0 && (
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Published
+                Shared
               </h3>
             )}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {publishedItems.map((item) => {
+              {sharedItems.map((item) => {
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
@@ -1210,7 +1210,7 @@ export function InternalMCPCatalog({
             </div>
           </div>
         ) : (
-          draftItems.length === 0 && (
+          personalItems.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               {hasActiveFilters ? (
                 <>

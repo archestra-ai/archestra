@@ -12,5 +12,6 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "git.openRepositoryInParentFolders": "always",
-  "typescript.tsserver.experimental.enableProjectDiagnostics": true
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true,
+  "js/ts.experimental.useTsgo": true
 }

@@ -6,3 +6,11 @@ packages:
 
 catalog:
   typescript: ^6.0.2
+  # TS 7 beta (Go-based `tsgo`) — publishes daily dev builds. .npmrc's
+  # `minimum-release-age=10080` (7 days) blocks anything newer. Pinning the
+  # newest build that is already past the 7-day window.
+  # To catch up with the `beta` dist-tag: as of 2026-04-23, `beta` points at
+  # 7.0.0-dev.20260421.2 (pub 2026-04-21) — bump this pin on or after
+  # 2026-04-28, or re-check `npm view @typescript/native-preview dist-tags`
+  # and pick the newest version at least 7 days old.
+  "@typescript/native-preview": 7.0.0-dev.20260415.1

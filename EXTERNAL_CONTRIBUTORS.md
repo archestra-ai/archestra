@@ -110,3 +110,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @alchemistlethal-a11y
 - @Nabhag8848
 - @artificial-feelings
+- @Smolevich
+- @Robhovhannisyan27
+- @lu2000luk

@@ -146,9 +146,6 @@ class McpCatalogLabelModel {
       }
     });
 
-    // Reconciliation of automatic MCP gateways that may now match (or no longer
-    // match) this catalog's labels is handled by the periodic sweep task.
-
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});
   }

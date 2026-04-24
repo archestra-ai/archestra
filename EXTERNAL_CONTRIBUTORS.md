@@ -114,3 +114,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Robhovhannisyan27
 - @lu2000luk
 - @ari1337an
+- @denisfl

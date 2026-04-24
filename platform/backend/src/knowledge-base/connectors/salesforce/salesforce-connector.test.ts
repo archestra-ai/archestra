@@ -89,17 +89,6 @@ describe("SalesforceConnector", () => {
       expect(r.error).toContain("loginUrl");
     });
 
-    test("rejects batchSize outside Salesforce query LIMIT bounds", async () => {
-      const c = new SalesforceConnector();
-      const r1 = await c.validateConfig({ batchSize: 0 });
-      expect(r1.valid).toBe(false);
-      expect(r1.error).toContain("batchSize");
-
-      const r2 = await c.validateConfig({ batchSize: 5000 });
-      expect(r2.valid).toBe(false);
-      expect(r2.error).toContain("batchSize");
-    });
-
     test("rejects unsafe characters in object names", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({ objects: ["Account; DROP TABLE"] });

@@ -27627,7 +27627,6 @@ export type GetConnectorsResponses = {
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
-                batchSize?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27769,7 +27768,6 @@ export type CreateConnectorData = {
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-            batchSize?: number;
         };
         credentials: {
             email?: string;
@@ -27958,7 +27956,6 @@ export type CreateConnectorResponses = {
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-            batchSize?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28238,7 +28235,6 @@ export type GetConnectorResponses = {
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-            batchSize?: number;
         };
         secretId: string | null;
         schedule: string;
@@ -28366,7 +28362,6 @@ export type UpdateConnectorData = {
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-            batchSize?: number;
         };
         credentials?: {
             email?: string;
@@ -28556,7 +28551,6 @@ export type UpdateConnectorResponses = {
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-            batchSize?: number;
         };
         secretId: string | null;
         schedule: string;

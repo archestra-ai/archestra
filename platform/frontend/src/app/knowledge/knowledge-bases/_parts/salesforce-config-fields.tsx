@@ -37,7 +37,7 @@ export function SalesforceConfigFields({
             </FormControl>
             <FormDescription>
               Comma-separated Salesforce object names. Leave empty to default to
-              <code> Account</code>.
+              <code> Account, Contact, Opportunity, Case</code>.
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -65,22 +65,6 @@ export function SalesforceConfigFields({
         )}
       />
 
-      <FormField
-        control={form.control}
-        name={`${prefix}.batchSize`}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Batch Size (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="200" {...field} />
-            </FormControl>
-            <FormDescription>
-              Max records fetched per SOQL page. Leave empty for default.
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
     </div>
   );
 }

@@ -433,6 +433,17 @@ describe("CreateConnectorDialog", () => {
       ).toBeInTheDocument();
     });
 
+    it("does not expose batch size in the salesforce UI", async () => {
+      const { user } = await renderSalesforceConfigureStep();
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Objects/)).toBeInTheDocument();
+      });
+      expect(screen.queryByLabelText(/Batch Size/i)).not.toBeInTheDocument();
+    });
+
     it("submits salesforce payload with transformed objects array", async () => {
       mockMutateAsync.mockResolvedValue({ id: "connector-1" });
       const { user } = await renderSalesforceConfigureStep();

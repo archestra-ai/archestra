@@ -268,9 +268,8 @@ Ingests CRM records from Salesforce orgs via the SOQL REST API. Each selected ob
 | Login URL                      | Salesforce login endpoint (default: `https://login.salesforce.com`; use `https://test.salesforce.com` for sandbox orgs) |
 | Email                          | Your Salesforce username (e.g., `user@company.com`)                                                           |
 | Password + Security Token      | Your Salesforce password concatenated with your security token (e.g., `MyPassword123XXYYZZ`)                 |
-| Objects                        | Comma-separated Salesforce object API names to sync (e.g., `Account, Contact, Opportunity, Case`). Leave blank to default to `Account`. |
+| Objects                        | Comma-separated Salesforce object API names to sync (e.g., `Account, Contact, Opportunity, Case`). Leave blank to use the default CRM objects: `Account`, `Contact`, `Opportunity`, and `Case`. |
 | Advanced Object Config JSON    | Optional JSON object for precise field and association control. When provided, overrides simple object selection. |
-| Batch Size                     | Records fetched per SOQL page (default: 200)                                                                  |
 
 Authentication uses a Salesforce **username + password + security token**. The password field should contain your password directly concatenated with the security token (no separator).
 
@@ -283,7 +282,7 @@ To obtain your security token:
 
 ### Simple vs Advanced Mode
 
-In **simple mode**, provide a comma-separated list of object names in the Objects field (e.g., `Account, Contact, Case`). Each object is queried with the default fields `Id`, `Name`, and `LastModifiedDate`.
+In **simple mode**, provide a comma-separated list of object names in the Objects field (e.g., `Account, Contact, Case`). If you leave Objects blank, the connector syncs `Account`, `Contact`, `Opportunity`, and `Case`. Each object uses a built-in default field set tuned for that record type.
 
 In **advanced mode**, provide a JSON object in the Advanced Object Config JSON field to specify exact fields and associations per object:
 

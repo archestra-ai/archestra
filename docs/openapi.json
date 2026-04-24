@@ -101937,11 +101937,6 @@
                                   },
                                   "advancedObjectConfigJson": {
                                     "type": "string"
-                                  },
-                                  "batchSize": {
-                                    "type": "integer",
-                                    "minimum": -9007199254740991,
-                                    "maximum": 9007199254740991
                                   }
                                 },
                                 "required": [
@@ -102960,11 +102955,6 @@
                           },
                           "advancedObjectConfigJson": {
                             "type": "string"
-                          },
-                          "batchSize": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -103631,11 +103621,6 @@
                             },
                             "advancedObjectConfigJson": {
                               "type": "string"
-                            },
-                            "batchSize": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
@@ -104601,11 +104586,6 @@
                             },
                             "advancedObjectConfigJson": {
                               "type": "string"
-                            },
-                            "batchSize": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
                             }
                           },
                           "required": [
@@ -105474,11 +105454,6 @@
                           },
                           "advancedObjectConfigJson": {
                             "type": "string"
-                          },
-                          "batchSize": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -106143,11 +106118,6 @@
                             },
                             "advancedObjectConfigJson": {
                               "type": "string"
-                            },
-                            "batchSize": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
                             }
                           },
                           "required": [

@@ -311,7 +311,6 @@ export const SalesforceConfigSchema = z.object({
           "advancedObjectConfigJson must be valid JSON object text when provided",
       },
     ),
-  batchSize: z.number().int().optional(),
 });
 export type SalesforceConfig = z.infer<typeof SalesforceConfigSchema>;
 

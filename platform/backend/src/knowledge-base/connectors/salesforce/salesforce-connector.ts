@@ -180,16 +180,6 @@ export class SalesforceConnector extends BaseConnector {
       };
     }
 
-    if (parsed.batchSize !== undefined) {
-      // Salesforce query `LIMIT` max is 2000.
-      if (parsed.batchSize < 1 || parsed.batchSize > 2000) {
-        return {
-          valid: false,
-          error: "batchSize must be between 1 and 2000",
-        };
-      }
-    }
-
     // Validate loginUrl is a proper HTTP(S) URL (matching Linear's URL check)
     if (!/^https?:\/\/.+/.test(parsed.loginUrl)) {
       return {
@@ -358,7 +348,7 @@ export class SalesforceConnector extends BaseConnector {
         objectSpec,
         checkpoint,
         progress,
-        batchSize: parsed.batchSize ?? DEFAULT_BATCH_SIZE,
+        batchSize: DEFAULT_BATCH_SIZE,
         objectSpecs,
       });
     }

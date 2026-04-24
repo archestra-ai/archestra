@@ -116,3 +116,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ari1337an
 - @denisfl
 - @Godzilla675
+- @artemiusz-dev

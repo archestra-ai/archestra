@@ -23,7 +23,7 @@ export function OrganizationTokenSection() {
       <Card>
         <SettingsCardHeader
           title="Organization Token"
-          description="Organization-wide authentication token for MCP Gateway access"
+          description="Organization-wide authentication token for Agents / MCP Gateways"
         />
         <CardContent>
           {tokensLoading ? (

@@ -26999,7 +26999,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27447,7 +27447,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
     };
     url: '/api/connectors';
 };
@@ -27523,7 +27523,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27622,6 +27622,11 @@ export type GetConnectorsResponses = {
                 outlineUrl: unknown;
                 collectionIds?: Array<string>;
                 batchSize?: number;
+            } | {
+                type: 'salesforce';
+                loginUrl: unknown;
+                objects?: Array<string>;
+                advancedObjectConfigJson?: string;
             };
             secretId: string | null;
             schedule: string;
@@ -27659,7 +27664,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27758,6 +27763,11 @@ export type CreateConnectorData = {
             outlineUrl: string;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl?: string;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         credentials: {
             email?: string;
@@ -27842,7 +27852,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27941,6 +27951,11 @@ export type CreateConnectorResponses = {
             outlineUrl: unknown;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl: unknown;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -28116,7 +28131,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28215,6 +28230,11 @@ export type GetConnectorResponses = {
             outlineUrl: unknown;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl: unknown;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -28337,6 +28357,11 @@ export type UpdateConnectorData = {
             outlineUrl: string;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl?: string;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         credentials?: {
             email?: string;
@@ -28422,7 +28447,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28521,6 +28546,11 @@ export type UpdateConnectorResponses = {
             outlineUrl: unknown;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl: unknown;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         secretId: string | null;
         schedule: string;

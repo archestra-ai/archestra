@@ -99448,6 +99448,12 @@
                                       "enum": [
                                         "outline"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "salesforce"
+                                      ]
                                     }
                                   ]
                                 }
@@ -101291,6 +101297,12 @@
                   "enum": [
                     "outline"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "salesforce"
+                  ]
                 }
               ]
             },
@@ -101412,6 +101424,12 @@
                                 "type": "string",
                                 "enum": [
                                   "outline"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "salesforce"
                                 ]
                               }
                             ]
@@ -101895,6 +101913,35 @@
                                 "required": [
                                   "type",
                                   "outlineUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "salesforce"
+                                    ]
+                                  },
+                                  "loginUrl": {
+                                    "default": "https://login.salesforce.com"
+                                  },
+                                  "objects": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "advancedObjectConfigJson": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "loginUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -102395,6 +102442,12 @@
                         "enum": [
                           "outline"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "salesforce"
+                        ]
                       }
                     ]
                   },
@@ -102880,6 +102933,33 @@
                           "type",
                           "outlineUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "salesforce"
+                            ]
+                          },
+                          "loginUrl": {
+                            "type": "string"
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "advancedObjectConfigJson": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103028,6 +103108,12 @@
                           "type": "string",
                           "enum": [
                             "outline"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
                           ]
                         }
                       ]
@@ -103511,6 +103597,35 @@
                           "required": [
                             "type",
                             "outlineUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -103959,6 +104074,12 @@
                           "enum": [
                             "outline"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
+                          ]
                         }
                       ]
                     },
@@ -104441,6 +104562,35 @@
                           "required": [
                             "type",
                             "outlineUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -105282,6 +105432,33 @@
                           "type",
                           "outlineUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "salesforce"
+                            ]
+                          },
+                          "loginUrl": {
+                            "type": "string"
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "advancedObjectConfigJson": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -105428,6 +105605,12 @@
                           "type": "string",
                           "enum": [
                             "outline"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
                           ]
                         }
                       ]
@@ -105911,6 +106094,35 @@
                           "required": [
                             "type",
                             "outlineUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }

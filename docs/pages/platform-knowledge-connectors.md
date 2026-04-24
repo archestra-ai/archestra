@@ -259,6 +259,57 @@ Authentication uses an Outline API key. Create one under **Settings -> API & App
 
 Incremental sync uses the previous completed run as the cutoff and re-ingests documents edited while a sync was in progress. Interrupted runs resume from the last processed collection and document. The UI uses the default Outline page size of 25; API-created connectors may override `batchSize` for rate-limit tuning.
 
+## Salesforce
+
+Ingests CRM records from Salesforce orgs via the SOQL REST API. Each selected object type is queried and serialized as a structured Markdown document with field values as `**Field:** value` pairs.
+
+| Field                          | Description                                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Login URL                      | Salesforce login endpoint (default: `https://login.salesforce.com`; use `https://test.salesforce.com` for sandbox orgs) |
+| Email                          | Your Salesforce username (e.g., `user@company.com`)                                                           |
+| Password + Security Token      | Your Salesforce password concatenated with your security token (e.g., `MyPassword123XXYYZZ`)                 |
+| Objects                        | Comma-separated Salesforce object API names to sync (e.g., `Account, Contact, Opportunity, Case`). Leave blank to use the default CRM objects: `Account`, `Contact`, `Opportunity`, and `Case`. |
+| Advanced Object Config JSON    | Optional JSON object for precise field and association control. When provided, overrides simple object selection. |
+
+Authentication uses a Salesforce **username + password + security token**. The password field should contain your password directly concatenated with the security token (no separator).
+
+To obtain your security token:
+
+1. Log in to your Salesforce org.
+2. Click your **User Avatar** (top right) → **Settings**.
+3. Navigate to **My Personal Information** → **Reset My Security Token**.
+4. Click **Reset Security Token** and check your email for the new token.
+
+### Simple vs Advanced Mode
+
+In **simple mode**, provide a comma-separated list of object names in the Objects field (e.g., `Account, Contact, Case`). If you leave Objects blank, the connector syncs `Account`, `Contact`, `Opportunity`, and `Case`. Each object uses a built-in default field set tuned for that record type.
+
+In **advanced mode**, provide a JSON object in the Advanced Object Config JSON field to specify exact fields and associations per object:
+
+```json
+{
+  "Lead": {
+    "fields": ["FirstName", "LastName", "Company", "Email"],
+    "associations": { "Account": ["Name"] }
+  },
+  "Case": {
+    "fields": ["Subject", "Status", "Priority", "Description"]
+  }
+}
+```
+
+When advanced config is provided, the connector queries only the objects and fields listed in the JSON. The base fields `Id`, `Name`, and `LastModifiedDate` are always included automatically.
+
+### Incremental Sync
+
+Incremental sync uses the `LastModifiedDate` field on each object. After the first full sync, only records modified since the last run are fetched. A 5-minute safety buffer is applied to the checkpoint boundary to avoid missing records near timestamp edges. Each object maintains its own high-water cursor in the checkpoint.
+
+### Known Limitations
+
+- Authentication supports username + password + security token only. OAuth Connected App flow is planned for a future release.
+- Objects without a `LastModifiedDate` field cannot be synced incrementally.
+- Very large field values may be truncated during Markdown serialization.
+
 ## Managing Connectors
 
 Connectors can be managed from either the **Connectors** page or a knowledge base's detail page. After creation you can:

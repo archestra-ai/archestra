@@ -120,6 +120,8 @@ class AgentLabelModel {
       }
     });
 
+    await assignAgentToolsFromLabels(agentId);
+
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});
   }

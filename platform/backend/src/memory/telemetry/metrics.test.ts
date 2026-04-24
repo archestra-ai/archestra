@@ -49,6 +49,9 @@ describe("memory telemetry metrics", () => {
       metrics.reportMemoryInjectionBlock("feature_flag_off"),
     ).not.toThrow();
     expect(() =>
+      metrics.reportMemoryReviewPolicyBlocked("high_risk_policy_flags"),
+    ).not.toThrow();
+    expect(() =>
       metrics.reportMemoryTombstoneHit({
         reason: "rejected",
         matchType: "normalized",
@@ -91,6 +94,7 @@ describe("memory telemetry metrics", () => {
       reason: "instruction_like_medium",
     });
     metrics.reportMemoryInjectionBlock("external_tools_with_trusted_context");
+    metrics.reportMemoryReviewPolicyBlocked("high_risk_policy_flags");
     metrics.reportMemoryTombstoneHit({
       reason: "rejected",
       matchType: "legacy_exact",
@@ -115,6 +119,9 @@ describe("memory telemetry metrics", () => {
     const injectionBlockMetric = client.register.getSingleMetric(
       "archestra_memory_injection_block_total",
     );
+    const reviewPolicyBlockMetric = client.register.getSingleMetric(
+      "archestra_memory_review_policy_block_total",
+    );
     const tombstoneHitMetric = client.register.getSingleMetric(
       "archestra_memory_tombstone_hit_total",
     );
@@ -128,6 +135,7 @@ describe("memory telemetry metrics", () => {
     expect(scopeViolationMetric).toBeDefined();
     expect(screenDecisionMetric).toBeDefined();
     expect(injectionBlockMetric).toBeDefined();
+    expect(reviewPolicyBlockMetric).toBeDefined();
     expect(tombstoneHitMetric).toBeDefined();
     expect(mcpProposeBlockMetric).toBeDefined();
 
@@ -136,6 +144,7 @@ describe("memory telemetry metrics", () => {
     const scopeViolationValues = await scopeViolationMetric?.get();
     const screenDecisionValues = await screenDecisionMetric?.get();
     const injectionBlockValues = await injectionBlockMetric?.get();
+    const reviewPolicyBlockValues = await reviewPolicyBlockMetric?.get();
     const tombstoneHitValues = await tombstoneHitMetric?.get();
     const mcpProposeBlockValues = await mcpProposeBlockMetric?.get();
 
@@ -153,6 +162,9 @@ describe("memory telemetry metrics", () => {
     ).toBe(true);
     expect(
       injectionBlockValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      reviewPolicyBlockValues?.values.some((value) => value.value === 1),
     ).toBe(true);
     expect(tombstoneHitValues?.values.some((value) => value.value === 1)).toBe(
       true,

@@ -7,16 +7,13 @@ import {
 import config, { getProviderEnvApiKey } from "@/config";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import logger from "@/logging";
-import { screenSensitiveData } from "@/memory/policy/sensitive-data-screen";
+import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
 import {
   type MemoryExtractionOutcome,
   type MemoryExtractionUnavailableReason,
   reportMemoryCandidates,
   reportMemoryExtractionDuration,
   reportMemoryExtractionUnavailable,
-  reportMemoryPolicyBlocked,
-  reportMemoryScreenDecision,
-  reportMemoryTombstoneHit,
 } from "@/memory/telemetry/metrics";
 import {
   setMemorySpanAttributes,
@@ -210,40 +207,14 @@ class MemoryExtractor {
               continue;
             }
 
-            const tombstoneMatch =
-              await MemoryTombstoneModel.findActiveMatchByContent({
-                organizationId: params.organizationId,
-                scopeType: "user",
-                scopeId: params.userId,
-                content: preparedCandidate.content,
-              });
-            if (tombstoneMatch.matched) {
-              reportMemoryPolicyBlocked("tombstone_hit");
-              if (tombstoneMatch.reason && tombstoneMatch.matchType) {
-                reportMemoryTombstoneHit({
-                  reason: tombstoneMatch.reason,
-                  matchType: tombstoneMatch.matchType,
-                });
-              }
-              skippedCount += 1;
-              continue;
-            }
-
-            const sensitivity = screenSensitiveData({
+            const policyScreen = await screenCandidateBeforePersist({
+              organizationId: params.organizationId,
+              scopeType: "user",
+              scopeId: params.userId,
               content: preparedCandidate.content,
+              source: "extractor",
             });
-            reportMemoryScreenDecision({
-              decision: sensitivity.decision,
-              reason: sensitivity.reason,
-            });
-            if (sensitivity.blocked) {
-              if (sensitivity.blockReason === "high_risk_pii") {
-                reportMemoryPolicyBlocked("high_risk_pii");
-              } else if (sensitivity.blockReason === "instruction_like_high") {
-                reportMemoryPolicyBlocked("instruction_like_high");
-              } else {
-                reportMemoryPolicyBlocked("sensitive");
-              }
+            if (!policyScreen.allowed) {
               skippedCount += 1;
               continue;
             }
@@ -258,7 +229,7 @@ class MemoryExtractor {
               content: preparedCandidate.content,
               createdBy: null,
               extractorVersion: EXTRACTOR_PROMPT_VERSION,
-              policyFlags: sensitivity.policyFlags,
+              policyFlags: policyScreen.policyFlags,
               sourceConversationId: params.conversationId,
               sourceMessageIds:
                 sourceMessageIds.length > 0 ? sourceMessageIds : null,
@@ -268,7 +239,7 @@ class MemoryExtractor {
             reportMemoryCandidates({
               scopeType: "user",
               extractorVersion: EXTRACTOR_PROMPT_VERSION,
-              policyFlags: sensitivity.policyFlags,
+              policyFlags: policyScreen.policyFlags,
             });
 
             seenHashes.add(contentHash);

@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { attachExternalToolSecurityMetadata } from "@/memory/policy/external-tools-capability";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -315,6 +316,66 @@ describe("chat routes memory injection wiring", () => {
           description: "Mock external browser tool",
           execute: vi.fn(),
         },
+      },
+      makeAgent: adaptFactory(makeAgent),
+      makeConversation: adaptFactory(makeConversation),
+      makeMember: adaptFactory(makeMember),
+      makeOrganization: adaptFactory(makeOrganization),
+      makeUser: adaptFactory(makeUser),
+    });
+
+    try {
+      mockMemoryInjectionBuild.mockResolvedValue(null);
+
+      const response = await appContext.app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: appContext.conversationId,
+          messages: [
+            {
+              id: crypto.randomUUID(),
+              role: "user",
+              parts: [{ type: "text", text: "Hello" }],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockMemoryInjectionBuild).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false }),
+      );
+      expect(mockReportMemoryScopeViolationBlocked).toHaveBeenCalledWith({
+        scopeType: "user",
+        reason: "external_tools_with_trusted_context",
+      });
+    } finally {
+      await appContext.app.close();
+    }
+  });
+
+  test("blocks memory injection from explicit tool capability metadata even when name is neutral", async ({
+    makeAgent,
+    makeConversation,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    memoryInjectionFlag.enabled = true;
+    const appContext = await createAppContext({
+      considerContextUntrusted: false,
+      mcpTools: {
+        remote__summarize: attachExternalToolSecurityMetadata(
+          {
+            description: "Neutral tool name with explicit external capability",
+            execute: vi.fn(),
+          },
+          {
+            capabilities: ["api"],
+            source: "metadata",
+          },
+        ),
       },
       makeAgent: adaptFactory(makeAgent),
       makeConversation: adaptFactory(makeConversation),

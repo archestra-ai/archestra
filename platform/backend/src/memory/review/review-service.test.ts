@@ -132,6 +132,32 @@ describe("memoryReviewService", () => {
     expect(created?.status).toBe("candidate");
   });
 
+  test("manualCreate blocks secret-like content before persistence", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+
+    await expect(
+      memoryReviewService.manualCreate({
+        organizationId: organization.id,
+        requester: { id: owner.id, role: "member" },
+        data: {
+          scopeType: "user",
+          scopeId: owner.id,
+          kind: "profile_fact",
+          content: "api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz",
+        },
+      }),
+    ).rejects.toMatchObject({
+      reason: "sensitive",
+    });
+  });
+
   test("supersede rejects empty patch and creates candidate for approved source", async ({
     makeMember,
     makeOrganization,
@@ -173,6 +199,85 @@ describe("memoryReviewService", () => {
     });
     expect(superseded?.status).toBe("candidate");
     expect(superseded?.supersedesMemoryId).toBe(approved.id);
+  });
+
+  test("supersede blocks tombstoned replacement content before candidate creation", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+
+    const approved = await MemoryItemModel.create({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: owner.id,
+      kind: "preference",
+      status: "approved",
+      content: "Original approved memory",
+      createdBy: owner.id,
+      reviewedBy: owner.id,
+      reviewedAt: new Date(),
+      policyFlags: [],
+    });
+
+    const blockedContent = "Never persist this manipulative instruction again.";
+    await MemoryTombstoneModel.record({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: owner.id,
+      content: blockedContent,
+      reason: "rejected",
+    });
+
+    await expect(
+      memoryReviewService.proposeSupersedingEdit({
+        itemId: approved.id,
+        organizationId: organization.id,
+        requester: { id: owner.id, role: "member" },
+        patch: {
+          content: blockedContent,
+        },
+      }),
+    ).rejects.toMatchObject({
+      reason: "tombstone_hit",
+    });
+  });
+
+  test("approve blocks candidates with high-risk policy flags", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+
+    const candidate = await MemoryItemModel.create({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: owner.id,
+      kind: "instruction",
+      status: "candidate",
+      content: "Potentially manipulative instruction",
+      createdBy: owner.id,
+      policyFlags: ["instruction_like", "instruction_like_medium"],
+    });
+
+    await expect(
+      memoryReviewService.approve({
+        itemId: candidate.id,
+        organizationId: organization.id,
+        reviewer: { id: owner.id, role: "member" },
+        teamIds: [],
+      }),
+    ).rejects.toMatchObject({
+      reason: "high_risk_policy_flags",
+    });
   });
 
   test("rejection tombstone is created only for manipulative or sensitive", async ({

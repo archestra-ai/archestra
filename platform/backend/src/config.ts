@@ -747,7 +747,7 @@ const config = {
     ),
     tombstoneTtlDays: parsePositiveInt(
       process.env.ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS,
-      30,
+      90,
     ),
     candidateTtlDays: parsePositiveInt(
       process.env.ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS,

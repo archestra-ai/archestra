@@ -38,6 +38,8 @@ export type MemoryInjectionBlockReason =
   | "external_tools_with_trusted_context"
   | "feature_flag_off";
 
+export type MemoryReviewPolicyBlockReason = "high_risk_policy_flags";
+
 export type MemoryTombstoneMatchType = "normalized" | "legacy_exact";
 
 export type MemoryExtractionUnavailableReason =
@@ -54,6 +56,7 @@ let memoryInjectionTokens: client.Histogram<string>;
 let memoryScopeViolationBlockedTotal: client.Counter<string>;
 let memoryScreenDecisionTotal: client.Counter<string>;
 let memoryInjectionBlockTotal: client.Counter<string>;
+let memoryReviewPolicyBlockTotal: client.Counter<string>;
 let memoryTombstoneHitTotal: client.Counter<string>;
 let memoryMcpProposeBlockTotal: client.Counter<string>;
 
@@ -128,6 +131,12 @@ export function initializeMemoryMetrics(): void {
   memoryInjectionBlockTotal = new client.Counter({
     name: "archestra_memory_injection_block_total",
     help: "Total memory injection blocks by reason",
+    labelNames: ["reason"],
+  });
+
+  memoryReviewPolicyBlockTotal = new client.Counter({
+    name: "archestra_memory_review_policy_block_total",
+    help: "Total review-path memory blocks enforced by security policy",
     labelNames: ["reason"],
   });
 
@@ -302,6 +311,16 @@ export function reportMemoryInjectionBlock(
   }
 
   memoryInjectionBlockTotal.inc({ reason });
+}
+
+export function reportMemoryReviewPolicyBlocked(
+  reason: MemoryReviewPolicyBlockReason,
+): void {
+  if (!memoryReviewPolicyBlockTotal) {
+    return;
+  }
+
+  memoryReviewPolicyBlockTotal.inc({ reason });
 }
 
 export function reportMemoryTombstoneHit(params: {

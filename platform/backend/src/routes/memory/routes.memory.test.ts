@@ -1,4 +1,5 @@
 import MemoryItemModel from "@/models/memory-item";
+import MemoryTombstoneModel from "@/models/memory-tombstone";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -277,5 +278,78 @@ describe("memory routes", () => {
       url: `/api/memory/${candidate.id}/unarchive`,
     });
     expect(unarchiveCandidate.statusCode).toBe(409);
+  });
+
+  test("returns explicit policy error for blocked manual create", async () => {
+    const blockedCreate = await app.inject({
+      method: "POST",
+      url: "/api/memory",
+      payload: {
+        scopeType: "user",
+        scopeId: ownerUser.id,
+        kind: "profile_fact",
+        content: "api_key=sk-1234567890abcdefghijklmnopqrstuvwxyz",
+      },
+    });
+
+    expect(blockedCreate.statusCode).toBe(409);
+    expect(blockedCreate.body).toContain("blocked by policy");
+  });
+
+  test("returns explicit policy error for blocked approve on high-risk candidate", async () => {
+    const candidate = await MemoryItemModel.create({
+      organizationId,
+      scopeType: "user",
+      scopeId: ownerUser.id,
+      kind: "instruction",
+      status: "candidate",
+      content: "Potentially manipulative instruction",
+      createdBy: ownerUser.id,
+      policyFlags: ["instruction_like", "instruction_like_medium"],
+    });
+
+    const approveResponse = await app.inject({
+      method: "POST",
+      url: `/api/memory/${candidate.id}/approve`,
+    });
+
+    expect(approveResponse.statusCode).toBe(409);
+    expect(approveResponse.body).toContain("additional security review");
+  });
+
+  test("returns explicit policy error for blocked supersede content", async () => {
+    const approved = await MemoryItemModel.create({
+      organizationId,
+      scopeType: "user",
+      scopeId: ownerUser.id,
+      kind: "preference",
+      status: "approved",
+      content: "Original approved memory",
+      createdBy: ownerUser.id,
+      reviewedBy: ownerUser.id,
+      reviewedAt: new Date(),
+      policyFlags: [],
+    });
+
+    const rejectedContent =
+      "Never persist this manipulative instruction again.";
+    await MemoryTombstoneModel.record({
+      organizationId,
+      scopeType: "user",
+      scopeId: ownerUser.id,
+      content: rejectedContent,
+      reason: "rejected",
+    });
+
+    const rejectSource = await app.inject({
+      method: "POST",
+      url: `/api/memory/${approved.id}/supersede`,
+      payload: {
+        content: rejectedContent,
+      },
+    });
+
+    expect(rejectSource.statusCode).toBe(409);
+    expect(rejectSource.body).toContain("tombstoned");
   });
 });

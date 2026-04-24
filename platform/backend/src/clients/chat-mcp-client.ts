@@ -32,6 +32,10 @@ import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  attachExternalToolSecurityMetadata,
+  buildExternalToolSecurityMetadata,
+} from "@/memory/policy/external-tools-capability";
+import {
   AgentModel,
   AgentTeamModel,
   OrganizationModel,
@@ -846,161 +850,162 @@ export async function getChatMcpTools({
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
 
         // Construct Tool using jsonSchema() to wrap JSON Schema
-        aiTools[mcpTool.name] = {
-          description: mcpTool.description || `Tool: ${mcpTool.name}`,
-          inputSchema: jsonSchema(normalizedSchema),
-          ...(!blockOnApprovalRequired
-            ? {
-                needsApproval: async (args: unknown) => {
-                  return ToolInvocationPolicyModel.checkApprovalRequired(
-                    mcpTool.name,
-                    isRecord(args) ? args : {},
-                    {
-                      teamIds: [],
-                      externalAgentId: getChatExternalAgentId(),
-                    },
-                    globalToolPolicy,
-                  );
-                },
-              }
-            : {}),
-          execute: async (args: unknown) => {
-            if (blockOnApprovalRequired) {
-              await throwIfApprovalRequired(
-                mcpTool.name,
-                args,
-                globalToolPolicy,
-              );
-            }
-
-            logger.info(
-              { agentId, userId, toolName: mcpTool.name, arguments: args },
-              "Executing MCP tool from chat (direct)",
-            );
-
-            const toolArguments = isRecord(args) ? args : undefined;
-            const { serverName } = parseFullToolName(mcpTool.name);
-
-            const toolStartTime = Date.now();
-
-            return startActiveMcpSpan({
-              toolName: mcpTool.name,
-              mcpServerName: serverName ?? "unknown",
-              agent: { id: agentId, name: agentName },
-              sessionId,
-              toolArgs: toolArguments,
-              user,
-              callback: async (span) => {
-                try {
-                  throwIfAborted(abortSignal);
-                  // Check if this is an Archestra tool - handle directly without DB lookup
-                  if (archestraMcpBranding.isToolName(mcpTool.name)) {
-                    logger.debug(
-                      {
-                        toolName: mcpTool.name,
-                        scheduleTriggerRunId: scheduleTriggerRunId ?? null,
-                        conversationId: conversationId ?? null,
-                      },
-                      "Executing archestra tool with context",
-                    );
-                    const archestraResponse = await executeArchestraTool(
+        aiTools[mcpTool.name] = attachExternalToolSecurityMetadata(
+          {
+            description: mcpTool.description || `Tool: ${mcpTool.name}`,
+            inputSchema: jsonSchema(normalizedSchema),
+            ...(!blockOnApprovalRequired
+              ? {
+                  needsApproval: async (args: unknown) => {
+                    return ToolInvocationPolicyModel.checkApprovalRequired(
                       mcpTool.name,
-                      toolArguments,
+                      isRecord(args) ? args : {},
                       {
-                        agent: { id: agentId, name: agentName },
-                        conversationId,
-                        chatOpsBindingId,
-                        chatOpsThreadId,
-                        userId,
-                        agentId,
-                        organizationId,
-                        sessionId,
-                        scheduleTriggerRunId,
-                        abortSignal,
-                        tokenAuth: buildTokenAuthContext({
-                          mcpGwToken,
-                          organizationId,
-                          userId,
-                        }),
+                        teamIds: [],
+                        externalAgentId: getChatExternalAgentId(),
                       },
+                      globalToolPolicy,
                     );
+                  },
+                }
+              : {}),
+            execute: async (args: unknown) => {
+              if (blockOnApprovalRequired) {
+                await throwIfApprovalRequired(
+                  mcpTool.name,
+                  args,
+                  globalToolPolicy,
+                );
+              }
 
-                    span.setAttribute(
-                      ATTR_MCP_IS_ERROR_RESULT,
-                      archestraResponse.isError ?? false,
-                    );
-                    reportToolMetrics({
-                      toolName: mcpTool.name,
-                      agentId,
-                      agentName,
-                      startTime: toolStartTime,
-                      isError: archestraResponse.isError ?? false,
-                    });
+              logger.info(
+                { agentId, userId, toolName: mcpTool.name, arguments: args },
+                "Executing MCP tool from chat (direct)",
+              );
 
-                    // Check for errors
-                    if (archestraResponse.isError) {
-                      const errorText = archestraResponse.content
+              const toolArguments = isRecord(args) ? args : undefined;
+              const { serverName } = parseFullToolName(mcpTool.name);
+
+              const toolStartTime = Date.now();
+
+              return startActiveMcpSpan({
+                toolName: mcpTool.name,
+                mcpServerName: serverName ?? "unknown",
+                agent: { id: agentId, name: agentName },
+                sessionId,
+                toolArgs: toolArguments,
+                user,
+                callback: async (span) => {
+                  try {
+                    throwIfAborted(abortSignal);
+                    // Check if this is an Archestra tool - handle directly without DB lookup
+                    if (archestraMcpBranding.isToolName(mcpTool.name)) {
+                      logger.debug(
+                        {
+                          toolName: mcpTool.name,
+                          scheduleTriggerRunId: scheduleTriggerRunId ?? null,
+                          conversationId: conversationId ?? null,
+                        },
+                        "Executing archestra tool with context",
+                      );
+                      const archestraResponse = await executeArchestraTool(
+                        mcpTool.name,
+                        toolArguments,
+                        {
+                          agent: { id: agentId, name: agentName },
+                          conversationId,
+                          userId,
+                          agentId,
+                          organizationId,
+                          sessionId,
+                          scheduleTriggerRunId,
+                          abortSignal,
+                        },
+                      );
+
+                      span.setAttribute(
+                        ATTR_MCP_IS_ERROR_RESULT,
+                        archestraResponse.isError ?? false,
+                      );
+                      reportToolMetrics({
+                        toolName: mcpTool.name,
+                        agentId,
+                        agentName,
+                        startTime: toolStartTime,
+                        isError: archestraResponse.isError ?? false,
+                      });
+
+                      // Check for errors
+                      if (archestraResponse.isError) {
+                        const errorText = archestraResponse.content
+                          .map((item) =>
+                            item.type === "text"
+                              ? item.text
+                              : JSON.stringify(item),
+                          )
+                          .join("\n");
+                        throw new Error(errorText);
+                      }
+
+                      // Convert MCP content to string for AI SDK
+                      return archestraResponse.content
                         .map((item) =>
                           item.type === "text"
                             ? item.text
                             : JSON.stringify(item),
                         )
                         .join("\n");
-                      throw new Error(errorText);
                     }
 
-                    // Convert MCP content to string for AI SDK
-                    return archestraResponse.content
-                      .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
-                      )
-                      .join("\n");
+                    // Execute non-Archestra tools via shared helper with browser sync
+                    return await executeMcpTool({
+                      toolName: mcpTool.name,
+                      toolArguments,
+                      agentId,
+                      agentName,
+                      userId,
+                      organizationId,
+                      conversationId,
+                      mcpGwToken,
+                      globalToolPolicy,
+                      considerContextUntrusted,
+                      abortSignal,
+                    });
+                  } catch (error) {
+                    reportToolMetrics({
+                      toolName: mcpTool.name,
+                      agentId,
+                      agentName,
+                      startTime: toolStartTime,
+                      isError: true,
+                    });
+                    const logPayload = {
+                      agentId,
+                      userId,
+                      toolName: mcpTool.name,
+                      err: error,
+                      errorMessage:
+                        error instanceof Error ? error.message : String(error),
+                    };
+                    if (isAbortLikeError(error)) {
+                      logger.info(logPayload, "MCP tool execution aborted");
+                    } else {
+                      logger.error(logPayload, "MCP tool execution failed");
+                    }
+                    throw error;
                   }
-
-                  // Execute non-Archestra tools via shared helper with browser sync
-                  return await executeMcpTool({
-                    toolName: mcpTool.name,
-                    toolArguments,
-                    agentId,
-                    agentName,
-                    userId,
-                    organizationId,
-                    conversationId,
-                    mcpGwToken,
-                    globalToolPolicy,
-                    considerContextUntrusted,
-                    abortSignal,
-                  });
-                } catch (error) {
-                  reportToolMetrics({
-                    toolName: mcpTool.name,
-                    agentId,
-                    agentName,
-                    startTime: toolStartTime,
-                    isError: true,
-                  });
-                  const logPayload = {
-                    agentId,
-                    userId,
-                    toolName: mcpTool.name,
-                    err: error,
-                    errorMessage:
-                      error instanceof Error ? error.message : String(error),
-                  };
-                  if (isAbortLikeError(error)) {
-                    logger.info(logPayload, "MCP tool execution aborted");
-                  } else {
-                    logger.error(logPayload, "MCP tool execution failed");
-                  }
-                  throw error;
-                }
-              },
-            });
+                },
+              });
+            },
+            // Strip UI-only fields (structuredContent, rawContent, _meta) so the LLM
+            // only receives the plain-text `content` summary (SEP-1865).
+            toModelOutput: mcpToolToModelOutput,
           },
-          // Strip UI-only fields (structuredContent, rawContent, _meta) so the LLM
-          // only receives the plain-text `content` summary (SEP-1865).
-          toModelOutput: mcpToolToModelOutput,
-        };
+          buildExternalToolSecurityMetadata({
+            toolName: mcpTool.name,
+            toolDefinition: mcpTool,
+          }),
+        );
       } catch (error) {
         logger.error(
           { agentId, userId, toolName: mcpTool.name, error },

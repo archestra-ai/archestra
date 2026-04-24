@@ -23,6 +23,7 @@ import type {
   InsertMemoryItem,
   MemoryItem,
   MemoryKind,
+  MemoryPolicyFlag,
   MemoryRejectionReason,
   MemoryScopeType,
   MemoryStatus,
@@ -187,6 +188,7 @@ class MemoryItemModel {
     organizationId: string;
     patch: SupersedingPatch;
     requesterId: string;
+    policyFlags?: MemoryPolicyFlag[];
   }): Promise<MemoryItem> {
     return await db.transaction(async (tx) => {
       const [source] = await tx
@@ -218,7 +220,7 @@ class MemoryItemModel {
           content: params.patch.content ?? source.content,
           createdBy: params.requesterId,
           extractorVersion: source.extractorVersion,
-          policyFlags: source.policyFlags,
+          policyFlags: params.policyFlags ?? source.policyFlags,
           sourceConversationId: source.sourceConversationId,
           sourceMessageIds: source.sourceMessageIds,
           supersedesMemoryId: source.id,

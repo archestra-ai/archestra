@@ -7,7 +7,11 @@ import {
   type MemoryRequesterRole,
   normalizeMemoryRequesterRole,
 } from "@/memory/policy/requester-role";
-import { reportMemoryReviewed } from "@/memory/telemetry/metrics";
+import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
+import {
+  reportMemoryReviewed,
+  reportMemoryReviewPolicyBlocked,
+} from "@/memory/telemetry/metrics";
 import {
   setMemorySpanAttributes,
   withMemorySpan,
@@ -17,6 +21,7 @@ import MemoryTombstoneModel from "@/models/memory-tombstone";
 import type {
   InsertMemoryItem,
   MemoryItem,
+  MemoryPolicyFlag,
   MemoryRejectionReason,
   UpdateMemoryItem,
 } from "@/types/memory-item";
@@ -70,6 +75,34 @@ export type ProposeSupersedingEditParams = {
   teamIds?: string[];
 };
 
+export type MemoryReviewPolicyErrorReason =
+  | "external_context"
+  | "sensitive"
+  | "high_risk_pii"
+  | "instruction_like_high"
+  | "tombstone_hit"
+  | "high_risk_policy_flags";
+
+export class MemoryReviewPolicyError extends Error {
+  readonly reason: MemoryReviewPolicyErrorReason;
+
+  constructor(params: {
+    reason: MemoryReviewPolicyErrorReason;
+    message: string;
+  }) {
+    super(params.message);
+    this.name = "MemoryReviewPolicyError";
+    this.reason = params.reason;
+  }
+}
+
+const HIGH_RISK_APPROVAL_POLICY_FLAGS = new Set<MemoryPolicyFlag>([
+  "instruction_like",
+  "instruction_like_high",
+  "instruction_like_medium",
+  "external_context",
+]);
+
 export async function approve(
   params: ApproveMemoryParams,
 ): Promise<MemoryItem | null> {
@@ -106,6 +139,23 @@ export async function approve(
         "[memory] approve: blocked by authorization",
       );
       return null;
+    }
+
+    if (hasHighRiskApprovalPolicyFlags(accessContext.item.policyFlags)) {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+          policyFlags: accessContext.item.policyFlags,
+        },
+        "[memory] approve: blocked by high-risk policy flags",
+      );
+      reportMemoryReviewPolicyBlocked("high_risk_policy_flags");
+      throw new MemoryReviewPolicyError({
+        reason: "high_risk_policy_flags",
+        message:
+          "Memory candidate blocked by policy: high-risk policy flags require additional security review before approval.",
+      });
     }
 
     const approved = await MemoryItemModel.transitionStatus({
@@ -224,6 +274,20 @@ export async function manualCreate(
     return null;
   }
 
+  const policyScreen = await screenCandidateBeforePersist({
+    organizationId: params.organizationId,
+    scopeType: params.data.scopeType,
+    scopeId: params.data.scopeId,
+    content: params.data.content,
+    source: "manual_create",
+  });
+  if (!policyScreen.allowed) {
+    throw new MemoryReviewPolicyError({
+      reason: policyScreen.code,
+      message: policyScreen.message,
+    });
+  }
+
   return await MemoryItemModel.create({
     organizationId: params.organizationId,
     scopeType: params.data.scopeType,
@@ -232,7 +296,10 @@ export async function manualCreate(
     status: "candidate",
     content: params.data.content,
     createdBy: params.requester.id,
-    policyFlags: params.data.policyFlags ?? [],
+    policyFlags: mergePolicyFlags(
+      params.data.policyFlags ?? [],
+      policyScreen.policyFlags,
+    ),
     extractorVersion: params.data.extractorVersion,
     sourceConversationId: params.data.sourceConversationId,
     sourceMessageIds: params.data.sourceMessageIds,
@@ -271,12 +338,31 @@ export async function proposeSupersedingEdit(
     return null;
   }
 
+  const nextContent = params.patch.content ?? accessContext.item.content;
+  const policyScreen = await screenCandidateBeforePersist({
+    organizationId: params.organizationId,
+    scopeType: accessContext.item.scopeType,
+    scopeId: accessContext.item.scopeId,
+    content: nextContent,
+    source: "supersede",
+  });
+  if (!policyScreen.allowed) {
+    throw new MemoryReviewPolicyError({
+      reason: policyScreen.code,
+      message: policyScreen.message,
+    });
+  }
+
   try {
     return await MemoryItemModel.createSupersedingCandidate({
       id: params.itemId,
       organizationId: params.organizationId,
       patch: params.patch,
       requesterId: params.requester.id,
+      policyFlags: mergePolicyFlags(
+        accessContext.item.policyFlags,
+        policyScreen.policyFlags,
+      ),
     });
   } catch {
     return null;
@@ -496,4 +582,19 @@ function shouldCreateRejectionTombstone(
   reason: MemoryRejectionReason,
 ): boolean {
   return reason === "manipulative" || reason === "sensitive";
+}
+
+function hasHighRiskApprovalPolicyFlags(
+  policyFlags: MemoryPolicyFlag[],
+): boolean {
+  return policyFlags.some((policyFlag) =>
+    HIGH_RISK_APPROVAL_POLICY_FLAGS.has(policyFlag),
+  );
+}
+
+function mergePolicyFlags(
+  currentPolicyFlags: MemoryPolicyFlag[],
+  nextPolicyFlags: MemoryPolicyFlag[],
+): MemoryPolicyFlag[] {
+  return Array.from(new Set([...currentPolicyFlags, ...nextPolicyFlags]));
 }

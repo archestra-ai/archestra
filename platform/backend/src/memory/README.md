@@ -83,3 +83,8 @@ Deferred items are tracked in:
 Use stable inline TODO references:
 
 - `TODO(SEC-FU-XX): <action>`
+
+## Runbook
+The operational security runbook for rollout-1 lives in:
+
+- `platform/backend/src/memory/docs/security.md`

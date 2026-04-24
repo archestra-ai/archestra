@@ -7,7 +7,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { canReadMemory } from "@/memory/policy/can-read";
-import { memoryReviewService } from "@/memory/review/review-service";
+import {
+  MemoryReviewPolicyError,
+  memoryReviewService,
+} from "@/memory/review/review-service";
 import { MemberModel, MemoryItemModel, TeamModel } from "@/models";
 import {
   ApiError,
@@ -241,21 +244,27 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         MemberModel.getByUserId(user.id, organizationId),
       ]);
 
-      const created = await memoryReviewService.manualCreate({
-        organizationId,
-        data: {
-          scopeType: body.scopeType,
-          scopeId: body.scopeId,
-          kind: body.kind,
-          content: body.content,
-          policyFlags: body.policyFlags,
-          confidenceBand: body.confidenceBand ?? undefined,
-          expiresAt: body.expiresAt ?? undefined,
-          language: body.language,
-        },
-        requester: { id: user.id, role: member?.role },
-        teamIds,
-      });
+      let created: Awaited<ReturnType<typeof memoryReviewService.manualCreate>>;
+      try {
+        created = await memoryReviewService.manualCreate({
+          organizationId,
+          data: {
+            scopeType: body.scopeType,
+            scopeId: body.scopeId,
+            kind: body.kind,
+            content: body.content,
+            policyFlags: body.policyFlags,
+            confidenceBand: body.confidenceBand ?? undefined,
+            expiresAt: body.expiresAt ?? undefined,
+            language: body.language,
+          },
+          requester: { id: user.id, role: member?.role },
+          teamIds,
+        });
+      } catch (error) {
+        rethrowMemoryReviewPolicyError(error);
+        throw error;
+      }
 
       if (!created) {
         throw new ApiError(
@@ -349,13 +358,21 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         MemberModel.getByUserId(user.id, organizationId),
       ]);
 
-      const created = await memoryReviewService.proposeSupersedingEdit({
-        itemId: id,
-        organizationId,
-        patch: body,
-        requester: { id: user.id, role: member?.role },
-        teamIds,
-      });
+      let created: Awaited<
+        ReturnType<typeof memoryReviewService.proposeSupersedingEdit>
+      >;
+      try {
+        created = await memoryReviewService.proposeSupersedingEdit({
+          itemId: id,
+          organizationId,
+          patch: body,
+          requester: { id: user.id, role: member?.role },
+          teamIds,
+        });
+      } catch (error) {
+        rethrowMemoryReviewPolicyError(error);
+        throw error;
+      }
 
       if (!created) {
         throw new ApiError(
@@ -385,12 +402,18 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         MemberModel.getByUserId(user.id, organizationId),
       ]);
 
-      const approved = await memoryReviewService.approve({
-        itemId: id,
-        organizationId,
-        reviewer: { id: user.id, role: member?.role },
-        teamIds,
-      });
+      let approved: Awaited<ReturnType<typeof memoryReviewService.approve>>;
+      try {
+        approved = await memoryReviewService.approve({
+          itemId: id,
+          organizationId,
+          reviewer: { id: user.id, role: member?.role },
+          teamIds,
+        });
+      } catch (error) {
+        rethrowMemoryReviewPolicyError(error);
+        throw error;
+      }
 
       if (!approved) {
         throw new ApiError(
@@ -551,3 +574,9 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default memoryRoutes;
+
+function rethrowMemoryReviewPolicyError(error: unknown): never | undefined {
+  if (error instanceof MemoryReviewPolicyError) {
+    throw new ApiError(409, error.message);
+  }
+}

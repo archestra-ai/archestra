@@ -40,7 +40,7 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import { memoryInjectionBuilder } from "@/memory/injection/injection-builder";
-import { hasExternalCommunicationCapability } from "@/memory/policy/external-tools-capability";
+import { assessExternalToolCapabilities } from "@/memory/policy/external-tools-capability";
 import {
   reportMemoryInjectionBlock,
   reportMemoryScopeViolationBlocked,
@@ -273,15 +273,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? ((await AgentModel.findById(agentId))?.considerContextUntrusted ??
               true)
             : false;
-          const hasExternalToolCapability = hasExternalCommunicationCapability(
-            Object.keys(mcpTools),
-          );
+          const externalToolCapabilityAssessment =
+            assessExternalToolCapabilities(Object.entries(mcpTools));
           const memoryInjectionBlockReason = getMemoryInjectionBlockReason({
             featureFlagEnabled: config.memory.injectionEnabled,
             considerContextUntrusted,
-            hasExternalToolCapability,
+            hasExternalToolCapability:
+              externalToolCapabilityAssessment.hasExternalCommunicationCapability,
           });
           const memoryInjectionEnabled = memoryInjectionBlockReason === null;
+
+          if (externalToolCapabilityAssessment.usedFallback) {
+            logger.info(
+              {
+                event: "memory_injection_tool_capability_fallback_used",
+                conversationId,
+                userId: user.id,
+                organizationId,
+                agentId,
+                fallbackToolNames:
+                  externalToolCapabilityAssessment.fallbackToolNames,
+                unknownCapabilityToolNames:
+                  externalToolCapabilityAssessment.unknownCapabilityToolNames,
+              },
+              "[memory] injection: tool capability metadata fallback used",
+            );
+          }
 
           if (
             memoryInjectionBlockReason &&

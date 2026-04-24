@@ -5,15 +5,9 @@ import {
 } from "@shared";
 import { z } from "zod";
 import logger from "@/logging";
-import { screenSensitiveData } from "@/memory/policy/sensitive-data-screen";
-import {
-  reportMemoryMcpProposeBlock,
-  reportMemoryPolicyBlocked,
-  reportMemoryScreenDecision,
-  reportMemoryTombstoneHit,
-} from "@/memory/telemetry/metrics";
+import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
+import { reportMemoryCandidates } from "@/memory/telemetry/metrics";
 import { MemoryItemModel } from "@/models";
-import MemoryTombstoneModel from "@/models/memory-tombstone";
 import {
   MemoryKindSchema,
   MemoryPolicyFlagSchema,
@@ -125,10 +119,6 @@ export const toolOutputSchemas = registry.toolOutputSchemas;
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
-export const __test = {
-  hasExternalContextMarker,
-};
-
 async function handleListMyMemory(params: { context: ArchestraContext }) {
   const { context } = params;
 
@@ -164,79 +154,22 @@ async function handleProposeMemoryCandidate(params: {
     return errorResult("User context not available");
   }
 
-  if (hasExternalContextMarker(args.content)) {
-    emitPolicyBlockAuditMetric({
-      reason: "external_context",
-      toolName,
-      context,
-      detectors: ["external_context_marker"],
-    });
-    reportMemoryPolicyBlocked("external_context");
-    reportMemoryScreenDecision({
-      decision: "block",
-      reason: "external_context_marker",
-    });
-    reportMemoryMcpProposeBlock("external_context_marker");
-    return errorResult(
-      "Memory candidate blocked by policy: external context markers are not allowed.",
-    );
-  }
-
-  const sensitiveDataResult = screenSensitiveData({ content: args.content });
-  reportMemoryScreenDecision({
-    decision: sensitiveDataResult.decision,
-    reason: sensitiveDataResult.reason,
-  });
-  if (sensitiveDataResult.blocked) {
-    if (sensitiveDataResult.blockReason === "high_risk_pii") {
-      reportMemoryPolicyBlocked("high_risk_pii");
-    } else if (sensitiveDataResult.blockReason === "instruction_like_high") {
-      reportMemoryPolicyBlocked("instruction_like_high");
-    } else {
-      reportMemoryPolicyBlocked("sensitive");
-    }
-    reportMemoryMcpProposeBlock(sensitiveDataResult.reason);
-    emitPolicyBlockAuditMetric({
-      reason: sensitiveDataResult.blockReason ?? "secret_or_pii",
-      toolName,
-      context,
-      detectors: sensitiveDataResult.matchedDetectors,
-    });
-    return errorResult(
-      sensitiveDataResult.blockReason === "instruction_like_high"
-        ? "Memory candidate blocked by policy: high-confidence instruction-like prompt injection detected."
-        : "Memory candidate blocked by policy: secret or sensitive markers detected.",
-    );
-  }
-
-  const tombstoneMatch = await MemoryTombstoneModel.findActiveMatchByContent({
+  const policyScreen = await screenCandidateBeforePersist({
     organizationId: context.organizationId,
     scopeType: "user",
     scopeId: context.userId,
     content: args.content,
+    source: "mcp_propose",
+    checkExternalContextMarkers: true,
   });
-  if (tombstoneMatch.matched) {
-    reportMemoryPolicyBlocked("tombstone_hit");
-    reportMemoryScreenDecision({
-      decision: "block",
-      reason: "tombstone_hit",
-    });
-    reportMemoryMcpProposeBlock("tombstone_hit");
-    if (tombstoneMatch.reason && tombstoneMatch.matchType) {
-      reportMemoryTombstoneHit({
-        reason: tombstoneMatch.reason,
-        matchType: tombstoneMatch.matchType,
-      });
-    }
+  if (!policyScreen.allowed) {
     emitPolicyBlockAuditMetric({
-      reason: "tombstone_hit",
+      reason: policyScreen.code,
       toolName,
       context,
-      detectors: ["tombstone_hit"],
+      detectors: policyScreen.matchedDetectors,
     });
-    return errorResult(
-      "Memory candidate blocked by policy: content previously rejected and tombstoned.",
-    );
+    return errorResult(policyScreen.message);
   }
 
   const memoryItem = await MemoryItemModel.create({
@@ -247,27 +180,17 @@ async function handleProposeMemoryCandidate(params: {
     status: "candidate",
     content: args.content,
     createdBy: context.userId,
-    policyFlags: sensitiveDataResult.policyFlags,
+    policyFlags: policyScreen.policyFlags,
+  });
+
+  reportMemoryCandidates({
+    scopeType: "user",
+    extractorVersion: "manual_mcp_propose",
+    policyFlags: policyScreen.policyFlags,
   });
 
   const result = { memoryItem: toMemoryItemOutput(memoryItem) };
   return structuredSuccessResult(result, JSON.stringify(result, null, 2));
-}
-
-function hasExternalContextMarker(content: string): boolean {
-  const normalized = normalizeExternalContextInput(content);
-  if (!normalized) {
-    return false;
-  }
-
-  const collapsed = normalized.replace(/[\s_-]+/g, "");
-
-  return EXTERNAL_CONTEXT_MARKERS.some((marker) => {
-    if (normalized.includes(marker.normalizedNeedle)) {
-      return true;
-    }
-    return collapsed.includes(marker.collapsedNeedle);
-  });
 }
 
 function emitPolicyBlockAuditMetric(params: {
@@ -301,10 +224,6 @@ function emitPolicyBlockAuditMetric(params: {
   );
 }
 
-function normalizeExternalContextInput(content: string): string {
-  return content.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
-}
-
 function toMemoryItemOutput(item: MemoryItem) {
   return {
     id: item.id,
@@ -327,22 +246,3 @@ function toMemoryItemOutput(item: MemoryItem) {
     expiresAt: item.expiresAt ? item.expiresAt.toISOString() : null,
   };
 }
-
-// TODO(SEC-FU-01): Replace marker heuristics with structured provenance fields in MCP args.
-const EXTERNAL_CONTEXT_MARKERS = [
-  "unsafecontextboundary",
-  "unsafe context boundary",
-  "unsafe context",
-  "external_context",
-  "external context",
-  "tool result",
-  "from tool output",
-  "browser output",
-  "search result",
-  "web fetch",
-  "mcp_fetch",
-  "mcp result",
-].map((needle) => ({
-  normalizedNeedle: needle,
-  collapsedNeedle: needle.replace(/[\s_-]+/g, ""),
-}));

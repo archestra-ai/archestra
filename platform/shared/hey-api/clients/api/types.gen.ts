@@ -35489,6 +35489,7 @@ export type GetOrganizationResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -35740,6 +35741,7 @@ export type UpdateAppearanceSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -35869,6 +35871,7 @@ export type UpdateSecuritySettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -35999,6 +36002,7 @@ export type UpdateLlmSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36130,6 +36134,7 @@ export type UpdateAgentSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36141,6 +36146,7 @@ export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
         connectionDefaultLlmProxyId?: string | null;
+        connectionDefaultClientId?: string | null;
         connectionShownClientIds?: Array<string> | null;
         connectionShownProviders?: Array<'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure'> | null;
     };
@@ -36261,6 +36267,7 @@ export type UpdateConnectionSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36389,6 +36396,7 @@ export type UpdateMcpSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36520,6 +36528,7 @@ export type UpdateKnowledgeSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36646,6 +36655,7 @@ export type DropEmbeddingConfigResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36855,6 +36865,7 @@ export type CompleteOnboardingResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };

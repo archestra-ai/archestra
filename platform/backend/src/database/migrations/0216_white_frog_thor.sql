@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "connection_default_client_id" text;

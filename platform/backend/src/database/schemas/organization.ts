@@ -169,6 +169,13 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultLlmProxyId: uuid("connection_default_llm_proxy_id"),
 
   /**
+   * Admin-selected client pre-selected on /connection. Null falls back to the
+   * system default ("generic" / "Any Client"). Stored as a string because
+   * client IDs are a frontend-owned string enum, not a DB row.
+   */
+  connectionDefaultClientId: text("connection_default_client_id"),
+
+  /**
    * Client IDs shown on the /connection client grid. Null = show all.
    * ("generic" is always shown regardless of this list.)
    */

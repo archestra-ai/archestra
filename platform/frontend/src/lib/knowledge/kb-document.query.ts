@@ -20,6 +20,7 @@ export function useKnowledgeBaseDocuments(params: {
   limit: number;
   offset: number;
   search?: string;
+  connectorId?: string;
 }) {
   return useQuery({
     queryKey: [
@@ -28,13 +29,17 @@ export function useKnowledgeBaseDocuments(params: {
       params.limit,
       params.offset,
       params.search ?? "",
+      params.connectorId ?? "",
     ],
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
-      const query: KnowledgeBaseDocumentsQuery = {
+      const query: KnowledgeBaseDocumentsQuery & { connectorId?: string } = {
         limit: params.limit,
         offset: params.offset,
         ...(params.search ? { search: params.search } : {}),
+        ...(params.connectorId && params.connectorId !== "all"
+          ? { connectorId: params.connectorId }
+          : {}),
       };
       const { data, error } = await getKnowledgeBaseDocuments({
         path: { id: params.knowledgeBaseId },

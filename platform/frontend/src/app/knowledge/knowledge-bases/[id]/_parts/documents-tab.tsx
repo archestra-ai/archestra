@@ -3,22 +3,34 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { ExternalLink, Eye, Trash2 } from "lucide-react";
+import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
   useDeleteKnowledgeBaseDocument,
   useKnowledgeBaseDocuments,
 } from "@/lib/knowledge/kb-document.query";
 import { formatDate } from "@/lib/utils";
+import { ConnectorTypeIcon } from "../../_parts/connector-icons";
 
 type PaginationMeta =
   archestraApiTypes.GetKnowledgeBaseDocumentsResponses["200"]["pagination"];
@@ -35,6 +47,8 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     updateQueryParams,
   } = useDataTableQueryParams({ defaultPageSize: DEFAULT_DOCUMENT_PAGE_SIZE });
   const search = searchParams.get("search") ?? "";
+  const connectorIdParam = searchParams.get("connectorId");
+
   const [selectedPreviewDoc, setSelectedPreviewDoc] =
     useState<KnowledgeBaseDocumentListItem | null>(null);
   const [deletingDoc, setDeletingDoc] =
@@ -45,6 +59,7 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     limit: pageSize,
     offset,
     search,
+    connectorId: connectorIdParam || undefined,
   });
   const deleteDocumentMutation = useDeleteKnowledgeBaseDocument();
 
@@ -53,6 +68,8 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     documentsResponse?.pagination ?? null;
   const totalDocuments = paginationMeta?.total ?? 0;
 
+  const { data: connectors } = useConnectors(knowledgeBaseId);
+
   const columns = useMemo<ColumnDef<KnowledgeBaseDocumentListItem>[]>(
     () => [
       {
@@ -60,18 +77,20 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         accessorKey: "title",
         header: "Title",
         cell: ({ row }) => (
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto max-w-[360px] justify-start p-0 text-left font-medium"
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedPreviewDoc(row.original);
-            }}
-            title={row.original.title}
-          >
-            {row.original.title}
-          </Button>
+          <div className="flex items-center gap-2 max-w-[400px]">
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <button
+              type="button"
+              className="truncate text-sm font-medium hover:underline cursor-pointer border-none bg-transparent p-0 text-left outline-none"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedPreviewDoc(row.original);
+              }}
+              title={row.original.title}
+            >
+              {row.original.title}
+            </button>
+          </div>
         ),
       },
       {
@@ -84,12 +103,14 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
               href={row.original.sourceUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex max-w-[320px] items-center gap-1 truncate text-sm text-muted-foreground hover:text-foreground hover:underline"
+              className="flex items-center gap-1.5 min-w-0 text-sm text-muted-foreground hover:text-foreground hover:underline"
               onClick={(event) => event.stopPropagation()}
               title={row.original.sourceUrl}
             >
-              <span className="truncate">{row.original.sourceUrl}</span>
-              <ExternalLink className="h-3 w-3 shrink-0" />
+              <span className="truncate max-w-[300px]">
+                {row.original.sourceUrl}
+              </span>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             </Link>
           ) : (
             <span className="text-sm text-muted-foreground">-</span>
@@ -100,8 +121,15 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         accessorKey: "connectorType",
         header: "Connector",
         cell: ({ row }) => (
-          <Badge variant="secondary" className="capitalize">
-            {row.original.connectorType}
+          <Badge
+            variant="outline"
+            className="flex w-fit items-center gap-1.5 px-2 py-0.5"
+          >
+            <ConnectorTypeIcon
+              type={row.original.connectorType}
+              className="h-3.5 w-3.5 shrink-0"
+            />
+            <span className="capitalize">{row.original.connectorType}</span>
           </Badge>
         ),
       },
@@ -110,45 +138,35 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         accessorKey: "updatedAt",
         header: "Last Updated",
         cell: ({ row }) => (
-          <span
-            className="text-sm text-muted-foreground"
-            title={formatDate({ date: row.original.updatedAt })}
-          >
-            {formatDistanceToNow(new Date(row.original.updatedAt), {
-              addSuffix: true,
-            })}
-          </span>
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span title={formatDate({ date: row.original.updatedAt })}>
+              {formatDistanceToNow(new Date(row.original.updatedAt), {
+                addSuffix: true,
+              })}
+            </span>
+          </div>
         ),
       },
       {
         id: "actions",
         header: "Actions",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedPreviewDoc(row.original);
-              }}
-              title="Preview document"
-            >
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(event) => {
-                event.stopPropagation();
-                setDeletingDoc(row.original);
-              }}
-              title="Delete document"
-            >
-              <Trash2 className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const actions: TableRowAction[] = [
+            {
+              icon: <Eye className="h-4 w-4" />,
+              label: "Preview",
+              onClick: () => setSelectedPreviewDoc(row.original),
+            },
+            {
+              icon: <Trash2 className="h-4 w-4" />,
+              label: "Delete",
+              variant: "destructive",
+              onClick: () => setDeletingDoc(row.original),
+            },
+          ];
+          return <TableRowActions actions={actions} />;
+        },
       },
     ],
     [],
@@ -156,18 +174,41 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <SearchInput
-          value={search}
-          syncQueryParams={false}
-          placeholder="Search documents by title..."
-          onSearchChange={(nextValue) =>
-            updateQueryParams({
-              search: nextValue || null,
-              page: "1",
-            })
-          }
-        />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-1 items-center gap-3 w-full max-w-lg">
+          <SearchInput
+            value={search}
+            syncQueryParams={false}
+            placeholder="Search documents by title..."
+            onSearchChange={(nextValue) =>
+              updateQueryParams({
+                search: nextValue || null,
+                page: "1",
+              })
+            }
+          />
+          <Select
+            value={searchParams.get("connectorId") || "all"}
+            onValueChange={(val: string) =>
+              updateQueryParams({
+                connectorId: val === "all" ? null : val,
+                page: "1",
+              })
+            }
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All Connectors" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Connectors</SelectItem>
+              {connectors?.map((conn) => (
+                <SelectItem key={conn.id} value={conn.id}>
+                  {conn.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <DataTable
@@ -181,11 +222,14 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           total: totalDocuments,
         }}
         onPaginationChange={setPagination}
-        hasActiveFilters={Boolean(search)}
-        filteredEmptyMessage="No documents match your search."
+        hasActiveFilters={
+          Boolean(search) || Boolean(searchParams.get("connectorId"))
+        }
+        filteredEmptyMessage="No documents match your filters."
         onClearFilters={() =>
           updateQueryParams({
             search: null,
+            connectorId: null,
             page: "1",
           })
         }
@@ -197,8 +241,7 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         onOpenChange={(open) => {
           if (!open) setSelectedPreviewDoc(null);
         }}
-        title={selectedPreviewDoc?.title ?? "Document Preview"}
-        description="Preview raw indexed document content."
+        title="Document Preview"
         size="medium"
       >
         {selectedPreviewDoc ? (

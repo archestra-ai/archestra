@@ -92,6 +92,7 @@ class KbDocumentModel {
     limit?: number;
     offset?: number;
     search?: string;
+    connectorId?: string;
   }): Promise<KbDocumentListItem[]> {
     const normalizedSearch = params.search?.trim();
     let query = db
@@ -135,6 +136,9 @@ class KbDocumentModel {
           ),
           normalizedSearch
             ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
+            : undefined,
+          params.connectorId
+            ? eq(schema.kbDocumentsTable.connectorId, params.connectorId)
             : undefined,
         ),
       )
@@ -216,6 +220,7 @@ class KbDocumentModel {
   static async countByKnowledgeBaseWithSearch(params: {
     knowledgeBaseId: string;
     search?: string;
+    connectorId?: string;
   }): Promise<number> {
     const normalizedSearch = params.search?.trim();
     const [result] = await db
@@ -236,6 +241,9 @@ class KbDocumentModel {
           ),
           normalizedSearch
             ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
+            : undefined,
+          params.connectorId
+            ? eq(schema.kbDocumentsTable.connectorId, params.connectorId)
             : undefined,
         ),
       );

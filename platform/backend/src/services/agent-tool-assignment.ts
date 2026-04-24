@@ -367,6 +367,14 @@ async function getAssignmentTargetContext(agentId: string): Promise<{
   };
 }
 
+async function isOrgAdmin(
+  userId: string,
+  organizationId: string,
+): Promise<boolean> {
+  const membership = await MemberModel.getByUserId(userId, organizationId);
+  return membership?.role === "admin";
+}
+
 export async function isMcpServerAssignableToTarget(params: {
   mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId">;
   target: {
@@ -383,10 +391,12 @@ export async function isMcpServerAssignableToTarget(params: {
       return target.teamIds.includes(mcpServer.teamId);
     }
     if (target.scope === "personal" && target.authorId) {
-      return TeamModel.isUserInAnyTeam(
-        [mcpServer.teamId],
-        target.authorId,
-      );
+      if (
+        await TeamModel.isUserInAnyTeam([mcpServer.teamId], target.authorId)
+      ) {
+        return true;
+      }
+      return isOrgAdmin(target.authorId, target.organizationId);
     }
     return false;
   }

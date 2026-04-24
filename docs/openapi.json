@@ -101940,7 +101940,7 @@
                                   },
                                   "batchSize": {
                                     "type": "integer",
-                                    "exclusiveMinimum": true,
+                                    "minimum": -9007199254740991,
                                     "maximum": 9007199254740991
                                   }
                                 },
@@ -102963,7 +102963,7 @@
                           },
                           "batchSize": {
                             "type": "integer",
-                            "exclusiveMinimum": true,
+                            "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           }
                         },
@@ -103634,7 +103634,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
-                              "exclusiveMinimum": true,
+                              "minimum": -9007199254740991,
                               "maximum": 9007199254740991
                             }
                           },
@@ -104604,7 +104604,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
-                              "exclusiveMinimum": true,
+                              "minimum": -9007199254740991,
                               "maximum": 9007199254740991
                             }
                           },
@@ -105477,7 +105477,7 @@
                           },
                           "batchSize": {
                             "type": "integer",
-                            "exclusiveMinimum": true,
+                            "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           }
                         },
@@ -106146,7 +106146,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
-                              "exclusiveMinimum": true,
+                              "minimum": -9007199254740991,
                               "maximum": 9007199254740991
                             }
                           },

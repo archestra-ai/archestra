@@ -1286,8 +1286,13 @@ export class ChatOpsManager {
             chatOpsBindingId: binding.id,
           });
 
+          const initialResponse = stripThinkingBlocks(initialResult.text || "");
+
           // If swap_agent/swap_to_default_agent changed this channel's binding,
-          // immediately hand off to the new agent in the same chatops turn.
+          // immediately hand off to the new agent in the same chatops turn only
+          // when the routing agent did not already produce a visible reply.
+          // Otherwise the handoff would replay routing text like
+          // "switch me to sales" into the target agent and can cause a swap loop.
           const updatedBinding = await ChatOpsChannelBindingModel.findById(
             binding.id,
           );
@@ -1296,6 +1301,16 @@ export class ChatOpsManager {
           if (swappedAgentId && swappedAgentId !== agent.id) {
             const swappedAgent = await AgentModel.findById(swappedAgentId);
             if (swappedAgent && swappedAgent.agentType === "agent") {
+              if (initialResponse) {
+                return {
+                  result: initialResult,
+                  responseAgent: {
+                    id: swappedAgent.id,
+                    name: swappedAgent.name,
+                  },
+                };
+              }
+
               logger.info(
                 {
                   bindingId: binding.id,

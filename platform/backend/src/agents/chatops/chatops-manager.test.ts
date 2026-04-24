@@ -1718,6 +1718,90 @@ describe("ChatOpsManager attachment passthrough", () => {
       }),
     );
   });
+
+  test("does not replay swap request into new agent when router replies", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "swap-reply@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const routerAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Router Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(routerAgent.id, [team.id]);
+
+    const specialistAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "French Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(specialistAgent.id, [team.id]);
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: routerAgent.id,
+    });
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async (params) => {
+        if (params.agentId === routerAgent.id) {
+          await ChatOpsChannelBindingModel.update(binding.id, {
+            agentId: specialistAgent.id,
+          });
+          return {
+            text: "Switched to French Agent. Bonjour!",
+            messageId: "router-msg",
+            finishReason: "stop",
+          };
+        }
+
+        throw new Error(`Unexpected handoff to agentId: ${params.agentId}`);
+      });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "swap-reply@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage({ text: "switch me to french agent" }),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.agentResponse).toBe("Switched to French Agent. Bonjour!");
+    expect(executorSpy).toHaveBeenCalledTimes(1);
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(specialistAgent.id);
+
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Switched to French Agent. Bonjour!",
+        footer: `🤖 ${specialistAgent.name}`,
+      }),
+    );
+  });
 });
 
 describe("buildChatOpsSessionId", () => {

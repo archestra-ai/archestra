@@ -7,8 +7,9 @@ import {
   getConnectorNamePlaceholder,
 } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { type UseFormReturn, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,31 @@ interface CreateConnectorFormValues {
   apiToken: string;
   schedule: string;
 }
+
+type AdvancedConfigFieldsProps = {
+  form: UseFormReturn<CreateConnectorFormValues>;
+};
+
+const ADVANCED_CONFIG_FIELDS: Record<
+  ConnectorType,
+  (props: AdvancedConfigFieldsProps) => ReactNode
+> = {
+  jira: ({ form }) => <JiraConfigFields form={form} hideUrl hideIsCloud />,
+  confluence: ({ form }) => (
+    <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
+  ),
+  github: ({ form }) => <GithubConfigFields form={form} hideUrl />,
+  gitlab: ({ form }) => <GitlabConfigFields form={form} hideUrl />,
+  linear: ({ form }) => <LinearConfigFields form={form} />,
+  servicenow: ({ form }) => <ServiceNowConfigFields form={form} hideUrl />,
+  notion: ({ form }) => <NotionConfigFields form={form} />,
+  sharepoint: ({ form }) => <SharePointConfigFields form={form} />,
+  gdrive: ({ form }) => <GoogleDriveConfigFields form={form} />,
+  dropbox: ({ form }) => <DropboxConfigFields control={form.control} />,
+  asana: ({ form }) => <AsanaConfigFields form={form} hideWorkspaceGid />,
+  outline: ({ form }) => <OutlineConfigFields form={form} />,
+  salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
+};
 
 type ConnectorVisibility = NonNullable<
   archestraApiTypes.CreateConnectorData["body"]["visibility"]
@@ -328,6 +354,7 @@ export function CreateConnectorDialog({
   const apiTokenLabel = apiTokenLabels[connectorType];
   const apiTokenPlaceholder = apiTokenPlaceholders[connectorType];
   const apiTokenRequiredMessage = apiTokenRequiredMessages[connectorType];
+  const AdvancedConfigFields = ADVANCED_CONFIG_FIELDS[connectorType];
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -737,45 +764,7 @@ export function CreateConnectorDialog({
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-4 space-y-4">
                     <SchedulePicker form={form} name="schedule" />
-                    {connectorType === "jira" && (
-                      <JiraConfigFields form={form} hideUrl hideIsCloud />
-                    )}
-                    {connectorType === "confluence" && (
-                      <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
-                    )}
-                    {connectorType === "github" && (
-                      <GithubConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "gitlab" && (
-                      <GitlabConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "linear" && (
-                      <LinearConfigFields form={form} />
-                    )}
-                    {connectorType === "servicenow" && (
-                      <ServiceNowConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "notion" && (
-                      <NotionConfigFields form={form} />
-                    )}
-                    {connectorType === "sharepoint" && (
-                      <SharePointConfigFields form={form} />
-                    )}
-                    {connectorType === "gdrive" && (
-                      <GoogleDriveConfigFields form={form} />
-                    )}
-                    {connectorType === "dropbox" && (
-                      <DropboxConfigFields control={form.control} />
-                    )}
-                    {connectorType === "asana" && (
-                      <AsanaConfigFields form={form} hideWorkspaceGid />
-                    )}
-                    {connectorType === "outline" && (
-                      <OutlineConfigFields form={form} />
-                    )}
-                    {connectorType === "salesforce" && (
-                      <SalesforceConfigFields form={form} />
-                    )}
+                    <AdvancedConfigFields form={form} />
                   </CollapsibleContent>
                 </Collapsible>
               </DialogBody>

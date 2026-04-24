@@ -6,8 +6,9 @@ import {
   getConnectorNamePlaceholder,
 } from "@shared";
 import { ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { type UseFormReturn, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -69,6 +70,34 @@ interface EditConnectorFormValues {
   apiToken: string;
   schedule: string;
 }
+
+type ConnectorType =
+  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
+
+type AdvancedConfigFieldsProps = {
+  form: UseFormReturn<EditConnectorFormValues>;
+};
+
+const ADVANCED_CONFIG_FIELDS: Record<
+  ConnectorType,
+  (props: AdvancedConfigFieldsProps) => ReactNode
+> = {
+  jira: ({ form }) => <JiraConfigFields form={form} hideUrl hideIsCloud />,
+  confluence: ({ form }) => (
+    <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
+  ),
+  github: ({ form }) => <GithubConfigFields form={form} hideUrl />,
+  gitlab: ({ form }) => <GitlabConfigFields form={form} hideUrl />,
+  linear: ({ form }) => <LinearConfigFields form={form} />,
+  servicenow: ({ form }) => <ServiceNowConfigFields form={form} hideUrl />,
+  notion: ({ form }) => <NotionConfigFields form={form} />,
+  sharepoint: ({ form }) => <SharePointConfigFields form={form} />,
+  gdrive: ({ form }) => <GoogleDriveConfigFields form={form} />,
+  dropbox: ({ form }) => <DropboxConfigFields control={form.control} />,
+  asana: ({ form }) => <AsanaConfigFields form={form} />,
+  outline: ({ form }) => <OutlineConfigFields form={form} />,
+  salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
+};
 
 export function EditConnectorDialog({
   connector,
@@ -142,7 +171,40 @@ export function EditConnectorDialog({
     salesforce: "Password + Security Token",
   };
 
+  const apiTokenPlaceholders: Record<ConnectorType, string> = {
+    servicenow: "Leave empty to keep existing password",
+    salesforce: "Leave empty to keep existing password + security token",
+    notion: "Leave empty to keep existing token",
+    sharepoint: "Leave empty to keep existing token",
+    gdrive: "Leave empty to keep existing token",
+    dropbox: "Leave empty to keep existing token",
+    outline: "Leave empty to keep existing token",
+    jira: "Leave empty to keep existing token",
+    confluence: "Leave empty to keep existing token",
+    github: "Leave empty to keep existing token",
+    gitlab: "Leave empty to keep existing token",
+    linear: "Leave empty to keep existing token",
+    asana: "Leave empty to keep existing token",
+  };
+
+  const apiTokenHelpText: Partial<Record<ConnectorType, ReactNode>> = {
+    sharepoint: (
+      <p className="text-[0.8rem] text-muted-foreground">
+        The Azure AD app registration requires the <code>Sites.Read.All</code>{" "}
+        permission on Microsoft Graph.
+      </p>
+    ),
+    gdrive: (
+      <p className="text-[0.8rem] text-muted-foreground">
+        Paste a service account JSON key (entire file content) or an OAuth2
+        access token with <code>drive.readonly</code> scope.
+      </p>
+    ),
+  };
+
   const apiTokenLabel = apiTokenLabels[connectorType];
+  const apiTokenPlaceholder = apiTokenPlaceholders[connectorType];
+  const AdvancedConfigFields = ADVANCED_CONFIG_FIELDS[connectorType];
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     const hasCredentials = values.apiToken.length > 0;
@@ -432,31 +494,14 @@ export function EditConnectorDialog({
                 <FormControl>
                   <Input
                     type="password"
-                    placeholder={
-                      connectorType === "servicenow"
-                        ? "Leave empty to keep existing password"
-                        : connectorType === "salesforce"
-                          ? "Leave empty to keep existing password + security token"
-                          : "Leave empty to keep existing token"
-                    }
+                    placeholder={apiTokenPlaceholder}
                     {...field}
                   />
                 </FormControl>
                 <FormDescription>
                   Leave empty to keep existing credentials unchanged.
                 </FormDescription>
-                {connectorType === "sharepoint" && (
-                  <p className="text-[0.8rem] text-muted-foreground">
-                    The Azure AD app registration requires the{" "}
-                    <code>Sites.Read.All</code> permission on Microsoft Graph.
-                  </p>
-                )}
-                {connectorType === "gdrive" && (
-                  <p className="text-[0.8rem] text-muted-foreground">
-                    Paste a service account JSON key (entire file content) or an
-                    OAuth2 access token with <code>drive.readonly</code> scope.
-                  </p>
-                )}
+                {apiTokenHelpText[connectorType]}
                 <FormMessage />
               </FormItem>
             )}
@@ -469,39 +514,7 @@ export function EditConnectorDialog({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-4 space-y-4">
               <SchedulePicker form={form} name="schedule" />
-              {connectorType === "jira" && (
-                <JiraConfigFields form={form} hideUrl hideIsCloud />
-              )}
-              {connectorType === "confluence" && (
-                <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
-              )}
-              {connectorType === "github" && (
-                <GithubConfigFields form={form} hideUrl />
-              )}
-              {connectorType === "gitlab" && (
-                <GitlabConfigFields form={form} hideUrl />
-              )}
-              {connectorType === "linear" && <LinearConfigFields form={form} />}
-              {connectorType === "servicenow" && (
-                <ServiceNowConfigFields form={form} hideUrl />
-              )}
-              {connectorType === "notion" && <NotionConfigFields form={form} />}
-              {connectorType === "sharepoint" && (
-                <SharePointConfigFields form={form} />
-              )}
-              {connectorType === "gdrive" && (
-                <GoogleDriveConfigFields form={form} />
-              )}
-              {connectorType === "dropbox" && (
-                <DropboxConfigFields control={form.control} />
-              )}
-              {connectorType === "asana" && <AsanaConfigFields form={form} />}
-              {connectorType === "outline" && (
-                <OutlineConfigFields form={form} />
-              )}
-              {connectorType === "salesforce" && (
-                <SalesforceConfigFields form={form} />
-              )}
+              <AdvancedConfigFields form={form} />
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -509,9 +522,6 @@ export function EditConnectorDialog({
     </StandardFormDialog>
   );
 }
-
-type ConnectorType =
-  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
 
 function getEditUrlConfig(type: ConnectorType): {
   typeLabel: string;

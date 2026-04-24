@@ -10,6 +10,9 @@ const HIDDEN_ARCHESTRA_META_TOOL_SHORT_NAMES = new Set([
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 ]);
+const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+);
 
 /**
  * Given catalog items and a parallel array of tool lists, find the default
@@ -36,7 +39,7 @@ export function getDefaultArchestraToolIds(
         const shortName = parseFullToolName(t.name).toolName;
         return (
           shortName !== null &&
-          DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.includes(shortName)
+          DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
         );
       })
       .map((t) => t.id),

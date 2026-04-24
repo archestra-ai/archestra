@@ -291,6 +291,7 @@ export const UpdateMcpSettingsSchema = z.object({
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
   connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
+  connectionDefaultClientId: z.string().max(64).nullable().optional(),
   connectionShownClientIds: z
     .array(z.string().max(64))
     .max(50)

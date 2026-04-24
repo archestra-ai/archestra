@@ -64,7 +64,6 @@ export function SalesforceConfigFields({
           </FormItem>
         )}
       />
-
     </div>
   );
 }

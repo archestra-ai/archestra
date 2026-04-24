@@ -1205,7 +1205,7 @@ export class ChatOpsManager {
 
   private async executeAndReply(params: {
     agent: { id: string; name: string };
-    binding: { organizationId: string };
+    binding: { id: string; organizationId: string; agentId: string | null };
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
@@ -1244,7 +1244,7 @@ export class ChatOpsManager {
       // appear as children of a single unified trace. The provider ID (e.g.
       // "ms-teams", "slack") is recorded as archestra.trigger.source so traces
       // can be filtered by invocation channel.
-      const result = await startActiveChatSpan({
+      const execution = await startActiveChatSpan({
         agentName: agent.name,
         agentId: agent.id,
         routeCategory: RouteCategory.CHATOPS,
@@ -1265,25 +1265,72 @@ export class ChatOpsManager {
             message.threadId,
           );
 
-          return executeA2AMessage({
+          const source =
+            provider.providerId === "slack"
+              ? "chatops:slack"
+              : "chatops:ms-teams";
+
+          const attachments =
+            message.attachments && message.attachments.length > 0
+              ? message.attachments
+              : undefined;
+
+          const initialResult = await executeA2AMessage({
             agentId: agent.id,
             organizationId: binding.organizationId,
             message: fullMessage,
             userId,
             sessionId,
-            source:
-              provider.providerId === "slack"
-                ? "chatops:slack"
-                : "chatops:ms-teams",
-            attachments:
-              message.attachments && message.attachments.length > 0
-                ? message.attachments
-                : undefined,
+            source,
+            attachments,
+            chatOpsBindingId: binding.id,
           });
+
+          // If swap_agent/swap_to_default_agent changed this channel's binding,
+          // immediately hand off to the new agent in the same chatops turn.
+          const updatedBinding = await ChatOpsChannelBindingModel.findById(
+            binding.id,
+          );
+          const swappedAgentId = updatedBinding?.agentId ?? null;
+
+          if (swappedAgentId && swappedAgentId !== agent.id) {
+            const swappedAgent = await AgentModel.findById(swappedAgentId);
+            if (swappedAgent && swappedAgent.agentType === "agent") {
+              logger.info(
+                {
+                  bindingId: binding.id,
+                  previousAgentId: agent.id,
+                  swappedAgentId: swappedAgent.id,
+                },
+                "[ChatOps] Agent binding changed during execution, handing off to swapped agent",
+              );
+
+              const handoffResult = await executeA2AMessage({
+                agentId: swappedAgent.id,
+                organizationId: binding.organizationId,
+                message: fullMessage,
+                userId,
+                sessionId,
+                source,
+                attachments,
+                chatOpsBindingId: binding.id,
+              });
+
+              return {
+                result: handoffResult,
+                responseAgent: { id: swappedAgent.id, name: swappedAgent.name },
+              };
+            }
+          }
+
+          return {
+            result: initialResult,
+            responseAgent: agent,
+          };
         },
       });
 
-      const agentResponse = stripThinkingBlocks(result.text || "");
+      const agentResponse = stripThinkingBlocks(execution.result.text || "");
 
       if (sendReply && agentResponse) {
         await provider.sendReply({
@@ -1309,7 +1356,7 @@ export class ChatOpsManager {
       return {
         success: true,
         agentResponse,
-        interactionId: result.messageId,
+        interactionId: execution.result.messageId,
       };
     } catch (error) {
       logger.error(

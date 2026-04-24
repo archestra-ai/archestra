@@ -1613,6 +1613,111 @@ describe("ChatOpsManager attachment passthrough", () => {
       }),
     );
   });
+
+  test("hands off to swapped chatops agent in the same turn", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "swap-handoff@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const routerAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Router Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(routerAgent.id, [team.id]);
+
+    const specialistAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Specialist Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(specialistAgent.id, [team.id]);
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: routerAgent.id,
+    });
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async (params) => {
+        if (params.agentId === routerAgent.id) {
+          await ChatOpsChannelBindingModel.update(binding.id, {
+            agentId: specialistAgent.id,
+          });
+          return {
+            text: "",
+            messageId: "router-msg",
+            finishReason: "stop",
+          };
+        }
+
+        if (params.agentId === specialistAgent.id) {
+          return {
+            text: "Specialist response",
+            messageId: "specialist-msg",
+            finishReason: "stop",
+          };
+        }
+
+        throw new Error(`Unexpected agentId: ${params.agentId}`);
+      });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "swap-handoff@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      text: "Please route this to the right expert",
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.agentResponse).toBe("Specialist response");
+
+    expect(executorSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        agentId: routerAgent.id,
+        chatOpsBindingId: binding.id,
+      }),
+    );
+    expect(executorSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        agentId: specialistAgent.id,
+        chatOpsBindingId: binding.id,
+      }),
+    );
+
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Specialist response",
+        footer: `🤖 ${specialistAgent.name}`,
+      }),
+    );
+  });
 });
 
 describe("buildChatOpsSessionId", () => {

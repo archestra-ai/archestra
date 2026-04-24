@@ -6,6 +6,7 @@ import {
 } from "@shared";
 import { vi } from "vitest";
 import {
+  ChatOpsChannelBindingModel,
   ConversationModel,
   LlmProviderApiKeyModel,
   OrganizationModel,
@@ -244,6 +245,89 @@ describe("chat tool execution", () => {
     expect(updatedConversation?.chatApiKeyId).toBe(targetApiKey.id);
   });
 
+  test("swap_agent succeeds with chatops binding context", async ({
+    makeAgent,
+  }) => {
+    const targetAgent = await makeAgent({
+      name: "ChatOps Swap Target",
+      agentType: "agent",
+      organizationId,
+    });
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "slack",
+      channelId: "C-chatops-swap",
+      workspaceId: "W-chatops-swap",
+      agentId: testAgent.id,
+    });
+
+    const contextWithChatOpsBinding: ArchestraContext = {
+      ...mockContext,
+      chatOpsBindingId: binding.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: "ChatOps Swap Target" },
+      contextWithChatOpsBinding,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      agent_id: targetAgent.id,
+      agent_name: "ChatOps Swap Target",
+    });
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(targetAgent.id);
+  });
+
+  test("swap_agent prefers chatops binding when both contexts are present", async ({
+    makeAgent,
+  }) => {
+    const targetAgent = await makeAgent({
+      name: "ChatOps Preferred Target",
+      agentType: "agent",
+      organizationId,
+    });
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "slack",
+      channelId: "C-chatops-both-contexts",
+      workspaceId: "W-chatops-both-contexts",
+      agentId: testAgent.id,
+    });
+
+    const contextWithBoth: ArchestraContext = {
+      ...mockContext,
+      conversationId: "synthetic-chatops-isolation-key",
+      chatOpsBindingId: binding.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: "ChatOps Preferred Target" },
+      contextWithBoth,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      agent_id: targetAgent.id,
+      agent_name: "ChatOps Preferred Target",
+    });
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(targetAgent.id);
+  });
+
   test("swap_agent returns error when swapping to same agent", async ({
     makeConversation,
   }) => {
@@ -377,6 +461,95 @@ describe("chat tool execution", () => {
     expect(updatedConversation?.selectedModel).toBe("gpt-4o");
     expect(updatedConversation?.selectedProvider).toBe("openai");
     expect(updatedConversation?.chatApiKeyId).toBe(defaultApiKey.id);
+  });
+
+  test("swap_to_default_agent succeeds with chatops binding context", async ({
+    makeAgent,
+  }) => {
+    const defaultAgent = await makeAgent({
+      name: "ChatOps Default Agent",
+      agentType: "agent",
+      organizationId,
+    });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: defaultAgent.id,
+    });
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "ms-teams",
+      channelId: "CH-chatops-default",
+      workspaceId: "WS-chatops-default",
+      agentId: testAgent.id,
+    });
+
+    const contextWithChatOpsBinding: ArchestraContext = {
+      ...mockContext,
+      chatOpsBindingId: binding.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      contextWithChatOpsBinding,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      agent_id: defaultAgent.id,
+      agent_name: "ChatOps Default Agent",
+    });
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(defaultAgent.id);
+  });
+
+  test("swap_to_default_agent prefers chatops binding when both contexts are present", async ({
+    makeAgent,
+  }) => {
+    const defaultAgent = await makeAgent({
+      name: "ChatOps Preferred Default",
+      agentType: "agent",
+      organizationId,
+    });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: defaultAgent.id,
+    });
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "ms-teams",
+      channelId: "CH-chatops-both-contexts",
+      workspaceId: "WS-chatops-both-contexts",
+      agentId: testAgent.id,
+    });
+
+    const contextWithBoth: ArchestraContext = {
+      ...mockContext,
+      conversationId: "synthetic-chatops-isolation-key",
+      chatOpsBindingId: binding.id,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      contextWithBoth,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      success: true,
+      agent_id: defaultAgent.id,
+      agent_name: "ChatOps Preferred Default",
+    });
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(defaultAgent.id);
   });
 
   test("swap_agent cannot swap to inaccessible team-scoped agent", async ({

@@ -47,7 +47,7 @@ export const AgentLabelWithDetailsSchema = z.object({
   valueId: UuidIdSchema.optional(),
 });
 
-export const AgentLabelGetForAgentResponseSchema = z.object({
+export const AgentLabelGetResponseSchema = z.object({
   keyId: UuidIdSchema,
   valueId: UuidIdSchema,
   key: labelKeySchema,
@@ -64,6 +64,4 @@ export type AgentLabel = z.infer<typeof SelectAgentLabelSchema>;
 export type InsertAgentLabel = z.infer<typeof InsertAgentLabelSchema>;
 
 export type AgentLabelWithDetails = z.infer<typeof AgentLabelWithDetailsSchema>;
-export type AgentLabelGetForAgentResponse = z.infer<
-  typeof AgentLabelGetForAgentResponseSchema
->;
+export type AgentLabelGetResponse = z.infer<typeof AgentLabelGetResponseSchema>;

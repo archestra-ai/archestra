@@ -1,9 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  AgentLabelGetForAgentResponse,
-  AgentLabelWithDetails,
-} from "@/types";
+import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
 class McpCatalogLabelModel {
@@ -12,7 +9,7 @@ class McpCatalogLabelModel {
    */
   static async getLabelsForCatalogItem(
     catalogId: string,
-  ): Promise<AgentLabelGetForAgentResponse[]> {
+  ): Promise<AgentLabelGetResponse[]> {
     const rows = await db
       .select({
         keyId: schema.mcpCatalogLabelsTable.keyId,

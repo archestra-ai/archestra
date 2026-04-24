@@ -179,12 +179,12 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         description:
-          "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
+          "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         tags: ["A2A"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: A2AJsonRpcRequestSchema,
+        body: z.union([A2AJsonRpcRequestSchema, z.unknown()]),
         response: {
           200: A2AJsonRpcResponseSchema,
         },
@@ -192,7 +192,13 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId } = request.params;
-      const { id, params } = request.body;
+      const body = request.body;
+
+      // Detect JSON-RPC envelope; otherwise treat body as a pass-through payload.
+      const envelopeParse = A2AJsonRpcRequestSchema.safeParse(body);
+      const isJsonRpc = envelopeParse.success;
+      const id: string | number = isJsonRpc ? envelopeParse.data.id : 1;
+      const params = isJsonRpc ? envelopeParse.data.params : {};
 
       // Fetch the internal agent
       const agent = await AgentModel.findById(agentId);
@@ -271,22 +277,28 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId = "system";
       }
 
-      // Extract user message from A2A message parts
-      const userMessage =
-        params?.message?.parts
-          ?.filter((p) => p.kind === "text")
-          .map((p) => p.text)
-          .join("\n") || "";
+      // Extract user message: from JSON-RPC message parts when enveloped,
+      // otherwise stringify the raw payload and pass it through to the agent.
+      let userMessage: string;
+      if (isJsonRpc) {
+        userMessage =
+          params?.message?.parts
+            ?.filter((p) => p.kind === "text")
+            .map((p) => p.text)
+            .join("\n") || "";
 
-      if (!userMessage) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32602,
-            message: "No message content provided",
-          },
-        });
+        if (!userMessage) {
+          return reply.send({
+            jsonrpc: "2.0" as const,
+            id,
+            error: {
+              code: -32602,
+              message: "No message content provided",
+            },
+          });
+        }
+      } else {
+        userMessage = typeof body === "string" ? body : JSON.stringify(body);
       }
 
       try {

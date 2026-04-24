@@ -17,6 +17,13 @@ const {
   getUniqueUserIds,
 } = archestraApiSdk;
 
+const isSessionId = (value: string): boolean => {
+  // Either <UUID>, or scheduled-<UUID>
+  const sessionIdRegex =
+    /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return sessionIdRegex.test(value);
+};
+
 export function useInteractions({
   profileId,
   externalAgentId,
@@ -190,6 +197,12 @@ export function useInteractionSessions({
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
 } = {}) {
+  // If the search value is a sessionId, we want to treat it as a sessionId search instead
+  const isSessionIdSearch = search ? isSessionId(search) : false;
+  const effectiveSessionId =
+    sessionId ?? (isSessionIdSearch ? search : undefined);
+  const effectiveSearch = isSessionIdSearch ? undefined : search;
+
   return useQuery({
     queryKey: [
       "interactions",
@@ -197,10 +210,10 @@ export function useInteractionSessions({
       profileId,
       userId,
       source,
-      sessionId,
+      effectiveSessionId,
       startDate,
       endDate,
-      search,
+      effectiveSearch,
       limit,
       offset,
     ],
@@ -210,10 +223,10 @@ export function useInteractionSessions({
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
           ...(source ? { source } : {}),
-          ...(sessionId ? { sessionId } : {}),
+          ...(effectiveSessionId ? { sessionId: effectiveSessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(search ? { search } : {}),
+          ...(effectiveSearch ? { search: effectiveSearch } : {}),
           limit,
           offset,
         },
@@ -242,10 +255,10 @@ export function useInteractionSessions({
       !profileId &&
       !userId &&
       !source &&
-      !sessionId &&
+      !effectiveSessionId &&
       !startDate &&
       !endDate &&
-      !search
+      !effectiveSearch
         ? initialData
         : undefined,
   });

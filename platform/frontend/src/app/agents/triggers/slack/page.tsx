@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, buildSlackSlashCommands } from "@shared";
 import { AlertTriangle, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -40,7 +40,7 @@ function useSlackProviderConfig(): ProviderConfig {
     providerIcon: "/icons/slack.png",
     webhookPath: "/api/webhooks/chatops/slack",
     docsUrl: getFrontendDocsUrl("platform-slack"),
-    slashCommand: `/${appName.toLowerCase()}-select-agent`,
+    slashCommand: buildSlackSlashCommands(appName).SELECT_AGENT,
     buildDeepLink: (binding) => {
       if (binding.workspaceId) {
         return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;

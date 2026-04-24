@@ -13,7 +13,7 @@ import secretsTable from "./secret";
 import { team } from "./team";
 
 /**
- * TeamToken table - stores authentication tokens for MCP Gateway access
+ * TeamToken table - stores authentication tokens for agent and MCP Gateway access
  * Each token is scoped to either the organization or a specific team
  * Token values are stored via secretsManager for Vault integration
  */

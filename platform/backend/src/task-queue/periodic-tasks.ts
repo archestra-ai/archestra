@@ -13,6 +13,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  {
+    taskType: "assign_agent_tools_from_labels",
+    intervalSeconds: 60,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

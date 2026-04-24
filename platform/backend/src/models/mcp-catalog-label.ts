@@ -1,7 +1,9 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
-import type { AgentLabelWithDetails } from "@/types";
+import type {
+  AgentLabelGetForAgentResponse,
+  AgentLabelWithDetails,
+} from "@/types";
 import AgentLabelModel from "./agent-label";
 
 class McpCatalogLabelModel {
@@ -10,7 +12,7 @@ class McpCatalogLabelModel {
    */
   static async getLabelsForCatalogItem(
     catalogId: string,
-  ): Promise<AgentLabelWithDetails[]> {
+  ): Promise<AgentLabelGetForAgentResponse[]> {
     const rows = await db
       .select({
         keyId: schema.mcpCatalogLabelsTable.keyId,
@@ -122,7 +124,7 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    const labelsInserted = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       await tx
         .delete(schema.mcpCatalogLabelsTable)
         .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
@@ -144,23 +146,11 @@ class McpCatalogLabelModel {
         }
 
         await tx.insert(schema.mcpCatalogLabelsTable).values(labelInserts);
-        return labelInserts.map((insert, index) => ({
-          keyId: insert.keyId,
-          valueId: insert.valueId,
-          key: labels[index].key,
-          value: labels[index].value,
-        }));
       }
-
-      return [];
     });
 
-    // After syncing labels, find all agents with matching labels and re-assign tools based on new label sets
-    const AgentModel = (await import("./agent")).default;
-    const agentIds = await AgentModel.findAllMatchingLabels(labelsInserted);
-    for (const agentId of agentIds) {
-      await assignAgentToolsFromLabels(agentId);
-    }
+    // Reconciliation of automatic MCP gateways that may now match (or no longer
+    // match) this catalog's labels is handled by the periodic sweep task.
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});

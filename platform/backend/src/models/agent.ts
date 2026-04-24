@@ -560,33 +560,6 @@ class AgentModel {
     return agents;
   }
 
-  static async findAllMatchingLabels(
-    pairs: { keyId: string; valueId: string }[],
-  ): Promise<string[]> {
-    if (pairs.length === 0) {
-      return [];
-    }
-
-    const whereConditions = pairs.map((pair) =>
-      and(
-        eq(schema.agentLabelsTable.keyId, pair.keyId),
-        eq(schema.agentLabelsTable.valueId, pair.valueId),
-      ),
-    );
-
-    const rows = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentLabelsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
-      )
-      .where(or(...whereConditions))
-      .groupBy(schema.agentsTable.id);
-
-    return rows.map((row) => row.id);
-  }
-
   /**
    * Find all internal agents including personal ones authored by a specific user.
    * Used for DM agent selection where personal agents of the current user are allowed.
@@ -1082,6 +1055,24 @@ class AgentModel {
     }
 
     return result;
+  }
+
+  /**
+   * Find IDs of all MCP gateway agents in automatic tool assignment mode.
+   * Used by the label-based tool reconciliation task queue fanout.
+   */
+  static async findAllAutomaticMcpGatewayIds(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.toolAssignmentMode, "automatic"),
+        ),
+      );
+
+    return rows.map((r) => r.id);
   }
 
   /**

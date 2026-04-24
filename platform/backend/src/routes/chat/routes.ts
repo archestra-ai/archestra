@@ -40,7 +40,11 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import { memoryInjectionBuilder } from "@/memory/injection/injection-builder";
-import { reportMemoryScopeViolationBlocked } from "@/memory/telemetry/metrics";
+import { hasExternalCommunicationCapability } from "@/memory/policy/external-tools-capability";
+import {
+  reportMemoryInjectionBlock,
+  reportMemoryScopeViolationBlocked,
+} from "@/memory/telemetry/metrics";
 import {
   AgentModel,
   ConversationChatErrorModel,
@@ -269,21 +273,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? ((await AgentModel.findById(agentId))?.considerContextUntrusted ??
               true)
             : false;
+          const hasExternalToolCapability = hasExternalCommunicationCapability(
+            Object.keys(mcpTools),
+          );
           const memoryInjectionBlockReason = getMemoryInjectionBlockReason({
             featureFlagEnabled: config.memory.injectionEnabled,
             considerContextUntrusted,
+            hasExternalToolCapability,
           });
           const memoryInjectionEnabled = memoryInjectionBlockReason === null;
 
-          if (memoryInjectionBlockReason === "untrusted_context") {
+          if (
+            memoryInjectionBlockReason &&
+            memoryInjectionBlockReason !== "feature_flag_off"
+          ) {
             reportMemoryScopeViolationBlocked({
               scopeType: "user",
-              reason: "untrusted_context",
+              reason: memoryInjectionBlockReason,
             });
+            reportMemoryInjectionBlock(memoryInjectionBlockReason);
             logger.info(
               {
                 event: "memory_injection_blocked",
-                reason: "untrusted_context",
+                reason: memoryInjectionBlockReason,
                 conversationId,
                 userId: user.id,
                 organizationId,
@@ -2271,6 +2283,7 @@ function normalizeDataUrlMediaType(params: {
 function shouldInjectMemory(params: {
   featureFlagEnabled: boolean;
   considerContextUntrusted: boolean;
+  hasExternalToolCapability: boolean;
 }): boolean {
   return getMemoryInjectionBlockReason(params) === null;
 }
@@ -2278,13 +2291,24 @@ function shouldInjectMemory(params: {
 function getMemoryInjectionBlockReason(params: {
   featureFlagEnabled: boolean;
   considerContextUntrusted: boolean;
-}): "untrusted_context" | "feature_flag_off" | null {
+  hasExternalToolCapability: boolean;
+}):
+  | "untrusted_context"
+  | "feature_flag_off"
+  | "external_tools_with_trusted_context"
+  | null {
   if (params.considerContextUntrusted) {
     return "untrusted_context";
   }
 
   if (!params.featureFlagEnabled) {
     return "feature_flag_off";
+  }
+
+  if (params.hasExternalToolCapability) {
+    // TODO(SEC-FU-07): enforce this at schema/API validation level (not only runtime).
+    // TODO(SEC-FU-08): keep secure default on considerContextUntrusted in agent config.
+    return "external_tools_with_trusted_context";
   }
 
   return null;

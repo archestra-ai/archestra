@@ -42,6 +42,8 @@ export type MemoryRejectionReason = z.infer<typeof MemoryRejectionReasonSchema>;
 
 export const MemoryPolicyFlagSchema = z.enum([
   "instruction_like",
+  "instruction_like_high",
+  "instruction_like_medium",
   "external_context",
   "source_deleted",
 ]);

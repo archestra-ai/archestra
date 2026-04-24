@@ -26,6 +26,19 @@ Key transitions:
 ## Human Review Invariant
 No extractor output becomes active memory without human approval. Agents/tools can propose candidates but cannot write directly into approved durable memory.
 
+## Security Layers
+- Candidate-only write boundary:
+  - Automated paths (extractor and MCP propose) can only create `candidate` records.
+- Sensitive screening:
+  - Secrets and high-risk PII are blocked before persistence.
+  - Instruction-like content is policy-scored and can be hard-blocked for high-confidence patterns.
+- External context isolation:
+  - Memory propose/injection paths enforce untrusted/external-context guards.
+- Tombstone protection:
+  - Deleted/rejected high-risk content is tracked with deterministic content hashing to prevent immediate recreation.
+- Runtime observability:
+  - Security decisions and blocks emit explicit memory security metrics.
+
 ## Extraction and Injection Boundaries
 - Extraction:
   - Asynchronous post-conversation task, gated by `ARCHESTRA_MEMORY_EXTRACTION_ENABLED`.
@@ -61,3 +74,12 @@ Endpoints with no request body (`POST /api/memory/:id/approve`, `POST /api/memor
 - Project/workspace/agent scopes
 - Auto-consolidation UI
 - Scheduled expiry workflows for approved memory (beyond candidate TTL cleanup)
+
+## Planned Security Improvements
+Deferred items are tracked in:
+
+- `C:\Users\vgarv\OneDrive\Desktop\Code\contribution\Archestra\.workspace\003-implementation\reports\stage-15-security-followups.md`
+
+Use stable inline TODO references:
+
+- `TODO(SEC-FU-XX): <action>`

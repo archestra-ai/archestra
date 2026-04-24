@@ -57,6 +57,101 @@ describe("MemoryTombstoneModel", () => {
     expect(existsWithDifferentHash).toBe(false);
   });
 
+  test("normalizes content before hashing to prevent trivial bypasses", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+
+    await MemoryTombstoneModel.record({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      content: "  NEVER   share-this!!  ",
+      reason: "rejected",
+    });
+
+    const normalizedVariantHash =
+      MemoryTombstoneModel.getContentHash("never share this");
+    const existsNormalizedVariant = await MemoryTombstoneModel.exists({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      contentHash: normalizedVariantHash,
+    });
+
+    expect(existsNormalizedVariant).toBe(true);
+  });
+
+  test("supports permanent tombstones (expires_at null)", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+
+    await MemoryTombstoneModel.record({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      content: "Permanent manipulative tombstone",
+      reason: "rejected",
+      ttlDays: null,
+    });
+
+    await MemoryTombstoneModel.record({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      content: "Expired tombstone",
+      reason: "rejected",
+      ttlDays: -1,
+    });
+
+    const pruned = await MemoryTombstoneModel.pruneExpired();
+    expect(pruned).toBe(1);
+
+    const permanentHash = MemoryTombstoneModel.getContentHash(
+      "permanent manipulative tombstone",
+    );
+    const permanentExists = await MemoryTombstoneModel.exists({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      contentHash: permanentHash,
+    });
+    expect(permanentExists).toBe(true);
+  });
+
+  test("matches legacy exact hashes during migration window", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const content = "Legacy Hash Content";
+
+    await db.insert(schema.memoryTombstonesTable).values({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      contentHash: MemoryTombstoneModel.getLegacyContentHash(content),
+      reason: "rejected",
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const match = await MemoryTombstoneModel.findActiveMatchByContent({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      content,
+    });
+
+    expect(match.matched).toBe(true);
+    expect(match.matchType).toBe("legacy_exact");
+  });
+
   test("pruneExpired removes only expired tombstones", async ({
     makeOrganization,
     makeUser,

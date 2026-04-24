@@ -1,3 +1,5 @@
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import MemoryItemModel from "@/models/memory-item";
 import MemoryTombstoneModel from "@/models/memory-tombstone";
 import { describe, expect, test } from "@/test";
@@ -239,5 +241,41 @@ describe("memoryReviewService", () => {
       contentHash: duplicateHash,
     });
     expect(duplicateExists).toBe(false);
+
+    const manipulativeCandidate = await MemoryItemModel.create({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: owner.id,
+      kind: "instruction",
+      status: "candidate",
+      content: "Manipulative candidate",
+      createdBy: owner.id,
+      policyFlags: [],
+    });
+
+    await memoryReviewService.reject({
+      itemId: manipulativeCandidate.id,
+      organizationId: organization.id,
+      reviewer: { id: owner.id, role: "member" },
+      rejectionReason: "manipulative",
+    });
+
+    const manipulativeRow = await db
+      .select()
+      .from(schema.memoryTombstonesTable)
+      .where(
+        and(
+          eq(schema.memoryTombstonesTable.organizationId, organization.id),
+          eq(schema.memoryTombstonesTable.scopeType, "user"),
+          eq(schema.memoryTombstonesTable.scopeId, owner.id),
+          eq(
+            schema.memoryTombstonesTable.contentHash,
+            MemoryTombstoneModel.getContentHash("Manipulative candidate"),
+          ),
+        ),
+      )
+      .limit(1);
+
+    expect(manipulativeRow[0]?.expiresAt).toBeNull();
   });
 });

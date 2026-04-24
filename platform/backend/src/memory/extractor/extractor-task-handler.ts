@@ -1,7 +1,10 @@
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { reportMemoryPolicyBlocked } from "@/memory/telemetry/metrics";
+import {
+  reportMemoryPolicyBlocked,
+  reportMemoryScreenDecision,
+} from "@/memory/telemetry/metrics";
 import { ConversationModel, MemoryItemModel, TaskModel } from "@/models";
 import type { ChatMessage } from "@/types";
 import { hasExternalContextBoundary, memoryExtractor } from "./extractor";
@@ -60,6 +63,10 @@ export async function handleExtractMemoryCandidates(
 
   if (hasExternalContextBoundary(conversation.messages as ChatMessage[])) {
     reportMemoryPolicyBlocked("external_context");
+    reportMemoryScreenDecision({
+      decision: "block",
+      reason: "external_context_marker",
+    });
     logger.info(
       {
         conversationId: parsedPayload.conversationId,

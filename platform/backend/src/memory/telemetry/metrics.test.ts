@@ -39,6 +39,21 @@ describe("memory telemetry metrics", () => {
         reason: "untrusted_context",
       }),
     ).not.toThrow();
+    expect(() =>
+      metrics.reportMemoryScreenDecision({
+        decision: "allow",
+        reason: "none",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      metrics.reportMemoryInjectionBlock("feature_flag_off"),
+    ).not.toThrow();
+    expect(() =>
+      metrics.reportMemoryTombstoneHit({
+        reason: "rejected",
+        matchType: "normalized",
+      }),
+    ).not.toThrow();
   });
 
   test("initializes and records metric values", async () => {
@@ -71,6 +86,16 @@ describe("memory telemetry metrics", () => {
       scopeType: "user",
       reason: "untrusted_context",
     });
+    metrics.reportMemoryScreenDecision({
+      decision: "flag",
+      reason: "instruction_like_medium",
+    });
+    metrics.reportMemoryInjectionBlock("external_tools_with_trusted_context");
+    metrics.reportMemoryTombstoneHit({
+      reason: "rejected",
+      matchType: "legacy_exact",
+    });
+    metrics.reportMemoryMcpProposeBlock("tombstone_hit");
 
     const candidatesMetric = client.register.getSingleMetric(
       "archestra_memory_candidates_total",
@@ -84,15 +109,35 @@ describe("memory telemetry metrics", () => {
     const scopeViolationMetric = client.register.getSingleMetric(
       "archestra_memory_scope_violation_blocked_total",
     );
+    const screenDecisionMetric = client.register.getSingleMetric(
+      "archestra_memory_screen_decision_total",
+    );
+    const injectionBlockMetric = client.register.getSingleMetric(
+      "archestra_memory_injection_block_total",
+    );
+    const tombstoneHitMetric = client.register.getSingleMetric(
+      "archestra_memory_tombstone_hit_total",
+    );
+    const mcpProposeBlockMetric = client.register.getSingleMetric(
+      "archestra_memory_mcp_propose_block_total",
+    );
 
     expect(candidatesMetric).toBeDefined();
     expect(reviewedMetric).toBeDefined();
     expect(extractionDuration).toBeDefined();
     expect(scopeViolationMetric).toBeDefined();
+    expect(screenDecisionMetric).toBeDefined();
+    expect(injectionBlockMetric).toBeDefined();
+    expect(tombstoneHitMetric).toBeDefined();
+    expect(mcpProposeBlockMetric).toBeDefined();
 
     const candidatesValues = await candidatesMetric?.get();
     const reviewedValues = await reviewedMetric?.get();
     const scopeViolationValues = await scopeViolationMetric?.get();
+    const screenDecisionValues = await screenDecisionMetric?.get();
+    const injectionBlockValues = await injectionBlockMetric?.get();
+    const tombstoneHitValues = await tombstoneHitMetric?.get();
+    const mcpProposeBlockValues = await mcpProposeBlockMetric?.get();
 
     expect(candidatesValues?.values.some((value) => value.value === 1)).toBe(
       true,
@@ -102,6 +147,18 @@ describe("memory telemetry metrics", () => {
     );
     expect(
       scopeViolationValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      screenDecisionValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      injectionBlockValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(tombstoneHitValues?.values.some((value) => value.value === 1)).toBe(
+      true,
+    );
+    expect(
+      mcpProposeBlockValues?.values.some((value) => value.value === 1),
     ).toBe(true);
   });
 });

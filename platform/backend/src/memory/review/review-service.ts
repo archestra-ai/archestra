@@ -179,13 +179,17 @@ export async function reject(
     }
 
     if (shouldCreateRejectionTombstone(params.rejectionReason)) {
+      const tombstoneTtlDays =
+        params.rejectionReason === "manipulative"
+          ? null
+          : config.memory.tombstoneTtlDays;
       await MemoryTombstoneModel.record({
         organizationId: accessContext.item.organizationId,
         scopeType: accessContext.item.scopeType,
         scopeId: accessContext.item.scopeId,
         content: accessContext.item.content,
         reason: "rejected",
-        ttlDays: config.memory.tombstoneTtlDays,
+        ttlDays: tombstoneTtlDays,
       });
     }
 

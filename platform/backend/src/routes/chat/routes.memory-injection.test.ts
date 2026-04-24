@@ -145,6 +145,7 @@ describe("chat routes memory injection wiring", () => {
     memoryInjectionFlag.enabled = true;
     const appContext = await createAppContext({
       considerContextUntrusted: false,
+      mcpTools: {},
       makeAgent: adaptFactory(makeAgent),
       makeConversation: adaptFactory(makeConversation),
       makeMember: adaptFactory(makeMember),
@@ -197,6 +198,7 @@ describe("chat routes memory injection wiring", () => {
     memoryInjectionFlag.enabled = true;
     const appContext = await createAppContext({
       considerContextUntrusted: true,
+      mcpTools: {},
       makeAgent: adaptFactory(makeAgent),
       makeConversation: adaptFactory(makeConversation),
       makeMember: adaptFactory(makeMember),
@@ -257,6 +259,7 @@ describe("chat routes memory injection wiring", () => {
     memoryInjectionFlag.enabled = false;
     const appContext = await createAppContext({
       considerContextUntrusted: false,
+      mcpTools: {},
       makeAgent: adaptFactory(makeAgent),
       makeConversation: adaptFactory(makeConversation),
       makeMember: adaptFactory(makeMember),
@@ -296,10 +299,65 @@ describe("chat routes memory injection wiring", () => {
       await appContext.app.close();
     }
   });
+
+  test("omits memory block when trusted-context agent has external tools", async ({
+    makeAgent,
+    makeConversation,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    memoryInjectionFlag.enabled = true;
+    const appContext = await createAppContext({
+      considerContextUntrusted: false,
+      mcpTools: {
+        playwright__browser_navigate: {
+          description: "Mock external browser tool",
+          execute: vi.fn(),
+        },
+      },
+      makeAgent: adaptFactory(makeAgent),
+      makeConversation: adaptFactory(makeConversation),
+      makeMember: adaptFactory(makeMember),
+      makeOrganization: adaptFactory(makeOrganization),
+      makeUser: adaptFactory(makeUser),
+    });
+
+    try {
+      mockMemoryInjectionBuild.mockResolvedValue(null);
+
+      const response = await appContext.app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: appContext.conversationId,
+          messages: [
+            {
+              id: crypto.randomUUID(),
+              role: "user",
+              parts: [{ type: "text", text: "Hello" }],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockMemoryInjectionBuild).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false }),
+      );
+      expect(mockReportMemoryScopeViolationBlocked).toHaveBeenCalledWith({
+        scopeType: "user",
+        reason: "external_tools_with_trusted_context",
+      });
+    } finally {
+      await appContext.app.close();
+    }
+  });
 });
 
 async function createAppContext(params: {
   considerContextUntrusted: boolean;
+  mcpTools?: Record<string, unknown>;
   makeAgent: (...args: unknown[]) => Promise<{ id: string }>;
   makeConversation: (...args: unknown[]) => Promise<{ id: string }>;
   makeMember: (...args: unknown[]) => Promise<unknown>;
@@ -310,7 +368,7 @@ async function createAppContext(params: {
   mockRenderSystemPrompt.mockImplementation((template: string) => template);
 
   mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
-  mockGetChatMcpTools.mockResolvedValue({});
+  mockGetChatMcpTools.mockResolvedValue(params.mcpTools ?? {});
   mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
   mockExtractAndIngestDocuments.mockResolvedValue(undefined);
   mockStartActiveChatSpan.mockImplementation(

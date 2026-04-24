@@ -6,7 +6,14 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import { screenSensitiveData } from "@/memory/policy/sensitive-data-screen";
+import {
+  reportMemoryMcpProposeBlock,
+  reportMemoryPolicyBlocked,
+  reportMemoryScreenDecision,
+  reportMemoryTombstoneHit,
+} from "@/memory/telemetry/metrics";
 import { MemoryItemModel } from "@/models";
+import MemoryTombstoneModel from "@/models/memory-tombstone";
 import {
   MemoryKindSchema,
   MemoryPolicyFlagSchema,
@@ -164,13 +171,31 @@ async function handleProposeMemoryCandidate(params: {
       context,
       detectors: ["external_context_marker"],
     });
+    reportMemoryPolicyBlocked("external_context");
+    reportMemoryScreenDecision({
+      decision: "block",
+      reason: "external_context_marker",
+    });
+    reportMemoryMcpProposeBlock("external_context_marker");
     return errorResult(
       "Memory candidate blocked by policy: external context markers are not allowed.",
     );
   }
 
   const sensitiveDataResult = screenSensitiveData({ content: args.content });
+  reportMemoryScreenDecision({
+    decision: sensitiveDataResult.decision,
+    reason: sensitiveDataResult.reason,
+  });
   if (sensitiveDataResult.blocked) {
+    if (sensitiveDataResult.blockReason === "high_risk_pii") {
+      reportMemoryPolicyBlocked("high_risk_pii");
+    } else if (sensitiveDataResult.blockReason === "instruction_like_high") {
+      reportMemoryPolicyBlocked("instruction_like_high");
+    } else {
+      reportMemoryPolicyBlocked("sensitive");
+    }
+    reportMemoryMcpProposeBlock(sensitiveDataResult.reason);
     emitPolicyBlockAuditMetric({
       reason: sensitiveDataResult.blockReason ?? "secret_or_pii",
       toolName,
@@ -178,7 +203,39 @@ async function handleProposeMemoryCandidate(params: {
       detectors: sensitiveDataResult.matchedDetectors,
     });
     return errorResult(
-      "Memory candidate blocked by policy: secret or sensitive markers detected.",
+      sensitiveDataResult.blockReason === "instruction_like_high"
+        ? "Memory candidate blocked by policy: high-confidence instruction-like prompt injection detected."
+        : "Memory candidate blocked by policy: secret or sensitive markers detected.",
+    );
+  }
+
+  const tombstoneMatch = await MemoryTombstoneModel.findActiveMatchByContent({
+    organizationId: context.organizationId,
+    scopeType: "user",
+    scopeId: context.userId,
+    content: args.content,
+  });
+  if (tombstoneMatch.matched) {
+    reportMemoryPolicyBlocked("tombstone_hit");
+    reportMemoryScreenDecision({
+      decision: "block",
+      reason: "tombstone_hit",
+    });
+    reportMemoryMcpProposeBlock("tombstone_hit");
+    if (tombstoneMatch.reason && tombstoneMatch.matchType) {
+      reportMemoryTombstoneHit({
+        reason: tombstoneMatch.reason,
+        matchType: tombstoneMatch.matchType,
+      });
+    }
+    emitPolicyBlockAuditMetric({
+      reason: "tombstone_hit",
+      toolName,
+      context,
+      detectors: ["tombstone_hit"],
+    });
+    return errorResult(
+      "Memory candidate blocked by policy: content previously rejected and tombstoned.",
     );
   }
 
@@ -198,12 +255,19 @@ async function handleProposeMemoryCandidate(params: {
 }
 
 function hasExternalContextMarker(content: string): boolean {
-  const normalized = content.toLowerCase();
-  return (
-    normalized.includes("unsafecontextboundary") ||
-    normalized.includes("external_context") ||
-    normalized.includes("external context")
-  );
+  const normalized = normalizeExternalContextInput(content);
+  if (!normalized) {
+    return false;
+  }
+
+  const collapsed = normalized.replace(/[\s_-]+/g, "");
+
+  return EXTERNAL_CONTEXT_MARKERS.some((marker) => {
+    if (normalized.includes(marker.normalizedNeedle)) {
+      return true;
+    }
+    return collapsed.includes(marker.collapsedNeedle);
+  });
 }
 
 function emitPolicyBlockAuditMetric(params: {
@@ -237,6 +301,10 @@ function emitPolicyBlockAuditMetric(params: {
   );
 }
 
+function normalizeExternalContextInput(content: string): string {
+  return content.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 function toMemoryItemOutput(item: MemoryItem) {
   return {
     id: item.id,
@@ -259,3 +327,22 @@ function toMemoryItemOutput(item: MemoryItem) {
     expiresAt: item.expiresAt ? item.expiresAt.toISOString() : null,
   };
 }
+
+// TODO(SEC-FU-01): Replace marker heuristics with structured provenance fields in MCP args.
+const EXTERNAL_CONTEXT_MARKERS = [
+  "unsafecontextboundary",
+  "unsafe context boundary",
+  "unsafe context",
+  "external_context",
+  "external context",
+  "tool result",
+  "from tool output",
+  "browser output",
+  "search result",
+  "web fetch",
+  "mcp_fetch",
+  "mcp result",
+].map((needle) => ({
+  normalizedNeedle: needle,
+  collapsedNeedle: needle.replace(/[\s_-]+/g, ""),
+}));

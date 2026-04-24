@@ -116,6 +116,7 @@ describe("shouldInjectMemory", () => {
     const result = __test.shouldInjectMemory({
       featureFlagEnabled: true,
       considerContextUntrusted: true,
+      hasExternalToolCapability: false,
     });
 
     expect(result).toBe(false);
@@ -126,6 +127,7 @@ describe("shouldInjectMemory", () => {
       __test.shouldInjectMemory({
         featureFlagEnabled: true,
         considerContextUntrusted: false,
+        hasExternalToolCapability: false,
       }),
     ).toBe(true);
 
@@ -133,6 +135,7 @@ describe("shouldInjectMemory", () => {
       __test.shouldInjectMemory({
         featureFlagEnabled: false,
         considerContextUntrusted: false,
+        hasExternalToolCapability: false,
       }),
     ).toBe(false);
   });
@@ -143,6 +146,7 @@ describe("getMemoryInjectionBlockReason", () => {
     const reason = __test.getMemoryInjectionBlockReason({
       featureFlagEnabled: true,
       considerContextUntrusted: true,
+      hasExternalToolCapability: false,
     });
 
     expect(reason).toBe("untrusted_context");
@@ -152,6 +156,7 @@ describe("getMemoryInjectionBlockReason", () => {
     const reason = __test.getMemoryInjectionBlockReason({
       featureFlagEnabled: false,
       considerContextUntrusted: false,
+      hasExternalToolCapability: false,
     });
 
     expect(reason).toBe("feature_flag_off");
@@ -161,9 +166,20 @@ describe("getMemoryInjectionBlockReason", () => {
     const reason = __test.getMemoryInjectionBlockReason({
       featureFlagEnabled: true,
       considerContextUntrusted: false,
+      hasExternalToolCapability: false,
     });
 
     expect(reason).toBeNull();
+  });
+
+  it("returns external_tools_with_trusted_context when external tools are available", () => {
+    const reason = __test.getMemoryInjectionBlockReason({
+      featureFlagEnabled: true,
+      considerContextUntrusted: false,
+      hasExternalToolCapability: true,
+    });
+
+    expect(reason).toBe("external_tools_with_trusted_context");
   });
 });
 

@@ -19,6 +19,7 @@ import {
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
+  parseMemoryExtractionEnabled,
   parseProcessType,
   parseSampleRate,
   parseTrustProxy,
@@ -991,6 +992,16 @@ describe("parseProcessType", () => {
   });
 });
 
+describe("parseMemoryExtractionEnabled", () => {
+  test("returns true only for exact 'true'", () => {
+    expect(parseMemoryExtractionEnabled("true")).toBe(true);
+    expect(parseMemoryExtractionEnabled("false")).toBe(false);
+    expect(parseMemoryExtractionEnabled(undefined)).toBe(false);
+    expect(parseMemoryExtractionEnabled("TRUE")).toBe(false);
+    expect(parseMemoryExtractionEnabled(" true ")).toBe(false);
+  });
+});
+
 describe("parseSampleRate", () => {
   test("should return default when undefined", () => {
     expect(parseSampleRate(undefined, 0.2)).toBe(0.2);
@@ -1197,5 +1208,17 @@ describe("memory config parsing", () => {
       maxContentLength: 500,
       maxCandidatesPerExtraction: 5,
     });
+  });
+
+  test("uses secure extraction default when env is unset or invalid", async () => {
+    delete process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED;
+
+    let loaded = await import("./config");
+    expect(loaded.default.memory.extractionEnabled).toBe(false);
+
+    vi.resetModules();
+    process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED = "invalid";
+    loaded = await import("./config");
+    expect(loaded.default.memory.extractionEnabled).toBe(false);
   });
 });

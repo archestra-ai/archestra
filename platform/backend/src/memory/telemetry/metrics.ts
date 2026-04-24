@@ -18,7 +18,27 @@ export type MemoryExtractionOutcome = "success" | "skipped" | "error";
 export type MemoryPolicyBlockedReason =
   | "sensitive"
   | "high_risk_pii"
-  | "external_context";
+  | "external_context"
+  | "instruction_like_high"
+  | "tombstone_hit";
+
+export type MemoryScreenDecision = "allow" | "flag" | "block";
+
+export type MemoryScreenReason =
+  | "none"
+  | "secret"
+  | "high_risk_pii"
+  | "instruction_like_high"
+  | "instruction_like_medium"
+  | "external_context_marker"
+  | "tombstone_hit";
+
+export type MemoryInjectionBlockReason =
+  | "untrusted_context"
+  | "external_tools_with_trusted_context"
+  | "feature_flag_off";
+
+export type MemoryTombstoneMatchType = "normalized" | "legacy_exact";
 
 export type MemoryExtractionUnavailableReason =
   | "missing_model"
@@ -32,6 +52,10 @@ let memoryPolicyBlockedTotal: client.Counter<string>;
 let memoryExtractionUnavailableTotal: client.Counter<string>;
 let memoryInjectionTokens: client.Histogram<string>;
 let memoryScopeViolationBlockedTotal: client.Counter<string>;
+let memoryScreenDecisionTotal: client.Counter<string>;
+let memoryInjectionBlockTotal: client.Counter<string>;
+let memoryTombstoneHitTotal: client.Counter<string>;
+let memoryMcpProposeBlockTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -93,6 +117,30 @@ export function initializeMemoryMetrics(): void {
     name: "archestra_memory_scope_violation_blocked_total",
     help: "Total memory operations blocked due to scope or trust violations",
     labelNames: ["scope_type", "reason"],
+  });
+
+  memoryScreenDecisionTotal = new client.Counter({
+    name: "archestra_memory_screen_decision_total",
+    help: "Total sensitive-screen decisions with normalized reason labels",
+    labelNames: ["decision", "reason"],
+  });
+
+  memoryInjectionBlockTotal = new client.Counter({
+    name: "archestra_memory_injection_block_total",
+    help: "Total memory injection blocks by reason",
+    labelNames: ["reason"],
+  });
+
+  memoryTombstoneHitTotal = new client.Counter({
+    name: "archestra_memory_tombstone_hit_total",
+    help: "Total tombstone hits by reason and match type",
+    labelNames: ["reason", "match_type"],
+  });
+
+  memoryMcpProposeBlockTotal = new client.Counter({
+    name: "archestra_memory_mcp_propose_block_total",
+    help: "Total MCP memory-propose blocks by reason",
+    labelNames: ["reason"],
   });
 
   logger.info("Memory metrics initialized");
@@ -177,6 +225,21 @@ export function reportMemoryPolicyBlocked(
   }
 
   memoryPolicyBlockedTotal.inc({ reason });
+
+  const screenReasonByPolicyReason: Record<
+    MemoryPolicyBlockedReason,
+    MemoryScreenReason
+  > = {
+    sensitive: "secret",
+    high_risk_pii: "high_risk_pii",
+    external_context: "external_context_marker",
+    instruction_like_high: "instruction_like_high",
+    tombstone_hit: "tombstone_hit",
+  };
+  reportMemoryScreenDecision({
+    decision: "block",
+    reason: screenReasonByPolicyReason[reason],
+  });
 }
 
 export function reportMemoryExtractionUnavailable(
@@ -215,6 +278,52 @@ export function reportMemoryScopeViolationBlocked(params: {
     scope_type: params.scopeType,
     reason: params.reason,
   });
+}
+
+export function reportMemoryScreenDecision(params: {
+  decision: MemoryScreenDecision;
+  reason: MemoryScreenReason;
+}): void {
+  if (!memoryScreenDecisionTotal) {
+    return;
+  }
+
+  memoryScreenDecisionTotal.inc({
+    decision: params.decision,
+    reason: params.reason,
+  });
+}
+
+export function reportMemoryInjectionBlock(
+  reason: MemoryInjectionBlockReason,
+): void {
+  if (!memoryInjectionBlockTotal) {
+    return;
+  }
+
+  memoryInjectionBlockTotal.inc({ reason });
+}
+
+export function reportMemoryTombstoneHit(params: {
+  reason: "rejected" | "deleted_by_user" | "archived";
+  matchType: MemoryTombstoneMatchType;
+}): void {
+  if (!memoryTombstoneHitTotal) {
+    return;
+  }
+
+  memoryTombstoneHitTotal.inc({
+    reason: params.reason,
+    match_type: params.matchType,
+  });
+}
+
+export function reportMemoryMcpProposeBlock(reason: MemoryScreenReason): void {
+  if (!memoryMcpProposeBlockTotal) {
+    return;
+  }
+
+  memoryMcpProposeBlockTotal.inc({ reason });
 }
 
 // =============================================================================

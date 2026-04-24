@@ -713,8 +713,9 @@ const config = {
     })(),
   },
   memory: {
-    extractionEnabled:
-      process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED !== "false",
+    extractionEnabled: parseMemoryExtractionEnabled(
+      process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED,
+    ),
     injectionEnabled: process.env.ARCHESTRA_MEMORY_INJECTION_ENABLED === "true",
     idleDelaySeconds: parsePositiveInt(
       process.env.ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS,
@@ -957,4 +958,10 @@ export function parseCommaSeparatedList(value: string): string[] {
 function parseOptionalString(value: string | undefined): string | undefined {
   const trimmedValue = value?.trim();
   return trimmedValue ? trimmedValue : undefined;
+}
+
+export function parseMemoryExtractionEnabled(
+  value: string | undefined,
+): boolean {
+  return value === "true";
 }

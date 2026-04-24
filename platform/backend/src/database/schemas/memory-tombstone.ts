@@ -7,6 +7,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { MemoryTombstoneReason } from "@/types/memory-tombstone";
 import organizationsTable from "./organization";
 
 const memoryTombstonesTable = pgTable(
@@ -19,10 +20,10 @@ const memoryTombstonesTable = pgTable(
     scopeType: text("scope_type").notNull(),
     scopeId: text("scope_id").notNull(),
     contentHash: text("content_hash").notNull(),
-    reason: text("reason").notNull(),
-    expiresAt: timestamp("expires_at", { mode: "date" })
-      .notNull()
-      .default(sql`now() + interval '30 days'`),
+    reason: text("reason").$type<MemoryTombstoneReason>().notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).default(
+      sql`now() + interval '30 days'`,
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

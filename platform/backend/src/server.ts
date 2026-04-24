@@ -112,6 +112,29 @@ const {
   observability,
 } = config;
 
+function logMemoryStartupDiagnostics(processType: "web" | "worker"): void {
+  logger.info(
+    {
+      processType,
+      extractionEnabled: config.memory.extractionEnabled,
+      injectionEnabled: config.memory.injectionEnabled,
+      extractionIdleDelaySeconds: config.memory.idleDelaySeconds,
+    },
+    "[memory] startup configuration",
+  );
+
+  if (config.memory.extractionEnabled && !config.memory.injectionEnabled) {
+    logger.warn(
+      {
+        processType,
+        extractionEnabled: true,
+        injectionEnabled: false,
+      },
+      "[memory] extraction enabled while injection is disabled; candidates will require manual review/use",
+    );
+  }
+}
+
 /**
  * Register schemas in global zod registry for OpenAPI generation.
  * This enables proper $ref generation in the OpenAPI spec.
@@ -738,6 +761,8 @@ const startWebServer = async () => {
   fastify.register(enterpriseLicenseMiddleware);
 
   try {
+    logMemoryStartupDiagnostics("web");
+
     // Initialize database connection first
     await initializeDatabase();
 
@@ -975,6 +1000,8 @@ const startWorker = async () => {
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {
+    logMemoryStartupDiagnostics("worker");
+
     await initializeDatabase();
     cacheManager.start();
 

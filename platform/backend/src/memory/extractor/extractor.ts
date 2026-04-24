@@ -15,6 +15,8 @@ import {
   reportMemoryExtractionDuration,
   reportMemoryExtractionUnavailable,
   reportMemoryPolicyBlocked,
+  reportMemoryScreenDecision,
+  reportMemoryTombstoneHit,
 } from "@/memory/telemetry/metrics";
 import {
   setMemorySpanAttributes,
@@ -208,13 +210,21 @@ class MemoryExtractor {
               continue;
             }
 
-            const tombstoned = await MemoryTombstoneModel.exists({
-              organizationId: params.organizationId,
-              scopeType: "user",
-              scopeId: params.userId,
-              contentHash,
-            });
-            if (tombstoned) {
+            const tombstoneMatch =
+              await MemoryTombstoneModel.findActiveMatchByContent({
+                organizationId: params.organizationId,
+                scopeType: "user",
+                scopeId: params.userId,
+                content: preparedCandidate.content,
+              });
+            if (tombstoneMatch.matched) {
+              reportMemoryPolicyBlocked("tombstone_hit");
+              if (tombstoneMatch.reason && tombstoneMatch.matchType) {
+                reportMemoryTombstoneHit({
+                  reason: tombstoneMatch.reason,
+                  matchType: tombstoneMatch.matchType,
+                });
+              }
               skippedCount += 1;
               continue;
             }
@@ -222,12 +232,18 @@ class MemoryExtractor {
             const sensitivity = screenSensitiveData({
               content: preparedCandidate.content,
             });
+            reportMemoryScreenDecision({
+              decision: sensitivity.decision,
+              reason: sensitivity.reason,
+            });
             if (sensitivity.blocked) {
-              reportMemoryPolicyBlocked(
-                sensitivity.blockReason === "high_risk_pii"
-                  ? "high_risk_pii"
-                  : "sensitive",
-              );
+              if (sensitivity.blockReason === "high_risk_pii") {
+                reportMemoryPolicyBlocked("high_risk_pii");
+              } else if (sensitivity.blockReason === "instruction_like_high") {
+                reportMemoryPolicyBlocked("instruction_like_high");
+              } else {
+                reportMemoryPolicyBlocked("sensitive");
+              }
               skippedCount += 1;
               continue;
             }

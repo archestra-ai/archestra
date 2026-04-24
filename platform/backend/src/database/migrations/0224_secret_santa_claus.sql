@@ -1,0 +1,1 @@
+ALTER TABLE "memory_tombstone" ALTER COLUMN "expires_at" DROP NOT NULL;

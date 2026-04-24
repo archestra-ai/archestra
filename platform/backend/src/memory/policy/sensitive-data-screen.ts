@@ -1,8 +1,24 @@
 import type { MemoryPolicyFlag } from "@/types/memory-item";
+import { classifyInstructionLike } from "./instruction-classifier";
 
-export type SensitiveDataBlockReason = "secret" | "high_risk_pii";
+export type SensitiveDataBlockReason =
+  | "secret"
+  | "high_risk_pii"
+  | "instruction_like_high";
+
+export type SensitiveDataDecision = "allow" | "flag" | "block";
+
+export type SensitiveDataReason =
+  | "none"
+  | "secret"
+  | "high_risk_pii"
+  | "instruction_like_high"
+  | "instruction_like_medium";
 
 export type SensitiveDataScreenResult = {
+  decision: SensitiveDataDecision;
+  severity: "low" | "medium" | "high";
+  reason: SensitiveDataReason;
   blocked: boolean;
   blockReason: SensitiveDataBlockReason | null;
   policyFlags: MemoryPolicyFlag[];
@@ -17,6 +33,9 @@ export function screenSensitiveData(params: {
 
   if (secretMatches.length > 0) {
     return {
+      decision: "block",
+      severity: "high",
+      reason: "secret",
       blocked: true,
       blockReason: "secret",
       policyFlags: [],
@@ -34,6 +53,9 @@ export function screenSensitiveData(params: {
 
   if (piiMatches.length > 0) {
     return {
+      decision: "block",
+      severity: "high",
+      reason: "high_risk_pii",
       blocked: true,
       blockReason: "high_risk_pii",
       policyFlags: [],
@@ -41,12 +63,39 @@ export function screenSensitiveData(params: {
     };
   }
 
-  const instructionLike = isInstructionLike(normalizedContent);
+  const instructionClassification = classifyInstructionLike(normalizedContent);
+  if (instructionClassification?.severity === "high") {
+    return {
+      decision: "block",
+      severity: "high",
+      reason: "instruction_like_high",
+      blocked: true,
+      blockReason: "instruction_like_high",
+      policyFlags: [],
+      matchedDetectors: toSortedUniqueList(instructionClassification.detectors),
+    };
+  }
+
+  if (instructionClassification?.severity === "medium") {
+    return {
+      decision: "flag",
+      severity: "medium",
+      reason: "instruction_like_medium",
+      blocked: false,
+      blockReason: null,
+      policyFlags: ["instruction_like", "instruction_like_medium"],
+      matchedDetectors: toSortedUniqueList(instructionClassification.detectors),
+    };
+  }
+
   return {
+    decision: "allow",
+    severity: "low",
+    reason: "none",
     blocked: false,
     blockReason: null,
-    policyFlags: instructionLike ? ["instruction_like"] : [],
-    matchedDetectors: instructionLike ? ["instruction_like"] : [],
+    policyFlags: [],
+    matchedDetectors: [],
   };
 }
 
@@ -119,18 +168,6 @@ function passesLuhnCheck(digits: string): boolean {
   return sum % 10 === 0;
 }
 
-function isInstructionLike(content: string): boolean {
-  if (content.length === 0) {
-    return false;
-  }
-
-  const normalized = content.toLowerCase();
-  const startsWithImperative = INSTRUCTION_START_REGEX.test(normalized);
-  const containsInstructionCue = INSTRUCTION_CUE_REGEX.test(normalized);
-
-  return startsWithImperative && containsInstructionCue;
-}
-
 function toSortedUniqueList(values: string[]): string[] {
   return Array.from(new Set(values)).sort((left, right) =>
     left.localeCompare(right),
@@ -162,6 +199,18 @@ const SECRET_DETECTORS: readonly RegexDetector[] = [
     id: "password_assignment",
     regex: /\b(password|secret|token|api[_\s-]?key)\b\s*[:=]\s*\S+/i,
   },
+  {
+    id: "natural_language_password",
+    regex: /\b(my|the)\s+password\s+is\b/i,
+  },
+  {
+    id: "natural_language_api_key",
+    regex: /\b(the|my)\s+api[_\s-]?key\s+is\b/i,
+  },
+  {
+    id: "natural_language_secret_assignment",
+    regex: /\bsecret\s+(is|equals?)\b/i,
+  },
 ];
 
 const HIGH_RISK_PII_DETECTORS: readonly RegexDetector[] = [
@@ -184,15 +233,20 @@ const HIGH_RISK_PII_DETECTORS: readonly RegexDetector[] = [
   },
   {
     id: "health_sensitive_keyword",
-    regex: /\b(diagnosis|medical\s+record|prescription|therapy)\b/i,
+    regex:
+      /\b(diagnosis|medical\s+record|prescription|therapy|hiv|cancer|pregnancy|depression|anxiety|adhd|autism|addiction|mental\s+health)\b/i,
+  },
+  {
+    id: "ssn_keyword",
+    regex: /\b(ssn|social\s+security\s+number)\b/i,
+  },
+  {
+    id: "financial_sensitive_keyword",
+    regex:
+      /\b(credit\s+card|card\s+number|debit\s+card|cvv|cvc|routing\s+number|bank\s+account)\b/i,
   },
   {
     id: "legal_sensitive_keyword",
     regex: /\b(attorney-client|legal\s+dispute|lawsuit)\b/i,
   },
 ];
-
-const INSTRUCTION_START_REGEX =
-  /^(always|never|remember|follow|use|keep|avoid|ignore|answer|respond|do|don't|do not|please)\b/;
-const INSTRUCTION_CUE_REGEX =
-  /\b(always|never|you must|ignore previous|do not|don't|must)\b/;

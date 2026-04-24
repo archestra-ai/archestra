@@ -25,7 +25,7 @@
 - `ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS` and `ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS` govern queue/tombstone lifecycle.
 
 ### Merge Defaults and Review Requirement
-- Default posture for rollout 1 is extraction on (environment-controlled) and injection off.
+- Default posture for rollout 1 is extraction off (strict opt-in via `ARCHESTRA_MEMORY_EXTRACTION_ENABLED=true`) and injection off.
 - Promotion from candidate to approved requires explicit human review.
 - Extractor prompt is frozen at `v1.0.0` for rollout 1 decisions.
 - Fixed rejection taxonomy:
@@ -39,3 +39,19 @@
   - `not_useful`
   - `conflicts_with_existing`
   - `policy_violation`
+
+### Security Rollout Split
+- Rollout 1 ships deterministic security hardening in existing contracts:
+  - extraction strict opt-in;
+  - hard-block for high-confidence instruction-like content;
+  - expanded sensitive screening;
+  - stricter external-context detection in MCP memory propose;
+  - runtime injection guard for unsafe agent/tool combinations;
+  - normalized/permanent tombstone policy;
+  - security telemetry counters.
+- Rollout 2/3 keeps architectural extensions and advanced detection:
+  - structured provenance fields in MCP API;
+  - quarantine workflow for medium-confidence candidates;
+  - declarative policy schema and semantic adjudication;
+  - fuzzy/semantic tombstone matching;
+  - adversarial CI harness and admin UX.

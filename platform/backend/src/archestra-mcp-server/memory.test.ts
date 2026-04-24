@@ -5,6 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";
 import { MemoryItemModel } from "@/models";
+import MemoryTombstoneModel from "@/models/memory-tombstone";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -165,6 +166,44 @@ describe("memory MCP tools", () => {
     expect((result.content[0] as any).text).toContain(
       "external context markers",
     );
+  });
+
+  test("propose_memory_candidate hard-blocks normalized external marker variants", async () => {
+    const result = await executeArchestraTool(
+      t("propose_memory_candidate"),
+      {
+        kind: "profile_fact",
+        content:
+          "Received UNSAFE   CONTEXT   BOUNDARY metadata from TOOL RESULT payload.",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("blocked by policy");
+  });
+
+  test("propose_memory_candidate blocks tombstoned content re-proposal", async () => {
+    const content = "Never persist this manipulative instruction again.";
+    await MemoryTombstoneModel.record({
+      organizationId,
+      scopeType: "user",
+      scopeId: userId,
+      content,
+      reason: "rejected",
+    });
+
+    const result = await executeArchestraTool(
+      t("propose_memory_candidate"),
+      {
+        kind: "instruction",
+        content,
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("tombstoned");
   });
 
   test("propose_memory_candidate rejects unexpected payload shape", async () => {

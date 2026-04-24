@@ -1569,6 +1569,13 @@
       "when": 1776872721043,
       "tag": "0223_smiling_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "7",
+      "when": 1777011514100,
+      "tag": "0224_secret_santa_claus",
+      "breakpoints": true
     }
   ]
 }

@@ -89,6 +89,17 @@ describe("SalesforceConnector", () => {
       expect(r.error).toContain("loginUrl");
     });
 
+    test("rejects batchSize outside Salesforce query LIMIT bounds", async () => {
+      const c = new SalesforceConnector();
+      const r1 = await c.validateConfig({ batchSize: 0 });
+      expect(r1.valid).toBe(false);
+      expect(r1.error).toContain("batchSize");
+
+      const r2 = await c.validateConfig({ batchSize: 5000 });
+      expect(r2.valid).toBe(false);
+      expect(r2.error).toContain("batchSize");
+    });
+
     test("rejects unsafe characters in object names", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({ objects: ["Account; DROP TABLE"] });
@@ -118,6 +129,34 @@ describe("SalesforceConnector", () => {
         }),
       });
       expect(r).toEqual({ valid: true });
+    });
+
+    test("accepts valid Salesforce API name suffixes beyond __c/__r (e.g. __kav, __mdt, __b)", async () => {
+      const c = new SalesforceConnector();
+
+      const r1 = await c.validateConfig({ objects: ["Knowledge__kav"] });
+      expect(r1).toEqual({ valid: true });
+
+      const r2 = await c.validateConfig({
+        advancedObjectConfigJson: JSON.stringify({
+          CustomMetadata__mdt: { fields: ["DeveloperName"] },
+          BigObject__b: { fields: ["Id"] },
+        }),
+      });
+      expect(r2).toEqual({ valid: true });
+    });
+
+    test("trims objects and defaults to core objects when objects is empty", async () => {
+      const c = new SalesforceConnector();
+      // Should not reject and should succeed even with whitespace and empties.
+      const r = await c.validateConfig({
+        objects: ["  Account  ", " ", "Contact"],
+      });
+      expect(r).toEqual({ valid: true });
+
+      // Empty list should not fail validation.
+      const r2 = await c.validateConfig({ objects: [] });
+      expect(r2).toEqual({ valid: true });
     });
   });
 
@@ -375,6 +414,47 @@ describe("SalesforceConnector", () => {
       expect(batches[0].documents[0].content).toContain("**FirstName:** Ada");
     });
 
+    test("does not implicitly append Name for advanced object configs", async () => {
+      const c = new SalesforceConnector();
+      mockLogin.mockResolvedValueOnce({});
+      mockQuery.mockResolvedValueOnce({
+        done: true,
+        totalSize: 1,
+        records: [
+          {
+            attributes: { type: "Lead" },
+            Id: "00QA",
+            FirstName: "Ada",
+            LastName: "Lovelace",
+            LastModifiedDate: "2026-04-20T08:30:00.000Z",
+          },
+        ],
+      });
+
+      await collectBatches(
+        c.sync({
+          config: {
+            advancedObjectConfigJson: JSON.stringify({
+              Lead: {
+                fields: ["FirstName", "LastName"],
+                associations: {},
+              },
+            }),
+          },
+          credentials: CREDS,
+          checkpoint: null,
+        }),
+      );
+
+      const soql = mockQuery.mock.calls[0][0] as string;
+      expect(soql).toContain("FROM Lead");
+      expect(soql).toContain("FirstName");
+      expect(soql).toContain("LastName");
+      expect(soql).toContain("Id");
+      expect(soql).toContain("LastModifiedDate");
+      expect(soql).not.toMatch(/\bName\b/);
+    });
+
     test("handles pagination via queryMore", async () => {
       const c = new SalesforceConnector();
       mockLogin.mockResolvedValueOnce({});
@@ -602,8 +682,8 @@ describe("SalesforceConnector", () => {
       const soql = mockQuery.mock.calls[0][0] as string;
       expect(soql).toContain("FROM CustomObj__c");
       expect(soql).toContain("Id");
-      expect(soql).toContain("Name");
       expect(soql).toContain("LastModifiedDate");
+      expect(soql).not.toContain("Name");
       expect(soql).not.toContain("Industry");
     });
 

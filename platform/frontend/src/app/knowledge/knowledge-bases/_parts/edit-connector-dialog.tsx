@@ -496,6 +496,9 @@ export function EditConnectorDialog({
                 <DropboxConfigFields control={form.control} />
               )}
               {connectorType === "asana" && <AsanaConfigFields form={form} />}
+              {connectorType === "outline" && (
+                <OutlineConfigFields form={form} />
+              )}
               {connectorType === "salesforce" && (
                 <SalesforceConfigFields form={form} />
               )}

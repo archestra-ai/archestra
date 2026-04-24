@@ -38,7 +38,7 @@ const MAX_CASE_COMMENTS = 100;
  * CaseComments are fetched inline via SOQL subquery on Case.
  */
 const DEFAULT_OBJECTS = ["Account", "Contact", "Opportunity", "Case"];
-const BASE_FIELDS = ["Id", "Name", "LastModifiedDate"];
+const BASE_FIELDS = ["Id", "LastModifiedDate"];
 
 /**
  * Per-object default fields for richer simple-mode documents.
@@ -115,7 +115,7 @@ const CASE_COMMENTS_SUBQUERY =
  * Allows standard API names, custom fields (__c), relationship paths (Account.Name).
  */
 const SAFE_SOQL_IDENTIFIER =
-  /^[a-zA-Z_][a-zA-Z0-9_]*(__[a-zA-Z])?(\.[a-zA-Z_][a-zA-Z0-9_]*(__[a-zA-Z])?)*$/;
+  /^[a-zA-Z_][a-zA-Z0-9_]*(?:__[a-zA-Z0-9]+)?(?:\.[a-zA-Z_][a-zA-Z0-9_]*(?:__[a-zA-Z0-9]+)?)*$/;
 
 // ===== Internal types =====
 
@@ -178,6 +178,16 @@ export class SalesforceConnector extends BaseConnector {
         error:
           "Invalid Salesforce configuration: loginUrl must be a URL and advancedObjectConfigJson must be valid JSON object text when provided",
       };
+    }
+
+    if (parsed.batchSize !== undefined) {
+      // Salesforce query `LIMIT` max is 2000.
+      if (parsed.batchSize < 1 || parsed.batchSize > 2000) {
+        return {
+          valid: false,
+          error: "batchSize must be between 1 and 2000",
+        };
+      }
     }
 
     // Validate loginUrl is a proper HTTP(S) URL (matching Linear's URL check)
@@ -549,7 +559,19 @@ function parseSalesforceConfig(
     loginUrl: "https://login.salesforce.com",
     ...config,
   });
-  return result.success ? result.data : null;
+
+  if (!result.success) return null;
+
+  // Normalize object names to avoid accidental invalid identifiers due to whitespace.
+  const objects = result.data.objects
+    ?.map((o) => o.trim())
+    .filter((o) => o.length > 0);
+
+  // Default to core CRM objects when none are specified.
+  return {
+    ...result.data,
+    objects: objects && objects.length > 0 ? objects : DEFAULT_OBJECTS,
+  };
 }
 
 function parseAdvancedObjectConfig(
@@ -664,7 +686,7 @@ function buildSoqlQuery(params: {
   const whereClause = params.syncFrom
     ? ` WHERE LastModifiedDate >= ${toSalesforceDateLiteral(params.syncFrom)}`
     : "";
-  return `SELECT ${selected} FROM ${params.objectSpec.objectName}${whereClause} ORDER BY LastModifiedDate ASC LIMIT ${params.batchSize}`;
+  return `SELECT ${selected} FROM ${params.objectSpec.objectName}${whereClause} ORDER BY LastModifiedDate ASC, Id ASC LIMIT ${params.batchSize}`;
 }
 
 function salesforceRecordToDocument(params: {

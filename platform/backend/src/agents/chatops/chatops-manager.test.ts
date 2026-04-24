@@ -1617,9 +1617,7 @@ describe("ChatOpsManager attachment passthrough", () => {
 
 describe("buildChatOpsSessionId", () => {
   test("uses threadId when provided", () => {
-    expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe(
-      "chatops:slack:T456",
-    );
+    expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe("chatops:slack:T456");
   });
 
   test("falls back to channelId when threadId is undefined", () => {
@@ -1627,15 +1625,11 @@ describe("buildChatOpsSessionId", () => {
   });
 
   test("uses ms-teams provider ID", () => {
-    expect(buildChatOpsSessionId("ms-teams", "CH1", "TH1")).toBe(
-      "chatops:ms-teams:TH1",
-    );
+    expect(buildChatOpsSessionId("ms-teams", "CH1", "TH1")).toBe("chatops:ms-teams:TH1");
   });
 
   test("uses channelId for non-threaded ms-teams message", () => {
-    expect(buildChatOpsSessionId("ms-teams", "CH1")).toBe(
-      "chatops:ms-teams:CH1",
-    );
+    expect(buildChatOpsSessionId("ms-teams", "CH1")).toBe("chatops:ms-teams:CH1");
   });
 
   test("hashes long MS Teams DM channel IDs to stay within exemplar budget", () => {
@@ -1653,5 +1647,195 @@ describe("buildChatOpsSessionId", () => {
     const a = buildChatOpsSessionId("ms-teams", longChannelId);
     const b = buildChatOpsSessionId("ms-teams", longChannelId);
     expect(a).toBe(b);
+  });
+});
+
+describe("ChatOpsManager sticky agents", () => {
+  function createMockProvider(overrides: any = {}): ChatOpsProvider {
+    return {
+      providerId: "ms-teams",
+      displayName: "Microsoft Teams",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: overrides.getUserEmail ?? (async () => null),
+      getChannelName: async () => null,
+      getWorkspaceId: () => null,
+      getWorkspaceName: () => null,
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+    };
+  }
+
+  function mockA2AExecutor() {
+    return vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: "Agent response",
+      messageId: "test-message-id",
+      finishReason: "stop",
+    });
+  }
+
+  function createMockMessage(overrides: Partial<IncomingChatMessage> = {}): IncomingChatMessage {
+    return {
+      messageId: "test-message-id",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      senderId: "test-sender-aad-id",
+      senderName: "Test User",
+      text: "Hello agent",
+      rawText: "@Bot Hello agent",
+      timestamp: new Date(),
+      isThreadReply: false,
+      ...overrides,
+    };
+  }
+
+  test("uses sticky agent from existing conversation when present", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockA2AExecutor();
+
+    // Setup
+    const user = await makeUser({ email: "sticky@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const defaultAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Default Agent",
+      teams: [team.id],
+    });
+    const swappedAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Swapped Agent",
+      teams: [team.id],
+    });
+
+    await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
+    await AgentTeamModel.assignTeamsToAgent(swappedAgent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: defaultAgent.id,
+    });
+
+    const sessionId = buildChatOpsSessionId("ms-teams", "test-channel-id", "test-thread-id");
+
+    // Create a conversation that has the swapped agent
+    await ConversationModel.create(sessionId, user.id, org.id, {
+      agentId: swappedAgent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "sticky@example.com",
+    });
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: access private for testing
+    (manager as any).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "test-thread-id",
+      text: "Hello",
+    });
+
+    await manager.processMessage({ message, provider: mockProvider });
+
+    // Verify it used the swapped agent, not the default one
+    expect(executorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: swappedAgent.id,
+      }),
+    );
+  });
+
+  test("inline mention overrides sticky agent", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockA2AExecutor();
+
+    // Setup
+    const user = await makeUser({ email: "override@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const defaultAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Default Agent",
+      teams: [team.id],
+    });
+    const stickyAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Sticky Agent",
+      teams: [team.id],
+    });
+    const mentionAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Mention Agent",
+      teams: [team.id],
+    });
+
+    await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [team.id]);
+    await AgentTeamModel.assignTeamsToAgent(stickyAgent.id, [team.id]);
+    await AgentTeamModel.assignTeamsToAgent(mentionAgent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: defaultAgent.id,
+    });
+
+    const sessionId = buildChatOpsSessionId("ms-teams", "test-channel-id", "test-thread-id");
+
+    // Create a conversation that has the sticky agent
+    await ConversationModel.create(sessionId, user.id, org.id, {
+      agentId: stickyAgent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "override@example.com",
+    });
+
+    const manager = new ChatOpsManager();
+    // biome-ignore lint/suspicious/noExplicitAny: access private for testing
+    (manager as any).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      threadId: "test-thread-id",
+      text: "Mention Agent > Hello",
+    });
+
+    await manager.processMessage({ message, provider: mockProvider });
+
+    // Verify it used the mention agent, overriding the sticky one
+    expect(executorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: mentionAgent.id,
+      }),
+    );
   });
 });

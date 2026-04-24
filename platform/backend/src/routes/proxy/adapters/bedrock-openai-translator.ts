@@ -403,11 +403,10 @@ export function createConverseToOpenaiSseEncoder(
   }
 
   return {
-    encodeBedrockEvent,
-    formatEnd,
-    formatTextDelta,
-    formatCompleteText,
-    buildFinalResponseFromState,
+    encodeNativeEvent: encodeBedrockEvent,
+    formatEnd: () => formatEnd(),
+    formatTextDelta: (text: string) => formatTextDelta(text),
+    formatCompleteText: (text: string) => formatCompleteText(text),
   };
 }
 

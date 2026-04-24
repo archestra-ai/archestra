@@ -21,6 +21,7 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "azure",
+  "unified",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -44,6 +45,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "minimax:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "unified:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -80,6 +82,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   azure: "Azure AI Foundry",
+  unified: "Unified Proxy",
 };
 
 /**

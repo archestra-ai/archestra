@@ -36,6 +36,7 @@ type PaginationMeta =
   archestraApiTypes.GetKnowledgeBaseDocumentsResponses["200"]["pagination"];
 
 const DEFAULT_DOCUMENT_PAGE_SIZE = 10;
+const MAX_PREVIEW_CHARS = 20_000;
 
 export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   const {
@@ -63,6 +64,8 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   });
   const deleteDocumentMutation = useDeleteKnowledgeBaseDocument();
 
+  const hasLoadError = documentsResponse === null;
+
   const documents = documentsResponse?.data ?? [];
   const paginationMeta: PaginationMeta | null =
     documentsResponse?.pagination ?? null;
@@ -86,9 +89,9 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                 event.stopPropagation();
                 setSelectedPreviewDoc(row.original);
               }}
-              title={row.original.title}
+              title={row.original.title ?? undefined}
             >
-              {row.original.title}
+              {row.original.title ?? "(untitled)"}
             </button>
           </div>
         ),
@@ -225,7 +228,6 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         hasActiveFilters={
           Boolean(search) || Boolean(searchParams.get("connectorId"))
         }
-        filteredEmptyMessage="No documents match your filters."
         onClearFilters={() =>
           updateQueryParams({
             search: null,
@@ -233,7 +235,16 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             page: "1",
           })
         }
-        emptyMessage="No documents indexed yet. Sync a connector to populate this list."
+        emptyMessage={
+          hasLoadError
+            ? "Failed to load documents. Please try again."
+            : "No documents indexed yet. Sync a connector to populate this list."
+        }
+        filteredEmptyMessage={
+          hasLoadError
+            ? "Failed to load documents. Please try again."
+            : "No documents match your filters."
+        }
       />
 
       <StandardDialog
@@ -245,9 +256,20 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
         size="medium"
       >
         {selectedPreviewDoc ? (
-          <pre className="max-h-[60vh] overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
-            <code>{selectedPreviewDoc.content}</code>
-          </pre>
+          <div className="space-y-2">
+            {selectedPreviewDoc.content &&
+            selectedPreviewDoc.content.length > MAX_PREVIEW_CHARS ? (
+              <div className="text-xs text-muted-foreground">
+                Preview truncated to {MAX_PREVIEW_CHARS.toLocaleString()}{" "}
+                characters.
+              </div>
+            ) : null}
+            <pre className="max-h-[60vh] overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
+              <code>
+                {(selectedPreviewDoc.content ?? "").slice(0, MAX_PREVIEW_CHARS)}
+              </code>
+            </pre>
+          </div>
         ) : null}
       </StandardDialog>
 
@@ -267,6 +289,9 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           });
           if (result) {
             setDeletingDoc(null);
+            if (documents.length === 1 && pageIndex > 0) {
+              setPagination({ pageIndex: pageIndex - 1, pageSize });
+            }
           }
         }}
         confirmLabel="Delete Document"

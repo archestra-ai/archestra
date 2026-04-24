@@ -104,6 +104,93 @@ describe("kb-document query hooks", () => {
     });
   });
 
+  it("fetches knowledge base documents with connectorId filter", async () => {
+    mockGetKnowledgeBaseDocuments.mockResolvedValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderHook(
+      () =>
+        useKnowledgeBaseDocuments({
+          knowledgeBaseId: "kb-1",
+          limit: 10,
+          offset: 0,
+          connectorId: "connector-1",
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(mockGetKnowledgeBaseDocuments).toHaveBeenCalled();
+    });
+
+    expect(mockGetKnowledgeBaseDocuments).toHaveBeenCalledWith({
+      path: { id: "kb-1" },
+      query: {
+        limit: 10,
+        offset: 0,
+        connectorId: "connector-1",
+      },
+    });
+  });
+
+  it("does not include connectorId when set to 'all'", async () => {
+    mockGetKnowledgeBaseDocuments.mockResolvedValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderHook(
+      () =>
+        useKnowledgeBaseDocuments({
+          knowledgeBaseId: "kb-1",
+          limit: 10,
+          offset: 0,
+          connectorId: "all",
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(mockGetKnowledgeBaseDocuments).toHaveBeenCalled();
+    });
+
+    expect(mockGetKnowledgeBaseDocuments).toHaveBeenCalledWith({
+      path: { id: "kb-1" },
+      query: {
+        limit: 10,
+        offset: 0,
+      },
+    });
+  });
+
   it("deletes a knowledge base document and invalidates related queries", async () => {
     mockDeleteKnowledgeBaseDocument.mockResolvedValue({
       data: { success: true },

@@ -221,12 +221,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetKnowledgeBaseDocuments,
-        description:
-          "List indexed documents for a knowledge base with pagination and title search",
+        description: "List documents for a knowledge base",
         tags: ["Knowledge Bases"],
         params: z.object({ id: z.string() }),
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
+          connectorId: z.string().optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
@@ -236,7 +236,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        query: { limit, offset, search },
+        query: { limit, offset, search, connectorId },
         organizationId,
         user,
       },
@@ -254,10 +254,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           search,
+          connectorId,
         }),
         KbDocumentModel.countByKnowledgeBaseWithSearch({
           knowledgeBaseId: id,
           search,
+          connectorId,
         }),
       ]);
 
@@ -265,42 +267,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data,
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
-    },
-  );
-
-  fastify.delete(
-    "/api/knowledge-bases/:id/documents/:docId",
-    {
-      schema: {
-        operationId: RouteId.DeleteKnowledgeBaseDocument,
-        description:
-          "Delete an indexed document from a knowledge base (chunks are removed by cascade)",
-        tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string(), docId: z.string() }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { id, docId }, organizationId, user }, reply) => {
-      await findKnowledgeBaseOrThrow({
-        id,
-        organizationId,
-        userId: user.id,
-      });
-
-      const document = await KbDocumentModel.findByIdAndKnowledgeBase({
-        documentId: docId,
-        knowledgeBaseId: id,
-      });
-      if (!document) {
-        throw new ApiError(404, "Document not found");
-      }
-
-      const success = await KbDocumentModel.delete(docId);
-      if (!success) {
-        throw new ApiError(404, "Document not found");
-      }
-
-      return reply.send({ success: true });
     },
   );
 
@@ -359,6 +325,37 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Knowledge base not found");
       }
 
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-bases/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.DeleteKnowledgeBaseDocument,
+        description: "Delete a knowledge base document",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.string(), docId: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findByIdAndKnowledgeBase({
+        documentId: docId,
+        knowledgeBaseId: id,
+      });
+      if (!existing || existing.organizationId !== organizationId) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      await KbDocumentModel.delete(docId);
       return reply.send({ success: true });
     },
   );
@@ -503,11 +500,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
       }));
 
+      const validatedData = enrichedData.filter((connector) => {
+        const parsed = SelectKnowledgeBaseConnectorSchema.safeParse(connector);
+        if (parsed.success) return true;
+        logger.warn(
+          {
+            connectorId: connector.id,
+            connectorType: connector.connectorType,
+            configType: (connector.config as Record<string, unknown> | null)
+              ?.type,
+            validationErrors: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              code: i.code,
+              message: i.message,
+            })),
+          },
+          "Skipping connector with invalid persisted schema",
+        );
+        return false;
+      });
+
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
 
       return reply.send({
-        data: enrichedData,
+        data: validatedData,
         pagination: {
           currentPage,
           limit,
@@ -545,12 +562,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
-      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
-        throw new ApiError(
-          400,
-          "At least one team must be selected for team-scoped connectors",
-        );
-      }
 
       if (
         visibility === "team-scoped" &&
@@ -558,7 +569,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
+        );
+      }
+      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
         );
       }
 
@@ -692,6 +709,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { credentials: _, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
+
+      if (
+        connector.visibility !== "team-scoped" &&
+        nextVisibility === "team-scoped" &&
+        !config.enterpriseFeatures.knowledgeBase
+      ) {
+        throw new ApiError(
+          403,
+          "Team-scoped connectors require an enterprise license",
+        );
+      }
       if (
         isTeamScopedWithoutTeams({
           visibility: nextVisibility,
@@ -701,17 +729,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           "At least one team must be selected for team-scoped connectors",
-        );
-      }
-
-      if (
-        nextVisibility === "team-scoped" &&
-        connector.visibility !== "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
-      ) {
-        throw new ApiError(
-          403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
         );
       }
 

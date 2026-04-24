@@ -196,6 +196,71 @@ describe("knowledge base routes", () => {
       expect(body.pagination.hasNext).toBe(true);
     });
 
+    test("only returns documents for connectors assigned to the knowledge base", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Scoped Docs KB",
+      });
+      const assignedConnector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Assigned Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://scoped.atlassian.net",
+          isCloud: true,
+          projectKey: "SCO",
+        },
+      });
+      const unassignedConnector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Unassigned Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://unassigned.atlassian.net",
+          isCloud: true,
+          projectKey: "UNA",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        assignedConnector.id,
+        kb.id,
+      );
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "assigned-1",
+        connectorId: assignedConnector.id,
+        title: "Assigned Doc",
+        content: "assigned-content",
+        contentHash: "hash-assigned",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "unassigned-1",
+        connectorId: unassignedConnector.id,
+        title: "Unassigned Doc",
+        content: "unassigned-content",
+        contentHash: "hash-unassigned",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kb.id}/documents?limit=20&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(1);
+      expect(body.data.map((d) => d.title)).toEqual(["Assigned Doc"]);
+    });
+
     test("filters documents by title search", async () => {
       const kb = await KnowledgeBaseModel.create({
         organizationId,
@@ -248,6 +313,141 @@ describe("knowledge base routes", () => {
       };
       expect(body.pagination.total).toBe(1);
       expect(body.data.map((d) => d.title)).toEqual(["Budget Planning"]);
+    });
+
+    test("filters documents by connectorId", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Connector Filter KB",
+      });
+      const connectorA = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector A",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://conn-a.atlassian.net",
+          isCloud: true,
+          projectKey: "CNA",
+        },
+      });
+      const connectorB = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector B",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://conn-b.atlassian.net",
+          isCloud: true,
+          projectKey: "CNB",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connectorA.id,
+        kb.id,
+      );
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connectorB.id,
+        kb.id,
+      );
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "conn-filter-a",
+        connectorId: connectorA.id,
+        title: "Connector A Doc",
+        content: "a",
+        contentHash: "hash-a",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "conn-filter-b",
+        connectorId: connectorB.id,
+        title: "Connector B Doc",
+        content: "b",
+        contentHash: "hash-b",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kb.id}/documents?limit=20&offset=0&connectorId=${connectorA.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string; connectorId: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(1);
+      expect(body.data[0]?.title).toBe("Connector A Doc");
+      expect(body.data[0]?.connectorId).toBe(connectorA.id);
+    });
+
+    test("returns empty list when filtering by connectorId not assigned to the knowledge base", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Unassigned Connector Filter KB",
+      });
+      const assignedConnector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Assigned Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://assigned.atlassian.net",
+          isCloud: true,
+          projectKey: "ASC",
+        },
+      });
+      const unassignedConnector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Unassigned Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://unassigned.atlassian.net",
+          isCloud: true,
+          projectKey: "UNC",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        assignedConnector.id,
+        kb.id,
+      );
+
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "assigned-doc-1",
+        connectorId: assignedConnector.id,
+        title: "Assigned Doc",
+        content: "assigned",
+        contentHash: "hash-assigned",
+        acl: ["org:*"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "unassigned-doc-1",
+        connectorId: unassignedConnector.id,
+        title: "Unassigned Doc",
+        content: "unassigned",
+        contentHash: "hash-unassigned",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kb.id}/documents?limit=20&offset=0&connectorId=${unassignedConnector.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(0);
+      expect(body.data).toEqual([]);
     });
 
     test("returns 404 for non-existent knowledge base", async () => {
@@ -368,6 +568,35 @@ describe("knowledge base routes", () => {
 
       expect(response.statusCode).toBe(404);
       expect(await KbDocumentModel.findById(docInKbB.id)).not.toBeNull();
+    });
+
+    test("returns 404 when document does not exist", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Delete Missing Doc KB",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Delete Missing Doc Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://missing.atlassian.net",
+          isCloud: true,
+          projectKey: "MIS",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connector.id,
+        kb.id,
+      );
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-bases/${kb.id}/documents/${crypto.randomUUID()}`,
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 

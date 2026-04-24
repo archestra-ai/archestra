@@ -11,6 +11,17 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/knowledge/knowledge-bases",
 }));
 
+vi.mock("@/components/ui/permission-button", () => ({
+  PermissionButton: ({
+    children,
+    ...props
+  }: React.PropsWithChildren<React.ComponentPropsWithoutRef<"button">>) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
+}));
+
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBasesPaginated: () => ({
     data: {
@@ -38,7 +49,9 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
     isPending: false,
     isFetching: false,
   }),
+  useCreateKnowledgeBase: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteKnowledgeBase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useIsKnowledgeBaseConfigured: () => true,
 }));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({

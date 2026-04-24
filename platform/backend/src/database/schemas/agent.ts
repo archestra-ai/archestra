@@ -10,7 +10,12 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
+import type {
+  AgentScope,
+  AgentToolAssignmentMode,
+  AgentType,
+  BuiltInAgentConfig,
+} from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import usersTable from "./user";
@@ -74,6 +79,13 @@ const agentsTable = pgTable(
       .default("private"),
     /** Allowed domain for 'internal' security mode (e.g., 'example.com') */
     incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
+
+    // Tool assignment mode settings
+    /** Tool assignment mode for the agent */
+    toolAssignmentMode: text("tool_assignment_mode")
+      .$type<AgentToolAssignmentMode>()
+      .notNull()
+      .default("manual"),
 
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */

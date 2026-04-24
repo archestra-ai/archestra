@@ -34978,6 +34978,13 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "toolAssignmentMode": {
+                            "type": "string",
+                            "enum": [
+                              "automatic",
+                              "manual"
+                            ]
+                          },
                           "llmApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -35301,6 +35308,7 @@
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
+                          "toolAssignmentMode",
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
@@ -35655,6 +35663,13 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "toolAssignmentMode": {
+                    "type": "string",
+                    "enum": [
+                      "automatic",
+                      "manual"
+                    ]
+                  },
                   "llmApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -35896,6 +35911,13 @@
                     "incomingEmailAllowedDomain": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
                     },
                     "llmApiKeyId": {
                       "nullable": true,
@@ -36220,6 +36242,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
@@ -36603,6 +36626,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "toolAssignmentMode": {
+                        "type": "string",
+                        "enum": [
+                          "automatic",
+                          "manual"
+                        ]
+                      },
                       "llmApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -36926,6 +36956,7 @@
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
+                      "toolAssignmentMode",
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
@@ -37249,6 +37280,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -37572,6 +37610,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
@@ -37895,6 +37934,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -38218,6 +38264,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
@@ -38553,6 +38600,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -38876,6 +38930,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
@@ -39182,6 +39237,13 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "toolAssignmentMode": {
+                    "type": "string",
+                    "enum": [
+                      "automatic",
+                      "manual"
+                    ]
+                  },
                   "llmApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -39428,6 +39490,13 @@
                     "incomingEmailAllowedDomain": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
                     },
                     "llmApiKeyId": {
                       "nullable": true,
@@ -39752,6 +39821,7 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
+                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",

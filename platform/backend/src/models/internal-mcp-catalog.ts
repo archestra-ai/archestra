@@ -6,6 +6,7 @@ import type {
   InternalMcpCatalog,
   UpdateInternalMcpCatalog,
 } from "@/types";
+import AgentModel from "./agent";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";

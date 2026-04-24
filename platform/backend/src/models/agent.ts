@@ -13,6 +13,7 @@ import {
   eq,
   ilike,
   inArray,
+  is,
   isNull,
   min,
   ne,
@@ -21,6 +22,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { id } from "zod/v4/locales";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import {
@@ -28,6 +30,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
 import type {
   Agent,
   AgentScope,
@@ -42,6 +45,7 @@ import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
+import AgentToolModel from "./agent-tool";
 import MemberModel from "./member";
 import ToolModel from "./tool";
 
@@ -182,6 +186,15 @@ class AgentModel {
     // Assign labels to the agent if provided
     if (labels && labels.length > 0) {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
+    }
+
+    // Assign tools for MCP gateways when tool assignment mode is automatic
+    const hasLabels = labels && labels.length > 0;
+    const isMcpGateway = createdAgent.agentType === "mcp_gateway";
+    const isAutomaticToolAssignment =
+      createdAgent.toolAssignmentMode === "automatic";
+    if (hasLabels && isMcpGateway && isAutomaticToolAssignment) {
+      await assignAgentToolsFromLabels(createdAgent.id);
     }
 
     // Assign knowledge bases if provided
@@ -545,6 +558,33 @@ class AgentModel {
       .orderBy(asc(schema.agentsTable.name));
 
     return agents;
+  }
+
+  static async findAllMatchingLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<string[]> {
+    if (pairs.length === 0) {
+      return [];
+    }
+
+    const whereConditions = pairs.map((pair) =>
+      and(
+        eq(schema.agentLabelsTable.keyId, pair.keyId),
+        eq(schema.agentLabelsTable.valueId, pair.valueId),
+      ),
+    );
+
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentLabelsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
+      )
+      .where(or(...whereConditions))
+      .groupBy(schema.agentsTable.id);
+
+    return rows.map((row) => row.id);
   }
 
   /**
@@ -1342,6 +1382,27 @@ class AgentModel {
     // Sync label assignments if labels is provided
     if (labels !== undefined) {
       await AgentLabelModel.syncAgentLabels(id, labels);
+    }
+
+    // Assign or unassign tools based on changes to labels and mode for MCP Gateway agents
+    const isMcpGateway = updatedAgent.agentType === "mcp_gateway";
+
+    if (isMcpGateway) {
+      const labelsChanged = labels !== undefined;
+      const isCurrentlyAutomatic =
+        updatedAgent.toolAssignmentMode === "automatic";
+      const isPreviouslyAutomatic =
+        existingAgent.toolAssignmentMode === "automatic";
+      const isSwitchingToAutomatic =
+        isCurrentlyAutomatic && !isPreviouslyAutomatic;
+      const isSwitchingToManual =
+        !isCurrentlyAutomatic && isPreviouslyAutomatic;
+
+      if ((isCurrentlyAutomatic && labelsChanged) || isSwitchingToAutomatic) {
+        await assignAgentToolsFromLabels(id);
+      } else if (isSwitchingToManual) {
+        await AgentToolModel.deleteAllForAgent(id);
+      }
     }
 
     // Sync knowledge base assignments if knowledgeBaseIds is provided

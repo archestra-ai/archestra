@@ -1,5 +1,6 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
 import type { AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
@@ -87,6 +88,30 @@ class McpCatalogLabelModel {
     return labelsMap;
   }
 
+  static async getCatalogIdsByLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<string[]> {
+    if (pairs.length === 0) {
+      return [];
+    }
+
+    const rows = await db
+      .selectDistinct({ catalogId: schema.mcpCatalogLabelsTable.catalogId })
+      .from(schema.mcpCatalogLabelsTable)
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.mcpCatalogLabelsTable.keyId, pair.keyId),
+              eq(schema.mcpCatalogLabelsTable.valueId, pair.valueId),
+            ),
+          ),
+        ),
+      );
+
+    return rows.map((r) => r.catalogId);
+  }
+
   /**
    * Sync labels for a catalog item (replaces all existing labels).
    * Reuses AgentLabelModel.getOrCreateKey/Value for shared label_keys/label_values tables.
@@ -97,7 +122,7 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    await db.transaction(async (tx) => {
+    const labelsInserted = await db.transaction(async (tx) => {
       await tx
         .delete(schema.mcpCatalogLabelsTable)
         .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
@@ -119,8 +144,23 @@ class McpCatalogLabelModel {
         }
 
         await tx.insert(schema.mcpCatalogLabelsTable).values(labelInserts);
+        return labelInserts.map((insert, index) => ({
+          keyId: insert.keyId,
+          valueId: insert.valueId,
+          key: labels[index].key,
+          value: labels[index].value,
+        }));
       }
+
+      return [];
     });
+
+    // After syncing labels, find all agents with matching labels and re-assign tools based on new label sets
+    const AgentModel = (await import("./agent")).default;
+    const agentIds = await AgentModel.findAllMatchingLabels(labelsInserted);
+    for (const agentId of agentIds) {
+      await assignAgentToolsFromLabels(agentId);
+    }
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});

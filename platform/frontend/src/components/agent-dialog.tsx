@@ -2,6 +2,7 @@
 
 import {
   type AgentScope,
+  type AgentToolAssignmentMode,
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
@@ -622,6 +623,8 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [toolAssignmentMode, setToolAssignmentMode] =
+    useState<AgentToolAssignmentMode>("manual");
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
@@ -680,6 +683,7 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
+        setToolAssignmentMode(agentData.toolAssignmentMode);
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -712,6 +716,7 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
+        setToolAssignmentMode("manual");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -943,6 +948,7 @@ export function AgentDialog({
             ...(agentType === "mcp_gateway" && {
               passthroughHeaders:
                 passthroughHeaders.length > 0 ? passthroughHeaders : null,
+              toolAssignmentMode,
             }),
           },
         });
@@ -979,6 +985,7 @@ export function AgentDialog({
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
+            toolAssignmentMode,
           }),
         });
         if (!created) return;
@@ -1070,6 +1077,7 @@ export function AgentDialog({
     onOpenChange,
     supportsIdentityProvider,
     passthroughHeaders,
+    toolAssignmentMode,
     deleteAgent,
   ]);
 
@@ -1435,20 +1443,60 @@ export function AgentDialog({
 
                   {/* Tools */}
                   <div className="space-y-2">
-                    <Label>Tools ({selectedToolsCount})</Label>
-                    {!agent && selectedToolsCount > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Some recommended {appName} MCP tools are pre-selected
-                        for you
-                      </p>
-                    )}
-                    <AgentToolsEditor
-                      ref={agentToolsEditorRef}
-                      agentId={agent?.id}
-                      assignmentScope={scope}
-                      assignmentTeamIds={assignedTeamIds}
-                      onSelectedCountChange={setSelectedToolsCount}
-                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>
+                        Tools
+                        {(agentType !== "mcp_gateway" ||
+                          toolAssignmentMode === "manual") &&
+                          ` (${selectedToolsCount})`}
+                      </Label>
+                      {agentType === "mcp_gateway" && (
+                        <Select
+                          value={toolAssignmentMode}
+                          onValueChange={(value) =>
+                            setToolAssignmentMode(
+                              value as AgentToolAssignmentMode,
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-auto gap-2 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="automatic">
+                              Automatic (by labels)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                    {agentType === "mcp_gateway" &&
+                      toolAssignmentMode === "automatic" && (
+                        <p className="text-xs text-muted-foreground">
+                          Tools are auto-assigned from catalog entries that
+                          match this gateway's labels. Switch to Manual to
+                          edit directly.
+                        </p>
+                      )}
+                    {agentType !== "mcp_gateway" ||
+                    toolAssignmentMode === "manual" ? (
+                      <>
+                        {!agent && selectedToolsCount > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Some recommended {appName} MCP tools are
+                            pre-selected for you
+                          </p>
+                        )}
+                        <AgentToolsEditor
+                          ref={agentToolsEditorRef}
+                          agentId={agent?.id}
+                          assignmentScope={scope}
+                          assignmentTeamIds={assignedTeamIds}
+                          onSelectedCountChange={setSelectedToolsCount}
+                        />
+                      </>
+                    ) : null}
                   </div>
 
                   {/* Subagents */}

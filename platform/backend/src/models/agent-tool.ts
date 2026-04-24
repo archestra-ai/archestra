@@ -331,6 +331,32 @@ class AgentToolModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  static async deleteAllForAgent(agentId: string): Promise<number> {
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+
+    return result.rowCount || 0;
+  }
+
+  static async deleteManyForAgent(
+    agentId: string,
+    toolIds: string[],
+  ): Promise<number> {
+    if (toolIds.length === 0) return 0;
+
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.agentToolsTable.toolId, toolIds),
+        ),
+      );
+
+    return result.rowCount || 0;
+  }
+
   static async findToolIdsByAgent(agentId: string): Promise<string[]> {
     const results = await db
       .select({ toolId: schema.agentToolsTable.toolId })

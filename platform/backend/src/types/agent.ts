@@ -37,6 +37,16 @@ export const AgentTypeSchema = z.enum([
 ]);
 export type AgentType = z.infer<typeof AgentTypeSchema>;
 
+/**
+ * Agent tool assignment mode:
+ * - automatic: Tools are automatically assigned based label selectors
+ * - manual: Tools must be manually assigned by the user
+ */
+export const AgentToolAssignmentModeSchema = z.enum(["automatic", "manual"]);
+export type AgentToolAssignmentMode = z.infer<
+  typeof AgentToolAssignmentModeSchema
+>;
+
 export const AgentScopeSchema = ResourceVisibilityScopeSchema;
 export type AgentScope = ResourceVisibilityScope;
 
@@ -114,6 +124,7 @@ const selectExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
+  toolAssignmentMode: AgentToolAssignmentModeSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
 };
@@ -122,6 +133,7 @@ const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
+  toolAssignmentMode: AgentToolAssignmentModeSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
 };

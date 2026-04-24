@@ -331,14 +331,6 @@ class AgentToolModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  static async deleteAllForAgent(agentId: string): Promise<number> {
-    const result = await db
-      .delete(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.agentId, agentId));
-
-    return result.rowCount || 0;
-  }
-
   static async deleteManyForAgent(
     agentId: string,
     toolIds: string[],

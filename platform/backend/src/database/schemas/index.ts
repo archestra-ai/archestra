@@ -12,6 +12,7 @@ export { default as chatopsChannelBindingsTable } from "./chatops-channel-bindin
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
+export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
 export {
   conversationShareTeamsTable,

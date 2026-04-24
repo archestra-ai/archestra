@@ -52,6 +52,7 @@ The bot responds with a list of options to choose which agent will handle messag
 ### Commands
 
 Archestra uses native Slack slash commands — type them directly in the message box without mentioning the bot.
+The command prefix is generated from the Slack app name in the setup wizard. The default app name uses:
 
 | Command | Description |
 |---------|-------------|

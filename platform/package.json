@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.2.20",
+  "version": "1.2.23",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -36,8 +36,7 @@
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
-    "turbo": "^2.8.13",
-    "typescript": "^5.9.2"
+    "turbo": "^2.8.13"
   },
   "pnpm": {
     "overrides": {

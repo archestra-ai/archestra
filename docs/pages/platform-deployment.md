@@ -944,6 +944,11 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Content exceeding this limit is truncated with a `...[truncated]` suffix
   - Only applies when `ARCHESTRA_OTEL_CAPTURE_CONTENT` is enabled
 
+- **`ARCHESTRA_OTEL_TRACES_SAMPLE_RATE`** - Sampling rate for OTEL traces when Sentry is not enabled. Value between 0 and 1.
+  - Default: `1.0` (100% of traces sampled)
+  - Uses `ParentBasedSampler` with `TraceIdRatioBasedSampler` — child spans inherit the parent's sampling decision
+  - Ignored when Sentry is enabled (sampling is managed by Sentry's `ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE`)
+
 - **`ARCHESTRA_OTEL_VERBOSE_TRACING`** - Enable verbose infrastructure spans (HTTP routes, outgoing HTTP calls, Node.js fetch, etc).
   - Default: `false` (disabled)
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
@@ -1083,8 +1088,7 @@ To learn more about enterprise licensing, please reach out to [sales@archestra.a
   - Set to `true` to enable the enterprise license
   - Required as a prerequisite for all other enterprise feature flags
 
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables the Knowledge Base enterprise feature.
-  - Set to `true` to enable
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, knowledge bases connectors are limited to org-wide visibility.
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).

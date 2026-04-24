@@ -1,4 +1,4 @@
-import { ChatErrorResponseSchema, SupportedProvidersSchema } from "@shared";
+import { SupportedProvidersSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ConversationShareVisibilitySchema } from "./conversation-share";
 
 const ConversationShareSummarySchema = z
@@ -19,7 +20,6 @@ const ConversationShareSummarySchema = z
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
-  lastChatError: ChatErrorResponseSchema.nullable(),
 };
 
 // For insert/update schema, selectedProvider is optional
@@ -42,6 +42,7 @@ export const SelectConversationSchema = createSelectSchema(
     .nullable(),
   share: ConversationShareSummarySchema,
   messages: z.array(z.any()), // UIMessage[] from AI SDK
+  chatErrors: z.array(SelectConversationChatErrorSchema),
   ...selectExtendedFields,
 });
 

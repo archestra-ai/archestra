@@ -10,8 +10,12 @@ import { z } from "zod";
 import { schema } from "@/database";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
+const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+// "GIF87a" or "GIF89a"
+const GIF87A_MAGIC_BYTES = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61];
+const GIF89A_MAGIC_BYTES = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
 const MAX_CHAT_LINK_URL_LENGTH = 2000;
 
 /**
@@ -69,6 +73,78 @@ const Base64PngSchema = z
     }
   });
 
+/**
+ * Validates a Base64-encoded PNG or GIF data URI.
+ *
+ * Same 2MB cap as the PNG schema; also accepts GIF87a and GIF89a.
+ * Used for onboarding-wizard page images (GIFs allowed so admins can embed
+ * animated screen recordings).
+ */
+export const Base64ImageSchema = z
+  .string()
+  .nullable()
+  .superRefine((val, ctx) => {
+    if (val === null) return;
+
+    const isPng = val.startsWith(DATA_URI_PREFIX);
+    const isGif = val.startsWith(GIF_DATA_URI_PREFIX);
+    if (!isPng && !isGif) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image must be a PNG or GIF in data URI format",
+      });
+      return;
+    }
+
+    const base64Payload = val.slice(
+      isPng ? DATA_URI_PREFIX.length : GIF_DATA_URI_PREFIX.length,
+    );
+
+    const decoded = Buffer.from(base64Payload, "base64");
+    if (decoded.toString("base64") !== base64Payload) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image contains invalid Base64 encoding",
+      });
+      return;
+    }
+
+    if (decoded.length > MAX_LOGO_SIZE_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image must be less than 2MB",
+      });
+      return;
+    }
+
+    if (isPng) {
+      if (
+        decoded.length < PNG_MAGIC_BYTES.length ||
+        !PNG_MAGIC_BYTES.every((byte, i) => decoded[i] === byte)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Image must contain valid PNG data",
+        });
+      }
+      return;
+    }
+
+    // GIF
+    const matchesGif87a =
+      decoded.length >= GIF87A_MAGIC_BYTES.length &&
+      GIF87A_MAGIC_BYTES.every((byte, i) => decoded[i] === byte);
+    const matchesGif89a =
+      decoded.length >= GIF89A_MAGIC_BYTES.length &&
+      GIF89A_MAGIC_BYTES.every((byte, i) => decoded[i] === byte);
+    if (!matchesGif87a && !matchesGif89a) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image must contain valid GIF data",
+      });
+    }
+  });
+
 const ChatLinkUrlSchema = z
   .string()
   .trim()
@@ -80,6 +156,16 @@ const ChatLinkUrlSchema = z
 export const OrganizationChatLinkSchema = z.object({
   label: z.string().trim().min(1).max(25),
   url: ChatLinkUrlSchema,
+});
+
+export const OnboardingWizardPageSchema = z.object({
+  image: Base64ImageSchema.optional(),
+  content: z.string(),
+});
+
+export const OnboardingWizardSchema = z.object({
+  label: z.string().trim().min(1).max(25),
+  pages: z.array(OnboardingWizardPageSchema).min(1).max(10),
 });
 
 /**
@@ -97,6 +183,7 @@ export const AppearanceSettingsSchema = z.object({
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
   chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
+  onboardingWizard: OnboardingWizardSchema.nullable(),
   chatErrorSupportMessage: z.string().nullable(),
   slimChatErrorUi: z.boolean(),
   animateChatPlaceholders: z.boolean(),
@@ -135,6 +222,7 @@ const extendedFields = {
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
   chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
+  onboardingWizard: OnboardingWizardSchema.nullable(),
   chatErrorSupportMessage: z.string().nullable(),
   slimChatErrorUi: z.boolean(),
   chatPlaceholders: z.array(z.string()).nullable(),
@@ -162,6 +250,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
   chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
+  onboardingWizard: OnboardingWizardSchema.nullable().optional(),
   chatErrorSupportMessage: z.string().max(500).nullable().optional(),
   slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
@@ -228,6 +317,8 @@ export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;
+export type OnboardingWizardPage = z.infer<typeof OnboardingWizardPageSchema>;
+export type OnboardingWizard = z.infer<typeof OnboardingWizardSchema>;
 export type McpOauthAccessTokenLifetimeSeconds = z.infer<
   typeof McpOauthAccessTokenLifetimeSecondsSchema
 >;

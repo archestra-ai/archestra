@@ -46,9 +46,6 @@ export const CHATOPS_TEAM_CACHE = {
 };
 
 /**
- * Bot commands recognized by the chatops system
- */
-/**
  * Channel discovery configuration for auto-populating channel bindings
  */
 export const CHATOPS_CHANNEL_DISCOVERY = {
@@ -66,21 +63,12 @@ export const CHATOPS_COMMANDS = {
 } as const;
 
 /**
- * Native Slack slash commands.
- * These are registered in the Slack app manifest and handled by a dedicated endpoint.
- * All three share one backend endpoint — the `command` field distinguishes them.
- */
-/**
  * Default connection mode for Slack when not explicitly configured.
  */
 export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
   "socket" as const;
 
-export const SLACK_SLASH_COMMANDS = {
-  SELECT_AGENT: "/archestra-select-agent",
-  STATUS: "/archestra-status",
-  HELP: "/archestra-help",
-} as const;
+export { SLACK_SLASH_COMMANDS } from "@shared";
 
 /**
  * Attachment limits for chatops file downloads.

@@ -204,7 +204,6 @@ function makeConversation(
     hasCustomToolSelection: false,
     todoList: null,
     artifact: null,
-    lastChatError: null,
     pinnedAt: null,
     createdAt: "2026-03-19T00:00:00.000Z",
     updatedAt: "2026-03-19T00:00:00.000Z",
@@ -217,6 +216,7 @@ function makeConversation(
     },
     share: null,
     messages: [],
+    chatErrors: [],
     ...overrides,
   };
 }

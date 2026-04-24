@@ -12,7 +12,7 @@
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsgo --noEmit",
     "test": "vitest",
     "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
@@ -32,6 +32,7 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.94.0",
     "@types/node": "^25",
+    "@typescript/native-preview": "catalog:",
     "knip": "^5.85.0",
     "typescript": "catalog:",
     "vitest": "^4.1.0"

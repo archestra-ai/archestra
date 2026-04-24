@@ -286,6 +286,46 @@ describe("chat tool execution", () => {
     expect(updatedBinding?.agentId).toBe(targetAgent.id);
   });
 
+  test("swap_agent cannot assign personal agent to shared chatops channel", async ({
+    makeAgent,
+  }) => {
+    const personalAgent = await makeAgent({
+      name: "Personal ChatOps Target",
+      agentType: "agent",
+      organizationId,
+      scope: "personal",
+      authorId: userId,
+    });
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "slack",
+      channelId: "C-chatops-personal-blocked",
+      workspaceId: "W-chatops-personal-blocked",
+      agentId: testAgent.id,
+      isDm: false,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_agent`,
+      { agent_name: personalAgent.name },
+      {
+        ...mockContext,
+        chatOpsBindingId: binding.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Personal agents cannot be assigned to channels",
+    );
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(testAgent.id);
+  });
+
   test("swap_agent prefers chatops binding when both contexts are present", async ({
     makeAgent,
   }) => {
@@ -505,6 +545,49 @@ describe("chat tool execution", () => {
       binding.id,
     );
     expect(updatedBinding?.agentId).toBe(defaultAgent.id);
+  });
+
+  test("swap_to_default_agent cannot assign personal default agent to shared chatops channel", async ({
+    makeAgent,
+  }) => {
+    const defaultAgent = await makeAgent({
+      name: "Personal Default Agent",
+      agentType: "agent",
+      organizationId,
+      scope: "personal",
+      authorId: userId,
+    });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: defaultAgent.id,
+    });
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "ms-teams",
+      channelId: "CH-chatops-personal-default-blocked",
+      workspaceId: "WS-chatops-personal-default-blocked",
+      agentId: testAgent.id,
+      isDm: false,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}swap_to_default_agent`,
+      {},
+      {
+        ...mockContext,
+        chatOpsBindingId: binding.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Personal agents cannot be assigned to channels",
+    );
+
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(testAgent.id);
   });
 
   test("swap_to_default_agent prefers chatops binding when both contexts are present", async ({

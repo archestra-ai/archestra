@@ -15,6 +15,7 @@ import {
   OrganizationModel,
   ScheduleTriggerRunModel,
 } from "@/models";
+import type { Agent } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
   catchError,
@@ -298,12 +299,18 @@ async function handleSwapAgent(params: {
     // - conversationId: synthetic isolation key for tool/session caching
     // Prefer the chatops binding whenever available.
     if (context.chatOpsBindingId) {
-      const updatedBinding = await ChatOpsChannelBindingModel.update(
-        context.chatOpsBindingId,
-        { agentId: targetAgent.id },
-      );
+      const updateResult = await updateChatOpsBindingAgent({
+        bindingId: context.chatOpsBindingId,
+        agent: targetAgent,
+        userId: context.userId,
+        organizationId: context.organizationId,
+      });
 
-      if (!updatedBinding) {
+      if (updateResult.error) {
+        return errorResult(updateResult.error);
+      }
+
+      if (!updateResult.binding) {
         return errorResult("Failed to update chatops channel agent.");
       }
     } else if (context.conversationId) {
@@ -411,12 +418,18 @@ async function handleSwapToDefaultAgent(params: {
     // - conversationId: synthetic isolation key for tool/session caching
     // Prefer the chatops binding whenever available.
     if (context.chatOpsBindingId) {
-      const updatedBinding = await ChatOpsChannelBindingModel.update(
-        context.chatOpsBindingId,
-        { agentId: defaultAgentId },
-      );
+      const updateResult = await updateChatOpsBindingAgent({
+        bindingId: context.chatOpsBindingId,
+        agent: targetAgent,
+        userId: context.userId,
+        organizationId: context.organizationId,
+      });
 
-      if (!updatedBinding) {
+      if (updateResult.error) {
+        return errorResult(updateResult.error);
+      }
+
+      if (!updateResult.binding) {
         return errorResult("Failed to update chatops channel agent.");
       }
     } else if (context.conversationId) {
@@ -465,4 +478,39 @@ async function handleSwapToDefaultAgent(params: {
   } catch (error) {
     return catchError(error, "swapping to default agent");
   }
+}
+
+async function updateChatOpsBindingAgent(params: {
+  bindingId: string;
+  agent: Pick<Agent, "id" | "scope" | "authorId">;
+  userId: string;
+  organizationId: string;
+}) {
+  const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
+  if (!binding || binding.organizationId !== params.organizationId) {
+    return { binding: null };
+  }
+
+  if (params.agent.scope === "personal") {
+    if (!binding.isDm) {
+      return {
+        binding: null,
+        error:
+          "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
+      };
+    }
+
+    if (params.agent.authorId !== params.userId) {
+      return {
+        binding: null,
+        error: "You can only assign your own personal agents to your DM.",
+      };
+    }
+  }
+
+  return {
+    binding: await ChatOpsChannelBindingModel.update(params.bindingId, {
+      agentId: params.agent.id,
+    }),
+  };
 }

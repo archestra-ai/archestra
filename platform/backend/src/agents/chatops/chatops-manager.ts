@@ -1336,7 +1336,7 @@ export class ChatOpsManager {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `🤖 ${agent.name}`,
+          footer: `🤖 ${execution.responseAgent.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       } else if (

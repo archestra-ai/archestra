@@ -105,3 +105,8 @@ archestra:
           - path: /
             port: 9000
             pathType: Prefix
+
+postgresql:
+  primary:
+    persistence:
+      size: 20Gi

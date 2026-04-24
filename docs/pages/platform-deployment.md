@@ -1088,8 +1088,7 @@ To learn more about enterprise licensing, please reach out to [sales@archestra.a
   - Set to `true` to enable the enterprise license
   - Required as a prerequisite for all other enterprise feature flags
 
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables the Knowledge Base enterprise feature.
-  - Set to `true` to enable
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, knowledge bases connectors are limited to org-wide visibility.
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).

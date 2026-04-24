@@ -247,7 +247,7 @@ New users are automatically added to the "Default Team" when they accept an invi
 **For MCP Servers:**
 
 - Users can only access MCP servers assigned to teams they belong to
-- Exception: Users with \`mcpServer:admin\` permission can access all MCP servers
+- Exception: Users with \`mcpServerInstallation:admin\` permission can access all MCP servers
 - Exception: MCP servers with no team assignment are accessible to all users
 
 **Associated Artifacts:**

@@ -26999,7 +26999,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27447,7 +27447,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
     };
     url: '/api/connectors';
 };
@@ -27523,7 +27523,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27617,6 +27617,11 @@ export type GetConnectorsResponses = {
                 includeProjects?: boolean;
                 includeCycles?: boolean;
                 batchSize?: number;
+            } | {
+                type: 'outline';
+                outlineUrl: unknown;
+                collectionIds?: Array<string>;
+                batchSize?: number;
             };
             secretId: string | null;
             schedule: string;
@@ -27654,7 +27659,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27748,6 +27753,11 @@ export type CreateConnectorData = {
             includeProjects?: boolean;
             includeCycles?: boolean;
             batchSize?: number;
+        } | {
+            type: 'outline';
+            outlineUrl: string;
+            collectionIds?: Array<string>;
+            batchSize?: number;
         };
         credentials: {
             email?: string;
@@ -27832,7 +27842,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -27925,6 +27935,11 @@ export type CreateConnectorResponses = {
             includeComments?: boolean;
             includeProjects?: boolean;
             includeCycles?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'outline';
+            outlineUrl: unknown;
+            collectionIds?: Array<string>;
             batchSize?: number;
         };
         secretId: string | null;
@@ -28101,7 +28116,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28194,6 +28209,11 @@ export type GetConnectorResponses = {
             includeComments?: boolean;
             includeProjects?: boolean;
             includeCycles?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'outline';
+            outlineUrl: unknown;
+            collectionIds?: Array<string>;
             batchSize?: number;
         };
         secretId: string | null;
@@ -28312,6 +28332,11 @@ export type UpdateConnectorData = {
             includeProjects?: boolean;
             includeCycles?: boolean;
             batchSize?: number;
+        } | {
+            type: 'outline';
+            outlineUrl: string;
+            collectionIds?: Array<string>;
+            batchSize?: number;
         };
         credentials?: {
             email?: string;
@@ -28397,7 +28422,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28490,6 +28515,11 @@ export type UpdateConnectorResponses = {
             includeComments?: boolean;
             includeProjects?: boolean;
             includeCycles?: boolean;
+            batchSize?: number;
+        } | {
+            type: 'outline';
+            outlineUrl: unknown;
+            collectionIds?: Array<string>;
             batchSize?: number;
         };
         secretId: string | null;

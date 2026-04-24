@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.22"
+    "version": "1.2.23"
   },
   "components": {
     "schemas": {
@@ -34547,69 +34547,73 @@
         "tags": [
           "A2A"
         ],
-        "description": "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
+        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "jsonrpc": {
-                    "type": "string",
-                    "enum": [
-                      "2.0"
-                    ]
-                  },
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ]
-                  },
-                  "method": {
-                    "type": "string"
-                  },
-                  "params": {
+                "anyOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "message": {
+                      "jsonrpc": {
+                        "type": "string",
+                        "enum": [
+                          "2.0"
+                        ]
+                      },
+                      "id": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "method": {
+                        "type": "string"
+                      },
+                      "params": {
                         "type": "object",
                         "properties": {
-                          "parts": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "enum": [
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text"
+                                      ]
+                                    },
+                                    "text": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
                                     "text"
                                   ]
-                                },
-                                "text": {
-                                  "type": "string"
                                 }
-                              },
-                              "required": [
-                                "kind",
-                                "text"
-                              ]
+                              }
                             }
                           }
                         }
                       }
-                    }
+                    },
+                    "required": [
+                      "jsonrpc",
+                      "id",
+                      "method"
+                    ]
                   }
-                },
-                "required": [
-                  "jsonrpc",
-                  "id",
-                  "method"
                 ]
               }
             }
@@ -99438,6 +99442,12 @@
                                       "enum": [
                                         "linear"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "outline"
+                                      ]
                                     }
                                   ]
                                 }
@@ -101275,6 +101285,12 @@
                   "enum": [
                     "linear"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "outline"
+                  ]
                 }
               ]
             },
@@ -101390,6 +101406,12 @@
                                 "type": "string",
                                 "enum": [
                                   "linear"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "outline"
                                 ]
                               }
                             ]
@@ -101847,6 +101869,32 @@
                                 "required": [
                                   "type",
                                   "linearApiUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "outline"
+                                    ]
+                                  },
+                                  "outlineUrl": {},
+                                  "collectionIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "outlineUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -102341,6 +102389,12 @@
                         "enum": [
                           "linear"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "outline"
+                        ]
                       }
                     ]
                   },
@@ -102799,6 +102853,33 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
                       }
                     ]
                   },
@@ -102941,6 +103022,12 @@
                           "type": "string",
                           "enum": [
                             "linear"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         }
                       ]
@@ -103398,6 +103485,32 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -103840,6 +103953,12 @@
                           "enum": [
                             "linear"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
+                          ]
                         }
                       ]
                     },
@@ -104296,6 +104415,32 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -105110,6 +105255,33 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "outline"
+                            ]
+                          },
+                          "outlineUrl": {
+                            "type": "string"
+                          },
+                          "collectionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "outlineUrl"
+                        ]
                       }
                     ]
                   },
@@ -105250,6 +105422,12 @@
                           "type": "string",
                           "enum": [
                             "linear"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outline"
                           ]
                         }
                       ]
@@ -105707,6 +105885,32 @@
                           "required": [
                             "type",
                             "linearApiUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            "outlineUrl": {},
+                            "collectionIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "outlineUrl"
                           ],
                           "additionalProperties": false
                         }

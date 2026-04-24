@@ -78,7 +78,7 @@ Endpoints with no request body (`POST /api/memory/:id/approve`, `POST /api/memor
 ## Planned Security Improvements
 Deferred items are tracked in:
 
-- `C:\Users\vgarv\OneDrive\Desktop\Code\contribution\Archestra\.workspace\003-implementation\reports\stage-15-security-followups.md`
+- `.workspace/003-implementation/reports/stage-15/artifacts/stage-15-security-followups.md`
 
 Use stable inline TODO references:
 

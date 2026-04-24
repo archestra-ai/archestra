@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 
 class AgentLabelModel {
@@ -116,8 +115,6 @@ class AgentLabelModel {
         await tx.insert(schema.agentLabelsTable).values(labelInserts);
       }
     });
-
-    await assignAgentToolsFromLabels(agentId);
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});

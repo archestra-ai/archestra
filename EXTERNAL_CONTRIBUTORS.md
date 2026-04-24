@@ -108,3 +108,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @NP127
 - @suletetes
 - @alchemistlethal-a11y
+- @Nabhag8848
+- @artificial-feelings

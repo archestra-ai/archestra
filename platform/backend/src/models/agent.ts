@@ -240,6 +240,50 @@ class AgentModel {
   }
 
   /**
+   * Clone an existing agent, duplicating all its configuration:
+   * - System prompt & user prompt
+   * - Tool assignments
+   * - Team memberships
+   * - Knowledge base associations
+   * - Labels
+   * - Connector assignments
+   * - TOON conversion setting
+   */
+  static async clone(
+    sourceAgentId: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<Agent> {
+    const source = await AgentModel.findById(sourceAgentId, userId, isAgentAdmin);
+    if (!source) {
+      throw new ApiError(404, `Agent not found: ${sourceAgentId}`);
+    }
+
+    const cloneName = `Copy of ${source.name}`;
+
+    const insertPayload: InsertAgent = {
+      name: cloneName,
+      agentType: source.agentType,
+      organizationId: source.organizationId,
+      description: source.description ?? undefined,
+      systemPrompt: source.systemPrompt ?? undefined,
+      userPrompt: source.userPrompt ?? undefined,
+      scope: source.scope,
+      toonConversionEnabled: source.toonConversionEnabled ?? false,
+      teams: source.teams.map((t) => t.id),
+      labels: source.labels,
+      knowledgeBaseIds: source.knowledgeBaseIds,
+      connectorIds: source.connectorIds,
+      suggestedPrompts: source.suggestedPrompts?.map((p) => ({
+        label: p.label,
+        prompt: p.prompt,
+      })),
+    };
+
+    return AgentModel.create(insertPayload, userId);
+  }
+
+  /**
    * Find all agents with optional filtering by agentType or agentTypes
    */
   static async findAll(

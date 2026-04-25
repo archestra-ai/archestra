@@ -413,6 +413,65 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+
+  fastify.post(
+    "/api/agents/:id/clone",
+    {
+      schema: {
+        description: "Clone an existing agent with all its configuration",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch source agent to check permissions and get its type
+      const sourceAgent = await AgentModel.findById(id, user.id, true);
+      if (!sourceAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Check create permission for this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      checker.require(sourceAgent.agentType, "create");
+
+      // Scope-based permissions: use same rules as create
+      if (!checker.isAdmin(sourceAgent.agentType)) {
+        if (sourceAgent.scope === "org") {
+          throw new ApiError(403, "Only admins can clone org-scoped agents");
+        }
+        if (sourceAgent.scope === "team" || sourceAgent.teams.length > 0) {
+          if (!checker.isTeamAdmin(sourceAgent.agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to clone team-scoped agents",
+            );
+          }
+          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = sourceAgent.teams
+            .map((t) => t.id)
+            .filter((tid) => !userTeamIdSet.has(tid));
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only clone agents assigned to teams you are a member of",
+            );
+          }
+        }
+      }
+
+      const cloned = await AgentModel.clone(id, user.id, true);
+      await initializeObservabilityMetrics();
+
+      return reply.send(cloned);
+    },
+  );
   fastify.get(
     "/api/agents/:id",
     {

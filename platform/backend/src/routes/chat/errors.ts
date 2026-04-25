@@ -21,6 +21,7 @@ import {
 import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
+import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 
 // =============================================================================
 // ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
@@ -1502,6 +1503,17 @@ export function mapProviderError(
     (parsedError as ParsedAnthropicError)?.type ||
     (parsedError as ParsedGeminiError)?.status ||
     (error instanceof Error ? error.name : undefined);
+  const rawErrorJson = stringifyRawError(error);
+
+  captureRawProviderErrorInSentry({
+    provider,
+    statusCode,
+    parsedError,
+    errorCode,
+    errorMessage,
+    errorType,
+    rawErrorJson,
+  });
 
   logger.info(
     {
@@ -1510,7 +1522,7 @@ export function mapProviderError(
       parsedError,
       mappedCode: errorCode,
       errorMessage,
-      rawErrorJson: stringifyRawError(error),
+      rawErrorJson,
     },
     "[ChatErrorMapper] Mapped provider error",
   );

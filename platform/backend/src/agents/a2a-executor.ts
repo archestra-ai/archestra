@@ -66,6 +66,8 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
+  /** ChatOps thread identifier for thread-scoped agent overrides */
+  chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
@@ -101,6 +103,7 @@ export async function executeA2AMessage(
     abortSignal,
     attachments,
     chatOpsBindingId,
+    chatOpsThreadId,
     parentContextIsTrusted,
     scheduleTriggerRunId,
   } = params;
@@ -178,6 +181,7 @@ export async function executeA2AMessage(
       userId,
       organizationId,
       chatOpsBindingId,
+      chatOpsThreadId,
       sessionId,
       delegationChain,
       conversationId: isolationKey,

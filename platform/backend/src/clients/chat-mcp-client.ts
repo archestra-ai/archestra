@@ -703,6 +703,7 @@ export async function getChatMcpTools({
   userId,
   organizationId,
   chatOpsBindingId,
+  chatOpsThreadId,
   enabledToolIds,
   conversationId,
   sessionId,
@@ -718,6 +719,8 @@ export async function getChatMcpTools({
   organizationId: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
+  /** ChatOps thread identifier for thread-scoped agent overrides */
+  chatOpsThreadId?: string;
   enabledToolIds?: string[];
   conversationId?: string;
   /** Session ID for grouping related LLM requests in logs */
@@ -905,6 +908,7 @@ export async function getChatMcpTools({
                         agent: { id: agentId, name: agentName },
                         conversationId,
                         chatOpsBindingId,
+                        chatOpsThreadId,
                         userId,
                         agentId,
                         organizationId,
@@ -1021,6 +1025,7 @@ export async function getChatMcpTools({
           organizationId,
           conversationId,
           chatOpsBindingId,
+          chatOpsThreadId,
           sessionId,
           scheduleTriggerRunId,
           // Pass delegation chain for tracking delegated agent calls

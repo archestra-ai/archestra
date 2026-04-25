@@ -65,12 +65,12 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
 describe("mcp server inspect route", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
-  let requestOrganizationId: string | undefined;
+  let requestOrganizationId: string;
   const originalFetch = global.fetch;
 
   beforeEach(async ({ makeUser }) => {
     user = await makeUser();
-    requestOrganizationId = undefined;
+    requestOrganizationId = crypto.randomUUID();
     hasPermissionMock.mockResolvedValue({ success: true });
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
@@ -82,9 +82,8 @@ describe("mcp server inspect route", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: User }).user = user;
-      (
-        request as typeof request & { organizationId: string | undefined }
-      ).organizationId = requestOrganizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        requestOrganizationId;
     });
 
     const { default: mcpServerRoutes } = await import("./mcp-server");

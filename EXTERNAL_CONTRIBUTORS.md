@@ -124,3 +124,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jokius
 - @mobley-trent
 - @majwadalam
+- @yurc

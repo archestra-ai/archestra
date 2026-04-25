@@ -1501,12 +1501,11 @@ export function AgentDialog({
                           Search-and-run tool mode
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Expose only the built-in{" "}
+                          Expose only{" "}
                           <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                          <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> tools. Other
-                          assigned tools stay hidden from MCP{" "}
-                          <code>tools/list</code>, but remain searchable and
-                          runnable.{" "}
+                          <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
+                          <code>tools/list</code>; assigned tools stay
+                          searchable and runnable.{" "}
                           <ExternalDocsLink
                             href={toolExposureDocsUrl}
                             className="underline"
@@ -1515,14 +1514,6 @@ export function AgentDialog({
                             Learn more
                           </ExternalDocsLink>
                         </p>
-                        {toolExposureMode === "search_and_run_only" && (
-                          <p className="text-xs text-muted-foreground">
-                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> are enabled
-                            implicitly by this mode and do not appear in the
-                            built-in tool picker.
-                          </p>
-                        )}
                       </div>
                     </div>
                   </div>

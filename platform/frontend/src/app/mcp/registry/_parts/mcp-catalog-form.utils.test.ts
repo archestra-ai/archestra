@@ -175,7 +175,7 @@ describe("transformFormToApiData", () => {
     });
   });
 
-  it('uses ["read", "write"] as defaults only when the scopes field is blank', () => {
+  it("persists empty scopes when the scopes field is blank, but keeps ['read','write'] as default_scopes fallback", () => {
     const values: McpCatalogFormValues = {
       name: "Default Scope OAuth MCP",
       description: "",
@@ -215,12 +215,12 @@ describe("transformFormToApiData", () => {
     };
 
     expect(transformFormToApiData(values).oauthConfig).toMatchObject({
-      scopes: ["read", "write"],
+      scopes: [],
       default_scopes: ["read", "write"],
     });
   });
 
-  it('treats comma-only scopes input as blank and falls back to ["read", "write"]', () => {
+  it("treats comma-only scopes input as blank (persists empty scopes with read/write fallback)", () => {
     const values: McpCatalogFormValues = {
       name: "Comma Scope OAuth MCP",
       description: "",
@@ -260,7 +260,7 @@ describe("transformFormToApiData", () => {
     };
 
     expect(transformFormToApiData(values).oauthConfig).toMatchObject({
-      scopes: ["read", "write"],
+      scopes: [],
       default_scopes: ["read", "write"],
     });
   });
@@ -458,6 +458,31 @@ describe("transformFormToApiData", () => {
         description: "Tenant ID",
       },
     ]);
+  });
+
+  it("leaves the scopes field empty when external catalog oauth_config has no scopes", () => {
+    const values = transformExternalCatalogToFormValues({
+      name: "empty-scopes-server",
+      display_name: "Empty Scopes Server",
+      description: "",
+      icon: null,
+      server: {
+        type: "remote",
+        url: "https://mcp.example.com",
+      },
+      oauth_config: {
+        client_id: "client-id",
+        client_secret: "client-secret",
+        redirect_uris: ["https://app.example.com/oauth-callback"],
+        scopes: [],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: true,
+        grant_type: "authorization_code",
+        server_url: "https://mcp.example.com",
+      },
+    } as never);
+
+    expect(values.oauthConfig?.scopes).toBe("");
   });
 
   it("detects default bearer auth from external catalog manifests without an explicit headerName", () => {

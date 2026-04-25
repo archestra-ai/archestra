@@ -180,10 +180,9 @@ export async function createAgentServer(
       agent.toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
-    const candidateTools = dedupeToolsByName([
-      ...mcpTools,
-      ...implicitMetaTools,
-    ]);
+    const candidateTools = dedupeToolsByName(
+      [...mcpTools, ...implicitMetaTools].map(toMcpListTool),
+    );
 
     // Filter Archestra tools based on user RBAC permissions
     const permittedNames = await filterToolNamesByPermission(
@@ -1325,15 +1324,7 @@ export async function buildKnowledgeSourcesDescription(
 
 function filterExposedTools(params: {
   toolExposureMode: "full" | "search_and_run_only";
-  tools: Array<{
-    name: string;
-    description: string | null;
-    parameters: unknown;
-    meta?: {
-      annotations?: Record<string, unknown>;
-      _meta?: Record<string, unknown>;
-    };
-  }>;
+  tools: McpListTool[];
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
@@ -1342,6 +1333,33 @@ function filterExposedTools(params: {
       ? isMetaTool
       : !isMetaTool;
   });
+}
+
+type McpListTool = {
+  name: string;
+  description: string | null;
+  parameters: unknown;
+  meta?: {
+    annotations?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+  };
+};
+
+function toMcpListTool(tool: {
+  name: string;
+  description?: string | null;
+  parameters?: unknown;
+  meta?: {
+    annotations?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+  } | null;
+}): McpListTool {
+  return {
+    name: tool.name,
+    description: tool.description ?? null,
+    parameters: tool.parameters ?? {},
+    meta: tool.meta ?? undefined,
+  };
 }
 
 function getImplicitArchestraMetaTools() {

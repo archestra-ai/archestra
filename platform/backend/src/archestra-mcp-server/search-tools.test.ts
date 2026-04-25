@@ -4,6 +4,13 @@ import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
 
+type SearchToolsStructuredContent = {
+  total: number;
+  tools: Array<{
+    toolName: string;
+  }>;
+};
+
 describe("search_tools", () => {
   test("returns ranked matching tools with compact parameter summaries", async ({
     makeAgent,
@@ -63,8 +70,10 @@ describe("search_tools", () => {
     );
 
     expect(result.isError).toBe(false);
-    const firstResult = result.structuredContent?.tools?.[0];
-    expect(result.structuredContent?.total).toBeGreaterThan(0);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    const firstResult = structuredContent.tools[0];
+    expect(structuredContent.total).toBeGreaterThan(0);
     expect(firstResult).toEqual({
       toolName: "github__search_repositories",
       title: null,
@@ -93,10 +102,11 @@ describe("search_tools", () => {
     );
 
     expect(genericQueryResult.isError).toBe(false);
-    const returnedToolNames =
-      genericQueryResult.structuredContent?.tools?.map(
-        (tool: { toolName: string }) => tool.toolName,
-      ) ?? [];
+    const genericStructuredContent =
+      genericQueryResult.structuredContent as SearchToolsStructuredContent;
+    const returnedToolNames = genericStructuredContent.tools.map(
+      (tool) => tool.toolName,
+    );
     expect(returnedToolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });

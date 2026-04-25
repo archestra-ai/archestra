@@ -207,7 +207,7 @@ async function getSearchableTools(params: {
 function toAssignedToolCandidate(tool: {
   name: string;
   description: string | null;
-  parameters: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
   catalogId: string | null;
 }): SearchCandidate {
   const source = archestraMcpBranding.isToolName(tool.name)
@@ -215,7 +215,8 @@ function toAssignedToolCandidate(tool: {
     : "mcp";
   const parsedToolName =
     source === "mcp" ? parseFullToolName(tool.name) : { serverName: null };
-  const inputParameters = summarizeInputParameters(tool.parameters);
+  const parameters = tool.parameters ?? {};
+  const inputParameters = summarizeInputParameters(parameters);
   const title =
     source === "archestra" ? formatArchestraToolTitle(tool.name) : null;
 
@@ -224,14 +225,14 @@ function toAssignedToolCandidate(tool: {
     title,
     description: tool.description,
     source,
-    server: parsedToolName.serverName,
+    server: parsedToolName.serverName ?? null,
     catalogName: source === "mcp" ? null : null,
     inputParameters,
     searchText: buildSearchText({
       name: tool.name,
       title: title ?? "",
       description: tool.description,
-      schema: tool.parameters,
+      schema: parameters,
     }),
   };
 }
@@ -252,7 +253,7 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
     searchText: buildSearchText({
       name: tool.name,
       title: tool.title ?? "",
-      description: tool.description,
+      description: tool.description ?? null,
       schema: tool.inputSchema as Record<string, unknown>,
     }),
   };

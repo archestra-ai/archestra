@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.22"
+    "version": "1.2.24"
   },
   "components": {
     "schemas": {
@@ -34547,69 +34547,73 @@
         "tags": [
           "A2A"
         ],
-        "description": "Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')",
+        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "jsonrpc": {
-                    "type": "string",
-                    "enum": [
-                      "2.0"
-                    ]
-                  },
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ]
-                  },
-                  "method": {
-                    "type": "string"
-                  },
-                  "params": {
+                "anyOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "message": {
+                      "jsonrpc": {
+                        "type": "string",
+                        "enum": [
+                          "2.0"
+                        ]
+                      },
+                      "id": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "method": {
+                        "type": "string"
+                      },
+                      "params": {
                         "type": "object",
                         "properties": {
-                          "parts": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "enum": [
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text"
+                                      ]
+                                    },
+                                    "text": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
                                     "text"
                                   ]
-                                },
-                                "text": {
-                                  "type": "string"
                                 }
-                              },
-                              "required": [
-                                "kind",
-                                "text"
-                              ]
+                              }
                             }
                           }
                         }
                       }
-                    }
+                    },
+                    "required": [
+                      "jsonrpc",
+                      "id",
+                      "method"
+                    ]
                   }
-                },
-                "required": [
-                  "jsonrpc",
-                  "id",
-                  "method"
                 ]
               }
             }
@@ -35006,6 +35010,13 @@
                               "type": "string"
                             }
                           },
+                          "toolExposureMode": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "search_and_run_only"
+                            ]
+                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -35313,6 +35324,7 @@
                           "llmModel",
                           "identityProviderId",
                           "passthroughHeaders",
+                          "toolExposureMode",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -35695,6 +35707,13 @@
                       "pattern": "^[a-zA-Z0-9-]+$"
                     }
                   },
+                  "toolExposureMode": {
+                    "type": "string",
+                    "enum": [
+                      "full",
+                      "search_and_run_only"
+                    ]
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -35939,6 +35958,13 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -36247,6 +36273,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -36654,6 +36681,13 @@
                           "type": "string"
                         }
                       },
+                      "toolExposureMode": {
+                        "type": "string",
+                        "enum": [
+                          "full",
+                          "search_and_run_only"
+                        ]
+                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -36961,6 +36995,7 @@
                       "llmModel",
                       "identityProviderId",
                       "passthroughHeaders",
+                      "toolExposureMode",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -37308,6 +37343,13 @@
                         "type": "string"
                       }
                     },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -37615,6 +37657,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -37962,6 +38005,13 @@
                         "type": "string"
                       }
                     },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38269,6 +38319,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38628,6 +38679,13 @@
                         "type": "string"
                       }
                     },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38935,6 +38993,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39269,6 +39328,13 @@
                       "pattern": "^[a-zA-Z0-9-]+$"
                     }
                   },
+                  "toolExposureMode": {
+                    "type": "string",
+                    "enum": [
+                      "full",
+                      "search_and_run_only"
+                    ]
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -39518,6 +39584,13 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -39826,6 +39899,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -99514,6 +99588,12 @@
                                       "enum": [
                                         "outline"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "salesforce"
+                                      ]
                                     }
                                   ]
                                 }
@@ -101357,6 +101437,12 @@
                   "enum": [
                     "outline"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "salesforce"
+                  ]
                 }
               ]
             },
@@ -101478,6 +101564,12 @@
                                 "type": "string",
                                 "enum": [
                                   "outline"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "salesforce"
                                 ]
                               }
                             ]
@@ -101961,6 +102053,35 @@
                                 "required": [
                                   "type",
                                   "outlineUrl"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "salesforce"
+                                    ]
+                                  },
+                                  "loginUrl": {
+                                    "default": "https://login.salesforce.com"
+                                  },
+                                  "objects": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "advancedObjectConfigJson": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "loginUrl"
                                 ],
                                 "additionalProperties": false
                               }
@@ -102461,6 +102582,12 @@
                         "enum": [
                           "outline"
                         ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "salesforce"
+                        ]
                       }
                     ]
                   },
@@ -102946,6 +103073,33 @@
                           "type",
                           "outlineUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "salesforce"
+                            ]
+                          },
+                          "loginUrl": {
+                            "type": "string"
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "advancedObjectConfigJson": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -103094,6 +103248,12 @@
                           "type": "string",
                           "enum": [
                             "outline"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
                           ]
                         }
                       ]
@@ -103577,6 +103737,35 @@
                           "required": [
                             "type",
                             "outlineUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -104025,6 +104214,12 @@
                           "enum": [
                             "outline"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
+                          ]
                         }
                       ]
                     },
@@ -104507,6 +104702,35 @@
                           "required": [
                             "type",
                             "outlineUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -105348,6 +105572,33 @@
                           "type",
                           "outlineUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "salesforce"
+                            ]
+                          },
+                          "loginUrl": {
+                            "type": "string"
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "advancedObjectConfigJson": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
                       }
                     ]
                   },
@@ -105494,6 +105745,12 @@
                           "type": "string",
                           "enum": [
                             "outline"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "salesforce"
                           ]
                         }
                       ]
@@ -105977,6 +106234,35 @@
                           "required": [
                             "type",
                             "outlineUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            },
+                            "loginUrl": {
+                              "default": "https://login.salesforce.com"
+                            },
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "advancedObjectConfigJson": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "loginUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -131954,6 +132240,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -132009,6 +132299,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -132693,6 +132984,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -132748,6 +133043,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -133682,6 +133978,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -133737,6 +134037,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -134291,6 +134592,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -134346,6 +134651,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -134918,6 +135224,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -134973,6 +135283,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -135225,6 +135536,11 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "connectionDefaultClientId": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 64
                   },
                   "connectionShownClientIds": {
                     "nullable": true,
@@ -135553,6 +135869,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -135608,6 +135928,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -136146,6 +136467,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -136201,6 +136526,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -136755,6 +137081,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -136810,6 +137140,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -137331,6 +137662,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -137386,6 +137721,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],
@@ -138202,6 +138538,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "connectionDefaultClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "connectionShownClientIds": {
                       "nullable": true,
                       "type": "array",
@@ -138257,6 +138597,7 @@
                     "mcpOauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
+                    "connectionDefaultClientId",
                     "connectionShownClientIds",
                     "connectionShownProviders"
                   ],

@@ -1,5 +1,5 @@
 {
-  "id": "6c66de41-1056-4438-a3f9-0ffe2a9b7fe9",
+  "id": "8a0dc127-f0c2-4865-a0bd-7a6ae7a5a47e",
   "prevId": "388740ce-9279-4d3b-b36a-07614292008a",
   "version": "7",
   "dialect": "postgresql",
@@ -756,13 +756,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "tool_assignment_mode": {
-          "name": "tool_assignment_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'manual'"
         },
         "llm_api_key_id": {
           "name": "llm_api_key_id",
@@ -6342,6 +6335,12 @@
         "connection_default_llm_proxy_id": {
           "name": "connection_default_llm_proxy_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connection_default_client_id": {
+          "name": "connection_default_client_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

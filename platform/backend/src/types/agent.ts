@@ -50,6 +50,9 @@ export type AgentToolAssignmentMode = z.infer<
 export const AgentScopeSchema = ResourceVisibilityScopeSchema;
 export type AgentScope = ResourceVisibilityScope;
 
+export const ToolExposureModeSchema = z.enum(["full", "search_and_run_only"]);
+export type ToolExposureMode = z.infer<typeof ToolExposureModeSchema>;
+
 export const AgentScopeFilterSchema = z.enum([
   "personal",
   "team",
@@ -125,6 +128,7 @@ const selectExtendedFields = {
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
   toolAssignmentMode: AgentToolAssignmentModeSchema,
+  toolExposureMode: ToolExposureModeSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
 };
@@ -134,6 +138,7 @@ const insertExtendedFields = {
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
   toolAssignmentMode: AgentToolAssignmentModeSchema.optional(),
+  toolExposureMode: ToolExposureModeSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
 };

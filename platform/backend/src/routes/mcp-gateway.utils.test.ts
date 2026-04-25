@@ -3,6 +3,9 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
+  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -1267,6 +1270,48 @@ describe("createAgentServer tools/list", () => {
     ).toBe(true);
 
     archestraMcpBranding.syncFromOrganization(null);
+  });
+
+  test("returns implicit search_tools and run_tool when toolExposureMode is search_and_run_only", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<
+          string,
+          (request: unknown) => Promise<{
+            tools: Array<{ name: string; description?: string }>;
+          }>
+        >;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+
+    expect(response.tools.map((tool) => tool.name).sort()).toEqual(
+      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+    );
+    expect(
+      response.tools.some(
+        (tool) => tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
+      ),
+    ).toBe(false);
   });
 
   test("preserves user context when calling restricted Archestra tools", async ({

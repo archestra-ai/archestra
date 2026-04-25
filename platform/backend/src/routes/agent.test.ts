@@ -95,6 +95,24 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts[0].summaryTitle).toBe("Quick start");
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
     });
+
+    test("should create an agent with toolExposureMode", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Search Only Agent ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "mcp_gateway",
+          scope: "personal",
+          teams: [],
+          toolExposureMode: "search_and_run_only",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const agent = response.json();
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+    });
   });
 
   describe("GET /api/agents/:id", () => {
@@ -228,6 +246,39 @@ describe("agent routes", () => {
       const fetched = getResponse.json();
       expect(fetched.systemPrompt).toBeNull();
       expect(fetched.suggestedPrompts).toHaveLength(0);
+    });
+
+    test("should update and persist toolExposureMode", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Agent Exposure Test ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "mcp_gateway",
+      });
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          toolExposureMode: "search_and_run_only",
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json().toolExposureMode).toBe(
+        "search_and_run_only",
+      );
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}`,
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
     });
   });
 

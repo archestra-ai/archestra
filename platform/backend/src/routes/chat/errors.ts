@@ -21,6 +21,7 @@ import {
 import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
+import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 
 // =============================================================================
 // ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
@@ -87,6 +88,18 @@ function safeSerialize(obj: unknown): unknown {
       };
     }
     return String(obj);
+  }
+}
+
+function stringifyRawError(error: unknown): string {
+  try {
+    return JSON.stringify(error, Object.getOwnPropertyNames(error));
+  } catch {
+    try {
+      return JSON.stringify(safeSerialize(error));
+    } catch {
+      return String(error);
+    }
   }
 }
 
@@ -1490,6 +1503,17 @@ export function mapProviderError(
     (parsedError as ParsedAnthropicError)?.type ||
     (parsedError as ParsedGeminiError)?.status ||
     (error instanceof Error ? error.name : undefined);
+  const rawErrorJson = stringifyRawError(error);
+
+  captureRawProviderErrorInSentry({
+    provider,
+    statusCode,
+    parsedError,
+    errorCode,
+    errorMessage,
+    errorType,
+    rawErrorJson,
+  });
 
   logger.info(
     {
@@ -1498,6 +1522,7 @@ export function mapProviderError(
       parsedError,
       mappedCode: errorCode,
       errorMessage,
+      rawErrorJson,
     },
     "[ChatErrorMapper] Mapped provider error",
   );

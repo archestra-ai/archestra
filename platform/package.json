@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.2.22",
+  "version": "1.2.24",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -36,19 +36,17 @@
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
-    "turbo": "^2.8.13",
-    "typescript": "^6.0.2"
+    "turbo": "^2.8.13"
   },
   "pnpm": {
     "overrides": {
-      "typescript": "^6.0.2",
       "@fastify/reply-from": ">=12.6.2",
       "@fastify/http-proxy": ">=11.4.4",
       "protobufjs": ">=7.5.5",
       "vite": "7.3.2",
       "@hono/node-server": "1.19.11",
       "body-parser": "2.2.1",
-      "dompurify": "3.3.3",
+      "dompurify": "3.4.0",
       "glob": "11.1.0",
       "esbuild": "0.27.0",
       "mdast-util-to-hast": "13.2.1",

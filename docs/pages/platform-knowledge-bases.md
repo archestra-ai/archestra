@@ -13,7 +13,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Knowledge bases provide built-in retrieval augmented generation (RAG) powered by PostgreSQL and pgvector. Connectors sync data from external tools into knowledge bases, where documents are chunked, embedded, and indexed for hybrid search. Agents automatically query their assigned knowledge sources at runtime.
 
-> **Enterprise feature.** Knowledge bases require an enterprise license. Contact sales@archestra.ai for licensing information.
+> **Enterprise access control.** Advanced access control requires an enterprise license. Contact sales@archestra.ai for licensing information.
 
 ## Architecture
 

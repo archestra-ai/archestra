@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { DocsPage, GITHUB_REPO_URL } from "@shared";
 import {
+  AlertTriangle,
   ChevronRight,
   Globe,
   Info,
@@ -79,6 +80,7 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { useListK8sNamespaces } from "@/lib/mcp/mcp-server.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -445,6 +447,10 @@ export function McpCatalogForm({
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
 
+  // Fetch available K8s namespaces for local server namespace selection
+  const { data: k8sNamespacesData, isLoading: isLoadingNamespaces } =
+    useListK8sNamespaces();
+
   // Update form values when BYOS paths/keys change
   useEffect(() => {
     form.setValue(
@@ -456,6 +462,25 @@ export function McpCatalogForm({
       oauthVaultSecretKey || undefined,
     );
   }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
+
+  // Pre-fill default namespace when switching to local server type and field is empty
+  const currentK8sNamespace = form.watch("k8sNamespace");
+  useEffect(() => {
+    if (
+      currentServerType === "local" &&
+      !currentK8sNamespace &&
+      k8sNamespacesData?.defaultNamespace
+    ) {
+      form.setValue("k8sNamespace", k8sNamespacesData.defaultNamespace, {
+        shouldDirty: false,
+      });
+    }
+  }, [
+    currentServerType,
+    currentK8sNamespace,
+    k8sNamespacesData?.defaultNamespace,
+    form,
+  ]);
 
   // Reset form when formValues change (catalog pre-fill in create mode)
   useEffect(() => {
@@ -1771,6 +1796,67 @@ export function McpCatalogForm({
                   valuePlaceholder="header value"
                 />
               )}
+            </div>
+          )}
+
+          {currentServerType === "local" && isLocalMcpEnabled && (
+            <div className="border rounded-lg p-5">
+              <FormField
+                control={form.control}
+                name="k8sNamespace"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Kubernetes Namespace</FormLabel>
+                    <Select
+                      value={field.value ?? ""}
+                      onValueChange={field.onChange}
+                      disabled={isLoadingNamespaces}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              isLoadingNamespaces
+                                ? "Loading namespaces..."
+                                : "Select namespace"
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(k8sNamespacesData?.namespaces ?? []).map((ns) => (
+                          <SelectItem key={ns} value={ns}>
+                            {ns}
+                            {ns === k8sNamespacesData?.defaultNamespace && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                (default)
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Kubernetes namespace where this server will be deployed.
+                    </FormDescription>
+                    {mode === "edit" &&
+                      field.value &&
+                      field.value !==
+                        (initialValues?.k8sNamespace ??
+                          k8sNamespacesData?.defaultNamespace) && (
+                        <Alert className="mt-2 border-amber-500/50 bg-amber-500/10">
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <AlertDescription>
+                            Changing the namespace will restart the server in
+                            the new namespace. Running sessions will be
+                            interrupted.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           )}
 

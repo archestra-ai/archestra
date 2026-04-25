@@ -67,6 +67,10 @@ export function transformFormToApiData(
       data.localConfigVaultPath = values.localConfigVaultPath;
       data.localConfigVaultKey = values.localConfigVaultKey;
     }
+
+    if (values.k8sNamespace) {
+      data.k8sNamespace = values.k8sNamespace;
+    }
   }
 
   // Handle OAuth configuration
@@ -462,6 +466,8 @@ export function transformCatalogItemToFormValues(
     scope: (item.scope as AgentScope) ?? "org",
     // Teams
     teams: item.teams?.map((t) => t.id) ?? [],
+    // Kubernetes namespace for local server deployments
+    k8sNamespace: item.k8sNamespace ?? undefined,
   } as McpCatalogFormValues;
 }
 

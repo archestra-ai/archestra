@@ -41,6 +41,10 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useK8sImagePullSecrets: vi.fn(() => ({ data: [] })),
 }));
 
+vi.mock("@/lib/mcp/mcp-server.query", () => ({
+  useListK8sNamespaces: vi.fn(() => ({ data: [] })),
+}));
+
 vi.mock("@/lib/secrets.query", () => ({
   useGetSecret: vi.fn(() => ({ data: null })),
 }));

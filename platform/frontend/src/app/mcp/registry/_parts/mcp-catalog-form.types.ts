@@ -211,6 +211,8 @@ export const formSchema = z
     localConfigVaultPath: z.string().optional(),
     // BYOS: External Vault key for local config secret env vars
     localConfigVaultKey: z.string().optional(),
+    // Kubernetes namespace for local server deployments
+    k8sNamespace: z.string().optional(),
     // Labels for categorizing catalog items
     labels: z
       .array(z.object({ key: z.string(), value: z.string() }))

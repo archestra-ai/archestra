@@ -420,6 +420,82 @@ export async function isMcpServerAssignableToTarget(params: {
   return TeamModel.isUserInAnyTeam(target.teamIds, mcpServer.ownerId);
 }
 
+export async function filterMcpServersAssignableToTarget<
+  TMcpServer extends Pick<PrefetchedMcpServer, "ownerId" | "teamId">,
+>(params: {
+  mcpServers: TMcpServer[];
+  target: {
+    organizationId: string;
+    scope: AgentScope;
+    authorId: string | null;
+    teamIds: string[];
+  };
+}): Promise<TMcpServer[]> {
+  const { mcpServers, target } = params;
+  if (mcpServers.length === 0) {
+    return [];
+  }
+
+  const ownerIds = [
+    ...new Set(
+      mcpServers
+        .map((server) => server.ownerId)
+        .filter((ownerId): ownerId is string => ownerId != null),
+    ),
+  ];
+  const teamServerTeamIds = [
+    ...new Set(
+      mcpServers
+        .map((server) => server.teamId)
+        .filter((teamId): teamId is string => teamId != null),
+    ),
+  ];
+
+  const [orgMemberOwnerIds, targetTeamMemberOwnerIds, authorTeamIds] =
+    await Promise.all([
+      target.scope === "org"
+        ? MemberModel.findUserIdsInOrganization({
+            organizationId: target.organizationId,
+            userIds: ownerIds,
+          })
+        : Promise.resolve([]),
+      target.scope === "team"
+        ? TeamModel.findUserIdsInAnyTeam({
+            teamIds: target.teamIds,
+            userIds: ownerIds,
+          })
+        : Promise.resolve([]),
+      target.scope === "personal" &&
+      target.authorId &&
+      teamServerTeamIds.length > 0
+        ? TeamModel.getUserTeamIds(target.authorId)
+        : Promise.resolve([]),
+    ]);
+
+  const orgMemberOwnerIdSet = new Set(orgMemberOwnerIds);
+  const targetTeamMemberOwnerIdSet = new Set(targetTeamMemberOwnerIds);
+  const authorTeamIdSet = new Set(authorTeamIds);
+  const needsOrgAdminCheck =
+    target.scope === "personal" &&
+    !!target.authorId &&
+    teamServerTeamIds.some((teamId) => !authorTeamIdSet.has(teamId));
+  const authorIsOrgAdmin =
+    needsOrgAdminCheck && target.authorId
+      ? await isOrgAdmin(target.authorId, target.organizationId)
+      : false;
+
+  return mcpServers.filter((mcpServer) =>
+    isMcpServerAssignableToPrefetchedTarget({
+      mcpServer,
+      target,
+      orgMemberOwnerIdSet,
+      targetTeamMemberOwnerIdSet,
+      authorTeamIdSet,
+      authorIsOrgAdmin,
+    }),
+  );
+}
+
 function getAssignmentValidationMessage(
   mcpServer: Pick<PrefetchedMcpServer, "teamId">,
 ) {
@@ -428,4 +504,50 @@ function getAssignmentValidationMessage(
   }
 
   return "The credential owner must be a member of a team that this resource is assigned to";
+}
+
+function isMcpServerAssignableToPrefetchedTarget(params: {
+  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId">;
+  target: {
+    scope: AgentScope;
+    authorId: string | null;
+    teamIds: string[];
+  };
+  orgMemberOwnerIdSet: Set<string>;
+  targetTeamMemberOwnerIdSet: Set<string>;
+  authorTeamIdSet: Set<string>;
+  authorIsOrgAdmin: boolean;
+}): boolean {
+  const {
+    authorIsOrgAdmin,
+    authorTeamIdSet,
+    mcpServer,
+    orgMemberOwnerIdSet,
+    target,
+    targetTeamMemberOwnerIdSet,
+  } = params;
+
+  if (mcpServer.teamId) {
+    if (target.scope === "team") {
+      return target.teamIds.includes(mcpServer.teamId);
+    }
+    if (target.scope === "personal" && target.authorId) {
+      return authorTeamIdSet.has(mcpServer.teamId) || authorIsOrgAdmin;
+    }
+    return false;
+  }
+
+  if (!mcpServer.ownerId) {
+    return true;
+  }
+
+  if (target.scope === "personal") {
+    return target.authorId === mcpServer.ownerId;
+  }
+
+  if (target.scope === "org") {
+    return orgMemberOwnerIdSet.has(mcpServer.ownerId);
+  }
+
+  return targetTeamMemberOwnerIdSet.has(mcpServer.ownerId);
 }

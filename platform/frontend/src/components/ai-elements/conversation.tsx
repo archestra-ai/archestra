@@ -69,10 +69,14 @@ export const ConversationEmptyState = ({
   </div>
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = ComponentProps<typeof Button> & {
+  /** Label shown when expanded (e.g. "New messages") */
+  label?: string;
+};
 
 export const ConversationScrollButton = ({
   className,
+  label,
   ...props
 }: ConversationScrollButtonProps) => {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
@@ -86,6 +90,10 @@ export const ConversationScrollButton = ({
       <Button
         className={cn(
           "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full",
+          "transition-all duration-200 ease-in-out",
+          label
+            ? "px-4 py-2 rounded-full flex items-center gap-2"
+            : "rounded-full w-10 h-10 p-0 justify-center",
           className,
         )}
         onClick={handleScrollToBottom}
@@ -94,7 +102,12 @@ export const ConversationScrollButton = ({
         variant="outline"
         {...props}
       >
-        <ArrowDownIcon className="size-4" />
+        <ArrowDownIcon className="size-4 shrink-0" />
+        {label && (
+          <span className="text-sm font-medium whitespace-nowrap">
+            {label}
+          </span>
+        )}
       </Button>
     )
   );

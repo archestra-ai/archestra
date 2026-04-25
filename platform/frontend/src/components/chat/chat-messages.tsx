@@ -272,6 +272,21 @@ export function ChatMessages({
     }
   }, [isEditing]);
 
+
+  // "New messages" FAB label — shows when scrolled up and new assistant message arrives
+  const [newMessageLabel, setNewMessageLabel] = useState<string | null>(null);
+  const assistantMessageCountRef = useRef(0);
+
+  // Track new assistant messages while scrolled up — set label when count increases
+  useLayoutEffect(() => {
+    const currentAssistantCount = messages.filter((m) => m.from === 'assistant').length;
+    if (currentAssistantCount > assistantMessageCountRef.current) {
+      // A new assistant message arrived while scrolled up
+      setNewMessageLabel('New messages');
+      assistantMessageCountRef.current = currentAssistantCount;
+    }
+  }, [messages]);
+
   const handleStartEdit = (partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
     // Always reset editingMessageId to prevent stale state when switching
@@ -1209,7 +1224,10 @@ export function ChatMessages({
           )}
         </div>
       </ConversationContent>
-      <ConversationScrollButton />
+      <ConversationScrollButton
+        label={newMessageLabel || undefined}
+        onClick={() => setNewMessageLabel(null)}
+      />
       <McpInstallDialogs orchestrator={orchestrator} />
     </Conversation>
   );

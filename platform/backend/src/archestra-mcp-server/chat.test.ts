@@ -7,6 +7,7 @@ import {
 import { vi } from "vitest";
 import {
   ChatOpsChannelBindingModel,
+  ChatOpsThreadAgentOverrideModel,
   ConversationModel,
   LlmProviderApiKeyModel,
   OrganizationModel,
@@ -265,6 +266,7 @@ describe("chat tool execution", () => {
     const contextWithChatOpsBinding: ArchestraContext = {
       ...mockContext,
       chatOpsBindingId: binding.id,
+      chatOpsThreadId: "thread-1234",
     };
 
     const result = await executeArchestraTool(
@@ -280,10 +282,18 @@ describe("chat tool execution", () => {
       agent_name: "ChatOps Swap Target",
     });
 
+    // Thread override should be created
+    const override = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      "thread-1234",
+    );
+    expect(override?.agentId).toBe(targetAgent.id);
+
+    // Channel binding should NOT be mutated
     const updatedBinding = await ChatOpsChannelBindingModel.findById(
       binding.id,
     );
-    expect(updatedBinding?.agentId).toBe(targetAgent.id);
+    expect(updatedBinding?.agentId).toBe(testAgent.id);
   });
 
   test("swap_agent cannot assign personal agent to shared chatops channel", async ({
@@ -312,6 +322,7 @@ describe("chat tool execution", () => {
       {
         ...mockContext,
         chatOpsBindingId: binding.id,
+        chatOpsThreadId: "thread-personal-blocked",
       },
     );
 
@@ -347,6 +358,7 @@ describe("chat tool execution", () => {
       ...mockContext,
       conversationId: "synthetic-chatops-isolation-key",
       chatOpsBindingId: binding.id,
+      chatOpsThreadId: "thread-both-contexts",
     };
 
     const result = await executeArchestraTool(
@@ -362,10 +374,18 @@ describe("chat tool execution", () => {
       agent_name: "ChatOps Preferred Target",
     });
 
+    // Thread override should be created (chatops binding path was taken)
+    const override = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      "thread-both-contexts",
+    );
+    expect(override?.agentId).toBe(targetAgent.id);
+
+    // Channel binding should NOT be mutated
     const updatedBinding = await ChatOpsChannelBindingModel.findById(
       binding.id,
     );
-    expect(updatedBinding?.agentId).toBe(targetAgent.id);
+    expect(updatedBinding?.agentId).toBe(testAgent.id);
   });
 
   test("swap_agent returns error when swapping to same agent", async ({
@@ -526,6 +546,7 @@ describe("chat tool execution", () => {
     const contextWithChatOpsBinding: ArchestraContext = {
       ...mockContext,
       chatOpsBindingId: binding.id,
+      chatOpsThreadId: "thread-default-swap",
     };
 
     const result = await executeArchestraTool(
@@ -541,10 +562,18 @@ describe("chat tool execution", () => {
       agent_name: "ChatOps Default Agent",
     });
 
+    // Thread override should be created
+    const override = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      "thread-default-swap",
+    );
+    expect(override?.agentId).toBe(defaultAgent.id);
+
+    // Channel binding should NOT be mutated
     const updatedBinding = await ChatOpsChannelBindingModel.findById(
       binding.id,
     );
-    expect(updatedBinding?.agentId).toBe(defaultAgent.id);
+    expect(updatedBinding?.agentId).toBe(testAgent.id);
   });
 
   test("swap_to_default_agent cannot assign personal default agent to shared chatops channel", async ({
@@ -576,6 +605,7 @@ describe("chat tool execution", () => {
       {
         ...mockContext,
         chatOpsBindingId: binding.id,
+        chatOpsThreadId: "thread-personal-default-blocked",
       },
     );
 
@@ -614,6 +644,7 @@ describe("chat tool execution", () => {
       ...mockContext,
       conversationId: "synthetic-chatops-isolation-key",
       chatOpsBindingId: binding.id,
+      chatOpsThreadId: "thread-both-default",
     };
 
     const result = await executeArchestraTool(
@@ -629,10 +660,18 @@ describe("chat tool execution", () => {
       agent_name: "ChatOps Preferred Default",
     });
 
+    // Thread override should be created (chatops binding path was taken)
+    const override = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      "thread-both-default",
+    );
+    expect(override?.agentId).toBe(defaultAgent.id);
+
+    // Channel binding should NOT be mutated
     const updatedBinding = await ChatOpsChannelBindingModel.findById(
       binding.id,
     );
-    expect(updatedBinding?.agentId).toBe(defaultAgent.id);
+    expect(updatedBinding?.agentId).toBe(testAgent.id);
   });
 
   test("swap_agent cannot swap to inaccessible team-scoped agent", async ({

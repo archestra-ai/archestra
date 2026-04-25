@@ -105,6 +105,16 @@ class MessageModel {
     return MessageModel.findByContentId(id);
   }
 
+  static async updateContent(
+    messageId: string,
+    content: unknown,
+  ): Promise<void> {
+    await db
+      .update(schema.messagesTable)
+      .set({ content, updatedAt: new Date() })
+      .where(eq(schema.messagesTable.id, messageId));
+  }
+
   static async updateTextPart(
     messageId: string,
     partIndex: number,

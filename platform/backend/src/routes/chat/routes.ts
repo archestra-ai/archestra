@@ -1961,6 +1961,13 @@ async function persistNewMessages(
     const existingMessages =
       await MessageModel.findByConversation(conversationId);
     const uiMessages = messages as ChatMessage[];
+
+    // Update existing messages whose content has changed (e.g. tool approval
+    // responses added after the user approves/declines an MCP tool call).
+    // Without this, the DB retains the old version of the message and the
+    // approval state is lost on page refresh.
+    await updateModifiedMessages({ existingMessages, uiMessages });
+
     const newMessages = getMessagesNotYetPersisted({
       existingMessages,
       uiMessages,
@@ -2088,6 +2095,60 @@ function getMessagesNotYetPersisted(params: {
 
     return !existingIds.has(message.id);
   });
+}
+
+async function updateModifiedMessages(params: {
+  existingMessages: Array<{ id: string; content: unknown }>;
+  uiMessages: ChatMessage[];
+}): Promise<void> {
+  const existingById = new Map<string, { id: string; content: unknown }>();
+  for (const msg of params.existingMessages) {
+    existingById.set(msg.id, msg);
+
+    const contentId =
+      typeof msg.content === "object" &&
+      msg.content !== null &&
+      "id" in msg.content &&
+      typeof msg.content.id === "string"
+        ? msg.content.id
+        : null;
+    if (contentId) {
+      existingById.set(contentId, msg);
+    }
+  }
+
+  for (const uiMsg of params.uiMessages) {
+    if (!uiMsg.id) continue;
+    const existing = existingById.get(uiMsg.id);
+    if (!existing) continue;
+
+    const existingParts = getPartsArray(existing.content);
+    const currentParts = uiMsg.parts ?? [];
+    if (currentParts.length <= existingParts.length) continue;
+
+    const normalized = normalizeChatMessages([uiMsg])[0];
+    await MessageModel.updateContent(existing.id, normalized);
+    logger.info(
+      {
+        messageId: existing.id,
+        previousParts: existingParts.length,
+        updatedParts: currentParts.length,
+      },
+      "[Chat] Updated existing message with new parts (approval response)",
+    );
+  }
+}
+
+function getPartsArray(content: unknown): ChatMessagePart[] {
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    "parts" in content &&
+    Array.isArray(content.parts)
+  ) {
+    return content.parts;
+  }
+  return [];
 }
 
 function prepareMessagesForProvider(params: {
@@ -2267,7 +2328,9 @@ async function validateChatApiKeyAccess(
 
 export const __test = {
   getMessagesNotYetPersisted,
+  getPartsArray,
   prepareMessagesForProvider,
+  updateModifiedMessages,
 };
 
 export default chatRoutes;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the ai module before importing chat routes
 const mockGenerateText = vi.hoisted(() => vi.fn());
@@ -23,6 +23,12 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
 const mockGetFastestModel = vi.hoisted(() => vi.fn());
 vi.mock("@/models/llm-provider-api-key-model", () => ({
   default: { getFastestModel: mockGetFastestModel },
+}));
+
+// Mock MessageModel for updateModifiedMessages tests
+const mockUpdateContent = vi.hoisted(() => vi.fn());
+vi.mock("@/models/message", () => ({
+  default: { updateContent: mockUpdateContent },
 }));
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -553,5 +559,159 @@ describe("title generation integration", () => {
     expect(prompt).toContain(
       "Assistant: I can help you debug that. What error are you seeing?",
     );
+  });
+});
+
+describe("getPartsArray", () => {
+  it("extracts parts from valid content", () => {
+    const parts = __test.getPartsArray({
+      parts: [{ type: "text", text: "hello" }],
+    });
+    expect(parts).toEqual([{ type: "text", text: "hello" }]);
+  });
+
+  it("returns empty array for content without parts", () => {
+    expect(__test.getPartsArray({})).toEqual([]);
+    expect(__test.getPartsArray(null)).toEqual([]);
+    expect(__test.getPartsArray("string")).toEqual([]);
+  });
+});
+
+describe("updateModifiedMessages", () => {
+  beforeEach(() => {
+    mockUpdateContent.mockReset();
+  });
+
+  it("updates an existing message when new parts are added (approval response)", async () => {
+    await __test.updateModifiedMessages({
+      existingMessages: [
+        {
+          id: "db-uuid-1",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-invocation",
+                toolCallId: "call-1",
+                toolName: "read_file",
+                state: "approval-requested",
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "db-uuid-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-invocation",
+              toolCallId: "call-1",
+              toolName: "read_file",
+              state: "output-available",
+            },
+            {
+              type: "tool-result",
+              toolCallId: "call-1",
+              output: "file contents",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(mockUpdateContent).toHaveBeenCalledTimes(1);
+    expect(mockUpdateContent).toHaveBeenCalledWith(
+      "db-uuid-1",
+      expect.objectContaining({ role: "assistant" }),
+    );
+  });
+
+  it("does not update when parts count is unchanged", async () => {
+    await __test.updateModifiedMessages({
+      existingMessages: [
+        {
+          id: "db-uuid-1",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "db-uuid-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "hello" }],
+        },
+      ],
+    });
+
+    expect(mockUpdateContent).not.toHaveBeenCalled();
+  });
+
+  it("matches messages by content id when frontend sends AI SDK ids", async () => {
+    await __test.updateModifiedMessages({
+      existingMessages: [
+        {
+          id: "db-uuid-1",
+          content: {
+            id: "temp-assistant-1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-invocation",
+                toolCallId: "call-1",
+                toolName: "read_file",
+                state: "approval-requested",
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "temp-assistant-1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-invocation",
+              toolCallId: "call-1",
+              toolName: "read_file",
+              state: "output-available",
+            },
+            {
+              type: "tool-result",
+              toolCallId: "call-1",
+              output: "approved",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(mockUpdateContent).toHaveBeenCalledTimes(1);
+    expect(mockUpdateContent).toHaveBeenCalledWith(
+      "db-uuid-1",
+      expect.objectContaining({ role: "assistant" }),
+    );
+  });
+
+  it("skips messages that are not in the existing set", async () => {
+    await __test.updateModifiedMessages({
+      existingMessages: [],
+      uiMessages: [
+        {
+          id: "new-msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "hello" }],
+        },
+      ],
+    });
+
+    expect(mockUpdateContent).not.toHaveBeenCalled();
   });
 });

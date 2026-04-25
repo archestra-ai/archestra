@@ -123,3 +123,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @orbitwebsites-cloud
 - @jokius
 - @mobley-trent
+- @majwadalam

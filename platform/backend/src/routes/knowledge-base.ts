@@ -1048,6 +1048,119 @@ async function findKnowledgeBaseOrThrow(params: {
   return kg;
 }
 
+
+  // ===== Knowledge Base Search Feedback =====
+
+  fastify.post(
+    "/api/knowledge-bases/:id/feedback",
+    {
+      schema: {
+        operationId: RouteId.SubmitKbSearchFeedback,
+        description: "Submit feedback for a knowledge base source citation",
+        tags: ["Knowledge Bases"],
+        params: z.object({
+          id: z.string(),
+        }),
+        body: z.object({
+          documentId: z.string(),
+          chunkId: z.string().optional(),
+          conversationId: z.string().optional(),
+          rating: z.enum(["positive", "negative"]),
+        }),
+        response: constructResponseSchema(z.object({ id: z.string() })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      // Verify KB exists and user has access
+      const kb = await KnowledgeBaseModel.findById(id);
+      if (!kb || kb.organizationId !== organizationId) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      const feedback = await KbSearchFeedbackModel.create({
+        organizationId,
+        knowledgeBaseId: id,
+        documentId: body.documentId,
+        chunkId: body.chunkId ?? null,
+        conversationId: body.conversationId ?? null,
+        userId: user.id,
+        rating: body.rating,
+      });
+
+      return reply.send({ id: feedback.id });
+    },
+  );
+
+  fastify.get(
+    "/api/knowledge-bases/:id/feedback/stats",
+    {
+      schema: {
+        operationId: RouteId.GetKbSearchFeedbackStats,
+        description: "Get aggregate feedback stats for a knowledge base",
+        tags: ["Knowledge Bases"],
+        params: z.object({
+          id: z.string(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            total: z.number(),
+            positiveCount: z.number(),
+            negativeCount: z.number(),
+            positivePercent: z.number(),
+            topDocuments: z.array(
+              z.object({
+                documentId: z.string(),
+                title: z.string(),
+                positiveCount: z.number(),
+                negativeCount: z.number(),
+              }),
+            ),
+            bottomDocuments: z.array(
+              z.object({
+                documentId: z.string(),
+                title: z.string(),
+                positiveCount: z.number(),
+                negativeCount: z.number(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const kb = await KnowledgeBaseModel.findById(id);
+      if (!kb || kb.organizationId !== organizationId) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      const stats = await KbSearchFeedbackModel.getStats(id);
+      return reply.send(stats);
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-bases/:id/feedback/:feedbackId",
+    {
+      schema: {
+        operationId: RouteId.DeleteKbSearchFeedback,
+        description: "Delete own feedback entry",
+        tags: ["Knowledge Bases"],
+        params: z.object({
+          id: z.string(),
+          feedbackId: z.string(),
+        }),
+        response: constructResponseSchema(z.object({ deleted: z.boolean() })),
+      },
+    },
+    async ({ params: { feedbackId }, organizationId, user }, reply) => {
+      const deleted = await KbSearchFeedbackModel.delete(feedbackId, user.id);
+      if (!deleted) {
+        throw new ApiError(404, "Feedback not found or not yours");
+      }
+      return reply.send({ deleted: true });
+    },
+  );
+
 async function findConnectorOrThrow(params: {
   id: string;
   organizationId: string;

@@ -423,6 +423,12 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+
+  // KB Search Feedback Routes
+  SubmitKbSearchFeedback: "submitKbSearchFeedback",
+  GetKbSearchFeedbackStats: "getKbSearchFeedbackStats",
+  DeleteKbSearchFeedback: "deleteKbSearchFeedback",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

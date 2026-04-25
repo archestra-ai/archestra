@@ -119,3 +119,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @artemiusz-dev
 - @codeco-dev
 - @muhamedag2022
+- @Marco1478

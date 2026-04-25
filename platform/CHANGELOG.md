@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.2.24](https://github.com/archestra-ai/archestra/compare/platform-v1.2.23...platform-v1.2.24) (2026-04-24)
+
+
+### Features
+
+* add salesforce knowledge connector ([#3990](https://github.com/archestra-ai/archestra/issues/3990)) ([5c7ce7e](https://github.com/archestra-ai/archestra/commit/5c7ce7e2d96d56c2ee7ed5ac87758ff30e54540b))
+* rename Unpublished to Personal the MCP page ([#4057](https://github.com/archestra-ai/archestra/issues/4057)) ([48f0901](https://github.com/archestra-ai/archestra/commit/48f090137328f51b2061d84f8bacd5becede79c6))
+
+
+### Bug Fixes
+
+* align backend dependency versions with pnpm overrides ([#4060](https://github.com/archestra-ai/archestra/issues/4060)) ([f7b16a7](https://github.com/archestra-ai/archestra/commit/f7b16a709217fd9876b316f0b46c9b9a20f68f72))
+* allow personal agents to use team credentials the author can access ([#4063](https://github.com/archestra-ai/archestra/issues/4063)) ([9f2f612](https://github.com/archestra-ai/archestra/commit/9f2f6121c50fad34d8bc950a966a5be826878632))
+* persist empty OAuth scopes from catalog form ([#4068](https://github.com/archestra-ai/archestra/issues/4068)) ([be834e5](https://github.com/archestra-ai/archestra/commit/be834e5d15cac65a037e7474529992853bdec0fe))
+
+
+### Dependencies
+
+* bump dompurify from 3.3.3 to 3.4.0 in /platform ([#4061](https://github.com/archestra-ai/archestra/issues/4061)) ([49ed4c4](https://github.com/archestra-ai/archestra/commit/49ed4c4ae304c4ec1e988990c6bcb520be658268))
+
+
+### Miscellaneous Chores
+
+* default client + searchable gateway/proxy pickers ([#4069](https://github.com/archestra-ai/archestra/issues/4069)) ([4d24d47](https://github.com/archestra-ai/archestra/commit/4d24d47779315fccc63b297418a6e071788eceba))
+* drop dead declaration flags from tsconfigs ([#4050](https://github.com/archestra-ai/archestra/issues/4050)) ([4e503a8](https://github.com/archestra-ai/archestra/commit/4e503a8522057690bb7c0785efda1bdfc64cf1d3))
+* log raw chat provider errors ([#4072](https://github.com/archestra-ai/archestra/issues/4072)) ([42940d7](https://github.com/archestra-ai/archestra/commit/42940d768391a4696b0c77674bd4a45e668c12f5))
+* use Native (Go) TypeScript 7.0 dev locally for type checking ([#4051](https://github.com/archestra-ai/archestra/issues/4051)) ([fa9f98b](https://github.com/archestra-ai/archestra/commit/fa9f98ba54eb3cc1520b99359d543156de8a9b3d))
+* use pnpm catalog for typescript ([#4043](https://github.com/archestra-ai/archestra/issues/4043)) ([56e3faa](https://github.com/archestra-ai/archestra/commit/56e3faae0a3f5a68fb218bdae636b5c997425e4f))
+
 ## [1.2.23](https://github.com/archestra-ai/archestra/compare/platform-v1.2.22...platform-v1.2.23) (2026-04-23)
 
 

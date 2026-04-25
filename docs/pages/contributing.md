@@ -27,6 +27,8 @@ You can find the entire development team in our [Slack Community](https://arches
 
 That's it! Taking this simple first step gets you 95% of the way there. Our engineers will jump into the conversation, greet you, and share any relevant context to get you started.
 
+Before you can comment, open issues, or open PRs, go through [contributor onboarding](https://archestra.ai/contributor-onboard). Takes about 60 seconds.
+
 # 🤝 Contribute Responsibly
 
 We encourage the use of AI tools while working on your contribution! However, as always, and especially in the AI era, it's essential to emphasize that the project benefits only from contributions made at a certain level of quality.

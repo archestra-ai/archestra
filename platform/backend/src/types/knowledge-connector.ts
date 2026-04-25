@@ -15,6 +15,7 @@ const DROPBOX = z.literal("dropbox");
 const ASANA = z.literal("asana");
 const OUTLINE = z.literal("outline");
 const LINEAR = z.literal("linear");
+const SALESFORCE = z.literal("salesforce");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -29,6 +30,7 @@ export const ConnectorTypeSchema = z.union([
   ASANA,
   LINEAR,
   OUTLINE,
+  SALESFORCE,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -279,6 +281,46 @@ export const LinearCheckpointSchema = z.object({
 });
 export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
 
+// ===== Salesforce Config & Checkpoint =====
+
+export const SalesforceConfigSchema = z.object({
+  type: SALESFORCE,
+  loginUrl: connectorUrlSchema
+    .optional()
+    .default("https://login.salesforce.com"),
+  objects: z.array(z.string().min(1)).optional(),
+  advancedObjectConfigJson: z
+    .string()
+    .optional()
+    .refine(
+      (value) => {
+        if (!value) return true;
+        try {
+          const parsed = JSON.parse(value);
+          return (
+            typeof parsed === "object" &&
+            parsed !== null &&
+            !Array.isArray(parsed)
+          );
+        } catch {
+          return false;
+        }
+      },
+      {
+        message:
+          "advancedObjectConfigJson must be valid JSON object text when provided",
+      },
+    ),
+});
+export type SalesforceConfig = z.infer<typeof SalesforceConfigSchema>;
+
+export const SalesforceCheckpointSchema = z.object({
+  type: SALESFORCE,
+  lastSyncedAt: z.string().optional(),
+  objectCursorMap: z.record(z.string(), z.string()).optional(),
+});
+export type SalesforceCheckpoint = z.infer<typeof SalesforceCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 // ===== Dropbox Config & Checkpoint =====
@@ -332,6 +374,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   AsanaConfigSchema,
   LinearConfigSchema,
   OutlineConfigSchema,
+  SalesforceConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -348,6 +391,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   AsanaCheckpointSchema,
   LinearCheckpointSchema,
   OutlineCheckpointSchema,
+  SalesforceCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 

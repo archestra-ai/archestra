@@ -199,6 +199,143 @@ describe("validateCredentialSource", () => {
     });
   });
 
+  test("accepts a team-installed MCP server for a personal agent when the author is a member of that team", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(author.id, organization.id, { role: "member" });
+
+    const sharedTeam = await makeTeam(organization.id, author.id, {
+      name: "Shared Team",
+    });
+    await makeTeamMember(sharedTeam.id, author.id);
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      teamId: sharedTeam.id,
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("rejects a team-installed MCP server for a personal agent when the author is not a member of that team", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(author.id, organization.id, { role: "member" });
+
+    const otherTeam = await makeTeam(organization.id, author.id, {
+      name: "Other Team",
+    });
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      teamId: otherTeam.id,
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toEqual({
+      code: "validation_error",
+      error: {
+        message: "This team connection is not shared with the selected team",
+        type: "validation_error",
+      },
+    });
+  });
+
+  test("accepts a team-installed MCP server for a personal agent when the author is an org admin", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(author.id, organization.id, { role: "admin" });
+
+    const otherTeam = await makeTeam(organization.id, owner.id, {
+      name: "Eng Team",
+    });
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      teamId: otherTeam.id,
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toBeNull();
+  });
+
   test("accepts a personal credential for a team-scoped resource when the owner is a team member", async ({
     makeAgent,
     makeInternalMcpCatalog,

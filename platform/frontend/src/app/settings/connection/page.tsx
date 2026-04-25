@@ -46,6 +46,7 @@ export default function ConnectionSettingsPage() {
 
   const [gatewayId, setGatewayId] = useState<string | null>(null);
   const [proxyId, setProxyId] = useState<string | null>(null);
+  const [defaultClientId, setDefaultClientId] = useState<string | null>(null);
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
     useState<string[]>(ALL_CLIENT_IDS);
@@ -56,6 +57,7 @@ export default function ConnectionSettingsPage() {
     if (!organization) return;
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
     setProxyId(organization.connectionDefaultLlmProxyId ?? null);
+    setDefaultClientId(organization.connectionDefaultClientId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
     setShownProviders(getShownProviders(organization) ?? ALL_PROVIDER_IDS);
   }, [organization]);
@@ -67,6 +69,7 @@ export default function ConnectionSettingsPage() {
 
   const serverGatewayId = organization?.connectionDefaultMcpGatewayId ?? null;
   const serverProxyId = organization?.connectionDefaultLlmProxyId ?? null;
+  const serverDefaultClientId = organization?.connectionDefaultClientId ?? null;
   const serverShownClients = (
     organization?.connectionShownClientIds ?? ALL_CLIENT_IDS
   )
@@ -81,6 +84,7 @@ export default function ConnectionSettingsPage() {
   const hasChanges =
     gatewayId !== serverGatewayId ||
     proxyId !== serverProxyId ||
+    defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
       JSON.stringify(serverShownClients) ||
     JSON.stringify([...shownProviders].sort()) !==
@@ -97,6 +101,7 @@ export default function ConnectionSettingsPage() {
     updateMutation.mutate({
       connectionDefaultMcpGatewayId: gatewayId,
       connectionDefaultLlmProxyId: proxyId,
+      connectionDefaultClientId: defaultClientId,
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
       connectionShownProviders: collapseIfAll(shownProviders, ALL_PROVIDER_IDS),
     });
@@ -105,6 +110,7 @@ export default function ConnectionSettingsPage() {
   const handleCancel = () => {
     setGatewayId(serverGatewayId);
     setProxyId(serverProxyId);
+    setDefaultClientId(serverDefaultClientId);
     setShownClientIds(serverShownClients);
     setShownProviders(serverShownProviders);
   };
@@ -174,6 +180,36 @@ export default function ConnectionSettingsPage() {
                         {p.name}
                       </SelectItem>
                     ))}
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+      />
+      <SettingsBlock
+        title="Default client"
+        control={
+          <WithPermissions
+            permissions={{ organizationSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={defaultClientId ?? "generic"}
+                onValueChange={(value) =>
+                  setDefaultClientId(value === "generic" ? null : value)
+                }
+                disabled={updateMutation.isPending || !hasPermission}
+              >
+                <SelectTrigger className="w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONNECT_CLIENTS.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}

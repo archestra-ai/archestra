@@ -12,7 +12,7 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import type { Agent, AgentScope } from "@/types";
+import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
@@ -192,7 +192,7 @@ export async function handleCreateResource<
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
-    toolExposureMode?: "full" | "search_and_run_only";
+    toolExposureMode?: ToolExposureMode;
   },
 >(params: {
   args: TArgs;

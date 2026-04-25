@@ -66,6 +66,7 @@ import type {
   CommonToolCall,
   SelectTeamToken,
   SelectUserToken,
+  ToolExposureMode,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -1323,7 +1324,7 @@ export async function buildKnowledgeSourcesDescription(
 }
 
 function filterExposedTools(params: {
-  toolExposureMode: "full" | "search_and_run_only";
+  toolExposureMode: ToolExposureMode;
   tools: McpListTool[];
 }) {
   const { toolExposureMode, tools } = params;

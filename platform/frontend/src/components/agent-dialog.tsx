@@ -155,7 +155,7 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
     };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
-type ToolExposureMode = "full" | "search_and_run_only";
+type ToolExposureMode = Agent["toolExposureMode"];
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {

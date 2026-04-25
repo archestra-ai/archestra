@@ -58,14 +58,10 @@ describe("MermaidDiagram", () => {
   it("shows inline error and skips render when parse returns false", async () => {
     mockParse.mockResolvedValue(false);
 
-    const { container } = render(
-      <MermaidDiagram chart="not valid mermaid" />,
-    );
+    const { container } = render(<MermaidDiagram chart="not valid mermaid" />);
 
     await waitFor(() =>
-      expect(container.textContent).toContain(
-        "Invalid mermaid diagram syntax",
-      ),
+      expect(container.textContent).toContain("Invalid mermaid diagram syntax"),
     );
     expect(mockRender).not.toHaveBeenCalled();
     // Original chart text is still surfaced for debugging
@@ -78,9 +74,7 @@ describe("MermaidDiagram", () => {
     const { container } = render(<MermaidDiagram chart="???" />);
 
     await waitFor(() =>
-      expect(container.textContent).toContain(
-        "Invalid mermaid diagram syntax",
-      ),
+      expect(container.textContent).toContain("Invalid mermaid diagram syntax"),
     );
     expect(mockRender).not.toHaveBeenCalled();
   });
@@ -89,9 +83,7 @@ describe("MermaidDiagram", () => {
     mockParse.mockResolvedValue({ diagramType: "flowchart", config: {} });
     mockRender.mockRejectedValue(new Error("render blew up"));
 
-    const { container } = render(
-      <MermaidDiagram chart="graph TD; A-->B" />,
-    );
+    const { container } = render(<MermaidDiagram chart="graph TD; A-->B" />);
 
     await waitFor(() =>
       expect(container.textContent).toContain(

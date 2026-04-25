@@ -7,7 +7,8 @@ import {
   GeminiErrorReasons,
   OpenAIErrorTypes,
 } from "@shared";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, it } from "@/test";
 
 const mockSentryCaptureMessage = vi.hoisted(() => vi.fn());
 

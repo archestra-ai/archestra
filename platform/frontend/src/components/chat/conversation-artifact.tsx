@@ -1,7 +1,7 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import { AlertTriangle, Copy, Download, FileText, GripVertical, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -12,6 +12,8 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
+import { ErrorBoundary } from "react-error-boundary";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -96,7 +98,22 @@ export function ConversationArtifactPanel({
         const code = String(children).replace(/\n$/, "");
         return (
           <div className="my-4 max-h-[600px] [&_svg]:!max-h-[600px] [&_svg]:!w-auto">
-            <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
+            <ErrorBoundary
+              resetKeys={[code]}
+              fallback={
+                <Alert variant="warning" className="my-4">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="text-sm font-medium mb-1">Invalid diagram</div>
+                    <div className="text-xs text-muted-foreground">
+                      Could not render Mermaid diagram
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              }
+            >
+              <MermaidDiagram chart={code} id={`mermaid-${Date.now()}`} />
+            </ErrorBoundary>
           </div>
         );
       }

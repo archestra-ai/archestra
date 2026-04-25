@@ -265,6 +265,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   // LLM Proxy routes (all providers)
   fastify.register(routes.anthropicProxyRoutes);
   fastify.register(routes.openAiProxyRoutes);
+  fastify.register(routes.unifiedProxyRoutes);
   fastify.register(routes.geminiProxyRoutes);
   fastify.register(routes.azureProxyRoutes);
   fastify.register(routes.bedrockProxyRoutes);

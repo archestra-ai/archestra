@@ -90,6 +90,18 @@ function safeSerialize(obj: unknown): unknown {
   }
 }
 
+function stringifyRawError(error: unknown): string {
+  try {
+    return JSON.stringify(error, Object.getOwnPropertyNames(error));
+  } catch {
+    try {
+      return JSON.stringify(safeSerialize(error));
+    } catch {
+      return String(error);
+    }
+  }
+}
+
 // =============================================================================
 // Parsed Error Types
 // =============================================================================
@@ -1498,6 +1510,7 @@ export function mapProviderError(
       parsedError,
       mappedCode: errorCode,
       errorMessage,
+      rawErrorJson: stringifyRawError(error),
     },
     "[ChatErrorMapper] Mapped provider error",
   );

@@ -27157,7 +27157,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -27605,7 +27605,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
     };
     url: '/api/connectors';
 };
@@ -27681,7 +27681,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -27780,6 +27780,11 @@ export type GetConnectorsResponses = {
                 outlineUrl: unknown;
                 collectionIds?: Array<string>;
                 batchSize?: number;
+            } | {
+                type: 'salesforce';
+                loginUrl: unknown;
+                objects?: Array<string>;
+                advancedObjectConfigJson?: string;
             };
             secretId: string | null;
             schedule: string;
@@ -27817,7 +27822,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -27916,6 +27921,11 @@ export type CreateConnectorData = {
             outlineUrl: string;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl?: string;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         credentials: {
             email?: string;
@@ -28000,7 +28010,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28099,6 +28109,11 @@ export type CreateConnectorResponses = {
             outlineUrl: unknown;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl: unknown;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -28274,7 +28289,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28373,6 +28388,11 @@ export type GetConnectorResponses = {
             outlineUrl: unknown;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl: unknown;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -28495,6 +28515,11 @@ export type UpdateConnectorData = {
             outlineUrl: string;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl?: string;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         credentials?: {
             email?: string;
@@ -28580,7 +28605,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -28679,6 +28704,11 @@ export type UpdateConnectorResponses = {
             outlineUrl: unknown;
             collectionIds?: Array<string>;
             batchSize?: number;
+        } | {
+            type: 'salesforce';
+            loginUrl: unknown;
+            objects?: Array<string>;
+            advancedObjectConfigJson?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -35613,6 +35643,7 @@ export type GetOrganizationResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -35864,6 +35895,7 @@ export type UpdateAppearanceSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -35993,6 +36025,7 @@ export type UpdateSecuritySettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36123,6 +36156,7 @@ export type UpdateLlmSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36254,6 +36288,7 @@ export type UpdateAgentSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36265,6 +36300,7 @@ export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
         connectionDefaultLlmProxyId?: string | null;
+        connectionDefaultClientId?: string | null;
         connectionShownClientIds?: Array<string> | null;
         connectionShownProviders?: Array<'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure'> | null;
     };
@@ -36385,6 +36421,7 @@ export type UpdateConnectionSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36513,6 +36550,7 @@ export type UpdateMcpSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36644,6 +36682,7 @@ export type UpdateKnowledgeSettingsResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36770,6 +36809,7 @@ export type DropEmbeddingConfigResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };
@@ -36979,6 +37019,7 @@ export type CompleteOnboardingResponses = {
         mcpOauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
     };

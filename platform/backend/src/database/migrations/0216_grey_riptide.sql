@@ -1,1 +1,0 @@
-ALTER TABLE "agents" ADD COLUMN "tool_exposure_mode" text DEFAULT 'full' NOT NULL;

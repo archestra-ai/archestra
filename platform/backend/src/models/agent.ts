@@ -1548,45 +1548,55 @@ class AgentModel {
     const cloneTeams =
       sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
 
-    const created = await AgentModel.create(
-      {
-        organizationId: sourceAgent.organizationId,
-        agentType: sourceAgent.agentType,
-        scope: sourceAgent.scope,
-        teams: cloneTeams,
-        labels: sourceAgent.labels,
-        knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
-        connectorIds: sourceAgent.connectorIds ?? [],
-        suggestedPrompts: sourceAgent.suggestedPrompts ?? [],
-        name: `Copy of ${sourceAgent.name}`,
-        systemPrompt: sourceAgent.systemPrompt,
-        description: sourceAgent.description,
-        icon: sourceAgent.icon,
-        considerContextUntrusted: sourceAgent.considerContextUntrusted,
-        incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
-        incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
-        incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
-        llmApiKeyId: sourceAgent.llmApiKeyId,
-        llmModel: sourceAgent.llmModel,
-        identityProviderId: sourceAgent.identityProviderId,
-        passthroughHeaders: sourceAgent.passthroughHeaders,
-      },
-      sourceAgent.scope === "personal" ? userId : undefined,
-    );
+    let created: Agent | null = null;
+    try {
+      created = await AgentModel.create(
+        {
+          organizationId: sourceAgent.organizationId,
+          agentType: sourceAgent.agentType,
+          scope: sourceAgent.scope,
+          teams: cloneTeams,
+          labels: sourceAgent.labels,
+          knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
+          connectorIds: sourceAgent.connectorIds ?? [],
+          suggestedPrompts: sourceAgent.suggestedPrompts ?? [],
+          name: `Copy of ${sourceAgent.name}`,
+          systemPrompt: sourceAgent.systemPrompt,
+          description: sourceAgent.description,
+          icon: sourceAgent.icon,
+          considerContextUntrusted: sourceAgent.considerContextUntrusted,
+          incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
+          incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
+          incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
+          llmApiKeyId: null,
+          llmModel: sourceAgent.llmModel,
+          identityProviderId: null,
+          passthroughHeaders: null,
+        },
+        sourceAgent.scope === "personal" ? userId : undefined,
+      );
 
-    // Clone tool assignments (including delegation/subagent tools)
-    await AgentToolModel.cloneAssignments({
-      fromAgentId: sourceAgent.id,
-      toAgentId: created.id,
-    });
+      await AgentToolModel.cloneAssignments({
+        fromAgentId: sourceAgent.id,
+        toAgentId: created.id,
+      });
 
-    // Return a fully hydrated agent with tools/teams/labels/knowledge assignments
-    const clonedAgent = await AgentModel.findById(created.id, userId, true);
-    if (!clonedAgent) {
-      throw new Error("Failed to load cloned agent");
+      const clonedAgent = await AgentModel.findById(created.id, userId, true);
+      if (!clonedAgent) {
+        throw new Error("Failed to load cloned agent");
+      }
+
+      return clonedAgent;
+    } catch (error) {
+      if (created) {
+        try {
+          await AgentModel.delete(created.id);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      throw error;
     }
-
-    return clonedAgent;
   }
 
   private static async generateUniqueSlug(name: string): Promise<string> {

@@ -50,10 +50,7 @@ class AgentToolModel {
 
     const rows = await db
       .select({
-        toolId: schema.agentToolsTable.toolId,
-        mcpServerId: schema.agentToolsTable.mcpServerId,
-        credentialResolutionMode:
-          schema.agentToolsTable.credentialResolutionMode,
+        ...getTableColumns(schema.agentToolsTable),
       })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.agentId, fromAgentId));
@@ -68,6 +65,8 @@ class AgentToolModel {
           toolId: r.toolId,
           mcpServerId: r.mcpServerId,
           credentialResolutionMode: r.credentialResolutionMode,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         })),
       )
       .onConflictDoNothing();

@@ -77,9 +77,7 @@ test("can clone an agent and rename it", {
   });
 
   // Clone the agent
-  await page
-    .getByTestId(`${E2eTestId.CloneAgentButton}-${AGENT_NAME}`)
-    .click();
+  await page.getByTestId(`${E2eTestId.CloneAgentButton}-${AGENT_NAME}`).click();
 
   // Wait for the edit dialog to open with the cloned agent
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });

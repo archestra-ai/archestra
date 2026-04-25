@@ -83,7 +83,7 @@ export function AgentActions({
     {
       icon: <Copy className="h-4 w-4" />,
       label: "Clone",
-      disabled: isBuiltIn || !canModify,
+      disabled: isBuiltIn,
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be cloned"
         : undefined,

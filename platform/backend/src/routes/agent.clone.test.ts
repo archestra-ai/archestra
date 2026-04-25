@@ -6,7 +6,7 @@ import {
   requireAgentModifyPermission,
 } from "@/auth";
 import db, { schema } from "@/database";
-import { ToolModel } from "@/models";
+import { AgentToolModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -415,6 +415,15 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("returns 400 for invalid UUID", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/not-a-uuid/clone",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   test("clones passthroughHeaders", async ({ makeInternalAgent }) => {
     const headers = ["X-Custom-Header", "X-Another-Header"];
 
@@ -437,7 +446,7 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(200);
     const cloned = response.json() as Agent;
 
-    expect(cloned.passthroughHeaders).toEqual(headers);
+    expect(cloned.passthroughHeaders).toBeNull();
   });
 
   test("clones incoming email settings", async ({ makeInternalAgent }) => {
@@ -516,6 +525,68 @@ describe("clone agent route", () => {
     const cloned = response.json() as Agent;
 
     expect(cloned.identityProviderId).toBeNull();
+  });
+
+  test("rejects cloning llm_proxy with knowledge bases or connectors", async ({
+    makeInternalAgent,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const kb = await makeKnowledgeBase(organizationId, { name: "KB Reject" });
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+      name: "Connector Reject",
+    });
+
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "LLM Proxy With KB",
+      agentType: "llm_proxy",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [kb.id],
+      connectorIds: [connector.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("cleans up partial clone if tool assignment cloning fails", async ({
+    makeInternalAgent,
+  }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Rollback Source",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const spy = vi
+      .spyOn(AgentToolModel, "cloneAssignments")
+      .mockRejectedValueOnce(new Error("boom"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    const clones = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.name, `Copy of ${sourceAgent.name}`));
+    expect(clones).toHaveLength(0);
+
+    spy.mockRestore();
   });
 
   test("clones agent with all suggested prompts", async ({

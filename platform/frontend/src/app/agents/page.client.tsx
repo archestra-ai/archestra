@@ -204,7 +204,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           // Open edit dialog for the cloned agent so user can rename immediately
           setEditingAgent(cloned as AgentData);
         }
-      } catch (error) {
+      } catch (_error) {
         toast.error("Failed to clone agent", { id: toastId });
       }
     },

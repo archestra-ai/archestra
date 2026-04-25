@@ -7,12 +7,23 @@ import {
   GeminiErrorReasons,
   OpenAIErrorTypes,
 } from "@shared";
-import { describe, expect, it } from "@/test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockSentryCaptureMessage = vi.hoisted(() => vi.fn());
+
+vi.mock("@sentry/node", () => ({
+  captureMessage: mockSentryCaptureMessage,
+}));
+
 import {
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+
+beforeEach(() => {
+  mockSentryCaptureMessage.mockClear();
+});
 
 // =============================================================================
 // OpenAI Error Tests
@@ -1185,6 +1196,51 @@ describe("mapProviderError - Fallback behavior", () => {
     const result = mapProviderError("Simple string error", "openai");
 
     expect(result.originalError?.message).toBe("Simple string error");
+  });
+});
+
+// =============================================================================
+// Sentry Capture Tests
+// =============================================================================
+
+describe("mapProviderError - Sentry raw error capture", () => {
+  it("creates a Sentry issue event for rawErrorJson provider error logs", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 500,
+      responseBody: JSON.stringify({
+        error: {
+          type: OpenAIErrorTypes.SERVER_ERROR,
+          message: "Provider failed",
+        },
+      }),
+      isRetryable: true,
+    };
+
+    mapProviderError(error, "openai");
+
+    expect(mockSentryCaptureMessage).toHaveBeenCalledWith(
+      "[ChatErrorMapper] rawErrorJson provider error",
+      expect.objectContaining({
+        level: "error",
+        fingerprint: [
+          "chat-provider-error-raw-error-json",
+          "openai",
+          "500",
+          ChatErrorCode.ServerError,
+        ],
+        tags: expect.objectContaining({
+          provider: "openai",
+          mapped_code: ChatErrorCode.ServerError,
+          raw_error_json: "true",
+          status_code: "500",
+        }),
+        extra: expect.objectContaining({
+          errorMessage: "Provider failed",
+          rawErrorJson: expect.stringContaining("AI_APICallError"),
+        }),
+      }),
+    );
   });
 });
 

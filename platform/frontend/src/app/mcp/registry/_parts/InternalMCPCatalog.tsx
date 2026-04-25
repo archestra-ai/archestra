@@ -740,6 +740,7 @@ export function InternalMCPCatalog({
           ? (installResult.teamId ?? undefined)
           : undefined,
       serviceAccount: installResult.serviceAccount,
+      k8sClusterId: installResult.k8sClusterId ?? undefined,
       dontShowToast: true,
     });
 

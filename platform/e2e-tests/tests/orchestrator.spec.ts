@@ -1,4 +1,5 @@
-import { TEST_CATALOG_ITEM_NAME, WIREMOCK_INTERNAL_URL } from "../consts";
+import * as k8s from "@kubernetes/client-node";
+import { MCP_SERVER_NAMESPACE, TEST_CATALOG_ITEM_NAME, WIREMOCK_INTERNAL_URL } from "../consts";
 import {
   findCatalogItem,
   findInstalledServer,
@@ -36,6 +37,10 @@ async function withRetry<T>(
 }
 
 test.describe("Orchestrator - MCP Server Installation and Execution", () => {
+  // Run all describe blocks serially to avoid K8s resource contention
+  // (multiple simultaneous pod deployments exhaust local cluster resources)
+  test.describe.configure({ mode: "serial" });
+
   const getMcpServerTools = async (
     request: APIRequestContext,
     makeApiRequest: TestFixtures["makeApiRequest"],
@@ -129,7 +134,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
   test.describe("Local MCP Server - internal-dev-test-server", () => {
     // Run tests serially on the same worker to share beforeAll setup (MCP server installation)
     // Also extend timeout since MCP server installation can take a while
-    test.describe.configure({ mode: "serial", timeout: 60_000 });
+    test.describe.configure({ mode: "serial", timeout: 120_000 });
 
     let serverId: string;
 
@@ -142,6 +147,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         uninstallMcpServer,
         getTeamByName,
       }) => {
+        test.setTimeout(120_000);
         // Create agent for testing (needed for cleanup)
         await createAgent(request, "Orchestrator Test Agent", "personal");
 
@@ -320,6 +326,211 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
 
       // Should have discovered tools from the Docker server
       expect(tools.length).toBeGreaterThan(0);
+    });
+  });
+
+  test.describe("K8s Namespace support", () => {
+    test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+    let serverId: string;
+
+    test.beforeAll(
+      async ({
+        request,
+        installMcpServer,
+        listK8sNamespaces,
+        getTeamByName,
+      }) => {
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
+
+        const catalogItem = await findCatalogItem(
+          request,
+          TEST_CATALOG_ITEM_NAME,
+        );
+        if (!catalogItem) {
+          throw new Error(
+            `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+          );
+        }
+
+        const namespaces = await listK8sNamespaces(request);
+        expect(namespaces.length).toBeGreaterThan(0);
+        const targetNamespace: string = namespaces[0];
+
+        const installResponse = await installMcpServer(request, {
+          name: "Test Namespace Server",
+          catalogId: catalogItem.id,
+          teamId: defaultTeam.id,
+          environmentValues: { ARCHESTRA_TEST: "namespace-test-value" },
+          k8sNamespace: targetNamespace,
+        });
+        const server = await installResponse.json();
+        serverId = server.id;
+
+        await waitForServerInstallation(request, serverId);
+      },
+    );
+
+    test.afterAll(async ({ request, uninstallMcpServer }) => {
+      if (serverId) await uninstallMcpServer(request, serverId);
+    });
+
+    test("should list K8s namespaces", async ({
+      request,
+      listK8sNamespaces,
+    }) => {
+      const namespaces = await listK8sNamespaces(request);
+      expect(Array.isArray(namespaces)).toBe(true);
+      expect(namespaces.length).toBeGreaterThan(0);
+      expect(typeof namespaces[0]).toBe("string");
+    });
+
+    test("should install MCP server with explicit namespace and discover tools", async ({
+      request,
+      makeApiRequest,
+      listK8sNamespaces,
+    }) => {
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
+      expect(tools.length).toBeGreaterThan(0);
+
+      const namespaces = await listK8sNamespaces(request);
+      const targetNamespace = namespaces[0];
+
+      const serverResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/mcp_server/${serverId}`,
+      });
+      const server = await serverResponse.json();
+      expect(server.k8sNamespace).toBe(targetNamespace);
+    });
+
+    test("should reject install with nonexistent namespace", async ({
+      request,
+      installMcpServer,
+    }) => {
+      const catalogItem = await findCatalogItem(
+        request,
+        TEST_CATALOG_ITEM_NAME,
+      );
+      if (!catalogItem) {
+        throw new Error(`Catalog item '${TEST_CATALOG_ITEM_NAME}' not found`);
+      }
+
+      const response = await installMcpServer(
+        request,
+        {
+          name: "Test Bad Namespace Server",
+          catalogId: catalogItem.id,
+          environmentValues: { ARCHESTRA_TEST: "namespace-test-value" },
+          k8sNamespace: "nonexistent-namespace-xyz",
+        },
+        { ignoreStatusCheck: true },
+      );
+
+      expect(response.status()).toBe(400);
+      const body = await response.json();
+      expect(body.error.message).toContain("does not exist in the cluster");
+    });
+  });
+
+  test.describe("Local MCP Server - Custom K8s Cluster", () => {
+    test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+    let clusterId: string;
+    let serverId: string;
+    let teamId: string;
+
+    test.beforeAll(
+      async ({
+        request,
+        makeApiRequest,
+        installMcpServer,
+        createTeam,
+        deleteTeam,
+      }) => {
+        test.setTimeout(120_000);
+        // Export the current kubeconfig so we can register it as a "custom" cluster.
+        // In e2e the platform already uses this same cluster, so the server will
+        // actually deploy there — we just exercise the custom-cluster code path.
+        const kc = new k8s.KubeConfig();
+        kc.loadFromDefault();
+        const kubeconfigYaml = kc.exportConfig();
+
+        const clusterRes = await makeApiRequest({
+          request,
+          method: "post",
+          urlSuffix: "/api/k8s/clusters",
+          data: { name: "e2e-test-cluster", kubeconfig: kubeconfigYaml },
+        });
+        expect(clusterRes.status()).toBe(200);
+        const cluster = await clusterRes.json();
+        clusterId = cluster.id;
+
+        // Create a dedicated team to avoid catalog+team uniqueness conflict with
+        // the "Local MCP Server - internal-dev-test-server" test that also uses
+        // Default Team + the same catalog item.
+        const teamRes = await createTeam(
+          request,
+          "E2E Custom Cluster Team",
+          "Team for custom cluster e2e test",
+        );
+        const team = await teamRes.json();
+        teamId = team.id;
+
+        const catalogItem = await findCatalogItem(
+          request,
+          TEST_CATALOG_ITEM_NAME,
+        );
+        if (!catalogItem) {
+          throw new Error(
+            `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found`,
+          );
+        }
+
+        const installRes = await installMcpServer(request, {
+          name: `${catalogItem.name} - custom cluster`,
+          catalogId: catalogItem.id,
+          teamId,
+          k8sClusterId: clusterId,
+          k8sNamespace: MCP_SERVER_NAMESPACE,
+          environmentValues: { ARCHESTRA_TEST: "e2e-custom-cluster" },
+        });
+        expect(installRes.status()).toBe(200);
+        const server = await installRes.json();
+        serverId = server.id;
+
+        await waitForServerInstallation(request, serverId);
+      },
+    );
+
+    test.afterAll(
+      async ({ request, makeApiRequest, uninstallMcpServer, deleteTeam }) => {
+        if (serverId) await uninstallMcpServer(request, serverId);
+        if (clusterId) {
+          await makeApiRequest({
+            request,
+            method: "delete",
+            urlSuffix: `/api/k8s/clusters/${clusterId}`,
+          });
+        }
+        if (teamId) await deleteTeam(request, teamId);
+      },
+    );
+
+    test("should install MCP server into custom cluster and discover its tools", async ({
+      request,
+      makeApiRequest,
+    }) => {
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
+      expect(tools.length).toBeGreaterThan(0);
+      const testTool = tools.find((t: { name: string }) =>
+        t.name.includes("print_archestra_test"),
+      );
+      expect(testTool).toBeDefined();
     });
   });
 });

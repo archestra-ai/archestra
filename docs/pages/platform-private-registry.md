@@ -35,7 +35,7 @@ Registry entries can describe either a remote server or a self-hosted server.
 
 **Remote servers** run outside Archestra and are reached over HTTP. Use this for provider-hosted MCP servers or internal services already operated by another team. The registry entry stores the server URL, optional docs URL, authentication configuration, and any install-time fields users must provide.
 
-**Self-hosted servers** run in Kubernetes through the [MCP Orchestrator](/docs/platform-orchestrator). Use this when Archestra should own the runtime. The registry entry can define the command, arguments, Docker image, transport type, environment variables, image pull secrets, and optional deployment YAML overrides.
+**Self-hosted servers** run in Kubernetes through the [MCP Orchestrator](/docs/platform-orchestrator). Use this when Archestra should own the runtime. The registry entry can define the command, arguments, Docker image, transport type, environment variables, image pull secrets, optional deployment YAML overrides, and a Kubernetes namespace (override for `ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`) for the pods.
 
 Self-hosted servers support two transports:
 

@@ -26271,6 +26271,8 @@ export type GetInternalMcpCatalogResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -26394,6 +26396,8 @@ export type CreateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
+        k8sNamespace?: string | null;
+        k8sClusterId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -26586,6 +26590,8 @@ export type CreateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -26873,6 +26879,8 @@ export type GetInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -26995,6 +27003,8 @@ export type UpdateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
+        k8sNamespace?: string | null;
+        k8sClusterId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -27189,6 +27199,8 @@ export type UpdateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -27984,6 +27996,424 @@ export type CheckInvitationResponses = {
 };
 
 export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
+
+export type ListK8sClustersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/k8s/clusters';
+};
+
+export type ListK8sClustersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListK8sClustersError = ListK8sClustersErrors[keyof ListK8sClustersErrors];
+
+export type ListK8sClustersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        clusters: Array<{
+            id: null;
+            name: string;
+        } | {
+            id: string;
+            organizationId: string;
+            name: string;
+            kubeconfig: string;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+    };
+};
+
+export type ListK8sClustersResponse = ListK8sClustersResponses[keyof ListK8sClustersResponses];
+
+export type CreateK8sClusterData = {
+    body: {
+        name: string;
+        kubeconfig: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/k8s/clusters';
+};
+
+export type CreateK8sClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateK8sClusterError = CreateK8sClusterErrors[keyof CreateK8sClusterErrors];
+
+export type CreateK8sClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        kubeconfig: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateK8sClusterResponse = CreateK8sClusterResponses[keyof CreateK8sClusterResponses];
+
+export type DeleteK8sClusterData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/k8s/clusters/{id}';
+};
+
+export type DeleteK8sClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteK8sClusterError = DeleteK8sClusterErrors[keyof DeleteK8sClusterErrors];
+
+export type DeleteK8sClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteK8sClusterResponse = DeleteK8sClusterResponses[keyof DeleteK8sClusterResponses];
+
+export type UpdateK8sClusterData = {
+    body: {
+        name?: string;
+        kubeconfig?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/k8s/clusters/{id}';
+};
+
+export type UpdateK8sClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateK8sClusterError = UpdateK8sClusterErrors[keyof UpdateK8sClusterErrors];
+
+export type UpdateK8sClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        kubeconfig: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateK8sClusterResponse = UpdateK8sClusterResponses[keyof UpdateK8sClusterResponses];
+
+export type ListK8sNamespacesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        clusterId?: string;
+    };
+    url: '/api/k8s/namespaces';
+};
+
+export type ListK8sNamespacesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type ListK8sNamespacesError = ListK8sNamespacesErrors[keyof ListK8sNamespacesErrors];
+
+export type ListK8sNamespacesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        namespaces: Array<string>;
+        defaultNamespace: string;
+    };
+};
+
+export type ListK8sNamespacesResponse = ListK8sNamespacesResponses[keyof ListK8sNamespacesResponses];
 
 export type GetKnowledgeBasesData = {
     body?: never;
@@ -33646,6 +34076,8 @@ export type GetMcpServersResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -33680,6 +34112,8 @@ export type InstallMcpServerData = {
         localInstallationError?: string | null;
         oauthRefreshError?: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt?: unknown;
+        k8sNamespace?: string;
+        k8sClusterId?: string | null;
         userId?: string;
         userConfigValues?: {
             [key: string]: string;
@@ -33780,6 +34214,8 @@ export type InstallMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -33978,6 +34414,8 @@ export type GetMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -34101,6 +34539,8 @@ export type ReauthenticateMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -34496,6 +34936,8 @@ export type ReinstallMcpServerResponses = {
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
         oauthRefreshFailedAt: string | null;
+        k8sNamespace: string | null;
+        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;

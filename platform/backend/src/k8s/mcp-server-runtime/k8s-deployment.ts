@@ -199,6 +199,8 @@ interface K8sDeploymentOptions {
   userConfigValues?: Record<string, string>;
   environmentValues?: Record<string, string>;
   k8sExec: Exec;
+  // When false, skip inheriting platform pod nodeSelector/tolerations (for custom cluster deployments)
+  inheritPlatformScheduling?: boolean;
 }
 
 /**
@@ -228,6 +230,7 @@ export default class K8sDeployment {
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
   private environmentValues?: Record<string, string>;
+  private inheritPlatformScheduling: boolean;
 
   // Track assigned port for HTTP-based MCP servers
   assignedHttpPort?: number;
@@ -245,6 +248,7 @@ export default class K8sDeployment {
     this.catalogItem = options.catalogItem;
     this.userConfigValues = options.userConfigValues;
     this.environmentValues = options.environmentValues;
+    this.inheritPlatformScheduling = options.inheritPlatformScheduling ?? true;
     this.deploymentName = K8sDeployment.constructDeploymentName(
       options.mcpServer,
     );
@@ -1584,10 +1588,15 @@ export default class K8sDeployment {
         })),
       };
 
-      // Get the cached nodeSelector and tolerations from the platform pod (if available)
-      // This allows MCP servers to inherit the same scheduling constraints
-      const platformNodeSelector = getCachedPlatformNodeSelector();
-      const platformTolerations = getCachedPlatformTolerations();
+      // Platform pod scheduling constraints are only inherited for default-cluster deployments.
+      // Custom cluster deployments (inheritPlatformScheduling=false) skip this because
+      // the archestra-platform pod does not exist in external clusters.
+      const platformNodeSelector = this.inheritPlatformScheduling
+        ? getCachedPlatformNodeSelector()
+        : undefined;
+      const platformTolerations = this.inheritPlatformScheduling
+        ? getCachedPlatformTolerations()
+        : undefined;
 
       await this.k8sAppsApi.createNamespacedDeployment({
         namespace: this.namespace,

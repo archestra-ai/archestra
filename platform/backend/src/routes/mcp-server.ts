@@ -26,6 +26,7 @@ import {
   findExternalIdentityProviderById,
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
+import { validateK8sNamespace } from "@/services/k8s-namespace-validation";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   AgentScopeSchema,
@@ -145,6 +146,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override for local MCP servers
           serviceAccount: z.string().optional(),
+          // Kubernetes namespace override for local MCP servers
+          k8sNamespace: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -158,8 +161,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         environmentValues,
         serviceAccount,
+        k8sNamespace: k8sNamespaceFromRequest,
         ...restDataFromRequestBody
       } = body;
+      let k8sNamespace = k8sNamespaceFromRequest;
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
       } = {
@@ -170,6 +175,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Set owner_id and userId to current user
       serverData.ownerId = user.id;
       serverData.userId = user.id;
+
+      // Validate k8sClusterId belongs to the organization
+      if (serverData.k8sClusterId) {
+        const { K8sClusterModel } = await import("@/models");
+        const cluster = await K8sClusterModel.findById(
+          serverData.k8sClusterId,
+          organizationId,
+        );
+        if (!cluster) {
+          throw new ApiError(400, "K8s cluster not found or does not belong to this organization");
+        }
+      }
 
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
@@ -207,6 +224,26 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           headers,
         });
+
+        // Fall back to catalog's k8sNamespace if not explicitly provided in the request
+        if (
+          !k8sNamespace &&
+          catalogItem.serverType === "local" &&
+          catalogItem.k8sNamespace
+        ) {
+          k8sNamespace = catalogItem.k8sNamespace;
+        }
+
+        // Validate k8sNamespace: reject early before idempotent early-return paths
+        if (k8sNamespace && catalogItem.serverType !== "local") {
+          throw new ApiError(
+            400,
+            "k8sNamespace can only be specified for local MCP servers",
+          );
+        }
+        if (catalogItem.serverType === "local" && k8sNamespace) {
+          await validateK8sNamespace(k8sNamespace);
+        }
 
         // Validate no duplicate installations for this catalog item
         const existingServers = await McpServerModel.findByCatalogId(
@@ -607,6 +644,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const mcpServer = await McpServerModel.create({
         ...serverData,
         ...(secretId && { secretId }),
+        ...(k8sNamespace && { k8sNamespace }),
       });
 
       try {

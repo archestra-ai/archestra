@@ -25,6 +25,7 @@ export * from "./kb-chunk";
 export * from "./kb-document";
 export * from "./knowledge-base";
 export * from "./knowledge-base-connector";
+export * from "./k8s-cluster";
 export * from "./knowledge-connector";
 export * from "./label";
 export * from "./limit";

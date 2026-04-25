@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { DocsPage, GITHUB_REPO_URL } from "@shared";
 import {
+  AlertTriangle,
   ChevronRight,
   Globe,
   Info,
@@ -79,6 +80,7 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { K8sClusterNamespaceField } from "./k8s-cluster-namespace-field";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -1777,6 +1779,21 @@ export function McpCatalogForm({
                   valuePlaceholder="header value"
                 />
               )}
+            </div>
+          )}
+
+          {currentServerType === "local" && isLocalMcpEnabled && mode === "create" && (
+            <div className="border rounded-lg p-5 space-y-3">
+              <K8sClusterNamespaceField
+                clusterId={form.watch("k8sClusterId") ?? null}
+                namespace={form.watch("k8sNamespace") ?? ""}
+                onClusterChange={(id) =>
+                  form.setValue("k8sClusterId", id, { shouldDirty: true })
+                }
+                onNamespaceChange={(ns) =>
+                  form.setValue("k8sNamespace", ns, { shouldDirty: true })
+                }
+              />
             </div>
           )}
 

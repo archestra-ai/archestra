@@ -21,6 +21,7 @@ const {
   getMcpServer,
   reauthenticateMcpServer,
   reinstallMcpServer,
+  listK8sNamespaces,
 } = archestraApiSdk;
 
 type McpServersQuery = Partial<
@@ -358,4 +359,21 @@ export function useMcpDeploymentStatuses(): Record<
   }, [isK8sEnabled]);
 
   return statuses;
+}
+
+export function useListK8sNamespaces() {
+  const isK8sEnabled = useFeature("orchestratorK8sRuntime");
+  return useQuery({
+    queryKey: ["k8s", "namespaces"],
+    queryFn: async () => {
+      const res = await listK8sNamespaces();
+      if (res.error) {
+        handleApiError(res.error);
+        return null;
+      }
+      return res.data ?? null;
+    },
+    enabled: !!isK8sEnabled,
+    staleTime: 30_000,
+  });
 }

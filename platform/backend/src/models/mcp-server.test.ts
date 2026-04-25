@@ -1,7 +1,26 @@
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import K8sClusterModel from "./k8s-cluster";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
+
+const VALID_KUBECONFIG = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://test-cluster.example.com
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+users:
+- name: test-user
+  user:
+    token: test-token
+`;
 
 describe("McpServerModel", () => {
   describe("serverType field", () => {
@@ -99,6 +118,85 @@ describe("McpServerModel", () => {
         crypto.randomUUID(),
       ]);
       expect(results).toEqual([]);
+    });
+  });
+
+  describe("resolveOrganizationId", () => {
+    test("resolves organizationId via team", async ({
+      makeOrganization,
+      makeTeam,
+      makeUser,
+      makeMcpServer,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const server = await makeMcpServer({ teamId: team.id });
+
+      const result = await McpServerModel.resolveOrganizationId(server.id);
+      expect(result).toBe(org.id);
+    });
+
+    test("resolves organizationId via member for personal server", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeMcpServer,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const server = await makeMcpServer({ ownerId: user.id });
+
+      const result = await McpServerModel.resolveOrganizationId(server.id);
+      expect(result).toBe(org.id);
+    });
+
+    test("returns null for server with no team or member", async ({
+      makeMcpServer,
+    }) => {
+      const server = await makeMcpServer();
+      const result = await McpServerModel.resolveOrganizationId(server.id);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("findWithClusterContext", () => {
+    test("returns server with null cluster when no k8sClusterId", async ({
+      makeOrganization,
+      makeMcpServer,
+    }) => {
+      await makeOrganization();
+      const server = await makeMcpServer();
+
+      const result = await McpServerModel.findWithClusterContext(server.id);
+      expect(result).not.toBeNull();
+      expect(result?.server.id).toBe(server.id);
+      expect(result?.cluster).toBeNull();
+    });
+
+    test("returns server with cluster when k8sClusterId is set", async ({
+      makeOrganization,
+      makeMcpServer,
+    }) => {
+      const org = await makeOrganization();
+      const cluster = await K8sClusterModel.create({
+        organizationId: org.id,
+        name: "Test Cluster",
+        kubeconfig: VALID_KUBECONFIG,
+      });
+      const server = await makeMcpServer({ k8sClusterId: cluster.id } as Parameters<typeof makeMcpServer>[0] & { k8sClusterId?: string });
+
+      const result = await McpServerModel.findWithClusterContext(server.id);
+      expect(result).not.toBeNull();
+      expect(result?.cluster?.id).toBe(cluster.id);
+    });
+
+    test("returns null for non-existent server", async () => {
+      const result = await McpServerModel.findWithClusterContext(
+        crypto.randomUUID(),
+      );
+      expect(result).toBeNull();
     });
   });
 

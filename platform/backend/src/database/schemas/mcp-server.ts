@@ -12,6 +12,7 @@ import type {
   LocalMcpServerInstallationStatus,
   ResourceVisibilityScope,
 } from "@/types";
+import k8sClustersTable from "./k8s-cluster";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 import { team } from "./team";
@@ -60,6 +61,10 @@ const mcpServerTable = pgTable(
     oauthRefreshError: oauthRefreshErrorEnum("oauth_refresh_error"),
     oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", {
       mode: "date",
+    }),
+    k8sNamespace: text("k8s_namespace"),
+    k8sClusterId: uuid("k8s_cluster_id").references(() => k8sClustersTable.id, {
+      onDelete: "set null",
     }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

@@ -46,6 +46,7 @@ vi.mock("@kubernetes/client-node", () => {
     CoreV1Api: vi.fn(),
     AppsV1Api: vi.fn(),
     BatchV1Api: vi.fn(),
+    AuthorizationV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
     Exec: vi.fn(),
@@ -986,6 +987,94 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
     expect(result).toEqual([]);
+  });
+});
+
+describe("McpServerRuntimeManager.listNamespaces", () => {
+  test("returns empty array when k8sApi not initialised", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    const result = await manager.listNamespaces();
+    expect(result).toEqual([]);
+  });
+
+  test("returns sorted namespace names, filtering entries with no name", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    const mockListNamespace = vi.fn().mockResolvedValue({
+      items: [
+        { metadata: { name: "zebra" } },
+        { metadata: { name: "alpha" } },
+        { metadata: {} }, // no name → filtered out
+        { metadata: { name: "middle" } },
+      ],
+    });
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespace: mockListNamespace,
+    };
+
+    const result = await manager.listNamespaces();
+    expect(result).toEqual(["alpha", "middle", "zebra"]);
+  });
+
+  test("returns empty array when API throws", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespace: vi.fn().mockRejectedValue(new Error("network error")),
+    };
+
+    const result = await manager.listNamespaces();
+    expect(result).toEqual([]);
+  });
+});
+
+describe("McpServerRuntimeManager.canWriteToNamespace", () => {
+  test("returns false when k8sAuthzApi not initialised", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    const result = await manager.canWriteToNamespace("test-ns");
+    expect(result).toBe(false);
+  });
+
+  test("returns true when API responds with allowed: true", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sAuthzApi: unknown }).k8sAuthzApi = {
+      createSelfSubjectAccessReview: vi
+        .fn()
+        .mockResolvedValue({ status: { allowed: true } }),
+    };
+
+    const result = await manager.canWriteToNamespace("test-ns");
+    expect(result).toBe(true);
+  });
+
+  test("returns false when API responds with allowed: false", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sAuthzApi: unknown }).k8sAuthzApi = {
+      createSelfSubjectAccessReview: vi
+        .fn()
+        .mockResolvedValue({ status: { allowed: false } }),
+    };
+
+    const result = await manager.canWriteToNamespace("test-ns");
+    expect(result).toBe(false);
+  });
+
+  test("propagates error when API throws", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sAuthzApi: unknown }).k8sAuthzApi = {
+      createSelfSubjectAccessReview: vi
+        .fn()
+        .mockRejectedValue(new Error("network error")),
+    };
+
+    await expect(manager.canWriteToNamespace("test-ns")).rejects.toThrow(
+      "network error",
+    );
   });
 });
 

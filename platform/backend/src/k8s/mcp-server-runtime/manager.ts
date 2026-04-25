@@ -1,17 +1,21 @@
-import type * as k8s from "@kubernetes/client-node";
+import * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
+  isK8sNotFoundError,
   loadKubeConfig,
+  loadKubeConfigFromString,
   sanitizeLabelValue,
+  type K8sClients,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
   InternalMcpCatalogModel,
+  K8sClusterModel,
   McpHttpSessionModel,
   McpServerModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { McpServer } from "@/types";
+import type { K8sCluster, McpServer } from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -30,6 +34,7 @@ import type {
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
+  private k8sAuthzApi?: k8s.AuthorizationV1Api;
   private k8sAttach?: k8s.Attach;
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
@@ -48,6 +53,7 @@ export class McpServerRuntimeManager {
 
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
+      this.k8sAuthzApi = clients.authzApi;
       this.k8sAttach = clients.attach;
       this.k8sExec = clients.exec;
       this.k8sLog = clients.log;
@@ -57,6 +63,7 @@ export class McpServerRuntimeManager {
       this.status = "error";
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
+      this.k8sAuthzApi = undefined;
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
@@ -159,6 +166,71 @@ export class McpServerRuntimeManager {
   }
 
   /**
+   * Returns the default K8s namespace from platform configuration.
+   */
+  getDefaultNamespace(): string {
+    return this.namespace;
+  }
+
+  /**
+   * Lists all namespaces available in the given cluster (or default cluster if none specified).
+   * Returns names sorted alphabetically.
+   */
+  async listNamespaces(cluster?: K8sCluster | null): Promise<string[]> {
+    const api = cluster
+      ? await getClusterCoreApi(cluster)
+      : this.k8sApi;
+
+    if (!api) {
+      return [];
+    }
+
+    try {
+      const response = await api.listNamespace();
+      return (response.items ?? [])
+        .map((ns) => ns.metadata?.name ?? "")
+        .filter(Boolean)
+        .sort();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Checks whether the service account has permission to create deployments in the given namespace.
+   */
+  async canWriteToNamespace(
+    namespace: string,
+    cluster?: K8sCluster | null,
+  ): Promise<boolean> {
+    let authApi: k8s.AuthorizationV1Api | undefined;
+    if (cluster) {
+      const kc = loadKubeConfigFromString(cluster.kubeconfig);
+      authApi = kc.makeApiClient(k8s.AuthorizationV1Api);
+    } else {
+      authApi = this.k8sAuthzApi;
+    }
+
+    if (!authApi) {
+      return false;
+    }
+
+    const response = await authApi.createSelfSubjectAccessReview({
+      body: {
+        spec: {
+          resourceAttributes: {
+            namespace,
+            verb: "create",
+            resource: "deployments",
+            group: "apps",
+          },
+        },
+      },
+    });
+    return response.status?.allowed === true;
+  }
+
+  /**
    * Verify that we can connect to Kubernetes
    */
   private async verifyK8sConnection(): Promise<void> {
@@ -207,6 +279,31 @@ export class McpServerRuntimeManager {
       if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
         throw new Error("Kubernetes clients not initialized");
       }
+
+      // Resolve custom cluster if specified; fall back to platform (default) clients
+      let clusterClients: K8sClients | null = null;
+      if (mcpServer.k8sClusterId) {
+        const cluster = await K8sClusterModel.findByIdInternal(
+          mcpServer.k8sClusterId,
+        );
+        if (cluster) {
+          const kc = loadKubeConfigFromString(cluster.kubeconfig);
+          const targetNamespace = catalogItem?.k8sNamespace ?? this.namespace;
+          clusterClients = createK8sClients(kc, targetNamespace);
+        }
+      }
+
+      const activeK8sApi = clusterClients?.coreApi ?? this.k8sApi;
+      const activeK8sAppsApi = clusterClients?.appsApi ?? this.k8sAppsApi;
+      const activeK8sAttach = clusterClients
+        ? new k8s.Attach(clusterClients.kubeConfig)
+        : this.k8sAttach;
+      const activeK8sLog = clusterClients
+        ? new k8s.Log(clusterClients.kubeConfig)
+        : this.k8sLog;
+      const activeK8sExec = clusterClients
+        ? new k8s.Exec(clusterClients.kubeConfig)
+        : this.k8sExec;
 
       // If environmentValues not provided but server has a secretId,
       // fetch the secret values to use as environmentValues.
@@ -274,15 +371,16 @@ export class McpServerRuntimeManager {
 
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        k8sApi: activeK8sApi,
+        k8sAppsApi: activeK8sAppsApi,
+        k8sAttach: activeK8sAttach,
+        k8sLog: activeK8sLog,
+        namespace: mcpServer.k8sNamespace ?? this.namespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
-        k8sExec: this.k8sExec,
+        k8sExec: activeK8sExec,
+        inheritPlatformScheduling: !clusterClients,
       });
 
       // Register the deployment BEFORE starting it
@@ -418,18 +516,43 @@ export class McpServerRuntimeManager {
         return undefined;
       }
 
+      // Resolve custom cluster if specified; fall back to platform (default) clients
+      let lazyClusterClients: K8sClients | null = null;
+      if (mcpServer.k8sClusterId) {
+        const cluster = await K8sClusterModel.findByIdInternal(
+          mcpServer.k8sClusterId,
+        );
+        if (cluster) {
+          const kc = loadKubeConfigFromString(cluster.kubeconfig);
+          lazyClusterClients = createK8sClients(kc, this.namespace);
+        }
+      }
+
+      const lazyK8sApi = lazyClusterClients?.coreApi ?? this.k8sApi;
+      const lazyK8sAppsApi = lazyClusterClients?.appsApi ?? this.k8sAppsApi;
+      const lazyK8sAttach = lazyClusterClients
+        ? new k8s.Attach(lazyClusterClients.kubeConfig)
+        : this.k8sAttach;
+      const lazyK8sLog = lazyClusterClients
+        ? new k8s.Log(lazyClusterClients.kubeConfig)
+        : this.k8sLog;
+      const lazyK8sExec = lazyClusterClients
+        ? new k8s.Exec(lazyClusterClients.kubeConfig)
+        : this.k8sExec;
+
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        k8sApi: lazyK8sApi,
+        k8sAppsApi: lazyK8sAppsApi,
+        k8sAttach: lazyK8sAttach,
+        k8sLog: lazyK8sLog,
+        namespace: mcpServer.k8sNamespace ?? this.namespace,
         catalogItem,
-        k8sExec: this.k8sExec,
+        k8sExec: lazyK8sExec,
+        inheritPlatformScheduling: !lazyClusterClients,
       });
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
@@ -515,6 +638,57 @@ export class McpServerRuntimeManager {
       );
       throw error;
     }
+  }
+
+  async restartServerInNewNamespace(
+    mcpServerId: string,
+    newNamespace: string | null,
+  ): Promise<void> {
+    return this.restartServerInNewLocation(mcpServerId, newNamespace, undefined);
+  }
+
+  async restartServerInNewLocation(
+    mcpServerId: string,
+    newNamespace: string | null | undefined,
+    newClusterId: string | null | undefined,
+  ): Promise<void> {
+    logger.info(
+      { mcpServerId, newNamespace, newClusterId },
+      "Migrating MCP server to new location",
+    );
+
+    // Capture old namespace and deployment name before stopping
+    const mcpServerBeforeStop = await McpServerModel.findById(mcpServerId);
+    if (!mcpServerBeforeStop) {
+      throw new Error(`MCP server ${mcpServerId} not found`);
+    }
+    const oldNamespace = mcpServerBeforeStop.k8sNamespace ?? this.namespace;
+    const deploymentName = K8sDeployment.constructDeploymentName(mcpServerBeforeStop);
+
+    await this.stopServer(mcpServerId);
+    await this.waitForDeploymentDeletion(deploymentName, oldNamespace);
+
+    // Persist the new namespace/cluster in DB
+    const updates: Parameters<typeof McpServerModel.update>[1] = {};
+    if (newNamespace !== undefined) updates.k8sNamespace = newNamespace;
+    if (newClusterId !== undefined) updates.k8sClusterId = newClusterId ?? undefined;
+    await McpServerModel.update(mcpServerId, updates);
+
+    // Re-read full server record with updated location
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (!mcpServer) {
+      throw new Error(
+        `MCP server ${mcpServerId} not found after location update`,
+      );
+    }
+
+    // Create resources in the new location
+    await this.startServer(mcpServer);
+
+    logger.info(
+      { mcpServerId, newNamespace, newClusterId },
+      "MCP server migrated to new location successfully",
+    );
   }
 
   /**
@@ -780,6 +954,31 @@ export class McpServerRuntimeManager {
     }
   }
 
+  private async waitForDeploymentDeletion(
+    deploymentName: string,
+    namespace: string,
+    maxAttempts = 30,
+    intervalMs = 2000,
+  ): Promise<void> {
+    if (!this.k8sAppsApi) return;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        await this.k8sAppsApi.readNamespacedDeployment({
+          name: deploymentName,
+          namespace,
+        });
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      } catch (err) {
+        if (isK8sNotFoundError(err)) return;
+        throw err;
+      }
+    }
+    logger.warn(
+      { deploymentName, namespace, maxAttempts },
+      "Deployment not deleted after max attempts, proceeding anyway",
+    );
+  }
+
   /**
    * Backfill `team-id` labels on existing regcred secrets that were created
    * before this label was introduced. Uses the installed servers list to map
@@ -876,3 +1075,10 @@ export class McpServerRuntimeManager {
 }
 
 export default new McpServerRuntimeManager();
+
+async function getClusterCoreApi(
+  cluster: K8sCluster,
+): Promise<k8s.CoreV1Api> {
+  const kc = loadKubeConfigFromString(cluster.kubeconfig);
+  return kc.makeApiClient(k8s.CoreV1Api);
+}

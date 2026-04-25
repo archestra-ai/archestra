@@ -47,6 +47,7 @@ export interface TestFixtures {
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
+  listK8sNamespaces: typeof listK8sNamespaces;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
   createTeam: typeof createTeam;
@@ -475,14 +476,28 @@ const installMcpServer = async (
     environmentValues?: Record<string, string>;
     accessToken?: string;
     agentIds?: string[];
+    k8sClusterId?: string;
+    k8sNamespace?: string;
   },
+  options?: { ignoreStatusCheck?: boolean },
 ) =>
   makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/mcp_server",
     data: serverData,
+    ignoreStatusCheck: options?.ignoreStatusCheck,
   });
+
+const listK8sNamespaces = async (request: APIRequestContext) => {
+  const response = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/k8s/namespaces",
+  });
+  const data = await response.json();
+  return data.namespaces as string[];
+};
 
 /**
  * Uninstall an MCP server
@@ -1224,6 +1239,9 @@ export const test = base.extend<TestFixtures>({
   },
   uninstallMcpServer: async ({}, use) => {
     await use(uninstallMcpServer);
+  },
+  listK8sNamespaces: async ({}, use) => {
+    await use(listK8sNamespaces);
   },
   createRole: async ({}, use) => {
     await use(createRole);

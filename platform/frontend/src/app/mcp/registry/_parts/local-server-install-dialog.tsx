@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import { K8sClusterNamespaceField } from "./k8s-cluster-namespace-field";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -82,6 +83,8 @@ export interface LocalServerInstallResult {
   isByosVault?: boolean;
   /** Kubernetes service account for the MCP server pod */
   serviceAccount?: string;
+  /** Custom Kubernetes cluster ID (null = default platform cluster) */
+  k8sClusterId?: string | null;
 }
 
 interface LocalServerInstallDialogProps {
@@ -134,6 +137,8 @@ export function LocalServerInstallDialog({
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
     catalogItem?.localConfig?.serviceAccount,
   );
+  const [k8sClusterId, setK8sClusterId] = useState<string | null>(null);
+  const [k8sNamespace, setK8sNamespace] = useState<string>("");
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
@@ -212,6 +217,7 @@ export function LocalServerInstallDialog({
   >({});
 
   const byosEnabled = useFeature("byosEnabled");
+  const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 
@@ -334,6 +340,7 @@ export function LocalServerInstallDialog({
           secretFileVars.length > 0 ||
           hasPromptedSensitiveUserConfig),
       serviceAccount: serviceAccount || undefined,
+      k8sClusterId: k8sClusterId ?? undefined,
     });
 
     // Reset form
@@ -376,6 +383,8 @@ export function LocalServerInstallDialog({
     setVaultSecrets({});
     setUserConfigVaultSecrets({});
     setServiceAccount(catalogItem?.localConfig?.serviceAccount);
+    setK8sClusterId(null);
+    setK8sNamespace("");
   };
 
   const handleClose = () => {
@@ -552,6 +561,16 @@ export function LocalServerInstallDialog({
         <ServiceAccountField
           value={serviceAccount}
           onChange={setServiceAccount}
+          disabled={isInstalling}
+        />
+      )}
+
+      {canInstall && isLocalMcpEnabled && (
+        <K8sClusterNamespaceField
+          clusterId={k8sClusterId}
+          namespace={k8sNamespace}
+          onClusterChange={setK8sClusterId}
+          onNamespaceChange={setK8sNamespace}
           disabled={isInstalling}
         />
       )}

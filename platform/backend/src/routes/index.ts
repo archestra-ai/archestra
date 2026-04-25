@@ -11,6 +11,7 @@ export { default as configRoutes } from "./config";
 export { default as healthRoutes } from "./health";
 export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
+export { default as k8sRoutes } from "./k8s";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
 export { default as knowledgeBaseRoutes } from "./knowledge-base";

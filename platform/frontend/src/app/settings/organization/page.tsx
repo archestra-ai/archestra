@@ -3,6 +3,7 @@
 import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { useFeature } from "@/lib/config/config.query";
 import {
   SettingsCardHeader,
   SettingsSaveBar,
@@ -36,6 +37,7 @@ import {
   sanitizeOnboardingWizard,
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
+import { K8sClustersSection } from "./_components/k8s-clusters-section";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -47,6 +49,7 @@ export default function OrganizationSettingsPage() {
   const [hasThemeChanges, setHasThemeChanges] = useState(false);
   const queryClient = useQueryClient();
   const { data: organization } = useOrganization();
+  const isK8sEnabled = useFeature("orchestratorK8sRuntime");
 
   const orgTheme = useOrgTheme();
   const {
@@ -412,6 +415,14 @@ export default function OrganizationSettingsPage() {
           <OrganizationTokenSection />
         </SettingsSectionStack>
       </div>
+
+      {/* Kubernetes Clusters Section */}
+      {isK8sEnabled && (
+        <div>
+          <h3 className="text-lg font-medium mb-4">Kubernetes</h3>
+          <K8sClustersSection />
+        </div>
+      )}
 
       {/* Unified save bar for all changes (theme + fields) */}
       <SettingsSaveBar

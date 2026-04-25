@@ -35,7 +35,7 @@ _For Management:_
 - Reduce AI costs up to 96%
 - Get full visibility on AI adoption, usage and data access
 
-## 🚀 Quickstart with docker
+ ## 🚀 Quickstart with docker
 
 ```
 docker pull archestra/platform:latest;

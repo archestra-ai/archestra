@@ -1,12 +1,153 @@
 import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
+import MemberModel from "@/models/member";
+import TeamModel from "@/models/team";
 import { describe, expect, test } from "@/test";
 import {
   assignToolToAgent,
+  filterMcpServersAssignableToTarget,
   validateAssignment,
   validateCredentialSource,
   validateExecutionSource,
 } from "./agent-tool-assignment";
+
+describe("filterMcpServersAssignableToTarget", () => {
+  test("uses one organization membership lookup for org-scoped target filtering", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const memberOwner = await makeUser();
+    const outsideOwner = await makeUser();
+    await makeMember(memberOwner.id, organization.id, { role: "member" });
+
+    const getByUserIdSpy = vi.spyOn(MemberModel, "getByUserId");
+    const findUserIdsSpy = vi.spyOn(MemberModel, "findUserIdsInOrganization");
+
+    const filtered = await filterMcpServersAssignableToTarget({
+      mcpServers: [
+        { id: "member-owned", ownerId: memberOwner.id, teamId: null },
+        { id: "outside-owned", ownerId: outsideOwner.id, teamId: null },
+        { id: "org-owned", ownerId: null, teamId: null },
+      ],
+      target: {
+        organizationId: organization.id,
+        scope: "org",
+        authorId: null,
+        teamIds: [],
+      },
+    });
+
+    expect(filtered.map((server) => server.id)).toEqual([
+      "member-owned",
+      "org-owned",
+    ]);
+    expect(findUserIdsSpy).toHaveBeenCalledTimes(1);
+    expect(getByUserIdSpy).not.toHaveBeenCalled();
+
+    getByUserIdSpy.mockRestore();
+    findUserIdsSpy.mockRestore();
+  });
+
+  test("uses one team membership lookup for team-scoped personal server filtering", async ({
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const requester = await makeUser();
+    const selectedTeam = await makeTeam(organization.id, requester.id, {
+      name: "Selected Team",
+    });
+    const otherTeam = await makeTeam(organization.id, requester.id, {
+      name: "Other Team",
+    });
+    const selectedOwner = await makeUser();
+    const otherOwner = await makeUser();
+    await makeTeamMember(selectedTeam.id, selectedOwner.id);
+    await makeTeamMember(otherTeam.id, otherOwner.id);
+
+    const isUserInAnyTeamSpy = vi.spyOn(TeamModel, "isUserInAnyTeam");
+    const findUserIdsSpy = vi.spyOn(TeamModel, "findUserIdsInAnyTeam");
+
+    const filtered = await filterMcpServersAssignableToTarget({
+      mcpServers: [
+        { id: "selected-owner", ownerId: selectedOwner.id, teamId: null },
+        { id: "other-owner", ownerId: otherOwner.id, teamId: null },
+        { id: "selected-team", ownerId: requester.id, teamId: selectedTeam.id },
+        { id: "other-team", ownerId: requester.id, teamId: otherTeam.id },
+      ],
+      target: {
+        organizationId: organization.id,
+        scope: "team",
+        authorId: requester.id,
+        teamIds: [selectedTeam.id],
+      },
+    });
+
+    expect(filtered.map((server) => server.id)).toEqual([
+      "selected-owner",
+      "selected-team",
+    ]);
+    expect(findUserIdsSpy).toHaveBeenCalledTimes(1);
+    expect(isUserInAnyTeamSpy).not.toHaveBeenCalled();
+
+    isUserInAnyTeamSpy.mockRestore();
+    findUserIdsSpy.mockRestore();
+  });
+
+  test("uses the author's team IDs once for personal target filtering", async ({
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, organization.id, { role: "member" });
+    const authorTeam = await makeTeam(organization.id, author.id, {
+      name: "Author Team",
+    });
+    const otherTeam = await makeTeam(organization.id, author.id, {
+      name: "Other Team",
+    });
+    await makeTeamMember(authorTeam.id, author.id);
+
+    const getUserTeamIdsSpy = vi.spyOn(TeamModel, "getUserTeamIds");
+    const isUserInAnyTeamSpy = vi.spyOn(TeamModel, "isUserInAnyTeam");
+
+    const filtered = await filterMcpServersAssignableToTarget({
+      mcpServers: [
+        { id: "own-personal", ownerId: author.id, teamId: null },
+        { id: "other-personal", ownerId: crypto.randomUUID(), teamId: null },
+        { id: "author-team", ownerId: null, teamId: authorTeam.id },
+        { id: "other-team", ownerId: null, teamId: otherTeam.id },
+        { id: "org-owned", ownerId: null, teamId: null },
+      ],
+      target: {
+        organizationId: organization.id,
+        scope: "personal",
+        authorId: author.id,
+        teamIds: [],
+      },
+    });
+
+    expect(filtered.map((server) => server.id)).toEqual([
+      "own-personal",
+      "author-team",
+      "org-owned",
+    ]);
+    expect(getUserTeamIdsSpy).toHaveBeenCalledTimes(1);
+    expect(isUserInAnyTeamSpy).not.toHaveBeenCalled();
+
+    getUserTeamIdsSpy.mockRestore();
+    isUserInAnyTeamSpy.mockRestore();
+  });
+});
 
 describe("validateCredentialSource", () => {
   test("returns a validation error when a personal credential owner cannot access the target resource", async ({

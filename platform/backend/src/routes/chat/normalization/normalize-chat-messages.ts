@@ -62,27 +62,42 @@ function dedupeToolParts(
 function stripDanglingToolCallsFromMessages(messages: ChatMessage[]) {
   const sanitizedMessages = stripDanglingToolCalls(messages);
 
-  return sanitizedMessages.map((message, index) => {
-    const originalMessage = messages[index];
-    const originalCount = originalMessage?.parts?.length ?? 0;
-    const sanitizedCount = message.parts?.length ?? 0;
+  return sanitizedMessages
+    .map((message, index) => {
+      const originalMessage = messages[index];
+      const originalCount = originalMessage?.parts?.length ?? 0;
+      const sanitizedCount = message.parts?.length ?? 0;
 
-    if (sanitizedCount === originalCount) {
+      if (sanitizedCount === originalCount) {
+        return message;
+      }
+
+      logger.warn(
+        {
+          messageId: message.id,
+          role: message.role,
+          originalCount,
+          sanitizedCount,
+        },
+        "[normalizeChatMessages] Removed dangling tool calls from message",
+      );
+
       return message;
-    }
-
-    logger.warn(
-      {
-        messageId: message.id,
-        role: message.role,
-        originalCount,
-        sanitizedCount,
-      },
-      "[normalizeChatMessages] Removed dangling tool calls from message",
-    );
-
-    return message;
-  });
+    })
+    .filter((message) => {
+      // Drop messages left with no parts after normalization (e.g., assistant
+      // message that had only dangling tool-call parts stripped). An empty-parts
+      // message would produce content:[] which Bedrock Converse rejects.
+      const hasParts =
+        Array.isArray(message.parts) && message.parts.length > 0;
+      if (!hasParts) {
+        logger.warn(
+          { messageId: message.id, role: message.role },
+          "[normalizeChatMessages] Dropping message with empty parts after normalization",
+        );
+      }
+      return hasParts;
+    });
 }
 
 function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {

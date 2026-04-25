@@ -13,13 +13,17 @@ const k8sRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List available Kubernetes namespaces in the cluster",
         tags: ["K8s"],
         response: constructResponseSchema(
-          z.object({ namespaces: z.array(z.string()) }),
+          z.object({
+            namespaces: z.array(z.string()),
+            defaultNamespace: z.string(),
+          }),
         ),
       },
     },
     async (_request, reply) => {
       const namespaces = await McpServerRuntimeManager.listNamespaces();
-      return reply.send({ namespaces });
+      const defaultNamespace = McpServerRuntimeManager.getDefaultNamespace();
+      return reply.send({ namespaces, defaultNamespace });
     },
   );
 };

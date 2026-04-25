@@ -70,6 +70,7 @@ const internalMcpCatalogTable = pgTable(
       onDelete: "set null",
     }),
     scope: mcpCatalogScopeEnum("scope").notNull().default("org"),
+    k8sNamespace: text("k8s_namespace"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

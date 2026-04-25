@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "k8s_namespace" text;

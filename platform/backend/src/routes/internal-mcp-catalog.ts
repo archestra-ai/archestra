@@ -18,6 +18,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { validateK8sNamespace } from "@/services/k8s-namespace-validation";
 import {
   autoReinstallServer,
   requiresNewUserInputForReinstall,
@@ -611,6 +612,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Detect and validate namespace change for local servers
+      const incomingNamespace = restBody.k8sNamespace;
+      const namespaceChanged =
+        originalCatalogItem.serverType === "local" &&
+        incomingNamespace !== undefined &&
+        incomingNamespace !== originalCatalogItem.k8sNamespace;
+
+      if (namespaceChanged && incomingNamespace) {
+        await validateK8sNamespace(incomingNamespace);
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
@@ -622,8 +634,54 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const installedServers = await McpServerModel.findByCatalogId(id);
 
       if (installedServers.length > 0) {
-        // Check if new user input is required for reinstall
-        if (
+        if (namespaceChanged) {
+          // Namespace migration: stop in old namespace, start in new namespace
+          logger.info(
+            {
+              catalogId: id,
+              serverCount: installedServers.length,
+              newNamespace: catalogItem.k8sNamespace,
+            },
+            "Catalog namespace changed - migrating installed servers to new namespace",
+          );
+          setImmediate(async () => {
+            for (const server of installedServers) {
+              try {
+                await McpServerModel.update(server.id, {
+                  localInstallationStatus: "pending",
+                  localInstallationError: null,
+                });
+                await mcpServerRuntimeManager.restartServerInNewNamespace(
+                  server.id,
+                  catalogItem.k8sNamespace,
+                );
+                await McpServerModel.update(server.id, {
+                  localInstallationStatus: "success",
+                  localInstallationError: null,
+                });
+                logger.info(
+                  {
+                    serverId: server.id,
+                    newNamespace: catalogItem.k8sNamespace,
+                  },
+                  "Migrated MCP server to new namespace successfully",
+                );
+              } catch (error) {
+                const errorMessage =
+                  error instanceof Error ? error.message : "Unknown error";
+                logger.error(
+                  { err: error, serverId: server.id },
+                  "Failed to migrate MCP server to new namespace - marking for manual reinstall",
+                );
+                await McpServerModel.update(server.id, {
+                  reinstallRequired: true,
+                  localInstallationStatus: "error",
+                  localInstallationError: errorMessage,
+                });
+              }
+            }
+          });
+        } else if (
           requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
         ) {
           // Manual reinstall required: mark servers and let user trigger reinstall

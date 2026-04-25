@@ -26,6 +26,7 @@ import {
   findExternalIdentityProviderById,
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
+import { validateK8sNamespace } from "@/services/k8s-namespace-validation";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
   AgentScopeSchema,
@@ -160,9 +161,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         environmentValues,
         serviceAccount,
-        k8sNamespace,
+        k8sNamespace: k8sNamespaceFromRequest,
         ...restDataFromRequestBody
       } = body;
+      let k8sNamespace = k8sNamespaceFromRequest;
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
       } = {
@@ -211,6 +213,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           headers,
         });
 
+        // Fall back to catalog's k8sNamespace if not explicitly provided in the request
+        if (
+          !k8sNamespace &&
+          catalogItem.serverType === "local" &&
+          catalogItem.k8sNamespace
+        ) {
+          k8sNamespace = catalogItem.k8sNamespace;
+        }
+
         // Validate k8sNamespace: reject early before idempotent early-return paths
         if (k8sNamespace && catalogItem.serverType !== "local") {
           throw new ApiError(
@@ -219,33 +230,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         if (catalogItem.serverType === "local" && k8sNamespace) {
-          // need to list namespaces to reject non-existing because
-          // canWriteToNamespace returns allowed: true for them
-          const availableNamespaces =
-            await McpServerRuntimeManager.listNamespaces();
-          if (!availableNamespaces.includes(k8sNamespace)) {
-            throw new ApiError(
-              400,
-              `Kubernetes namespace "${k8sNamespace}" does not exist in the cluster.`,
-            );
-          }
-
-          let canWrite: boolean;
-          try {
-            canWrite =
-              await McpServerRuntimeManager.canWriteToNamespace(k8sNamespace);
-          } catch (err) {
-            throw new ApiError(
-              500,
-              `Failed to verify access to Kubernetes namespace "${k8sNamespace}": ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-          if (!canWrite) {
-            throw new ApiError(
-              400,
-              `No write access to Kubernetes namespace "${k8sNamespace}". Ensure the service account has permission to create deployments there.`,
-            );
-          }
+          await validateK8sNamespace(k8sNamespace);
         }
 
         // Validate no duplicate installations for this catalog item

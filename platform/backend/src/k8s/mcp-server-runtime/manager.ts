@@ -519,6 +519,40 @@ export class McpServerRuntimeManager {
     }
   }
 
+  async restartServerInNewNamespace(
+    mcpServerId: string,
+    newNamespace: string | null,
+  ): Promise<void> {
+    logger.info(
+      { mcpServerId, newNamespace },
+      "Migrating MCP server to new namespace",
+    );
+
+    // Stop and delete resources in the OLD namespace (reads current namespace from DB)
+    await this.stopServer(mcpServerId);
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Persist the new namespace in DB
+    await McpServerModel.update(mcpServerId, { k8sNamespace: newNamespace });
+
+    // Re-read full server record with updated namespace
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (!mcpServer) {
+      throw new Error(
+        `MCP server ${mcpServerId} not found after namespace update`,
+      );
+    }
+
+    // Create resources in the NEW namespace
+    await this.startServer(mcpServer);
+
+    logger.info(
+      { mcpServerId, newNamespace },
+      "MCP server migrated to new namespace successfully",
+    );
+  }
+
   /**
    * Check if an MCP server uses streamable HTTP transport
    */
@@ -780,6 +814,10 @@ export class McpServerRuntimeManager {
       );
       return [];
     }
+  }
+
+  getDefaultNamespace(): string {
+    return this.namespace;
   }
 
   async listNamespaces(): Promise<string[]> {

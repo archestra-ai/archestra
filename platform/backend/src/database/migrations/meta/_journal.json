@@ -1555,6 +1555,13 @@
       "when": 1745604541000,
       "tag": "0221_small_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1745622000000,
+      "tag": "0222_add_k8s_namespace_to_mcp_catalog",
+      "breakpoints": true
     }
   ]
 }

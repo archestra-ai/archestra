@@ -28,6 +28,40 @@ const {
   },
 } = config;
 
+export function captureRawProviderErrorInSentry(params: {
+  provider: string;
+  statusCode: number | undefined;
+  parsedError: unknown;
+  errorCode: string;
+  errorMessage: string;
+  errorType: string | undefined;
+  rawErrorJson: string;
+}): void {
+  Sentry.captureMessage("[ChatErrorMapper] rawErrorJson provider error", {
+    level: "error",
+    fingerprint: [
+      "chat-provider-error-raw-error-json",
+      params.provider,
+      String(params.statusCode ?? "unknown"),
+      params.errorCode,
+    ],
+    tags: {
+      provider: params.provider,
+      mapped_code: params.errorCode,
+      raw_error_json: "true",
+      ...(params.statusCode !== undefined
+        ? { status_code: String(params.statusCode) }
+        : {}),
+      ...(params.errorType ? { error_type: params.errorType } : {}),
+    },
+    extra: {
+      parsedError: params.parsedError,
+      errorMessage: params.errorMessage,
+      rawErrorJson: params.rawErrorJson,
+    },
+  });
+}
+
 /**
  * Safely load the profiling integration.
  * The @sentry/profiling-node package contains native bindings that can fail to load

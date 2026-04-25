@@ -544,6 +544,36 @@ class TeamModel {
     return isMember;
   }
 
+  static async findUserIdsInAnyTeam(params: {
+    teamIds: string[];
+    userIds: string[];
+  }): Promise<string[]> {
+    if (params.teamIds.length === 0 || params.userIds.length === 0) {
+      return [];
+    }
+
+    logger.debug(
+      { teamIds: params.teamIds, userCount: params.userIds.length },
+      "TeamModel.findUserIdsInAnyTeam: checking memberships",
+    );
+    const rows = await db
+      .select({ userId: schema.teamMembersTable.userId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          inArray(schema.teamMembersTable.teamId, params.teamIds),
+          inArray(schema.teamMembersTable.userId, params.userIds),
+        ),
+      );
+
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    logger.debug(
+      { teamIds: params.teamIds, userCount: userIds.length },
+      "TeamModel.findUserIdsInAnyTeam: completed",
+    );
+    return userIds;
+  }
+
   /**
    * Get all team IDs a user is a member of (used for authorization)
    */

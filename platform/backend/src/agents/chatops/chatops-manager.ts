@@ -9,6 +9,7 @@ import {
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
+  ChatOpsThreadAgentOverrideModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
@@ -615,11 +616,45 @@ export class ChatOpsManager {
       };
     }
 
+    // Check for a thread-level agent override (from a previous swap_agent call).
+    // This ensures swaps are scoped to the thread, not the channel binding.
+    const effectiveThreadId =
+      message.threadId ?? message.channelId ?? message.messageId;
+    const threadOverride = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      effectiveThreadId,
+    );
+
+    let resolvedAgent = agent;
+    if (threadOverride) {
+      const overrideAgent = await AgentModel.findById(threadOverride.agentId);
+      if (!overrideAgent) {
+        logger.warn(
+          {
+            agentId: threadOverride.agentId,
+            bindingId: binding.id,
+            threadId: effectiveThreadId,
+          },
+          "[ChatOps] Thread override agent not found, falling back to channel default",
+        );
+      } else if (overrideAgent.agentType !== "agent") {
+        logger.warn(
+          {
+            agentId: threadOverride.agentId,
+            agentType: overrideAgent.agentType,
+          },
+          "[ChatOps] Thread override agent has unsupported type, falling back to channel default",
+        );
+      } else {
+        resolvedAgent = overrideAgent;
+      }
+    }
+
     // Resolve inline agent mention
     const { agentToUse, cleanedMessageText } =
       await this.resolveInlineAgentMention({
         messageText: message.text,
-        defaultAgent: agent,
+        defaultAgent: resolvedAgent,
       });
 
     // Security: Validate user has access to the agent
@@ -1275,6 +1310,9 @@ export class ChatOpsManager {
               ? message.attachments
               : undefined;
 
+          const effectiveThreadId =
+            message.threadId ?? message.channelId ?? message.messageId;
+
           const initialResult = await executeA2AMessage({
             agentId: agent.id,
             organizationId: binding.organizationId,
@@ -1284,22 +1322,24 @@ export class ChatOpsManager {
             source,
             attachments,
             chatOpsBindingId: binding.id,
+            chatOpsThreadId: effectiveThreadId,
           });
 
           const initialResponse = stripThinkingBlocks(initialResult.text || "");
 
-          // If swap_agent/swap_to_default_agent changed this channel's binding,
-          // immediately hand off to the new agent in the same chatops turn only
-          // when the routing agent did not already produce a visible reply.
-          // Otherwise the handoff would replay routing text like
-          // "switch me to sales" into the target agent and can cause a swap loop.
-          const updatedBinding = await ChatOpsChannelBindingModel.findById(
-            binding.id,
-          );
-          const swappedAgentId = updatedBinding?.agentId ?? null;
+          // If swap_agent/swap_to_default_agent created a thread-level override
+          // during execution, hand off to the new agent in the same chatops turn
+          // only when the routing agent did not already produce a visible reply.
+          const postExecOverride =
+            await ChatOpsThreadAgentOverrideModel.findByThread(
+              binding.id,
+              effectiveThreadId,
+            );
 
-          if (swappedAgentId && swappedAgentId !== agent.id) {
-            const swappedAgent = await AgentModel.findById(swappedAgentId);
+          if (postExecOverride && postExecOverride.agentId !== agent.id) {
+            const swappedAgent = await AgentModel.findById(
+              postExecOverride.agentId,
+            );
             if (swappedAgent && swappedAgent.agentType === "agent") {
               if (initialResponse) {
                 return {
@@ -1314,10 +1354,11 @@ export class ChatOpsManager {
               logger.info(
                 {
                   bindingId: binding.id,
+                  threadId: effectiveThreadId,
                   previousAgentId: agent.id,
                   swappedAgentId: swappedAgent.id,
                 },
-                "[ChatOps] Agent binding changed during execution, handing off to swapped agent",
+                "[ChatOps] Thread agent override detected, handing off to swapped agent",
               );
 
               const handoffResult = await executeA2AMessage({
@@ -1329,11 +1370,15 @@ export class ChatOpsManager {
                 source,
                 attachments,
                 chatOpsBindingId: binding.id,
+                chatOpsThreadId: effectiveThreadId,
               });
 
               return {
                 result: handoffResult,
-                responseAgent: { id: swappedAgent.id, name: swappedAgent.name },
+                responseAgent: {
+                  id: swappedAgent.id,
+                  name: swappedAgent.name,
+                },
               };
             }
           }

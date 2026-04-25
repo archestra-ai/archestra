@@ -11,11 +11,11 @@ import logger from "@/logging";
 import {
   AgentModel,
   ChatOpsChannelBindingModel,
+  ChatOpsThreadAgentOverrideModel,
   ConversationModel,
   OrganizationModel,
   ScheduleTriggerRunModel,
 } from "@/models";
-import type { Agent } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
   catchError,
@@ -299,19 +299,42 @@ async function handleSwapAgent(params: {
     // - conversationId: synthetic isolation key for tool/session caching
     // Prefer the chatops binding whenever available.
     if (context.chatOpsBindingId) {
-      const updateResult = await updateChatOpsBindingAgent({
-        bindingId: context.chatOpsBindingId,
-        agent: targetAgent,
-        userId: context.userId,
-        organizationId: context.organizationId,
-      });
-
-      if (updateResult.error) {
-        return errorResult(updateResult.error);
+      if (!context.chatOpsThreadId) {
+        return errorResult(
+          "This tool requires thread context in chatops. Cannot determine which thread to swap.",
+        );
       }
 
-      if (!updateResult.binding) {
+      // Validate binding exists and user has permission
+      const binding = await ChatOpsChannelBindingModel.findById(
+        context.chatOpsBindingId,
+      );
+      if (!binding || binding.organizationId !== context.organizationId) {
         return errorResult("Failed to update chatops channel agent.");
+      }
+
+      // Personal agent scope check
+      if (targetAgent.scope === "personal") {
+        if (!binding.isDm) {
+          return errorResult(
+            "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
+          );
+        }
+        if (targetAgent.authorId !== context.userId) {
+          return errorResult(
+            "You can only assign your own personal agents to your DM.",
+          );
+        }
+      }
+
+      // Write thread-scoped override instead of mutating channel binding
+      const override = await ChatOpsThreadAgentOverrideModel.upsert(
+        context.chatOpsBindingId,
+        context.chatOpsThreadId,
+        targetAgent.id,
+      );
+      if (!override) {
+        return errorResult("Failed to update chatops thread agent.");
       }
     } else if (context.conversationId) {
       const llmSelection = await resolveConversationLlmSelectionForAgent({
@@ -418,19 +441,42 @@ async function handleSwapToDefaultAgent(params: {
     // - conversationId: synthetic isolation key for tool/session caching
     // Prefer the chatops binding whenever available.
     if (context.chatOpsBindingId) {
-      const updateResult = await updateChatOpsBindingAgent({
-        bindingId: context.chatOpsBindingId,
-        agent: targetAgent,
-        userId: context.userId,
-        organizationId: context.organizationId,
-      });
-
-      if (updateResult.error) {
-        return errorResult(updateResult.error);
+      if (!context.chatOpsThreadId) {
+        return errorResult(
+          "This tool requires thread context in chatops. Cannot determine which thread to swap.",
+        );
       }
 
-      if (!updateResult.binding) {
+      // Validate binding exists and user has permission
+      const binding = await ChatOpsChannelBindingModel.findById(
+        context.chatOpsBindingId,
+      );
+      if (!binding || binding.organizationId !== context.organizationId) {
         return errorResult("Failed to update chatops channel agent.");
+      }
+
+      // Personal agent scope check
+      if (targetAgent.scope === "personal") {
+        if (!binding.isDm) {
+          return errorResult(
+            "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
+          );
+        }
+        if (targetAgent.authorId !== context.userId) {
+          return errorResult(
+            "You can only assign your own personal agents to your DM.",
+          );
+        }
+      }
+
+      // Write thread-scoped override instead of mutating channel binding
+      const override = await ChatOpsThreadAgentOverrideModel.upsert(
+        context.chatOpsBindingId,
+        context.chatOpsThreadId,
+        targetAgent.id,
+      );
+      if (!override) {
+        return errorResult("Failed to update chatops thread agent.");
       }
     } else if (context.conversationId) {
       const llmSelection = await resolveConversationLlmSelectionForAgent({
@@ -480,37 +526,3 @@ async function handleSwapToDefaultAgent(params: {
   }
 }
 
-async function updateChatOpsBindingAgent(params: {
-  bindingId: string;
-  agent: Pick<Agent, "id" | "scope" | "authorId">;
-  userId: string;
-  organizationId: string;
-}) {
-  const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
-  if (!binding || binding.organizationId !== params.organizationId) {
-    return { binding: null };
-  }
-
-  if (params.agent.scope === "personal") {
-    if (!binding.isDm) {
-      return {
-        binding: null,
-        error:
-          "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
-      };
-    }
-
-    if (params.agent.authorId !== params.userId) {
-      return {
-        binding: null,
-        error: "You can only assign your own personal agents to your DM.",
-      };
-    }
-  }
-
-  return {
-    binding: await ChatOpsChannelBindingModel.update(params.bindingId, {
-      agentId: params.agent.id,
-    }),
-  };
-}

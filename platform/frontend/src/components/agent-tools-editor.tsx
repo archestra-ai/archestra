@@ -704,7 +704,7 @@ function McpServerPill({
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
-    () => new Set(assignedTools.map((assignment) => assignment.tool.id)),
+    () => new Set(assignedTools.map((at) => at.tool.id)),
     [assignedTools],
   );
   const currentAssignedToolIdsKey = useMemo(
@@ -801,7 +801,7 @@ function McpServerPill({
     return null;
   }
 
-  const assignedCount = currentAssignedToolIds.size;
+  const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
   const displayedCount = hasPendingChanges
     ? selectedToolIds.size

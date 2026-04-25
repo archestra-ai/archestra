@@ -8,6 +8,7 @@ type SearchToolsStructuredContent = {
   total: number;
   tools: Array<{
     toolName: string;
+    catalogName: string | null;
   }>;
 };
 
@@ -80,7 +81,7 @@ describe("search_tools", () => {
       description: "Search repositories by topic, language, or owner.",
       source: "mcp",
       server: "github",
-      catalogName: null,
+      catalogName: "GitHub MCP",
       inputParameters: [
         {
           name: "query",

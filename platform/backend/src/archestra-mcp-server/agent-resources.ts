@@ -266,6 +266,9 @@ export async function handleCreateResource<
       labels,
       agentType: targetAgentType,
     };
+    if (args.toolExposureMode !== undefined) {
+      createParams.toolExposureMode = args.toolExposureMode;
+    }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
       if (targetAgentType === "agent" && args.systemPrompt) {
@@ -434,6 +437,7 @@ export async function handleEditResource<
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
+    toolExposureMode?: ToolExposureMode;
   },
 >(params: {
   args: TArgs;
@@ -488,6 +492,9 @@ export async function handleEditResource<
     if (args.icon !== undefined) updateData.icon = args.icon;
     if (args.scope !== undefined) updateData.scope = args.scope;
     if (args.teams !== undefined) updateData.teams = args.teams;
+    if (args.toolExposureMode !== undefined) {
+      updateData.toolExposureMode = args.toolExposureMode;
+    }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);
     }

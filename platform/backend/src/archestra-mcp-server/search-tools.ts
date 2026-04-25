@@ -5,7 +5,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
-import { ToolModel } from "@/models";
+import { InternalMcpCatalogModel, ToolModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
 import { getAgentTools } from "./delegation";
 import {
@@ -126,10 +126,11 @@ const registry = defineArchestraTools([
         userId: context.userId,
       });
 
+      const preparedQuery = prepareSearchQuery(args.query);
       const rankedTools = searchableTools
         .map((tool) => ({
           tool,
-          score: scoreCandidate(tool, args.query),
+          score: scoreCandidate(tool, preparedQuery),
         }))
         .filter(({ score }) => score > 0)
         .sort(
@@ -193,9 +194,19 @@ async function getSearchableTools(params: {
         })
       : [];
 
+  const catalogNamesById = await getCatalogNamesById(filteredAssignedTools);
   const candidates = new Map<string, SearchCandidate>();
   for (const tool of filteredAssignedTools) {
-    candidates.set(tool.name, toAssignedToolCandidate(tool));
+    candidates.set(
+      tool.name,
+      toAssignedToolCandidate({
+        tool,
+        catalogName:
+          tool.catalogId != null
+            ? (catalogNamesById.get(tool.catalogId) ?? null)
+            : null,
+      }),
+    );
   }
 
   for (const tool of delegationTools) {
@@ -205,12 +216,16 @@ async function getSearchableTools(params: {
   return Array.from(candidates.values());
 }
 
-function toAssignedToolCandidate(tool: {
-  name: string;
-  description: string | null;
-  parameters?: Record<string, unknown>;
-  catalogId: string | null;
+function toAssignedToolCandidate(params: {
+  tool: {
+    name: string;
+    description: string | null;
+    parameters?: Record<string, unknown>;
+    catalogId: string | null;
+  };
+  catalogName: string | null;
 }): SearchCandidate {
+  const { catalogName, tool } = params;
   const source = archestraMcpBranding.isToolName(tool.name)
     ? "archestra"
     : "mcp";
@@ -227,7 +242,7 @@ function toAssignedToolCandidate(tool: {
     description: tool.description,
     source,
     server: parsedToolName.serverName ?? null,
-    catalogName: source === "mcp" ? null : null,
+    catalogName: source === "mcp" ? catalogName : null,
     inputParameters,
     searchText: buildSearchText({
       name: tool.name,
@@ -258,6 +273,22 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
       schema: tool.inputSchema as Record<string, unknown>,
     }),
   };
+}
+
+async function getCatalogNamesById(
+  tools: Array<{ catalogId: string | null }>,
+): Promise<Map<string, string>> {
+  const catalogIds = Array.from(
+    new Set(
+      tools
+        .map((tool) => tool.catalogId)
+        .filter((catalogId): catalogId is string => catalogId != null),
+    ),
+  );
+  const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
+  return new Map(
+    Array.from(catalogs.values()).map((catalog) => [catalog.id, catalog.name]),
+  );
 }
 
 function buildSearchText(params: {
@@ -308,13 +339,28 @@ function summarizeInputParameters(schema: Record<string, unknown>) {
     );
 }
 
-function scoreCandidate(candidate: SearchCandidate, query: string): number {
+type PreparedSearchQuery = {
+  normalizedQuery: string;
+  tokens: string[];
+};
+
+function prepareSearchQuery(query: string): PreparedSearchQuery {
   const normalizedQuery = normalizeText(query);
+  return {
+    normalizedQuery,
+    tokens: normalizedQuery ? tokenize(normalizedQuery) : [],
+  };
+}
+
+function scoreCandidate(
+  candidate: SearchCandidate,
+  query: PreparedSearchQuery,
+): number {
+  const { normalizedQuery, tokens } = query;
   if (!normalizedQuery) {
     return 0;
   }
 
-  const tokens = tokenize(normalizedQuery);
   const { name, title, description, argNames, argDescriptions, combined } =
     candidate.searchText;
 

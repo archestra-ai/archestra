@@ -4,7 +4,12 @@ import {
   TOOL_GET_LLM_PROXY_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
-import { AgentScopeSchema, UpdateAgentSchemaBase, UuidIdSchema } from "@/types";
+import {
+  AgentScopeSchema,
+  ToolExposureModeSchema,
+  UpdateAgentSchemaBase,
+  UuidIdSchema,
+} from "@/types";
 import {
   AgentDetailOutputSchema,
   CreateBaseToolArgsSchema,
@@ -49,6 +54,9 @@ const EditLlmProxyToolArgsSchema = z
       .describe("New name for the LLM proxy."),
     scope: AgentScopeSchema.optional().describe(
       "Updated visibility scope for the LLM proxy.",
+    ),
+    toolExposureMode: ToolExposureModeSchema.optional().describe(
+      "How tools should be exposed to MCP clients and models.",
     ),
     teams: z
       .array(UuidIdSchema)

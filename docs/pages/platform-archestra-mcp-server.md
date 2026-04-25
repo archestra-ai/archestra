@@ -184,6 +184,7 @@ Required RBAC permission: `agent:update`
 | `name` | `string` | No | New name for the agent. |
 | `connectorIds` | `string[]` | No | Replace the agent's directly assigned knowledge connectors with this set. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the agent. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be exposed to MCP clients and models. |
 | `suggestedPrompts` | `object[]` | No | Replace the agent's suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown to users for this suggested prompt. |
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |
@@ -272,6 +273,7 @@ Required RBAC permission: `llmProxy:update`
 | `labels[].value` | `string` | Yes |  |
 | `name` | `string` | No | New name for the LLM proxy. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the LLM proxy. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be exposed to MCP clients and models. |
 | `teams` | `string[]` | No | Replace the teams attached to a team-scoped LLM proxy. |
 
 
@@ -358,6 +360,7 @@ Required RBAC permission: `mcpGateway:update`
 | `labels[].value` | `string` | Yes |  |
 | `name` | `string` | No | New name for the MCP gateway. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the MCP gateway. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be exposed to MCP clients and models. |
 | `teams` | `string[]` | No | Replace the teams attached to a team-scoped MCP gateway. |
 | `knowledgeBaseIds` | `string[]` | No | Replace the MCP gateway's assigned knowledge bases with this set. |
 | `connectorIds` | `string[]` | No | Replace the MCP gateway's directly assigned knowledge connectors with this set. |

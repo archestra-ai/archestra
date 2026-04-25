@@ -2,14 +2,8 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 
-const HIDDEN_ARCHESTRA_META_TOOL_SHORT_NAMES = new Set([
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-]);
 const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
 );
@@ -34,7 +28,7 @@ export function getDefaultArchestraToolIds(
   if (!tools || tools.length === 0) return null;
 
   const toolIds = new Set(
-    filterSelectableCatalogTools(ARCHESTRA_MCP_CATALOG_ID, tools)
+    tools
       .filter((t) => {
         const shortName = parseFullToolName(t.name).toolName;
         return (
@@ -48,22 +42,6 @@ export function getDefaultArchestraToolIds(
   if (toolIds.size === 0) return null;
 
   return { toolIds, catalogIndex };
-}
-
-export function filterSelectableCatalogTools<
-  T extends { id: string; name: string },
->(catalogId: string, tools: T[]): T[] {
-  if (catalogId !== ARCHESTRA_MCP_CATALOG_ID) {
-    return tools;
-  }
-
-  return tools.filter((tool) => {
-    const shortName = parseFullToolName(tool.name).toolName;
-    return (
-      shortName === null ||
-      !HIDDEN_ARCHESTRA_META_TOOL_SHORT_NAMES.has(shortName)
-    );
-  });
 }
 
 export function sortCatalogItems<

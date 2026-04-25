@@ -8,6 +8,8 @@ import {
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
@@ -1816,7 +1818,7 @@ describe("ToolModel", () => {
       );
     });
 
-    test("findByCatalogId excludes query_knowledge_sources (auto-injected, not user-assignable)", async ({
+    test("findByCatalogId excludes built-in tools that are not user-assignable", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1828,6 +1830,8 @@ describe("ToolModel", () => {
       const toolNames = tools.map((t) => t.name);
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
       expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
     });
 

@@ -45,7 +45,6 @@ import {
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import {
-  filterSelectableCatalogTools,
   getDefaultArchestraToolIds,
   sortAndFilterTools,
   sortCatalogItems,
@@ -686,10 +685,6 @@ function McpServerPill({
   const { data: allTools = [], isLoading: isLoadingTools } = useCatalogTools(
     catalogItem.id,
   );
-  const selectableTools = useMemo(
-    () => filterSelectableCatalogTools(catalogItem.id, allTools),
-    [catalogItem.id, allTools],
-  );
 
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({
@@ -709,17 +704,8 @@ function McpServerPill({
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
-    () =>
-      new Set(
-        assignedTools
-          .filter(
-            (assignment) =>
-              filterSelectableCatalogTools(catalogItem.id, [assignment.tool])
-                .length,
-          )
-          .map((assignment) => assignment.tool.id),
-      ),
-    [assignedTools, catalogItem.id],
+    () => new Set(assignedTools.map((assignment) => assignment.tool.id)),
+    [assignedTools],
   );
   const currentAssignedToolIdsKey = useMemo(
     () => [...currentAssignedToolIds].sort().join(","),
@@ -777,17 +763,17 @@ function McpServerPill({
   // Use a ref so auto-select only fires once (at mount) and doesn't fight user deselections.
   const pendingSelectAllRef = useRef(initialPendingChanges?.selectAll ?? false);
   useEffect(() => {
-    if (!pendingSelectAllRef.current || selectableTools.length === 0) return;
+    if (!pendingSelectAllRef.current || allTools.length === 0) return;
 
     if (selectedToolIds.size === 0) {
       // Tools loaded but nothing selected — auto-select all
-      setSelectedToolIds(new Set(selectableTools.map((t) => t.id)));
+      setSelectedToolIds(new Set(allTools.map((t) => t.id)));
     }
     // Clear the flag regardless so we don't fight user deselections
     pendingSelectAllRef.current = false;
     // Depend on .size (not the full set) intentionally — the effect only cares
     // whether the selection is empty, and the ref guard prevents re-firing anyway.
-  }, [selectedToolIds.size, selectableTools]);
+  }, [selectedToolIds.size, allTools]);
 
   // Report pending changes to parent whenever local state changes.
   // The pill can only be rendered when isActive !== false, so always report as active
@@ -816,7 +802,7 @@ function McpServerPill({
   }
 
   const assignedCount = currentAssignedToolIds.size;
-  const totalCount = selectableTools.length;
+  const totalCount = allTools.length;
   const displayedCount = hasPendingChanges
     ? selectedToolIds.size
     : assignedCount;
@@ -944,7 +930,7 @@ function McpServerPill({
         ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <ToolChecklist
-              tools={selectableTools}
+              tools={allTools}
               selectedToolIds={selectedToolIds}
               onSelectionChange={(ids) => {
                 setSelectedToolIds(ids);

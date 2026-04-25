@@ -9,6 +9,8 @@ import {
   parseFullToolName,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import {
   and,
@@ -1013,6 +1015,14 @@ class ToolModel {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
+    const hiddenToolNames =
+      catalogId === ARCHESTRA_MCP_CATALOG_ID
+        ? [
+            brandedKnowledgeToolName,
+            archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+            archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME),
+          ]
+        : [brandedKnowledgeToolName];
     const allTools = await db
       .select({
         id: schema.toolsTable.id,
@@ -1025,7 +1035,9 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.catalogId, catalogId),
-          ne(schema.toolsTable.name, brandedKnowledgeToolName),
+          ...hiddenToolNames.map((toolName) =>
+            ne(schema.toolsTable.name, toolName),
+          ),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));

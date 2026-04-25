@@ -41,7 +41,9 @@ const SearchToolsOutputSchema = z.object({
   total: z.number().int().nonnegative().describe("Number of returned tools."),
   tools: z.array(
     z.object({
-      toolName: z.string().describe("Exact tool name to pass to run_tool."),
+      toolName: z
+        .string()
+        .describe(`Exact tool name to pass to ${TOOL_RUN_TOOL_SHORT_NAME}.`),
       title: z
         .string()
         .nullable()
@@ -108,14 +110,13 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SEARCH_TOOLS_SHORT_NAME,
     title: "Search Tools",
-    description:
-      "Search the agent's available tools on demand. Returns exact tool names plus compact input summaries so you can choose the right tool and then call run_tool with that exact name.",
+    description: `Search the agent's available tools on demand. Returns exact tool names plus compact input summaries so you can choose the right tool and then call ${TOOL_RUN_TOOL_SHORT_NAME} with that exact name.`,
     schema: SearchToolsArgsSchema,
     outputSchema: SearchToolsOutputSchema,
     async handler({ args, context }) {
       if (!context.agentId) {
         return errorResult(
-          "search_tools requires agent context to inspect assigned tools",
+          `${TOOL_SEARCH_TOOLS_SHORT_NAME} requires agent context to inspect assigned tools`,
         );
       }
 

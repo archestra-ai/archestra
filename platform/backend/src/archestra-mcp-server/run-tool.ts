@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   isAgentTool,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
 import logger from "@/logging";
@@ -38,8 +39,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description:
-      "Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using search_tools first when you need to discover the right exact name. Target-tool RBAC, argument validation, and output validation all still apply.",
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. Target-tool RBAC, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -66,14 +66,14 @@ const registry = defineArchestraTools([
           resolvedName,
           route,
         },
-        "run_tool dispatching",
+        `${TOOL_RUN_TOOL_SHORT_NAME} dispatching`,
       );
 
       const runToolFullName = getArchestraToolFullName(
         TOOL_RUN_TOOL_SHORT_NAME,
       );
       if (resolvedName === runToolFullName) {
-        return errorResult("run_tool cannot invoke itself");
+        return errorResult(`${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself`);
       }
 
       if (route === "archestra") {
@@ -86,7 +86,7 @@ const registry = defineArchestraTools([
       // Third-party MCP Gateway path.
       if (!context.agentId) {
         return errorResult(
-          "run_tool requires agent context to dispatch to third-party MCP tools",
+          `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
         );
       }
 

@@ -19,6 +19,8 @@ import {
   MAX_SUGGESTED_PROMPTS,
   providerDisplayNames,
   type SupportedProvider,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -1499,9 +1501,12 @@ export function AgentDialog({
                           Search-and-run tool mode
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Expose only the built-in `search_tools` and `run_tool`
-                          tools. Other assigned tools stay hidden from MCP
-                          `tools/list`, but remain searchable and runnable.{" "}
+                          Expose only the built-in{" "}
+                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                          <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> tools. Other
+                          assigned tools stay hidden from MCP{" "}
+                          <code>tools/list</code>, but remain searchable and
+                          runnable.{" "}
                           <ExternalDocsLink
                             href={toolExposureDocsUrl}
                             className="underline"
@@ -1512,9 +1517,10 @@ export function AgentDialog({
                         </p>
                         {toolExposureMode === "search_and_run_only" && (
                           <p className="text-xs text-muted-foreground">
-                            `search_tools` and `run_tool` are enabled implicitly
-                            by this mode and do not appear in the built-in tool
-                            picker.
+                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> are enabled
+                            implicitly by this mode and do not appear in the
+                            built-in tool picker.
                           </p>
                         )}
                       </div>

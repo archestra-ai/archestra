@@ -970,6 +970,88 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("findUserIdsInAnyTeam", () => {
+    test("returns empty array when no team IDs are provided", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      const userIds = await TeamModel.findUserIdsInAnyTeam({
+        teamIds: [],
+        userIds: [user.id],
+      });
+
+      expect(userIds).toEqual([]);
+    });
+
+    test("returns empty array when no user IDs are provided", async ({
+      makeOrganization,
+      makeTeam,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      const userIds = await TeamModel.findUserIdsInAnyTeam({
+        teamIds: [team.id],
+        userIds: [],
+      });
+
+      expect(userIds).toEqual([]);
+    });
+
+    test("returns unique user IDs for users in any requested team", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const member1 = await makeUser({ email: "member-1@test.com" });
+      const member2 = await makeUser({ email: "member-2@test.com" });
+      const nonMember = await makeUser({ email: "non-member@test.com" });
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, owner.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, owner.id, { name: "Team 2" });
+
+      await TeamModel.addMember(team1.id, member1.id);
+      await TeamModel.addMember(team1.id, member2.id);
+      await TeamModel.addMember(team2.id, member1.id);
+
+      const userIds = await TeamModel.findUserIdsInAnyTeam({
+        teamIds: [team1.id, team2.id],
+        userIds: [member1.id, member2.id, nonMember.id],
+      });
+
+      expect(userIds.sort()).toEqual([member1.id, member2.id].sort());
+    });
+
+    test("excludes users who only belong to teams outside the requested set", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const member = await makeUser({ email: "outside-team-member@test.com" });
+      const org = await makeOrganization();
+      const requestedTeam = await makeTeam(org.id, owner.id, {
+        name: "Requested Team",
+      });
+      const otherTeam = await makeTeam(org.id, owner.id, {
+        name: "Other Team",
+      });
+
+      await TeamModel.addMember(otherTeam.id, member.id);
+
+      const userIds = await TeamModel.findUserIdsInAnyTeam({
+        teamIds: [requestedTeam.id],
+        userIds: [member.id],
+      });
+
+      expect(userIds).toEqual([]);
+    });
+  });
+
   describe("syncUserTeams", () => {
     test("should add user to teams based on their SSO groups", async ({
       makeUser,

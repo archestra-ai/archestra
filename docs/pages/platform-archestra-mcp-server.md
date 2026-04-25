@@ -379,6 +379,7 @@ Required RBAC permission: `mcpGateway:update`
 | `deploy_mcp_server` | Deploy (install) an MCP server from the catalog. | `mcpRegistry:update` |
 | `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. | `mcpRegistry:read` |
 | `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. | `mcpRegistry:read` |
+| `list_k8s_namespaces` | List available Kubernetes namespaces in the cluster. Returns an empty list when K8s runtime is not configured. | `mcpServerInstallation:read` |
 | `create_mcp_server_installation_request` | Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. | `mcpServerInstallationRequest:create` |
 
 #### search_private_mcp_registry
@@ -503,6 +504,7 @@ Required RBAC permission: `mcpRegistry:update`
 | `envFrom[].prefix` | `string` | No | Optional environment variable prefix. |
 | `dockerImage` | `string` | No | [Local] Custom Docker image. |
 | `serviceAccount` | `string` | No | [Local] Kubernetes ServiceAccount name. |
+| `k8sNamespace` | `string` | No | [Local] Kubernetes namespace override. Defaults to the cluster-wide configured namespace (`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`). |
 | `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. |
 | `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport. |
 | `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport. |
@@ -562,6 +564,7 @@ Required RBAC permission: `mcpRegistry:create`
 | `envFrom[].prefix` | `string` | No | Optional environment variable prefix. |
 | `dockerImage` | `string` | No | [Local] Custom Docker image. |
 | `serviceAccount` | `string` | No | [Local] Kubernetes ServiceAccount name. |
+| `k8sNamespace` | `string` | No | [Local] Kubernetes namespace override. Defaults to the cluster-wide configured namespace (`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`). |
 | `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. |
 | `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport. |
 | `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport. |
@@ -605,6 +608,15 @@ Required RBAC permission: `mcpRegistry:read`
 |-----------|------|----------|-------------|
 | `serverId` | `string` | Yes | The deployment ID of the MCP server. |
 | `lines` | `integer` | No | Number of log lines to retrieve. |
+
+
+#### list_k8s_namespaces
+
+Required RBAC permission: `mcpServerInstallation:read`
+
+Returns the list of Kubernetes namespaces available in the configured cluster. Useful when deploying a local MCP server with a custom `k8sNamespace`. Returns an empty list if the K8s runtime is not configured.
+
+This tool takes no arguments.
 
 
 #### create_mcp_server_installation_request

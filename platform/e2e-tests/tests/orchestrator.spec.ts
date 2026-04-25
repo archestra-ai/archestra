@@ -322,4 +322,112 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       expect(tools.length).toBeGreaterThan(0);
     });
   });
+
+  test.describe("K8s Namespace support", () => {
+    test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+    let serverId: string;
+
+    test.beforeAll(
+      async ({
+        request,
+        installMcpServer,
+        listK8sNamespaces,
+        getTeamByName,
+      }) => {
+        const defaultTeam = await getTeamByName(request, "Default Team");
+        if (!defaultTeam) {
+          throw new Error("Default Team not found");
+        }
+
+        const catalogItem = await findCatalogItem(
+          request,
+          TEST_CATALOG_ITEM_NAME,
+        );
+        if (!catalogItem) {
+          throw new Error(
+            `Catalog item '${TEST_CATALOG_ITEM_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+          );
+        }
+
+        const namespaces = await listK8sNamespaces(request);
+        expect(namespaces.length).toBeGreaterThan(0);
+        const targetNamespace: string = namespaces[0];
+
+        const installResponse = await installMcpServer(request, {
+          name: "Test Namespace Server",
+          catalogId: catalogItem.id,
+          teamId: defaultTeam.id,
+          environmentValues: { ARCHESTRA_TEST: "namespace-test-value" },
+          k8sNamespace: targetNamespace,
+        });
+        const server = await installResponse.json();
+        serverId = server.id;
+
+        await waitForServerInstallation(request, serverId);
+      },
+    );
+
+    test.afterAll(async ({ request, uninstallMcpServer }) => {
+      if (serverId) await uninstallMcpServer(request, serverId);
+    });
+
+    test("should list K8s namespaces", async ({
+      request,
+      listK8sNamespaces,
+    }) => {
+      const namespaces = await listK8sNamespaces(request);
+      expect(Array.isArray(namespaces)).toBe(true);
+      expect(namespaces.length).toBeGreaterThan(0);
+      expect(typeof namespaces[0]).toBe("string");
+    });
+
+    test("should install MCP server with explicit namespace and discover tools", async ({
+      request,
+      makeApiRequest,
+      listK8sNamespaces,
+    }) => {
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
+      expect(tools.length).toBeGreaterThan(0);
+
+      const namespaces = await listK8sNamespaces(request);
+      const targetNamespace = namespaces[0];
+
+      const serverResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/mcp_server/${serverId}`,
+      });
+      const server = await serverResponse.json();
+      expect(server.k8sNamespace).toBe(targetNamespace);
+    });
+
+    test("should reject install with nonexistent namespace", async ({
+      request,
+      installMcpServer,
+    }) => {
+      const catalogItem = await findCatalogItem(
+        request,
+        TEST_CATALOG_ITEM_NAME,
+      );
+      if (!catalogItem) {
+        throw new Error(`Catalog item '${TEST_CATALOG_ITEM_NAME}' not found`);
+      }
+
+      const response = await installMcpServer(
+        request,
+        {
+          name: "Test Bad Namespace Server",
+          catalogId: catalogItem.id,
+          environmentValues: { ARCHESTRA_TEST: "namespace-test-value" },
+          k8sNamespace: "nonexistent-namespace-xyz",
+        },
+        { ignoreStatusCheck: true },
+      );
+
+      expect(response.status()).toBe(400);
+      const body = await response.json();
+      expect(body.error.message).toContain("does not exist in the cluster");
+    });
+  });
 });

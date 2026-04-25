@@ -63,6 +63,9 @@ export const RouteId = {
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
 
+  // K8s Routes
+  ListK8sNamespaces: "listK8sNamespaces",
+
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",

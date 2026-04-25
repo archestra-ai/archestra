@@ -511,6 +511,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],
   },
+  [RouteId.ListK8sNamespaces]: {
+    mcpServerInstallation: ["read"],
+  },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },

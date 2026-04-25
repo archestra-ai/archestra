@@ -14,6 +14,7 @@ export interface K8sClients {
   coreApi: k8s.CoreV1Api;
   appsApi: k8s.AppsV1Api;
   batchApi: k8s.BatchV1Api;
+  authzApi: k8s.AuthorizationV1Api;
   attach: k8s.Attach;
   exec: k8s.Exec;
   log: k8s.Log;
@@ -111,6 +112,7 @@ export function createK8sClients(
     coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api),
     appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api),
     batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api),
+    authzApi: kubeConfig.makeApiClient(k8s.AuthorizationV1Api),
     attach: new k8s.Attach(kubeConfig),
     exec: new k8s.Exec(kubeConfig),
     log: new k8s.Log(kubeConfig),

@@ -61,6 +61,7 @@ const mcpServerTable = pgTable(
     oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", {
       mode: "date",
     }),
+    k8sNamespace: text("k8s_namespace"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

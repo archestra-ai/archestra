@@ -29,6 +29,7 @@ import type {
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
+  private k8sAuthzApi?: k8s.AuthorizationV1Api;
   private k8sAttach?: k8s.Attach;
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
@@ -47,6 +48,7 @@ export class McpServerRuntimeManager {
 
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
+      this.k8sAuthzApi = clients.authzApi;
       this.k8sAttach = clients.attach;
       this.k8sExec = clients.exec;
       this.k8sLog = clients.log;
@@ -56,6 +58,7 @@ export class McpServerRuntimeManager {
       this.status = "error";
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
+      this.k8sAuthzApi = undefined;
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
@@ -277,7 +280,7 @@ export class McpServerRuntimeManager {
         k8sAppsApi: this.k8sAppsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        namespace: mcpServer.k8sNamespace ?? this.namespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
@@ -426,7 +429,7 @@ export class McpServerRuntimeManager {
         k8sAppsApi: this.k8sAppsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        namespace: mcpServer.k8sNamespace ?? this.namespace,
         catalogItem,
         k8sExec: this.k8sExec,
       });
@@ -777,6 +780,37 @@ export class McpServerRuntimeManager {
       );
       return [];
     }
+  }
+
+  async listNamespaces(): Promise<string[]> {
+    if (!this.k8sApi) return [];
+    try {
+      const res = await this.k8sApi.listNamespace();
+      return res.items
+        .map((ns) => ns.metadata?.name ?? "")
+        .filter((n) => n.length > 0)
+        .sort();
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to list K8s namespaces");
+      return [];
+    }
+  }
+
+  async canWriteToNamespace(namespace: string): Promise<boolean> {
+    if (!this.k8sAuthzApi) return false;
+    const res = await this.k8sAuthzApi.createSelfSubjectAccessReview({
+      body: {
+        spec: {
+          resourceAttributes: {
+            namespace,
+            verb: "create",
+            resource: "deployments",
+            group: "apps",
+          },
+        },
+      },
+    });
+    return res.status?.allowed === true;
   }
 
   /**

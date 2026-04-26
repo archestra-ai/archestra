@@ -12159,6 +12159,76 @@ export type GetMemberDefaultAgentResponses = {
 
 export type GetMemberDefaultAgentResponse = GetMemberDefaultAgentResponses[keyof GetMemberDefaultAgentResponses];
 
+export type SetMemberDefaultAgentData = {
+    body: {
+        agentId: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/members/default-agent';
+};
+
+export type SetMemberDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type SetMemberDefaultAgentError = SetMemberDefaultAgentErrors[keyof SetMemberDefaultAgentErrors];
+
+export type SetMemberDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        defaultAgentId: string | null;
+    };
+};
+
+export type SetMemberDefaultAgentResponse = SetMemberDefaultAgentResponses[keyof SetMemberDefaultAgentResponses];
+
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;

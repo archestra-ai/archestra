@@ -156,6 +156,7 @@ export {
   getMcpToolCall,
   getMcpToolCalls,
   getMemberDefaultAgent,
+  setMemberDefaultAgent,
   getMemberSignupStatus,
   getMembers,
   getModelStatistics,

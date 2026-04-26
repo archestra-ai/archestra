@@ -344,6 +344,7 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  SetMemberDefaultAgent: "setMemberDefaultAgent",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",

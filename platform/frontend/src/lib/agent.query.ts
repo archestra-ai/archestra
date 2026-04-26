@@ -20,6 +20,7 @@ const {
   getLabelKeys,
   getLabelValues,
   getMemberDefaultAgent,
+  setMemberDefaultAgent,
 } = archestraApiSdk;
 
 // Returns all agents as an array
@@ -267,6 +268,29 @@ export function useDefaultAgentId() {
     queryFn: async () => {
       const response = await getMemberDefaultAgent();
       return response.data?.defaultAgentId ?? null;
+    },
+  });
+}
+
+/**
+ * Mutation to set (or clear) the current user's personal default agent.
+ * Pass `agentId: null` to clear the personal default.
+ */
+export function useSetMemberDefaultAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (agentId: string | null) => {
+      const response = await setMemberDefaultAgent({ body: { agentId } });
+      if (!response.data) {
+        throw new Error("Failed to update default agent");
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member-default-agent"] });
+    },
+    onError: (error: Error) => {
+      handleApiError(error, "Failed to update default agent");
     },
   });
 }

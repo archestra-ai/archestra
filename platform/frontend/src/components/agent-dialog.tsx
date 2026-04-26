@@ -130,6 +130,7 @@ import {
   useAgentDelegations,
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import config from "@/lib/config/config";
@@ -395,6 +396,7 @@ function AccessLevelSelector({
   isTeamAdmin,
   canReadTeams,
   initialScope,
+  isOwner,
   agentType,
   teams,
   assignedTeamIds,
@@ -408,6 +410,9 @@ function AccessLevelSelector({
   isTeamAdmin: boolean;
   canReadTeams: boolean;
   initialScope?: AgentScope;
+  /** Whether the current user is the original author of the agent. Owners may
+   *  reclaim their own agent back to personal scope even after sharing it. */
+  isOwner?: boolean;
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
   assignedTeamIds: string[];
@@ -419,7 +424,8 @@ function AccessLevelSelector({
   const canShareWithTeams = isAdmin || isTeamAdmin;
 
   const isOptionDisabled = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
+    // Owners can always change their own agent back to personal scope.
+    if (value === "personal" && initialScope && initialScope !== "personal" && !isOwner)
       return true;
     if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
     if (value === "org" && !isAdmin) return true;
@@ -435,7 +441,8 @@ function AccessLevelSelector({
   const resourceName = resourceMap[agentType] || "agent";
 
   const getDisabledReason = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
+    // Owners can always reclaim their own agent back to personal scope.
+    if (value === "personal" && initialScope && initialScope !== "personal" && !isOwner)
       return "Shared agents cannot be made personal";
     if (value === "team" && !canReadTeams)
       return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
@@ -523,6 +530,8 @@ export function AgentDialog({
   readOnly = false,
 }: AgentDialogProps) {
   const appName = useAppName();
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
     open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
@@ -1699,6 +1708,11 @@ export function AgentDialog({
                       isAdmin={!!isAdmin}
                       isTeamAdmin={!!isTeamAdmin}
                       initialScope={agent?.scope}
+                      isOwner={
+                        !!currentUserId &&
+                        !!agent?.authorId &&
+                        agent.authorId === currentUserId
+                      }
                       agentType={agentType}
                       teams={teams}
                       canReadTeams={!!canReadTeams}

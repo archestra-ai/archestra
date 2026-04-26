@@ -36,10 +36,12 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useDefaultAgentId,
   useDeleteProfile,
   useProfile,
   useProfiles,
   useProfilesPaginated,
+  useSetMemberDefaultAgent,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -167,6 +169,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
+  const { data: memberDefaultAgentId } = useDefaultAgentId();
+  const setDefaultAgent = useSetMemberDefaultAgent();
 
   // Users can always create personal agents, no team requirement needed
 
@@ -428,6 +432,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <AgentActions
             agent={agent}
             canModify={canModify}
+            memberDefaultAgentId={memberDefaultAgentId}
             onConnect={setConnectingAgent}
             onEdit={(agentData) => {
               setEditingAgent(agentData);
@@ -436,6 +441,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               setViewingAgent(agentData);
             }}
             onDelete={setDeletingAgentId}
+            onSetDefault={(agentId) => setDefaultAgent.mutate(agentId)}
           />
         );
       },

@@ -554,8 +554,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Prevent downgrading shared agents to personal
-      if (body.scope === "personal" && existingAgent.scope !== "personal") {
+      // Prevent downgrading shared agents to personal, unless the requesting
+      // user is the original author of the agent (owners can always reclaim
+      // their own agents).
+      if (
+        body.scope === "personal" &&
+        existingAgent.scope !== "personal" &&
+        existingAgent.authorId !== user.id
+      ) {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
@@ -793,6 +799,39 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       );
       return reply.send({ defaultAgentId });
+    },
+  );
+
+  fastify.put(
+    "/api/members/default-agent",
+    {
+      schema: {
+        operationId: RouteId.SetMemberDefaultAgent,
+        description:
+          "Set the current user's default agent. Pass agentId: null to clear the personal default.",
+        tags: ["Members"],
+        body: z.object({
+          agentId: z.string().uuid().nullable(),
+        }),
+        response: constructResponseSchema(
+          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+        ),
+      },
+    },
+    async ({ user, organizationId, body }, reply) => {
+      if (body.agentId !== null) {
+        // Verify the agent exists and the user has read access to it
+        const agent = await AgentModel.findById(body.agentId, {
+          userId: user.id,
+          organizationId,
+        });
+        if (!agent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      await MemberModel.setDefaultAgent(user.id, organizationId, body.agentId);
+      return reply.send({ defaultAgentId: body.agentId });
     },
   );
 };

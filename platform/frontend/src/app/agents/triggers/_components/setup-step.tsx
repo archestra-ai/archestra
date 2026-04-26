@@ -32,11 +32,11 @@ export function SetupStep({
           )}
         >
           <CardTitle>
-            <div className="flex items-center gap-4">
+            <div className="flex items-start gap-4">
               {done ? (
-                <CheckCircle2 className="size-5 shrink-0 text-green-500" />
+                <CheckCircle2 className="size-5 shrink-0 text-green-500 mt-0.5" />
               ) : (
-                <Circle className="text-muted-foreground size-5 shrink-0" />
+                <Circle className="text-muted-foreground size-5 shrink-0 mt-0.5" />
               )}
               <div className="flex flex-col gap-1">
                 <div className="font-medium text-sm">{title}</div>

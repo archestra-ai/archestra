@@ -713,7 +713,9 @@ export function ModelSelector({
   if (availableProviders.length === 0) {
     return (
       <PromptInputButton disabled>
-        <ModelSelectorName>No models available</ModelSelectorName>
+        <ModelSelectorName className="truncate-none overflow-visible whitespace-nowrap">
+          No models available
+        </ModelSelectorName>
       </PromptInputButton>
     );
   }

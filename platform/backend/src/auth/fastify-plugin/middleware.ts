@@ -99,9 +99,12 @@ export class Authnz {
       return true;
     }
     // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
-    const isLlmProxyRoute = SupportedProviders.some((provider) =>
-      url.startsWith(`/v1/${provider}`),
-    );
+    const isLlmProxyRoute =
+      SupportedProviders.some((provider) =>
+        url.startsWith(`/v1/${provider}`),
+      ) ||
+      // Unified multi-provider proxy endpoint
+      url.startsWith("/v1/unified");
 
     if (
       url.startsWith("/api/auth") ||

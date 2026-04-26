@@ -12,13 +12,14 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import type { Agent, AgentScope } from "@/types";
+import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
   AgentToolAssignmentInputSchema,
   InsertAgentSchemaBase,
   SuggestedPromptInputSchema,
+  ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
 import {
@@ -96,6 +97,9 @@ export const CreateBaseToolArgsSchema = z
       .array(UuidIdSchema)
       .optional()
       .describe("Team IDs to attach when creating a team-scoped resource."),
+    toolExposureMode: ToolExposureModeSchema.optional().describe(
+      "How tools should be exposed to MCP clients and models. Use 'search_and_run_only' to expose only search_tools and run_tool while keeping the full assigned tool set searchable and runnable.",
+    ),
   })
   .strict();
 
@@ -140,6 +144,9 @@ export const AgentDetailOutputSchema = z.object({
     .describe("The resource description, if any."),
   icon: z.string().nullable().describe("The emoji icon, if configured."),
   scope: AgentScopeSchema.describe("The visibility scope."),
+  toolExposureMode: ToolExposureModeSchema.describe(
+    "How tools are exposed to MCP clients and models.",
+  ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -185,6 +192,7 @@ export async function handleCreateResource<
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
+    toolExposureMode?: ToolExposureMode;
   },
 >(params: {
   args: TArgs;
@@ -258,6 +266,9 @@ export async function handleCreateResource<
       labels,
       agentType: targetAgentType,
     };
+    if (args.toolExposureMode !== undefined) {
+      createParams.toolExposureMode = args.toolExposureMode;
+    }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
       if (targetAgentType === "agent" && args.systemPrompt) {
@@ -426,6 +437,7 @@ export async function handleEditResource<
     suggestedPrompts?: Array<{ summaryTitle: string; prompt: string }>;
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
+    toolExposureMode?: ToolExposureMode;
   },
 >(params: {
   args: TArgs;
@@ -480,6 +492,9 @@ export async function handleEditResource<
     if (args.icon !== undefined) updateData.icon = args.icon;
     if (args.scope !== undefined) updateData.scope = args.scope;
     if (args.teams !== undefined) updateData.teams = args.teams;
+    if (args.toolExposureMode !== undefined) {
+      updateData.toolExposureMode = args.toolExposureMode;
+    }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);
     }

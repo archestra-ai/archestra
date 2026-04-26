@@ -50,6 +50,7 @@ function makeBuiltInAgent(params: {
     isDefault: false,
     considerContextUntrusted: false,
     agentType: "agent",
+    toolExposureMode: "full",
     systemPrompt: params.systemPrompt,
     description: null,
     icon: null,

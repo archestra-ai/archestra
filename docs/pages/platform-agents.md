@@ -17,8 +17,22 @@ An agent can include:
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
 - one or more assigned tools
+- an optional search-and-run tool mode for hiding most tools from MCP `tools/list`
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
+
+## Search-and-Run Tool Mode
+
+By default, an agent exposes every assigned tool through MCP `tools/list`.
+
+For larger toolsets, you can switch the agent to **search-and-run tool mode**. In that mode, MCP clients only see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools. Those two tools are enabled implicitly by the mode and do not need normal tool assignment.
+
+- `search_tools` can still discover them
+- `run_tool` can still execute them
+
+Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+
+See [MCP Gateway - Search-and-Run Tool Mode](/docs/platform-mcp-gateway#search-and-run-tool-mode) for the MCP-client-facing behavior and the same mode on gateways.
 
 ## Invocation Paths
 

@@ -77,6 +77,7 @@ import {
   resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { compactMessagesIfNeeded } from "./context-compaction";
 import {
   parseMaxInputTokens,
   shouldProbeTextStreamForContextTrimRetry,
@@ -334,13 +335,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
           );
 
+          // Compact conversation history if it has grown beyond the context threshold.
+          // This summarises older messages so the agent can continue without hitting
+          // context limits in long-running sessions.
+          const { messages: compactedModelMessages, compacted } =
+            await compactMessagesIfNeeded({
+              messages: modelMessages,
+              conversationId,
+              provider,
+              organizationId,
+              userId: user.id,
+              chatApiKeyId: conversation.chatApiKeyId ?? undefined,
+            });
+
+          if (compacted) {
+            logger.info(
+              { conversationId, originalCount: modelMessages.length, compactedCount: compactedModelMessages.length },
+              "[ContextCompaction] Applied context compaction before streaming",
+            );
+          }
+
           // Perplexity does NOT support tool calling - it has built-in web search instead
           // @see https://docs.perplexity.ai/api-reference/chat-completions-post
           const supportsToolCalling = provider !== "perplexity";
 
           const streamTextConfig: Parameters<typeof streamText>[0] = {
             model,
-            messages: modelMessages,
+            messages: compactedModelMessages,
             ...(supportsToolCalling && { tools: mcpTools }),
             stopWhen: buildChatStopConditions(),
             abortSignal: chatAbortController.signal,
@@ -611,13 +632,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     const maxTokens = parseMaxInputTokens(error);
                     if (maxTokens !== null) {
                       const trimmed = trimMessagesToTokenLimit(
-                        modelMessages,
+                        compactedModelMessages,
                         maxTokens,
                       );
                       logger.info(
                         {
                           maxTokens,
-                          originalMessages: modelMessages.length,
+                          originalMessages: compactedModelMessages.length,
                           trimmedMessages: trimmed.length,
                           conversationId,
                         },

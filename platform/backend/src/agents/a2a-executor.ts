@@ -68,6 +68,17 @@ export interface A2AExecuteParams {
   parentContextIsTrusted?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+  /**
+   * ChatOps channel binding context — present when the agent is invoked from
+   * Slack or MS Teams. Passed through to the MCP tool context so swap_agent
+   * can update the channel binding instead of a DB conversation record.
+   */
+  chatopsBinding?: {
+    provider: string;
+    channelId: string;
+    workspaceId: string;
+    bindingId: string;
+  };
 }
 
 export interface A2AExecuteResult {
@@ -100,6 +111,7 @@ export async function executeA2AMessage(
     attachments,
     parentContextIsTrusted,
     scheduleTriggerRunId,
+    chatopsBinding,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -180,6 +192,7 @@ export async function executeA2AMessage(
       abortSignal,
       blockOnApprovalRequired: true, // A2A/autonomous: block tools that require human approval
       scheduleTriggerRunId,
+      chatopsBinding,
     });
 
     logger.info(

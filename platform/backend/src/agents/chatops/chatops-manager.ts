@@ -1205,7 +1205,7 @@ export class ChatOpsManager {
 
   private async executeAndReply(params: {
     agent: { id: string; name: string };
-    binding: { organizationId: string };
+    binding: { organizationId: string; id: string };
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
@@ -1279,6 +1279,14 @@ export class ChatOpsManager {
               message.attachments && message.attachments.length > 0
                 ? message.attachments
                 : undefined,
+            // Pass the channel binding context so swap_agent can update the
+            // binding's agentId instead of trying to update a DB conversation.
+            chatopsBinding: {
+              provider: provider.providerId,
+              channelId: message.channelId,
+              workspaceId: message.workspaceId ?? "",
+              bindingId: binding.id,
+            },
           });
         },
       });

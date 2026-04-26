@@ -710,6 +710,7 @@ export async function getChatMcpTools({
   user,
   blockOnApprovalRequired,
   scheduleTriggerRunId,
+  chatopsBinding,
 }: {
   agentName: string;
   agentId: string;
@@ -729,6 +730,16 @@ export async function getChatMcpTools({
   blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+  /**
+   * ChatOps channel binding context — passed through to the ArchestraContext so
+   * swap_agent can update the channel binding instead of a DB conversation record.
+   */
+  chatopsBinding?: {
+    provider: string;
+    channelId: string;
+    workspaceId: string;
+    bindingId: string;
+  };
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -1014,6 +1025,7 @@ export async function getChatMcpTools({
         const archestraContext: ArchestraContext = {
           agent: { id: agentId, name: agentName },
           agentId,
+          userId,
           organizationId,
           conversationId,
           sessionId,
@@ -1021,6 +1033,9 @@ export async function getChatMcpTools({
           // Pass delegation chain for tracking delegated agent calls
           delegationChain,
           abortSignal,
+          // ChatOps binding context — enables swap_agent to update the channel
+          // binding instead of a DB conversation record when running in Slack/Teams.
+          chatopsBinding,
           tokenAuth: mcpGwToken
             ? {
                 tokenId: mcpGwToken.tokenId,

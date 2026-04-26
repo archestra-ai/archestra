@@ -10,6 +10,7 @@ import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
+  ChatOpsChannelBindingModel,
   ConversationModel,
   OrganizationModel,
   ScheduleTriggerRunModel,
@@ -225,26 +226,30 @@ async function handleSwapAgent(params: {
   const { agentName, context } = params;
   const { agent: contextAgent } = context;
   logger.info(
-    { agentId: contextAgent.id, agentName },
+    {
+      agentId: contextAgent.id,
+      agentName,
+      isChatops: Boolean(context.chatopsBinding),
+    },
     "swap_agent tool called",
   );
 
   try {
-    if (!context.conversationId || !context.userId || !context.organizationId) {
+    // swap_agent requires at minimum a userId and organizationId to look up the
+    // target agent and verify access. The conversationId check is relaxed for
+    // ChatOps contexts, which use a channel binding instead of a DB conversation.
+    if (!context.userId || !context.organizationId) {
       return errorResult(
         "This tool requires conversation context. It can only be used within an active chat conversation.",
       );
     }
 
     // Look up agent by name
-    const isAdmin =
-      context.userId && context.organizationId
-        ? await isAgentTypeAdmin({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            agentType: "agent",
-          })
-        : false;
+    const isAdmin = await isAgentTypeAdmin({
+      userId: context.userId,
+      organizationId: context.organizationId,
+      agentType: "agent",
+    });
 
     const results = await AgentModel.findAllPaginated(
       { limit: 5, offset: 0 },
@@ -276,6 +281,47 @@ async function handleSwapAgent(params: {
     if (targetAgent.id === contextAgent.id) {
       return errorResult(
         `Already using agent "${targetAgent.name}". Choose a different agent.`,
+      );
+    }
+
+    // ChatOps context: update the channel binding so the next incoming message
+    // is routed to the new agent. There is no DB conversation to update.
+    if (context.chatopsBinding) {
+      const updated = await ChatOpsChannelBindingModel.update(
+        context.chatopsBinding.bindingId,
+        { agentId: targetAgent.id },
+      );
+
+      if (!updated) {
+        return errorResult(
+          "Failed to update channel binding agent. The binding may no longer exist.",
+        );
+      }
+
+      logger.info(
+        {
+          bindingId: context.chatopsBinding.bindingId,
+          previousAgentId: contextAgent.id,
+          newAgentId: targetAgent.id,
+          provider: context.chatopsBinding.provider,
+        },
+        "swap_agent updated ChatOps channel binding",
+      );
+
+      return structuredSuccessResult(
+        {
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        },
+        `Successfully swapped to agent "${targetAgent.name}" (ID: ${targetAgent.id}). Future messages in this channel will be handled by the new agent.`,
+      );
+    }
+
+    // Web UI / standard conversation context: require a real conversationId.
+    if (!context.conversationId) {
+      return errorResult(
+        "This tool requires conversation context. It can only be used within an active chat conversation.",
       );
     }
 
@@ -331,7 +377,7 @@ async function handleSwapToDefaultAgent(params: {
   );
 
   try {
-    if (!context.conversationId || !context.userId || !context.organizationId) {
+    if (!context.userId || !context.organizationId) {
       return errorResult(
         "This tool requires conversation context. It can only be used within an active chat conversation.",
       );
@@ -354,6 +400,47 @@ async function handleSwapToDefaultAgent(params: {
     if (targetAgent.id === contextAgent.id) {
       return errorResult(
         `Already using the default agent "${targetAgent.name}".`,
+      );
+    }
+
+    // ChatOps context: update the channel binding so the next incoming message
+    // is routed to the default agent. There is no DB conversation to update.
+    if (context.chatopsBinding) {
+      const updated = await ChatOpsChannelBindingModel.update(
+        context.chatopsBinding.bindingId,
+        { agentId: defaultAgentId },
+      );
+
+      if (!updated) {
+        return errorResult(
+          "Failed to update channel binding agent. The binding may no longer exist.",
+        );
+      }
+
+      logger.info(
+        {
+          bindingId: context.chatopsBinding.bindingId,
+          previousAgentId: contextAgent.id,
+          newAgentId: defaultAgentId,
+          provider: context.chatopsBinding.provider,
+        },
+        "swap_to_default_agent updated ChatOps channel binding",
+      );
+
+      return structuredSuccessResult(
+        {
+          success: true,
+          agent_id: targetAgent.id,
+          agent_name: targetAgent.name,
+        },
+        `Successfully swapped to default agent "${targetAgent.name}" (ID: ${targetAgent.id}). Future messages in this channel will be handled by the default agent.`,
+      );
+    }
+
+    // Web UI / standard conversation context: require a real conversationId.
+    if (!context.conversationId) {
+      return errorResult(
+        "This tool requires conversation context. It can only be used within an active chat conversation.",
       );
     }
 

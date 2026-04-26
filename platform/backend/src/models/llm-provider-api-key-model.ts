@@ -1,7 +1,12 @@
-import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
+import {
+  MODEL_MARKER_PATTERNS,
+  type ModelInputModality,
+  type SupportedProvider,
+} from "@shared";
+import type { SQL } from "drizzle-orm";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { LlmProviderApiKey, Model } from "@/types";
+import { ApiError, type LlmProviderApiKey, type Model } from "@/types";
 
 /**
  * Model class for the api_key_models join table.
@@ -346,6 +351,163 @@ class LlmProviderApiKeyModelLinkModel {
       isFastest: r.isFastest,
     }));
   }
+
+  /**
+   * Get available models for selector-style browsing.
+   * Applies filtering and cursor pagination in the database.
+   */
+  static async getAvailableModelsForApiKeyIds(params: {
+    apiKeyIds: string[];
+    provider?: SupportedProvider;
+    modelId?: string;
+    isEmbedding?: boolean;
+    q?: string;
+    inputModalities?: ModelInputModality[];
+    supportsToolCalling?: boolean;
+    cursor?: string;
+    limit: number;
+  }): Promise<{
+    models: Array<{ model: Model; isBest: boolean; isFastest: boolean }>;
+    nextCursor: string | null;
+    hasNext: boolean;
+  }> {
+    const {
+      apiKeyIds,
+      provider,
+      modelId,
+      isEmbedding,
+      q,
+      inputModalities,
+      supportsToolCalling,
+      cursor,
+      limit,
+    } = params;
+
+    if (apiKeyIds.length === 0) {
+      return { models: [], nextCursor: null, hasNext: false };
+    }
+
+    const decodedCursor = decodeAvailableModelsCursor(cursor);
+    const conditions: SQL[] = [
+      inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds),
+    ];
+
+    if (provider) {
+      conditions.push(eq(schema.modelsTable.provider, provider));
+    }
+
+    if (modelId) {
+      conditions.push(eq(schema.modelsTable.modelId, modelId));
+    }
+
+    conditions.push(eq(schema.modelsTable.ignored, false));
+
+    if (isEmbedding !== undefined) {
+      conditions.push(
+        isEmbedding
+          ? sql`${schema.modelsTable.embeddingDimensions} is not null`
+          : sql`${schema.modelsTable.embeddingDimensions} is null`,
+      );
+    }
+
+    if (!isEmbedding) {
+      conditions.push(sql`${schema.modelsTable.embeddingDimensions} is null`);
+      conditions.push(
+        sql`(${schema.modelsTable.inputModalities} is null or ${schema.modelsTable.inputModalities} @> '["text"]'::jsonb)`,
+      );
+      conditions.push(
+        sql`(${schema.modelsTable.outputModalities} is null or ${schema.modelsTable.outputModalities} @> '["text"]'::jsonb)`,
+      );
+    }
+
+    const searchTokens = q
+      ?.trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 0);
+    for (const token of searchTokens ?? []) {
+      const pattern = `%${escapeLikePattern(token)}%`;
+      conditions.push(
+        sql`(${schema.modelsTable.modelId} ilike ${pattern} or ${schema.modelsTable.description} ilike ${pattern})`,
+      );
+    }
+
+    for (const modality of inputModalities ?? []) {
+      conditions.push(
+        sql`${schema.modelsTable.inputModalities} @> ${JSON.stringify([modality])}::jsonb`,
+      );
+    }
+
+    if (supportsToolCalling !== undefined) {
+      conditions.push(
+        eq(schema.modelsTable.supportsToolCalling, supportsToolCalling),
+      );
+    }
+
+    if (decodedCursor) {
+      conditions.push(
+        sql`(
+          ${schema.modelsTable.provider} > ${decodedCursor.provider}
+          or (
+            ${schema.modelsTable.provider} = ${decodedCursor.provider}
+            and ${schema.modelsTable.modelId} > ${decodedCursor.modelId}
+          )
+          or (
+            ${schema.modelsTable.provider} = ${decodedCursor.provider}
+            and ${schema.modelsTable.modelId} = ${decodedCursor.modelId}
+            and ${schema.modelsTable.id} > ${decodedCursor.id}
+          )
+        )`,
+      );
+    }
+
+    const results = await db
+      .select({
+        model: schema.modelsTable,
+        isBest:
+          sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
+            "is_best_agg",
+          ),
+        isFastest:
+          sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isFastest})`.as(
+            "is_fastest_agg",
+          ),
+      })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(and(...conditions))
+      .groupBy(schema.modelsTable.id)
+      .orderBy(
+        asc(schema.modelsTable.provider),
+        asc(schema.modelsTable.modelId),
+        asc(schema.modelsTable.id),
+      )
+      .limit(limit + 1);
+
+    const pageRows = results.slice(0, limit);
+    const hasNext = results.length > limit;
+    const lastModel = pageRows.at(-1)?.model;
+
+    return {
+      models: pageRows.map((row) => ({
+        model: row.model,
+        isBest: row.isBest,
+        isFastest: row.isFastest,
+      })),
+      nextCursor:
+        hasNext && lastModel
+          ? encodeAvailableModelsCursor({
+              provider: lastModel.provider,
+              modelId: lastModel.modelId,
+              id: lastModel.id,
+            })
+          : null,
+      hasNext,
+    };
+  }
+
   /**
    * Get the "best" model for a specific API key.
    * Returns the model marked with is_best=true, or falls back to the first model.
@@ -492,6 +654,45 @@ class LlmProviderApiKeyModelLinkModel {
 }
 
 export default LlmProviderApiKeyModelLinkModel;
+
+type AvailableModelsCursor = {
+  provider: SupportedProvider;
+  modelId: string;
+  id: string;
+};
+
+function encodeAvailableModelsCursor(cursor: AvailableModelsCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeAvailableModelsCursor(
+  cursor: string | undefined,
+): AvailableModelsCursor | null {
+  if (!cursor) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    ) as AvailableModelsCursor;
+    if (
+      !decoded ||
+      typeof decoded.provider !== "string" ||
+      typeof decoded.modelId !== "string" ||
+      typeof decoded.id !== "string"
+    ) {
+      throw new Error("Invalid cursor shape");
+    }
+    return decoded;
+  } catch {
+    throw new ApiError(400, "Invalid pagination cursor");
+  }
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
 
 // ============================================================================
 // Helper functions

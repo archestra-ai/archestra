@@ -113562,6 +113562,67 @@
               "type": "string"
             },
             "in": "query",
+            "name": "modelId",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "image",
+                  "audio",
+                  "video",
+                  "pdf"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "inputModalities",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "supportsToolCalling",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
             "name": "isEmbedding",
             "required": false
           }
@@ -113572,149 +113633,182 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "displayName": {
-                        "type": "string"
-                      },
-                      "provider": {
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure"
-                        ]
-                      },
-                      "createdAt": {
-                        "type": "string"
-                      },
-                      "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "contextLength": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -2147483648,
-                            "maximum": 2147483647
-                          },
-                          "inputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio",
-                                "video",
-                                "pdf"
-                              ]
-                            }
-                          },
-                          "outputModalities": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "text",
-                                "image",
-                                "audio"
-                              ]
-                            }
-                          },
-                          "supportsToolCalling": {
-                            "nullable": true,
-                            "type": "boolean"
-                          },
-                          "pricePerMillionInput": {
-                            "nullable": true,
+                          "id": {
                             "type": "string"
                           },
-                          "pricePerMillionOutput": {
-                            "nullable": true,
+                          "displayName": {
                             "type": "string"
                           },
-                          "isCustomPrice": {
-                            "type": "boolean"
-                          },
-                          "priceSource": {
+                          "provider": {
                             "type": "string",
                             "enum": [
-                              "custom",
-                              "models_dev",
-                              "default"
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "capabilities": {
+                            "type": "object",
+                            "properties": {
+                              "contextLength": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "inputModalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio",
+                                    "video",
+                                    "pdf"
+                                  ]
+                                }
+                              },
+                              "outputModalities": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio"
+                                  ]
+                                }
+                              },
+                              "supportsToolCalling": {
+                                "nullable": true,
+                                "type": "boolean"
+                              },
+                              "pricePerMillionInput": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "pricePerMillionOutput": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "isCustomPrice": {
+                                "type": "boolean"
+                              },
+                              "priceSource": {
+                                "type": "string",
+                                "enum": [
+                                  "custom",
+                                  "models_dev",
+                                  "default"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "contextLength",
+                              "inputModalities",
+                              "outputModalities",
+                              "supportsToolCalling",
+                              "pricePerMillionInput",
+                              "pricePerMillionOutput",
+                              "isCustomPrice",
+                              "priceSource"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "isBest": {
+                            "type": "boolean"
+                          },
+                          "isFastest": {
+                            "type": "boolean"
+                          },
+                          "embeddingDimensions": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "enum": [
+                                  3072
+                                ]
+                              },
+                              {
+                                "type": "number",
+                                "enum": [
+                                  1536
+                                ]
+                              },
+                              {
+                                "type": "number",
+                                "enum": [
+                                  768
+                                ]
+                              }
                             ]
                           }
                         },
                         "required": [
-                          "contextLength",
-                          "inputModalities",
-                          "outputModalities",
-                          "supportsToolCalling",
-                          "pricePerMillionInput",
-                          "pricePerMillionOutput",
-                          "isCustomPrice",
-                          "priceSource"
+                          "id",
+                          "displayName",
+                          "provider"
                         ],
                         "additionalProperties": false
-                      },
-                      "isBest": {
-                        "type": "boolean"
-                      },
-                      "isFastest": {
-                        "type": "boolean"
-                      },
-                      "embeddingDimensions": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "type": "number",
-                            "enum": [
-                              3072
-                            ]
-                          },
-                          {
-                            "type": "number",
-                            "enum": [
-                              1536
-                            ]
-                          },
-                          {
-                            "type": "number",
-                            "enum": [
-                              768
-                            ]
-                          }
-                        ]
                       }
                     },
-                    "required": [
-                      "id",
-                      "displayName",
-                      "provider"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

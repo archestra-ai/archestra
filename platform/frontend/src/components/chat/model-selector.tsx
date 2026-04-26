@@ -48,7 +48,8 @@ import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import {
   type LlmModel,
   type ModelCapabilities,
-  useLlmModelsByProvider,
+  useAvailableLlmModel,
+  useInfiniteLlmModelsByProvider,
   useSyncLlmModels,
 } from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils";
@@ -201,23 +202,17 @@ function ModelCapabilityBadges({
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="flex items-center gap-0.5">
-        {hasVision && (
-          <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
-        )}
-        {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
-        {hasVideo && (
-          <CapabilityIcon icon={Video} label="Supports video input" />
-        )}
-        {hasPdf && (
-          <CapabilityIcon icon={FileText} label="Supports PDF input" />
-        )}
-        {hasToolCalling && (
-          <CapabilityIcon icon={Settings2} label="Supports tool calling" />
-        )}
-      </div>
-    </TooltipProvider>
+    <div className="flex items-center gap-0.5">
+      {hasVision && (
+        <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
+      )}
+      {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
+      {hasVideo && <CapabilityIcon icon={Video} label="Supports video input" />}
+      {hasPdf && <CapabilityIcon icon={FileText} label="Supports PDF input" />}
+      {hasToolCalling && (
+        <CapabilityIcon icon={Settings2} label="Supports tool calling" />
+      )}
+    </div>
   );
 }
 
@@ -248,19 +243,17 @@ function ContextLengthIndicator({
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
-            <Layers className="size-3" />
-            {formatContextLength(contextLength)}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          {contextLength.toLocaleString()} token context window
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
+          <Layers className="size-3" />
+          {formatContextLength(contextLength)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {contextLength.toLocaleString()} token context window
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -279,25 +272,23 @@ function PricingIndicator({
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex items-center text-muted-foreground">
-            <DollarSign className="size-3" />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          <div className="flex flex-col gap-0.5">
-            {pricePerMillionInput && (
-              <span>Input: ${pricePerMillionInput}/M tokens</span>
-            )}
-            {pricePerMillionOutput && (
-              <span>Output: ${pricePerMillionOutput}/M tokens</span>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center text-muted-foreground">
+          <DollarSign className="size-3" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        <div className="flex flex-col gap-0.5">
+          {pricePerMillionInput && (
+            <span>Input: ${pricePerMillionInput}/M tokens</span>
+          )}
+          {pricePerMillionOutput && (
+            <span>Output: ${pricePerMillionOutput}/M tokens</span>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -401,13 +392,11 @@ function FilterToggle({
 function ModelFiltersBar({
   filters,
   onFiltersChange,
-  availableModalities,
   onRefresh,
   isRefreshing,
 }: {
   filters: ModelFilters;
   onFiltersChange: (filters: ModelFilters) => void;
-  availableModalities: Set<FilterableModality>;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
@@ -431,107 +420,52 @@ function ModelFiltersBar({
     [filters, onFiltersChange],
   );
 
-  // Only show modality filters that are available in the model list
-  const visibleModalityFilters = MODALITY_FILTERS.filter((f) =>
-    availableModalities.has(f.modality),
-  );
-
   return (
     <div className="flex items-center gap-1 px-3 py-2 border-b">
-      {visibleModalityFilters.length > 0 && (
-        <>
-          <span className="text-xs text-muted-foreground mr-1">Filter:</span>
-          <div className="flex flex-wrap items-center gap-1 flex-1">
-            {visibleModalityFilters.map((config) => (
-              <FilterToggle
-                key={config.modality}
-                icon={config.icon}
-                label={config.label}
-                pressed={filters.modalities.has(config.modality)}
-                onPressedChange={(pressed) =>
-                  toggleModality(config.modality, pressed)
-                }
-              />
-            ))}
-            <FilterToggle
-              icon={TOOL_CALLING_FILTER.icon}
-              label={TOOL_CALLING_FILTER.label}
-              pressed={filters.toolCalling}
-              onPressedChange={toggleToolCalling}
+      <span className="text-xs text-muted-foreground mr-1">Filter:</span>
+      <div className="flex flex-wrap items-center gap-1 flex-1">
+        {MODALITY_FILTERS.map((config) => (
+          <FilterToggle
+            key={config.modality}
+            icon={config.icon}
+            label={config.label}
+            pressed={filters.modalities.has(config.modality)}
+            onPressedChange={(pressed) =>
+              toggleModality(config.modality, pressed)
+            }
+          />
+        ))}
+        <FilterToggle
+          icon={TOOL_CALLING_FILTER.icon}
+          label={TOOL_CALLING_FILTER.label}
+          pressed={filters.toolCalling}
+          onPressedChange={toggleToolCalling}
+        />
+      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={cn("size-4", isRefreshing && "animate-spin")}
             />
-          </div>
-        </>
-      )}
-      {visibleModalityFilters.length === 0 && <div className="flex-1" />}
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
-            >
-              <RefreshCw
-                className={cn("size-4", isRefreshing && "animate-spin")}
-              />
-              <span className="sr-only">Refresh models</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Refresh models from providers
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+            <span className="sr-only">Refresh models</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">
+          Refresh models from providers
+        </TooltipContent>
+      </Tooltip>
       <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
         <XIcon className="size-4" />
         <span className="sr-only">Close</span>
       </DialogClose>
     </div>
   );
-}
-
-/**
- * Checks if a model has unknown capabilities (no data available).
- */
-function hasUnknownCapabilities(model: LlmModel): boolean {
-  const capabilities = model.capabilities;
-  if (!capabilities) return true;
-
-  const hasVision = capabilities.inputModalities?.includes("image");
-  const hasAudio = capabilities.inputModalities?.includes("audio");
-  const hasVideo = capabilities.inputModalities?.includes("video");
-  const hasPdf = capabilities.inputModalities?.includes("pdf");
-  const hasToolCalling = capabilities.supportsToolCalling;
-
-  return !hasVision && !hasAudio && !hasVideo && !hasPdf && !hasToolCalling;
-}
-
-/**
- * Checks if a model matches the given filters.
- * Models with unknown capabilities are always shown.
- */
-function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
-  // Always show models with unknown capabilities
-  if (hasUnknownCapabilities(model)) {
-    return true;
-  }
-
-  const capabilities = model.capabilities;
-
-  // Check modality filters (AND logic - model must support all selected modalities)
-  for (const modality of filters.modalities) {
-    if (!capabilities?.inputModalities?.includes(modality)) {
-      return false;
-    }
-  }
-
-  // Check tool calling filter
-  if (filters.toolCalling && !capabilities?.supportsToolCalling) {
-    return false;
-  }
-
-  return true;
 }
 
 /**
@@ -550,101 +484,111 @@ export function ModelSelector({
   apiKeyId,
   enabled = true,
 }: ModelSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadMoreNode, setLoadMoreNode] = useState<HTMLDivElement | null>(null);
+
   const {
+    models,
     modelsByProvider,
     isPending: isLoading,
+    isFetching,
+    isFetchingNextPage,
     isPlaceholderData,
-  } = useLlmModelsByProvider({
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteLlmModelsByProvider({
+    apiKeyId: apiKeyId ?? undefined,
+    q: searchQuery.trim() || undefined,
+    inputModalities: Array.from(filters.modalities),
+    supportsToolCalling: filters.toolCalling ? "true" : undefined,
+    limit: 50,
+    enabled,
+  });
+  const selectedModelQuery = useAvailableLlmModel({
+    modelId: selectedModel || null,
     apiKeyId: apiKeyId ?? undefined,
     enabled,
   });
   const syncMutation = useSyncLlmModels();
-  const [open, setOpen] = useState(false);
-  const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
     // Reset filters when closing the dialog
     if (!newOpen) {
       setFilters(INITIAL_FILTERS);
+      setSearchQuery("");
     }
     onOpenChangeProp?.(newOpen);
   };
+
+  useEffect(() => {
+    if (!open || !hasNextPage || isFetching || isFetchingNextPage) {
+      return;
+    }
+
+    if (!loadMoreNode) {
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        fetchNextPage();
+      }
+    });
+    observer.observe(loadMoreNode);
+
+    return () => observer.disconnect();
+  }, [
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    loadMoreNode,
+    open,
+  ]);
 
   // Get available providers from the fetched models
   const availableProviders = useMemo(() => {
     return Object.keys(modelsByProvider) as SupportedProvider[];
   }, [modelsByProvider]);
 
-  // Calculate which modalities are available across all models
-  const availableModalities = useMemo(() => {
-    const modalities = new Set<FilterableModality>();
+  const modelIndexes = useMemo(() => {
+    const allModels: LlmModel[] = [];
+    const providerByModelId = new Map<string, SupportedProvider>();
+    const modelById = new Map<string, LlmModel>();
+
     for (const provider of availableProviders) {
       for (const model of modelsByProvider[provider] ?? []) {
-        const inputMods = model.capabilities?.inputModalities ?? [];
-        for (const mod of inputMods) {
-          if (mod !== "text") {
-            modalities.add(mod as FilterableModality);
-          }
-        }
+        allModels.push(model);
+        providerByModelId.set(model.id, provider);
+        modelById.set(model.id, model);
       }
     }
-    return modalities;
+
+    return { allModels, modelById, providerByModelId };
   }, [availableProviders, modelsByProvider]);
 
-  // Check if any filters are active
   const hasActiveFilters = filters.modalities.size > 0 || filters.toolCalling;
 
-  // Filter models by provider based on active filters
-  const filteredModelsByProvider = useMemo(() => {
-    if (!hasActiveFilters) {
-      return modelsByProvider;
-    }
-
-    const filtered: Partial<Record<SupportedProvider, LlmModel[]>> = {};
-    for (const provider of availableProviders) {
-      const models = modelsByProvider[provider] ?? [];
-      const matchingModels = models.filter((model) =>
-        modelMatchesFilters(model, filters),
-      );
-      if (matchingModels.length > 0) {
-        filtered[provider] = matchingModels;
-      }
-    }
-    return filtered;
-  }, [modelsByProvider, availableProviders, filters, hasActiveFilters]);
-
-  // Get filtered providers (only those with matching models)
-  const filteredProviders = useMemo(() => {
-    return Object.keys(filteredModelsByProvider) as SupportedProvider[];
-  }, [filteredModelsByProvider]);
-
-  // Find the provider for a given model
-  const getProviderForModel = (model: string): SupportedProvider | null => {
-    for (const provider of availableProviders) {
-      if (modelsByProvider[provider]?.some((m) => m.id === model)) {
-        return provider;
-      }
-    }
-    return null;
-  };
+  const hasSearch = searchQuery.trim().length > 0;
+  const isRefreshingResults =
+    open && isFetching && !isFetchingNextPage && !isLoading;
+  const selectedModelDetails =
+    modelIndexes.modelById.get(selectedModel) ??
+    selectedModelQuery.data ??
+    null;
 
   // Get selected model's provider for logo
-  const selectedModelProvider = getProviderForModel(selectedModel);
+  const selectedModelProvider = selectedModelDetails?.provider ?? null;
   const selectedModelLogo = selectedModelProvider
     ? providerToLogoProvider[selectedModelProvider]
     : null;
 
   // Get display name for selected model
-  const selectedModelDisplayName = useMemo(() => {
-    for (const provider of availableProviders) {
-      const model = modelsByProvider[provider]?.find(
-        (m) => m.id === selectedModel,
-      );
-      if (model) return model.displayName;
-    }
-    return selectedModel; // Fall back to ID if not found
-  }, [selectedModel, availableProviders, modelsByProvider]);
+  const selectedModelDisplayName =
+    selectedModelDetails?.displayName ?? selectedModel;
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format
@@ -661,46 +605,30 @@ export function ModelSelector({
     onModelChange(modelId);
   };
 
-  // All available models flattened (filtered by apiKeyId)
-  const allAvailableModels = useMemo(
-    () =>
-      availableProviders.flatMap(
-        (provider) => modelsByProvider[provider] ?? [],
-      ),
-    [availableProviders, modelsByProvider],
-  );
-  const allAvailableModelIds = useMemo(
-    () => allAvailableModels.map((m) => m.id),
-    [allAvailableModels],
-  );
-  const isModelAvailable = allAvailableModelIds.includes(selectedModel);
+  const isSelectedModelLoadedInList = modelIndexes.modelById.has(selectedModel);
+  const isSelectedModelMissingFromApiKey =
+    !!selectedModel &&
+    !isSelectedModelLoadedInList &&
+    selectedModelQuery.isFetched &&
+    !selectedModelQuery.isFetching &&
+    !selectedModelQuery.data;
 
-  // Auto-select the "best" model (or first) when the selected model is not
-  // in the available list (e.g. after switching API keys or on initial load).
-  // Only triggers when the model is genuinely unavailable — keeps the user's
-  // selection stable across API key changes if the model is still valid.
-  // Skip when using placeholder (stale) data from a previous apiKeyId query —
-  // the stale models would incorrectly trigger auto-select for the wrong provider.
+  // Auto-select only when no explicit model is selected. A selected model may
+  // simply be outside the currently loaded page.
   useEffect(() => {
-    if (isPlaceholderData) return;
+    if (selectedModel) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
-      availableModels: allAvailableModels,
+      availableModels: modelIndexes.allModels,
       isLoading,
     });
     if (modelToSelect) {
       onModelChange(modelToSelect);
     }
-  }, [
-    isLoading,
-    isPlaceholderData,
-    allAvailableModels,
-    selectedModel,
-    onModelChange,
-  ]);
+  }, [isLoading, modelIndexes.allModels, selectedModel, onModelChange]);
 
   // If loading, show loading state
-  if (isLoading) {
+  if (isLoading && !open) {
     return (
       <PromptInputButton disabled>
         <Loader2 className="size-4 animate-spin" />
@@ -710,7 +638,13 @@ export function ModelSelector({
   }
 
   // If no providers configured, show disabled state
-  if (availableProviders.length === 0) {
+  if (
+    !open &&
+    !selectedModel &&
+    !hasActiveFilters &&
+    !hasSearch &&
+    availableProviders.length === 0
+  ) {
     return (
       <PromptInputButton disabled>
         <ModelSelectorName>No models available</ModelSelectorName>
@@ -719,7 +653,7 @@ export function ModelSelector({
   }
 
   return (
-    <div>
+    <TooltipProvider delayDuration={300}>
       <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
         <ModelSelectorTrigger asChild>
           {variant === "outline" ? (
@@ -790,116 +724,167 @@ export function ModelSelector({
             </PromptInputButton>
           )}
         </ModelSelectorTrigger>
-        <ModelSelectorContent
-          title="Select Model"
-          onCloseAutoFocus={(e) => e.preventDefault()}
-          showCloseButton={false}
-        >
-          <ModelFiltersBar
-            filters={filters}
-            onFiltersChange={setFilters}
-            availableModalities={availableModalities}
-            onRefresh={() => syncMutation.mutate()}
-            isRefreshing={syncMutation.isPending}
-          />
-          <ModelSelectorInput placeholder="Search models..." autoFocus />
-          <ModelSelectorList>
-            <ModelSelectorEmpty>
-              {hasActiveFilters
-                ? "No models match the selected filters."
-                : "No models found."}
-            </ModelSelectorEmpty>
+        {open && (
+          <ModelSelectorContent
+            title="Select Model"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            showCloseButton={false}
+            shouldFilter={false}
+          >
+            <ModelFiltersBar
+              filters={filters}
+              onFiltersChange={setFilters}
+              onRefresh={() => syncMutation.mutate()}
+              isRefreshing={syncMutation.isPending}
+            />
+            <DebouncedModelSelectorInput
+              onDebouncedValueChange={setSearchQuery}
+            />
+            <ModelSelectorList className="relative">
+              {isRefreshingResults && (
+                <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
+                  <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+                    <Loader2 className="size-3 animate-spin" />
+                    Updating results...
+                  </div>
+                </div>
+              )}
+              <ModelSelectorEmpty>
+                {hasActiveFilters || hasSearch
+                  ? "No models match the selected filters."
+                  : "No models found."}
+              </ModelSelectorEmpty>
 
-            {/* Option to unselect model */}
-            {onClear && (
-              <ModelSelectorGroup heading="">
-                <ModelSelectorItem
-                  value="__none__"
-                  onSelect={() => {
-                    handleOpenChange(false);
-                    onClear();
-                  }}
+              {/* Option to unselect model */}
+              {onClear && (
+                <ModelSelectorGroup heading="">
+                  <ModelSelectorItem
+                    value="__none__"
+                    onSelect={() => {
+                      handleOpenChange(false);
+                      onClear();
+                    }}
+                  >
+                    <ModelSelectorName>
+                      Best available model (resolved at runtime)
+                    </ModelSelectorName>
+                    {!selectedModel && <CheckIcon className="ml-auto size-4" />}
+                  </ModelSelectorItem>
+                </ModelSelectorGroup>
+              )}
+
+              {selectedModel && (
+                <ModelSelectorGroup
+                  heading={
+                    isSelectedModelMissingFromApiKey
+                      ? "Current (API key missing)"
+                      : "Current"
+                  }
                 >
-                  <ModelSelectorName>
-                    Best available model (resolved at runtime)
-                  </ModelSelectorName>
-                  {!selectedModel && <CheckIcon className="ml-auto size-4" />}
-                </ModelSelectorItem>
-              </ModelSelectorGroup>
-            )}
+                  <ModelSelectorItem
+                    disabled
+                    value={selectedModel}
+                    className={cn(
+                      isSelectedModelMissingFromApiKey && "text-yellow-600",
+                    )}
+                  >
+                    {selectedModelLogo && (
+                      <ModelSelectorLogo provider={selectedModelLogo} />
+                    )}
+                    <ModelSelectorName>{selectedModel}</ModelSelectorName>
+                    <CheckIcon className="ml-auto size-4" />
+                  </ModelSelectorItem>
+                </ModelSelectorGroup>
+              )}
 
-            {/* Show current model if not in available list */}
-            {!isModelAvailable && selectedModel && (
-              <ModelSelectorGroup heading="Current (API key missing)">
-                <ModelSelectorItem
-                  disabled
-                  value={selectedModel}
-                  className="text-yellow-600"
+              {availableProviders.map((provider) => (
+                <ModelSelectorGroup
+                  key={provider}
+                  heading={providerDisplayNames[provider]}
                 >
-                  {selectedModelLogo && (
-                    <ModelSelectorLogo provider={selectedModelLogo} />
-                  )}
-                  <ModelSelectorName>{selectedModel}</ModelSelectorName>
-                  <CheckIcon className="ml-auto size-4" />
-                </ModelSelectorItem>
-              </ModelSelectorGroup>
-            )}
-
-            {filteredProviders.map((provider) => (
-              <ModelSelectorGroup
-                key={provider}
-                heading={providerDisplayNames[provider]}
-              >
-                {filteredModelsByProvider[provider]?.map((model) => {
-                  // Use provider:modelId format for unique keys/values
-                  // This prevents issues when different providers have models with the same ID
-                  const modelValue = createModelValue(provider, model.id);
-                  return (
-                    <ModelSelectorItem
-                      key={modelValue}
-                      value={modelValue}
-                      onSelect={() => handleSelectModel(modelValue)}
-                      className="group"
-                    >
-                      <ModelSelectorLogo
-                        provider={providerToLogoProvider[provider]}
-                      />
-                      <ModelSelectorName>
-                        {model.displayName}{" "}
-                        <span className="text-xs text-muted-foreground font-mono">
-                          ({model.id})
-                        </span>
-                        <CopyModelIdButton modelId={model.id} />
-                      </ModelSelectorName>
-                      <div className="ml-auto flex items-center gap-2">
-                        <ModelCapabilityBadges
-                          capabilities={model.capabilities}
+                  {modelsByProvider[provider]?.map((model) => {
+                    // Use provider:modelId format for unique keys/values
+                    // This prevents issues when different providers have models with the same ID
+                    const modelValue = createModelValue(provider, model.id);
+                    return (
+                      <ModelSelectorItem
+                        key={modelValue}
+                        value={modelValue}
+                        onSelect={() => handleSelectModel(modelValue)}
+                        className="group"
+                      >
+                        <ModelSelectorLogo
+                          provider={providerToLogoProvider[provider]}
                         />
-                        <ContextLengthIndicator
-                          contextLength={model.capabilities?.contextLength}
-                        />
-                        <PricingIndicator
-                          pricePerMillionInput={
-                            model.capabilities?.pricePerMillionInput
-                          }
-                          pricePerMillionOutput={
-                            model.capabilities?.pricePerMillionOutput
-                          }
-                        />
-                        {selectedModel === model.id ? (
-                          <CheckIcon className="size-4" />
-                        ) : (
-                          <div className="size-4" />
-                        )}
-                      </div>
-                    </ModelSelectorItem>
-                  );
-                })}
-              </ModelSelectorGroup>
-            ))}
-          </ModelSelectorList>
-        </ModelSelectorContent>
+                        <ModelSelectorName>
+                          {model.displayName}{" "}
+                          <span className="text-xs text-muted-foreground font-mono">
+                            ({model.id})
+                          </span>
+                          <CopyModelIdButton modelId={model.id} />
+                        </ModelSelectorName>
+                        <div className="ml-auto flex items-center gap-2">
+                          <ModelCapabilityBadges
+                            capabilities={model.capabilities}
+                          />
+                          <ContextLengthIndicator
+                            contextLength={model.capabilities?.contextLength}
+                          />
+                          <PricingIndicator
+                            pricePerMillionInput={
+                              model.capabilities?.pricePerMillionInput
+                            }
+                            pricePerMillionOutput={
+                              model.capabilities?.pricePerMillionOutput
+                            }
+                          />
+                          {selectedModel === model.id ? (
+                            <CheckIcon className="size-4" />
+                          ) : (
+                            <div className="size-4" />
+                          )}
+                        </div>
+                      </ModelSelectorItem>
+                    );
+                  })}
+                </ModelSelectorGroup>
+              ))}
+              <div ref={setLoadMoreNode} className="py-2 text-center text-xs">
+                {isFetchingNextPage && (
+                  <span className="text-muted-foreground">Loading more...</span>
+                )}
+                {!hasNextPage && models.length > 0 && !isPlaceholderData && (
+                  <span className="text-muted-foreground">End of results</span>
+                )}
+              </div>
+            </ModelSelectorList>
+          </ModelSelectorContent>
+        )}
       </ModelSelectorRoot>
-    </div>
+    </TooltipProvider>
+  );
+}
+
+function DebouncedModelSelectorInput({
+  onDebouncedValueChange,
+}: {
+  onDebouncedValueChange: (value: string) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      onDebouncedValueChange(value);
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [onDebouncedValueChange, value]);
+
+  return (
+    <ModelSelectorInput
+      placeholder="Search models..."
+      value={value}
+      onValueChange={setValue}
+      autoFocus
+    />
   );
 }

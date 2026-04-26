@@ -43897,3 +43897,63 @@ export type GetTeamVaultSecretKeysResponses = {
 };
 
 export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
+
+export type GetAuditLogsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        /** Filter by actor user ID */
+        actorId?: string;
+        /** Filter by resource type */
+        resourceType?: string;
+        /** Filter by action */
+        action?: string;
+        /** ISO date string — return entries at or after this timestamp */
+        from?: string;
+        /** ISO date string — return entries at or before this timestamp */
+        to?: string;
+    };
+    url: '/api/audit-logs';
+};
+
+export type GetAuditLogsErrors = {
+    400: { error: { message: string; type: 'api_validation_error' } };
+    401: { error: { message: string; type: 'api_authentication_error' } };
+    403: { error: { message: string; type: 'api_authorization_error' } };
+    500: { error: { message: string; type: 'api_internal_server_error' } };
+};
+
+export type GetAuditLogsError = GetAuditLogsErrors[keyof GetAuditLogsErrors];
+
+export type AuditLogEntry = {
+    id: string;
+    organizationId: string;
+    actorId: string | null;
+    actorName: string | null;
+    actorEmail: string | null;
+    resourceType: string;
+    resourceId: string | null;
+    resourceLabel: string | null;
+    action: string;
+    metadata: string | null;
+    ipAddress: string | null;
+    createdAt: string;
+};
+
+export type GetAuditLogsResponses = {
+    200: {
+        data: Array<AuditLogEntry>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAuditLogsResponse = GetAuditLogsResponses[keyof GetAuditLogsResponses];

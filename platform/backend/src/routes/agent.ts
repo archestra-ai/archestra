@@ -16,6 +16,7 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AuditLogModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
@@ -315,7 +316,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, organizationId } = request;
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
 
@@ -409,6 +411,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
 
+      void AuditLogModel.log({
+        organizationId,
+        actorId: user.id,
+        actorName: user.name,
+        actorEmail: user.email,
+        resourceType: "agent",
+        resourceId: agent.id,
+        resourceLabel: agent.name,
+        action: "created",
+        ipAddress: request.ip,
+      });
+
       return reply.send(agent);
     },
   );
@@ -475,7 +489,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { params: { id }, body, user, organizationId } = request;
       // Fetch agent to determine its type for permission check
       const existingAgent = await AgentModel.findById(id, user.id, true);
       if (!existingAgent) {
@@ -652,6 +667,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await initializeObservabilityMetrics();
       }
 
+      void AuditLogModel.log({
+        organizationId,
+        actorId: user.id,
+        actorName: user.name,
+        actorEmail: user.email,
+        resourceType: "agent",
+        resourceId: agent.id,
+        resourceLabel: agent.name,
+        action: "updated",
+        metadata: body.scope !== undefined ? { scope: body.scope } : null,
+        ipAddress: request.ip,
+      });
+
       return reply.send(agent);
     },
   );
@@ -669,7 +697,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { params: { id }, user, organizationId } = request;
       // Fetch agent to determine its type for permission check
       const agent = await AgentModel.findById(id, user.id, true);
       if (!agent) {
@@ -720,6 +749,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Agent not found");
       }
+
+      void AuditLogModel.log({
+        organizationId,
+        actorId: user.id,
+        actorName: user.name,
+        actorEmail: user.email,
+        resourceType: "agent",
+        resourceId: id,
+        resourceLabel: agent.name,
+        action: "deleted",
+        ipAddress: request.ip,
+      });
 
       return reply.send({ success: true });
     },

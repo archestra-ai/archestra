@@ -4503,3 +4503,5 @@ export const getTeamVaultSecretKeys = <ThrowOnError extends boolean = false>(opt
         ...options.headers
     }
 });
+
+export const getAuditLogs = <ThrowOnError extends boolean = false>(options?: Options<import('./types.gen').GetAuditLogsData, ThrowOnError>) => (options?.client ?? client).get<import('./types.gen').GetAuditLogsResponses, import('./types.gen').GetAuditLogsErrors, ThrowOnError>({ url: '/api/audit-logs', ...options });

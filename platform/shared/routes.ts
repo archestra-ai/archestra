@@ -423,6 +423,9 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Audit Log Routes
+  GetAuditLogs: "getAuditLogs",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

@@ -1073,4 +1073,5 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
+  "/settings/audit-log": { organizationSettings: ["read"] },
 };

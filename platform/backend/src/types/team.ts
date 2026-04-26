@@ -33,6 +33,24 @@ export const UpdateTeamBodySchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
 });
 
+/**
+ * Schema for updating team-level Kubernetes deployment settings.
+ * Allows admins to configure a per-team namespace or separate cluster
+ * for MCP servers belonging to this team.
+ */
+export const UpdateTeamK8sSettingsBodySchema = z.object({
+  /**
+   * Target Kubernetes namespace for MCP servers deployed by this team.
+   * Set to null to remove the override and fall back to the org/global default.
+   */
+  k8sNamespace: z.string().min(1).nullable().optional(),
+  /**
+   * Base64-encoded KUBECONFIG content for a separate Kubernetes cluster.
+   * Set to null to remove the override and use the org/global cluster.
+   */
+  k8sKubeconfigBase64: z.string().min(1).nullable().optional(),
+});
+
 export const AddTeamMemberBodySchema = z.object({
   userId: z.string(),
   role: z.string().default(MEMBER_ROLE_NAME),
@@ -58,6 +76,9 @@ export type TeamMemberListItem = z.infer<typeof SelectTeamMemberListItemSchema>;
 export type CreateTeamBody = z.infer<typeof CreateTeamBodySchema>;
 export type UpdateTeamBody = z.infer<typeof UpdateTeamBodySchema>;
 export type AddTeamMemberBody = z.infer<typeof AddTeamMemberBodySchema>;
+export type UpdateTeamK8sSettingsBody = z.infer<
+  typeof UpdateTeamK8sSettingsBodySchema
+>;
 export type TeamExternalGroup = z.infer<typeof SelectTeamExternalGroupSchema>;
 export type InsertTeamExternalGroup = z.infer<
   typeof InsertTeamExternalGroupSchema

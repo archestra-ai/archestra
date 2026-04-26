@@ -36409,6 +36409,69 @@ export type UpdateMcpSettingsResponses = {
 
 export type UpdateMcpSettingsResponse = UpdateMcpSettingsResponses[keyof UpdateMcpSettingsResponses];
 
+export type UpdateOrgK8sSettingsData = {
+    body: {
+        k8sNamespace?: string | null;
+        k8sKubeconfigBase64?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/k8s-settings';
+};
+
+export type UpdateOrgK8sSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateOrgK8sSettingsError = UpdateOrgK8sSettingsErrors[keyof UpdateOrgK8sSettingsErrors];
+
+export type UpdateOrgK8sSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: UpdateMcpSettingsResponses[200] & {
+        k8sNamespace: string | null;
+        k8sKubeconfigBase64: string | null;
+    };
+};
+
+export type UpdateOrgK8sSettingsResponse = UpdateOrgK8sSettingsResponses[keyof UpdateOrgK8sSettingsResponses];
+
 export type UpdateKnowledgeSettingsData = {
     body: {
         embeddingModel?: string | null;
@@ -39726,6 +39789,96 @@ export type UpdateTeamResponses = {
 };
 
 export type UpdateTeamResponse = UpdateTeamResponses[keyof UpdateTeamResponses];
+
+export type UpdateTeamK8sSettingsData = {
+    body: {
+        k8sNamespace?: string | null;
+        k8sKubeconfigBase64?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/k8s-settings';
+};
+
+export type UpdateTeamK8sSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateTeamK8sSettingsError = UpdateTeamK8sSettingsErrors[keyof UpdateTeamK8sSettingsErrors];
+
+export type UpdateTeamK8sSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        convertToolResultsToToon: boolean;
+        k8sNamespace: string | null;
+        k8sKubeconfigBase64: string | null;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            syncedFromSso: boolean;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type UpdateTeamK8sSettingsResponse = UpdateTeamK8sSettingsResponses[keyof UpdateTeamK8sSettingsResponses];
 
 export type GetTeamMembersData = {
     body?: never;

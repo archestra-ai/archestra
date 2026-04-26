@@ -21,6 +21,7 @@ import {
   SelectTeamMemberSchema,
   SelectTeamSchema,
   UpdateTeamBodySchema,
+  UpdateTeamK8sSettingsBodySchema,
 } from "@/types";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -176,6 +177,52 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const team = await TeamModel.update(id, body);
+
+      if (!team) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      return reply.send(team);
+    },
+  );
+
+  fastify.patch(
+    "/api/teams/:id/k8s-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateTeamK8sSettings,
+        description:
+          "Update Kubernetes deployment settings for a team. Allows admins to configure a per-team namespace or a separate cluster (via base64-encoded KUBECONFIG) for MCP servers deployed by this team.",
+        tags: ["Teams"],
+        params: z.object({
+          id: z.string(),
+        }),
+        body: UpdateTeamK8sSettingsBodySchema,
+        response: constructResponseSchema(SelectTeamSchema),
+      },
+    },
+    async ({ params: { id }, body, organizationId, headers }, reply) => {
+      // Only team admins may change k8s settings
+      const { success: isTeamAdmin } = await hasPermission(
+        { team: ["admin"] },
+        headers,
+      );
+      if (!isTeamAdmin) {
+        throw new ApiError(
+          403,
+          "Only team administrators can update Kubernetes settings",
+        );
+      }
+
+      const existingTeam = await TeamModel.findById(id);
+      if (!existingTeam || existingTeam.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      const team = await TeamModel.update(id, {
+        k8sNamespace: body.k8sNamespace ?? undefined,
+        k8sKubeconfigBase64: body.k8sKubeconfigBase64 ?? undefined,
+      });
 
       if (!team) {
         throw new ApiError(404, "Team not found");

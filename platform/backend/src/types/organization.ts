@@ -288,6 +288,25 @@ export const UpdateMcpSettingsSchema = z.object({
     McpOauthAccessTokenLifetimeSecondsSchema.optional(),
 });
 
+/**
+ * Schema for updating org-level Kubernetes deployment settings.
+ * These serve as the default for all teams that do not have their own overrides.
+ */
+export const UpdateOrgK8sSettingsSchema = z.object({
+  /**
+   * Default Kubernetes namespace for personal MCP servers across the org.
+   * Set to null to remove the override and use the global env var default.
+   * Team-level k8sNamespace takes precedence over this setting.
+   */
+  k8sNamespace: z.string().min(1).nullable().optional(),
+  /**
+   * Default base64-encoded KUBECONFIG for a separate Kubernetes cluster.
+   * Set to null to remove the override and use the global env var cluster.
+   * Team-level k8sKubeconfigBase64 takes precedence over this setting.
+   */
+  k8sKubeconfigBase64: z.string().min(1).nullable().optional(),
+});
+
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
   connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),

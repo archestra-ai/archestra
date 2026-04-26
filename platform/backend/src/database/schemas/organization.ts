@@ -185,6 +185,20 @@ const organizationsTable = pgTable("organization", {
   connectionShownProviders: text("connection_shown_providers")
     .$type<SupportedProvider[]>()
     .array(),
+
+  /**
+   * Optional org-wide Kubernetes namespace override for personal MCP servers.
+   * Falls back to the global ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE env var.
+   * Team-level k8sNamespace takes precedence over this value.
+   */
+  k8sNamespace: text("k8s_namespace"),
+
+  /**
+   * Optional org-wide base64-encoded KUBECONFIG for a separate Kubernetes cluster.
+   * Falls back to the global ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var.
+   * Team-level k8sKubeconfigBase64 takes precedence over this value.
+   */
+  k8sKubeconfigBase64: text("k8s_kubeconfig_base64"),
 });
 
 export default organizationsTable;

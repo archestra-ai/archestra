@@ -1,4 +1,4 @@
-import type * as k8s from "@kubernetes/client-node";
+import * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
   loadKubeConfig,
@@ -9,6 +9,8 @@ import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
+  OrganizationModel,
+  TeamModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
@@ -203,9 +205,16 @@ export class McpServerRuntimeManager {
         );
       }
 
-      if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
-        throw new Error("Kubernetes clients not initialized");
-      }
+      // Resolve k8s clients — may be per-team or per-org overrides
+      const resolvedClients = await this.resolveK8sClientsForServer(mcpServer);
+      const {
+        k8sApi: serverK8sApi,
+        k8sAppsApi: serverK8sAppsApi,
+        k8sAttach: serverK8sAttach,
+        k8sLog: serverK8sLog,
+        k8sExec: serverK8sExec,
+        namespace: serverNamespace,
+      } = resolvedClients;
 
       // If environmentValues not provided but server has a secretId,
       // fetch the secret values to use as environmentValues.
@@ -273,15 +282,15 @@ export class McpServerRuntimeManager {
 
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        k8sApi: serverK8sApi,
+        k8sAppsApi: serverK8sAppsApi,
+        k8sAttach: serverK8sAttach,
+        k8sLog: serverK8sLog,
+        namespace: serverNamespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
-        k8sExec: this.k8sExec,
+        k8sExec: serverK8sExec,
       });
 
       // Register the deployment BEFORE starting it
@@ -420,15 +429,16 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
+      const resolvedClients = await this.resolveK8sClientsForServer(mcpServer);
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        k8sApi: resolvedClients.k8sApi,
+        k8sAppsApi: resolvedClients.k8sAppsApi,
+        k8sAttach: resolvedClients.k8sAttach,
+        k8sLog: resolvedClients.k8sLog,
+        namespace: resolvedClients.namespace,
         catalogItem,
-        k8sExec: this.k8sExec,
+        k8sExec: resolvedClients.k8sExec,
       });
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
@@ -846,6 +856,124 @@ export class McpServerRuntimeManager {
         { err: error },
         "Failed to list secrets for team-id backfill",
       );
+    }
+  }
+
+  /**
+   * Resolve k8s clients and namespace for a specific MCP server.
+   *
+   * Priority order (highest → lowest):
+   *   1. Team-level k8sKubeconfigBase64 / k8sNamespace  (if server has a teamId)
+   *   2. Org-level  k8sKubeconfigBase64 / k8sNamespace
+   *   3. Global defaults from environment / loaded at startup
+   *
+   * Returns the default clients when no overrides exist or when lookup fails.
+   */
+  private async resolveK8sClientsForServer(mcpServer: McpServer): Promise<{
+    k8sApi: k8s.CoreV1Api;
+    k8sAppsApi: k8s.AppsV1Api;
+    k8sAttach: k8s.Attach;
+    k8sLog: k8s.Log;
+    k8sExec: k8s.Exec;
+    namespace: string;
+  }> {
+    // Fall through to defaults when the global clients are not set
+    if (
+      !this.k8sApi ||
+      !this.k8sAppsApi ||
+      !this.k8sAttach ||
+      !this.k8sLog ||
+      !this.k8sExec
+    ) {
+      throw new Error("Kubernetes API clients not initialized");
+    }
+
+    const defaultClients = {
+      k8sApi: this.k8sApi,
+      k8sAppsApi: this.k8sAppsApi,
+      k8sAttach: this.k8sAttach,
+      k8sLog: this.k8sLog,
+      k8sExec: this.k8sExec,
+      namespace: this.namespace,
+    };
+
+    try {
+      // Attempt to load team-level override first
+      let kubeconfigBase64: string | null | undefined;
+      let namespaceOverride: string | null | undefined;
+
+      if (mcpServer.teamId) {
+        const team = await TeamModel.findById(mcpServer.teamId);
+        kubeconfigBase64 = team?.k8sKubeconfigBase64;
+        namespaceOverride = team?.k8sNamespace;
+      }
+
+      // Fall back to org-level override when team has no override
+      if (!kubeconfigBase64 && !namespaceOverride) {
+        const org = await OrganizationModel.getFirst();
+        kubeconfigBase64 = org?.k8sKubeconfigBase64;
+        namespaceOverride = org?.k8sNamespace;
+      }
+
+      // No overrides — use the global default clients
+      if (!kubeconfigBase64 && !namespaceOverride) {
+        return defaultClients;
+      }
+
+      const resolvedNamespace =
+        namespaceOverride?.trim() || this.namespace;
+
+      // Build a new KubeConfig from the override or inherit the global one
+      let kubeConfig: k8s.KubeConfig;
+
+      if (kubeconfigBase64?.trim()) {
+        const kubeconfigYaml = Buffer.from(
+          kubeconfigBase64.trim(),
+          "base64",
+        ).toString("utf8");
+
+        // Write to a temp file so validateKubeconfig can stat it, then parse
+        kubeConfig = new k8s.KubeConfig();
+        try {
+          kubeConfig.loadFromString(kubeconfigYaml);
+        } catch (parseErr) {
+          logger.warn(
+            { err: parseErr, mcpServerId: mcpServer.id },
+            "Failed to parse custom kubeconfig for MCP server, falling back to default",
+          );
+          return { ...defaultClients, namespace: resolvedNamespace };
+        }
+
+        logger.info(
+          { mcpServerId: mcpServer.id, namespace: resolvedNamespace },
+          "Using custom kubeconfig for MCP server deployment",
+        );
+      } else {
+        // Namespace-only override — re-use the existing kubeconfig
+        const { kubeConfig: globalKc } = loadKubeConfig();
+        kubeConfig = globalKc;
+
+        logger.info(
+          { mcpServerId: mcpServer.id, namespace: resolvedNamespace },
+          "Using custom namespace override for MCP server deployment",
+        );
+      }
+
+      const clients = createK8sClients(kubeConfig, resolvedNamespace);
+      return {
+        k8sApi: clients.coreApi,
+        k8sAppsApi: clients.appsApi,
+        k8sAttach: clients.attach,
+        k8sLog: clients.log,
+        k8sExec: clients.exec,
+        namespace: clients.namespace,
+      };
+    } catch (error) {
+      logger.warn(
+        { err: error, mcpServerId: mcpServer.id },
+        "Failed to resolve custom k8s clients for MCP server, falling back to defaults",
+      );
+      return defaultClients;
     }
   }
 

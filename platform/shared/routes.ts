@@ -100,6 +100,7 @@ export const RouteId = {
   CreateTeam: "createTeam",
   GetTeam: "getTeam",
   UpdateTeam: "updateTeam",
+  UpdateTeamK8sSettings: "updateTeamK8sSettings",
   DeleteTeam: "deleteTeam",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
@@ -324,6 +325,7 @@ export const RouteId = {
 
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
+  UpdateOrgK8sSettings: "updateOrgK8sSettings",
 
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",

@@ -2,7 +2,7 @@
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
+import { Key, Link2, Plus, Server, Trash2, Users, Vault } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -22,6 +22,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { TeamK8sSettingsDialog } from "./team-k8s-settings-dialog";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -48,12 +49,14 @@ export function TeamsList() {
   const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
   const byosEnabled = useFeature("byosEnabled");
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [externalGroupsDialogOpen, setExternalGroupsDialogOpen] =
     useState(false);
   const [vaultFolderDialogOpen, setVaultFolderDialogOpen] = useState(false);
+  const [k8sSettingsDialogOpen, setK8sSettingsDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
@@ -254,6 +257,19 @@ export function TeamsList() {
                 },
               ]
             : []),
+          ...(orchestratorK8sRuntime
+            ? [
+                {
+                  icon: <Server className="h-4 w-4" />,
+                  label: "Configure Kubernetes Settings",
+                  permissions: { team: ["admin"] } as const,
+                  onClick: () => {
+                    setSelectedTeam(team);
+                    setK8sSettingsDialogOpen(true);
+                  },
+                },
+              ]
+            : []),
           ...(config.enterpriseFeatures.core
             ? [
                 {
@@ -388,6 +404,14 @@ export function TeamsList() {
             team={selectedTeam}
           />
         </Suspense>
+      )}
+
+      {selectedTeam && k8sSettingsDialogOpen && (
+        <TeamK8sSettingsDialog
+          open={k8sSettingsDialogOpen}
+          onOpenChange={setK8sSettingsDialogOpen}
+          team={selectedTeam}
+        />
       )}
 
       {selectedToken && (

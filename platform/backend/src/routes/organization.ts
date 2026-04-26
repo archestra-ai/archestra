@@ -38,6 +38,7 @@ import {
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateMcpSettingsSchema,
+  UpdateOrgK8sSettingsSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -251,6 +252,29 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update MCP settings (OAuth access token lifetime)",
         tags: ["Organization"],
         body: UpdateMcpSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/k8s-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateOrgK8sSettings,
+        description:
+          "Update organization-level Kubernetes deployment settings. Configures the default namespace and/or cluster (via base64-encoded KUBECONFIG) used for personal MCP servers. Team-level settings take precedence over these defaults.",
+        tags: ["Organization"],
+        body: UpdateOrgK8sSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },

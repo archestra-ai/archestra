@@ -499,6 +499,38 @@ export function useUpdateMcpSettings(
 }
 
 /**
+ * Update org-level Kubernetes deployment settings.
+ * Configures the default namespace and/or cluster for personal MCP servers.
+ * Team-level settings take precedence over these org defaults.
+ */
+export function useUpdateOrgK8sSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateOrgK8sSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateOrgK8sSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Update knowledge settings (embedding model)
  */
 export function useUpdateKnowledgeSettings(

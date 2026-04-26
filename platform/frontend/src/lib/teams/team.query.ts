@@ -1,8 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useFeature } from "@/lib/config/config.query";
 
-const { getTeams, getTeamVaultFolder } = archestraApiSdk;
+const { getTeams, getTeamVaultFolder, updateTeamK8sSettings } = archestraApiSdk;
 
 type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
@@ -84,4 +85,35 @@ export function useTeamsWithVaultFolders() {
     data: teamsWithVaultPaths,
     isLoading,
   };
+}
+
+/**
+ * Hook to update team-level Kubernetes deployment settings.
+ * Allows admins to configure a per-team namespace or separate cluster
+ * (via base64-encoded KUBECONFIG) for MCP servers belonging to this team.
+ */
+export function useUpdateTeamK8sSettings(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateTeamK8sSettingsData["body"],
+    ) => {
+      const { data: updatedTeam, error } = await updateTeamK8sSettings({
+        path: { id: teamId },
+        body: data,
+      });
+
+      if (error) {
+        toast.error("Failed to update Kubernetes settings");
+        return null;
+      }
+
+      return updatedTeam;
+    },
+    onSuccess: (updatedTeam) => {
+      if (!updatedTeam) return;
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      toast.success("Kubernetes settings updated");
+    },
+  });
 }

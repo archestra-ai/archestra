@@ -5,7 +5,7 @@ import {
   MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
 } from "@shared";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   SettingsBlock,
@@ -29,11 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useOrganization,
   useUpdateMcpSettings,
+  useUpdateOrgK8sSettings,
 } from "@/lib/organization.query";
+import { useFeature } from "@/lib/config/config.query";
 
 const CUSTOM_LIFETIME_VALUE = "custom";
 const MCP_LIFETIME_PRESETS = [
@@ -47,6 +50,134 @@ type McpSettingsFormValues = {
   lifetimePreset: string;
   customLifetimeSeconds: number;
 };
+
+type K8sSettingsFormValues = {
+  k8sNamespace: string;
+  k8sKubeconfigBase64: string;
+};
+
+function OrgK8sSettingsSection() {
+  const orchestratorEnabled = useFeature("orchestratorK8sRuntime");
+  const { data: organization } = useOrganization();
+  const updateK8sMutation = useUpdateOrgK8sSettings(
+    "Kubernetes settings updated",
+    "Failed to update Kubernetes settings",
+  );
+
+  const form = useForm<K8sSettingsFormValues>({
+    defaultValues: {
+      k8sNamespace: organization?.k8sNamespace ?? "",
+      k8sKubeconfigBase64: organization?.k8sKubeconfigBase64 ?? "",
+    },
+  });
+
+  useEffect(() => {
+    if (!organization) return;
+    form.reset({
+      k8sNamespace: organization.k8sNamespace ?? "",
+      k8sKubeconfigBase64: organization.k8sKubeconfigBase64 ?? "",
+    });
+  }, [form, organization]);
+
+  if (!orchestratorEnabled) return null;
+
+  const serverNamespace = organization?.k8sNamespace ?? "";
+  const serverKubeconfig = organization?.k8sKubeconfigBase64 ?? "";
+  const currentNamespace = form.watch("k8sNamespace");
+  const currentKubeconfig = form.watch("k8sKubeconfigBase64");
+  const hasChanges =
+    currentNamespace !== serverNamespace ||
+    currentKubeconfig !== serverKubeconfig;
+
+  async function handleSave(values: K8sSettingsFormValues) {
+    await updateK8sMutation.mutateAsync({
+      k8sNamespace: values.k8sNamespace.trim() || null,
+      k8sKubeconfigBase64: values.k8sKubeconfigBase64.trim() || null,
+    });
+    form.reset(values);
+  }
+
+  function handleCancel() {
+    form.reset({
+      k8sNamespace: serverNamespace,
+      k8sKubeconfigBase64: serverKubeconfig,
+    });
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSave)} className="space-y-5" noValidate>
+        <SettingsBlock
+          title="Kubernetes namespace"
+          description="Override the default Kubernetes namespace for personal MCP servers. Leave blank to use the namespace configured via the ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE environment variable. Per-team overrides take precedence over this setting."
+          control={
+            <div className="w-80">
+              <FormField
+                control={form.control}
+                name="k8sNamespace"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Namespace</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g. archestra-mcp"
+                        autoComplete="off"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Kubernetes namespace where personal MCP server pods are deployed.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          }
+        />
+
+        <SettingsBlock
+          title="Custom cluster (KUBECONFIG)"
+          description="To deploy personal MCP servers to a separate Kubernetes cluster, paste the base64-encoded contents of a KUBECONFIG file below. Leave blank to use the cluster configured via the ARCHESTRA_ORCHESTRATOR_KUBECONFIG environment variable. Per-team overrides take precedence."
+          control={
+            <div className="w-80">
+              <FormField
+                control={form.control}
+                name="k8sKubeconfigBase64"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>KUBECONFIG (base64)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="Paste base64-encoded KUBECONFIG here"
+                        rows={5}
+                        className="font-mono text-xs"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Encode your kubeconfig with:{" "}
+                      <code className="text-xs">base64 -w 0 ~/.kube/config</code>
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          }
+        />
+
+        <SettingsSaveBar
+          hasChanges={hasChanges}
+          isSaving={updateK8sMutation.isPending}
+          permissions={{ organizationSettings: ["update"] }}
+          onSave={form.handleSubmit(handleSave)}
+          onCancel={handleCancel}
+        />
+      </form>
+    </Form>
+  );
+}
 
 export default function McpSettingsPage() {
   const appName = useAppName();
@@ -127,6 +258,7 @@ export default function McpSettingsPage() {
 
   return (
     <SettingsSectionStack>
+      <OrgK8sSettingsSection />
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(handleSave)}

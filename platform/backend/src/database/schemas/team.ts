@@ -19,6 +19,18 @@ export const team = pgTable("team", {
   convertToolResultsToToon: boolean("convert_tool_results_to_toon")
     .notNull()
     .default(false),
+  /**
+   * Optional Kubernetes namespace override for MCP servers deployed by this team.
+   * When set, MCP servers belonging to this team are deployed to this namespace
+   * instead of the global default namespace.
+   */
+  k8sNamespace: text("k8s_namespace"),
+  /**
+   * Optional base64-encoded KUBECONFIG for a separate Kubernetes cluster.
+   * When set, MCP servers belonging to this team are deployed using this
+   * kubeconfig (i.e. a different cluster) instead of the global cluster.
+   */
+  k8sKubeconfigBase64: text("k8s_kubeconfig_base64"),
 });
 
 export const teamMember = pgTable("team_member", {

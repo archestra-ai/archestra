@@ -33,15 +33,17 @@ export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
  * When apiKeyId is provided, only returns models linked to that specific key.
  */
 export function useLlmModels(params?: LlmModelsParams) {
+  const queryParams = getLlmModelsQueryParams(params);
+
   return useQuery({
-    queryKey: ["llm-models", "all", params],
+    queryKey: ["llm-models", "all", queryParams],
     queryFn: async (): Promise<LlmModel[]> => {
       const models: LlmModel[] = [];
       let cursor: string | undefined;
 
       do {
         const data = await fetchLlmModelsPage({
-          params: { ...params, limit: 100 },
+          params: { ...queryParams, limit: 100 },
           cursor,
         });
         models.push(...data.data);
@@ -273,6 +275,11 @@ async function fetchLlmModelsPage({
       },
     }
   );
+}
+
+function getLlmModelsQueryParams(params?: LlmModelsParams): LlmModelsQuery {
+  const { enabled: _enabled, ...queryParams } = params ?? {};
+  return queryParams;
 }
 
 function groupModelsByProvider(models: LlmModel[]) {

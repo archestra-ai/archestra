@@ -114,10 +114,6 @@ export function resolveAutoSelectedModel(
 
 // ===== Model resolution logic =====
 
-interface ModelInfo {
-  id: string;
-}
-
 interface AgentInfo {
   llmModel?: string | null;
   llmApiKeyId?: string | null;
@@ -129,8 +125,11 @@ interface OrganizationInfo {
 }
 
 interface ChatContext {
-  modelsByProvider: Record<string, ModelInfo[]>;
-  chatApiKeys: Array<{ id: string; provider: string }>;
+  chatApiKeys: Array<{
+    id: string;
+    provider: string;
+    bestModelId?: string | null;
+  }>;
   organization: OrganizationInfo | null;
 }
 
@@ -148,41 +147,24 @@ interface ResolvedModel {
 
 /**
  * Resolve which model to use on initial chat load.
- * Priority: user override > agent config > organization default > first available model.
- * Returns null if no model can be resolved (e.g., no models available).
+ * Priority: user override > agent config > organization default > API key best model.
+ * Returns null when no configured/default/best model is known yet.
  */
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
-  const { modelsByProvider, agent, chatApiKeys, organization } = params;
-  const allModels = Object.values(modelsByProvider).flat();
-  if (allModels.length === 0) return null;
+  const { agent, chatApiKeys, organization } = params;
 
-  const findKeyForProvider = (provider: string): string | null => {
-    const key = chatApiKeys.find((k) => k.provider === provider);
-    return key?.id ?? null;
-  };
-
-  const findProviderForModel = (modelId: string): string | null => {
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models.some((m) => m.id === modelId)) return provider;
-    }
-    return null;
-  };
-
-  // 0. User override from localStorage
   const userOverride = getSavedModelOverride();
-  if (userOverride && allModels.some((m) => m.id === userOverride)) {
-    const provider = findProviderForModel(userOverride);
+  if (userOverride) {
     return {
       modelId: userOverride,
-      apiKeyId: provider ? findKeyForProvider(provider) : null,
+      apiKeyId: null,
       source: "user",
     };
   }
 
-  // 1. Agent-configured model
-  if (agent?.llmModel && allModels.some((m) => m.id === agent.llmModel)) {
+  if (agent?.llmModel) {
     return {
       modelId: agent.llmModel,
       apiKeyId: agent.llmApiKeyId ?? null,
@@ -190,36 +172,22 @@ export function resolveInitialModel(
     };
   }
 
-  // 2. Organization default model
-  if (
-    organization?.defaultLlmModel &&
-    allModels.some((m) => m.id === organization.defaultLlmModel)
-  ) {
-    const provider = findProviderForModel(organization.defaultLlmModel);
+  if (organization?.defaultLlmModel) {
     const orgKeyId = organization.defaultLlmApiKeyId ?? null;
     const orgKeyAvailable =
       orgKeyId && chatApiKeys.some((k) => k.id === orgKeyId);
-    const apiKeyId = orgKeyAvailable
-      ? orgKeyId
-      : provider
-        ? findKeyForProvider(provider)
-        : null;
     return {
       modelId: organization.defaultLlmModel,
-      apiKeyId,
+      apiKeyId: orgKeyAvailable ? orgKeyId : null,
       source: "organization",
     };
   }
 
-  // 3. First available model
-  const providers = Object.keys(modelsByProvider);
-  if (providers.length > 0) {
-    const firstProvider = providers[0];
-    const models = modelsByProvider[firstProvider];
-    if (models && models.length > 0) {
+  for (const key of chatApiKeys) {
+    if (key.bestModelId) {
       return {
-        modelId: models[0].id,
-        apiKeyId: findKeyForProvider(firstProvider),
+        modelId: key.bestModelId,
+        apiKeyId: key.id,
         source: "fallback",
       };
     }

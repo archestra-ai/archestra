@@ -14,7 +14,8 @@ type AgentInfo = {
 
 type ChatApiKeyInfo = {
   id: string;
-  provider: string;
+  provider: SupportedProvider;
+  bestModelId?: string | null;
 };
 
 type OrganizationInfo = {
@@ -45,13 +46,11 @@ export type CreateConversationInput = {
 
 export function resolveInitialAgentState(params: {
   agent: AgentInfo;
-  modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
 }): ResolvedInitialAgentState | null {
   const resolved = resolveChatModelState({
     agent: params.agent,
-    modelsByProvider: params.modelsByProvider,
     chatApiKeys: params.chatApiKeys,
     organization: params.organization,
   });
@@ -68,32 +67,21 @@ export function resolveInitialAgentState(params: {
   };
 }
 
-export function getProviderForModelId(params: {
-  modelId: string;
-  chatModels: LlmModel[];
-}): SupportedProvider | undefined {
-  return params.chatModels.find((model) => model.id === params.modelId)
-    ?.provider;
-}
-
 export function resolveChatModelState(params: {
   agent: AgentInfo | null;
-  modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
-  chatModels?: LlmModel[];
+  selectedModelMetadata?: LlmModel | null;
 }): ResolvedChatModelState | null {
   const resolved = params.agent
     ? resolveModelForAgent({
         agent: params.agent,
         context: {
-          modelsByProvider: params.modelsByProvider,
           chatApiKeys: params.chatApiKeys,
           organization: params.organization,
         },
       })
     : resolveInitialModel({
-        modelsByProvider: params.modelsByProvider,
         chatApiKeys: params.chatApiKeys,
         organization: params.organization,
         agent: null,
@@ -108,28 +96,29 @@ export function resolveChatModelState(params: {
     apiKeyId: resolved.apiKeyId,
     modelSource: resolved.source === "fallback" ? null : resolved.source,
     provider:
-      params.chatModels && params.chatModels.length > 0
-        ? getProviderForModelId({
-            modelId: resolved.modelId,
-            chatModels: params.chatModels,
-          })
-        : undefined,
+      params.selectedModelMetadata?.id === resolved.modelId
+        ? params.selectedModelMetadata.provider
+        : getProviderForApiKeyId({
+            apiKeyId: resolved.apiKeyId,
+            chatApiKeys: params.chatApiKeys,
+          }),
   };
 }
 
 export function resolvePreferredModelForProvider(params: {
   provider: SupportedProvider;
-  modelsByProvider: Record<string, LlmModel[]>;
+  apiKeyId: string;
+  chatApiKeys: ChatApiKeyInfo[];
 }): { modelId: string; provider: SupportedProvider } | null {
-  const providerModels = params.modelsByProvider[params.provider];
-  if (!providerModels || providerModels.length === 0) {
+  const selectedKey = params.chatApiKeys.find(
+    (key) => key.id === params.apiKeyId && key.provider === params.provider,
+  );
+  if (!selectedKey?.bestModelId) {
     return null;
   }
 
-  const bestModel = providerModels.find((model) => model.isBest);
-
   return {
-    modelId: bestModel?.id ?? providerModels[0].id,
+    modelId: selectedKey.bestModelId,
     provider: params.provider,
   };
 }
@@ -138,18 +127,22 @@ export function buildCreateConversationInput(params: {
   agentId: string | null;
   modelId: string;
   chatApiKeyId: string | null;
-  chatModels: LlmModel[];
+  selectedModelMetadata?: LlmModel | null;
+  selectedProvider?: SupportedProvider;
+  chatApiKeys: ChatApiKeyInfo[];
 }): CreateConversationInput | null {
   if (!params.agentId) {
     return null;
   }
 
-  const selectedProvider = params.modelId
-    ? getProviderForModelId({
-        modelId: params.modelId,
-        chatModels: params.chatModels,
-      })
-    : undefined;
+  const selectedProvider =
+    params.selectedProvider ??
+    (params.selectedModelMetadata?.id === params.modelId
+      ? params.selectedModelMetadata.provider
+      : getProviderForApiKeyId({
+          apiKeyId: params.chatApiKeyId,
+          chatApiKeys: params.chatApiKeys,
+        }));
 
   return {
     agentId: params.agentId,
@@ -157,6 +150,14 @@ export function buildCreateConversationInput(params: {
     selectedProvider,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
   };
+}
+
+function getProviderForApiKeyId(params: {
+  apiKeyId: string | null;
+  chatApiKeys: ChatApiKeyInfo[];
+}): SupportedProvider | undefined {
+  if (!params.apiKeyId) return undefined;
+  return params.chatApiKeys.find((key) => key.id === params.apiKeyId)?.provider;
 }
 
 export function shouldResetInitialChatState(params: {

@@ -79,7 +79,7 @@ import {
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
-import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { useAvailableLlmModel } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
   useLlmProviderApiKeys,
@@ -182,9 +182,7 @@ export function ChatPageContent({
     useInternalAgents({ enabled: hasChatAccess });
   const { data: defaultAgentId } = useDefaultAgentId();
 
-  // Fetch profiles and models for initial chat (no conversation)
-  const { modelsByProvider, isPending: isModelsLoading } =
-    useLlmModelsByProvider({ enabled: canUseProviderSettings });
+  // Fetch profiles and API keys for initial chat (no conversation)
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
     useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
@@ -202,21 +200,18 @@ export function ChatPageContent({
     initialApiKeyId,
     initialModel,
     initialModelSource,
-    initialProvider,
     resetInitialChatState,
     setInitialApiKeyId,
   } = useInitialChatState({
     internalAgents,
     defaultAgentId,
     searchParams,
-    modelsByProvider,
     chatApiKeys,
     organization: organization ?? null,
     isOrgLoading,
   });
 
   const { isLoading: isLoadingFeatures } = useConfig();
-  const { data: chatModels = [] } = useLlmModels();
   // Check if user has any API keys (including system keys for keyless providers
   // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
   const hasAnyApiKey = chatApiKeys.length > 0;
@@ -346,12 +341,31 @@ export function ChatPageContent({
   const { recentlyGeneratedTitles: headerAnimatingTitles } =
     useRecentlyGeneratedTitles(conversationForTitleTracking);
 
-  // Derive current provider from selected model
+  const selectedModelId = conversation?.selectedModel ?? initialModel;
+  const selectedApiKeyId = conversation?.chatApiKeyId ?? initialApiKeyId;
+  const selectedApiKey = useMemo(
+    () => chatApiKeys.find((key) => key.id === selectedApiKeyId),
+    [chatApiKeys, selectedApiKeyId],
+  );
+  const { data: selectedModelMetadata = null } = useAvailableLlmModel({
+    modelId: selectedModelId || null,
+    apiKeyId: selectedApiKeyId,
+    enabled: canUseProviderSettings && !!selectedModelId,
+  });
+
+  // Derive current provider from stored conversation state, selected model metadata,
+  // or the selected API key. This avoids loading the full model catalog.
   const currentProvider = useMemo((): SupportedProvider | undefined => {
-    if (!conversation?.selectedModel) return undefined;
-    const model = chatModels.find((m) => m.id === conversation.selectedModel);
-    return model?.provider;
-  }, [conversation?.selectedModel, chatModels]);
+    return (
+      conversation?.selectedProvider ??
+      selectedModelMetadata?.provider ??
+      selectedApiKey?.provider
+    );
+  }, [
+    conversation?.selectedProvider,
+    selectedModelMetadata?.provider,
+    selectedApiKey?.provider,
+  ]);
 
   // Derive model source for existing conversations by comparing with agent/org defaults.
   // Check localStorage override first — if the user explicitly saved this model as their
@@ -389,19 +403,15 @@ export function ChatPageContent({
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
-    const modelId = conversation?.selectedModel ?? initialModel;
-    if (!modelId) return null;
-    const model = chatModels.find((m) => m.id === modelId);
-    return model?.capabilities?.contextLength ?? null;
-  }, [conversation?.selectedModel, initialModel, chatModels]);
+    if (!selectedModelId) return null;
+    return selectedModelMetadata?.capabilities?.contextLength ?? null;
+  }, [selectedModelId, selectedModelMetadata?.capabilities?.contextLength]);
 
   // Get selected model's input modalities for file upload filtering
   const selectedModelInputModalities = useMemo(() => {
-    const modelId = conversation?.selectedModel ?? initialModel;
-    if (!modelId) return null;
-    const model = chatModels.find((m) => m.id === modelId);
-    return model?.capabilities?.inputModalities ?? null;
-  }, [conversation?.selectedModel, initialModel, chatModels]);
+    if (!selectedModelId) return null;
+    return selectedModelMetadata?.capabilities?.inputModalities ?? null;
+  }, [selectedModelId, selectedModelMetadata?.capabilities?.inputModalities]);
 
   // Mutation for updating conversation model
   // Use a ref so callbacks don't recreate when mutation state changes (isPending etc.),
@@ -410,26 +420,22 @@ export function ChatPageContent({
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
 
-  // Handle model change — use refs for chatModels and conversation to keep
-  // callback reference stable. A new callback reference would re-trigger
-  // ModelSelector's auto-select effect on every chatModels refetch.
-  const chatModelsRef = useRef(chatModels);
-  chatModelsRef.current = chatModels;
+  // Handle model change — use refs for conversation to keep callback reference
+  // stable and avoid re-triggering ModelSelector effects.
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
-  const handleModelChange = useCallback((model: string) => {
-    if (!conversationRef.current) return;
+  const handleModelChange = useCallback(
+    (model: string, provider?: SupportedProvider) => {
+      if (!conversationRef.current) return;
 
-    // Find the provider for this model
-    const modelInfo = chatModelsRef.current.find((m) => m.id === model);
-    const provider = modelInfo?.provider;
-
-    updateConversationMutateRef.current({
-      id: conversationRef.current.id,
-      selectedModel: model,
-      selectedProvider: provider,
-    });
-  }, []);
+      updateConversationMutateRef.current({
+        id: conversationRef.current.id,
+        selectedModel: model,
+        selectedProvider: provider,
+      });
+    },
+    [],
+  );
 
   // Handle API key change - preselect best model for the new key's provider.
   // Combines chatApiKeyId + model selection in a single mutation to avoid
@@ -440,7 +446,8 @@ export function ChatPageContent({
 
       const preferredModel = resolvePreferredModelForProvider({
         provider: newProvider,
-        modelsByProvider,
+        apiKeyId,
+        chatApiKeys,
       });
       if (preferredModel) {
         updateConversationMutateRef.current({
@@ -457,7 +464,7 @@ export function ChatPageContent({
         });
       }
     },
-    [conversation, modelsByProvider],
+    [conversation, chatApiKeys],
   );
 
   // Handle agent change in existing conversation
@@ -490,7 +497,6 @@ export function ChatPageContent({
 
     const resolved = resolveChatModelState({
       agent: agent ?? null,
-      modelsByProvider,
       chatApiKeys,
       organization: organization
         ? {
@@ -498,7 +504,7 @@ export function ChatPageContent({
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
-      chatModels,
+      selectedModelMetadata,
     });
 
     if (resolved) {
@@ -511,10 +517,9 @@ export function ChatPageContent({
   }, [
     conversation,
     internalAgents,
-    modelsByProvider,
     chatApiKeys,
     organization,
-    chatModels,
+    selectedModelMetadata,
   ]);
 
   // Create conversation mutation (requires agentId)
@@ -737,7 +742,9 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
-        chatModels,
+        selectedModelMetadata,
+        selectedProvider: currentProvider,
+        chatApiKeys,
       });
       if (!input) {
         return false;
@@ -756,7 +763,9 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
-      chatModels,
+      selectedModelMetadata,
+      currentProvider,
+      chatApiKeys,
       createConversationMutation,
     ],
   );
@@ -1121,7 +1130,7 @@ export function ChatPageContent({
                         allowFileUploads={
                           organization?.allowChatFileUploads ?? false
                         }
-                        isModelsLoading={isModelsLoading}
+                        isModelsLoading={false}
                         tokensUsed={tokensUsed}
                         maxContextLength={selectedModelContextLength}
                         inputModalities={selectedModelInputModalities}
@@ -1229,7 +1238,7 @@ export function ChatPageContent({
                         handleInitialModelSelectorOpenChange
                       }
                       agentId={newChatAgentId}
-                      currentProvider={initialProvider}
+                      currentProvider={currentProvider}
                       textareaRef={textareaRef}
                       initialApiKeyId={initialApiKeyId}
                       onApiKeyChange={setInitialApiKeyId}
@@ -1237,7 +1246,7 @@ export function ChatPageContent({
                       allowFileUploads={
                         organization?.allowChatFileUploads ?? false
                       }
-                      isModelsLoading={isModelsLoading}
+                      isModelsLoading={false}
                       inputModalities={selectedModelInputModalities}
                       agentLlmApiKeyId={
                         (

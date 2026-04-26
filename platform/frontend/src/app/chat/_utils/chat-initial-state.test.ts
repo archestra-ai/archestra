@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
   buildCreateConversationInput,
-  getProviderForModelId,
   resolveChatModelState,
   resolveInitialAgentState,
   resolvePreferredModelForProvider,
@@ -12,9 +11,6 @@ describe("resolveInitialAgentState", () => {
   test("returns org default model for an agent without its own model", () => {
     const result = resolveInitialAgentState({
       agent: { id: "agent-1" },
-      modelsByProvider: {
-        openai: [{ id: "gpt-4.1", provider: "openai" } as never],
-      },
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: {
         defaultLlmModel: "gpt-4.1",
@@ -37,11 +33,6 @@ describe("resolveInitialAgentState", () => {
         llmModel: "claude-3-5-sonnet",
         llmApiKeyId: "key-2",
       },
-      modelsByProvider: {
-        anthropic: [
-          { id: "claude-3-5-sonnet", provider: "anthropic" } as never,
-        ],
-      },
       chatApiKeys: [{ id: "key-2", provider: "anthropic" }],
       organization: {
         defaultLlmModel: "gpt-4.1",
@@ -58,27 +49,13 @@ describe("resolveInitialAgentState", () => {
   });
 });
 
-describe("getProviderForModelId", () => {
-  test("returns the model provider when present", () => {
-    expect(
-      getProviderForModelId({
-        modelId: "gpt-4.1",
-        chatModels: [{ id: "gpt-4.1", provider: "openai" } as never],
-      }),
-    ).toBe("openai");
-  });
-});
-
 describe("resolveChatModelState", () => {
   test("includes provider information when chat models are supplied", () => {
     const result = resolveChatModelState({
       agent: { id: "agent-1", llmModel: "gpt-4.1", llmApiKeyId: "key-1" },
-      modelsByProvider: {
-        openai: [{ id: "gpt-4.1", provider: "openai" } as never],
-      },
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: null,
-      chatModels: [{ id: "gpt-4.1", provider: "openai" } as never],
+      selectedModelMetadata: { id: "gpt-4.1", provider: "openai" } as never,
     });
 
     expect(result).toEqual({
@@ -91,16 +68,14 @@ describe("resolveChatModelState", () => {
 });
 
 describe("resolvePreferredModelForProvider", () => {
-  test("prefers the best model for a provider", () => {
+  test("prefers the selected API key best model for a provider", () => {
     expect(
       resolvePreferredModelForProvider({
         provider: "openai",
-        modelsByProvider: {
-          openai: [
-            { id: "gpt-4.1-mini", provider: "openai" } as never,
-            { id: "gpt-4.1", provider: "openai", isBest: true } as never,
-          ],
-        },
+        apiKeyId: "key-1",
+        chatApiKeys: [
+          { id: "key-1", provider: "openai", bestModelId: "gpt-4.1" },
+        ],
       }),
     ).toEqual({
       modelId: "gpt-4.1",
@@ -112,7 +87,8 @@ describe("resolvePreferredModelForProvider", () => {
     expect(
       resolvePreferredModelForProvider({
         provider: "openai",
-        modelsByProvider: {},
+        apiKeyId: "key-1",
+        chatApiKeys: [{ id: "key-1", provider: "openai" }],
       }),
     ).toBeNull();
   });
@@ -125,7 +101,8 @@ describe("buildCreateConversationInput", () => {
         agentId: "agent-1",
         modelId: "gpt-4.1",
         chatApiKeyId: "key-1",
-        chatModels: [{ id: "gpt-4.1", provider: "openai" } as never],
+        selectedModelMetadata: { id: "gpt-4.1", provider: "openai" } as never,
+        chatApiKeys: [{ id: "key-1", provider: "openai" }],
       }),
     ).toEqual({
       agentId: "agent-1",
@@ -141,7 +118,8 @@ describe("buildCreateConversationInput", () => {
         agentId: "agent-1",
         modelId: "",
         chatApiKeyId: null,
-        chatModels: [],
+        selectedModelMetadata: null,
+        chatApiKeys: [],
       }),
     ).toEqual({
       agentId: "agent-1",
@@ -157,9 +135,27 @@ describe("buildCreateConversationInput", () => {
         agentId: null,
         modelId: "",
         chatApiKeyId: null,
-        chatModels: [],
+        selectedModelMetadata: null,
+        chatApiKeys: [],
       }),
     ).toBeNull();
+  });
+
+  test("uses selected API key provider when model metadata is unavailable", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "gpt-4.1",
+        chatApiKeyId: "key-1",
+        selectedModelMetadata: null,
+        chatApiKeys: [{ id: "key-1", provider: "openai" }],
+      }),
+    ).toEqual({
+      agentId: "agent-1",
+      selectedModel: "gpt-4.1",
+      selectedProvider: "openai",
+      chatApiKeyId: "key-1",
+    });
   });
 });
 

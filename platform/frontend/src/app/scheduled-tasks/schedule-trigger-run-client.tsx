@@ -16,7 +16,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -33,7 +32,8 @@ import {
   useUpdateConversation,
 } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
-import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { useAvailableLlmModel } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   useCreateScheduleTriggerRunConversation,
@@ -115,8 +115,7 @@ export function ScheduleTriggerRunPage({
 
   const isRunActive = isScheduleTriggerRunActive(run?.status);
 
-  const { data: chatModels = [] } = useLlmModels();
-  const { modelsByProvider } = useLlmModelsByProvider();
+  const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys();
   const { data: organization } = useOrganization();
   const { data: internalAgents = [] } = useInternalAgents({
     enabled: !!conversation?.agentId,
@@ -136,15 +135,13 @@ export function ScheduleTriggerRunPage({
   const tokenUsage = chatSession?.tokenUsage;
   const tokensUsed = tokenUsage?.totalTokens;
 
-  const selectedModel = useMemo(
-    () =>
-      conversation?.selectedModel
-        ? chatModels.find((item) => item.id === conversation.selectedModel)
-        : undefined,
-    [conversation?.selectedModel, chatModels],
-  );
+  const { data: selectedModel = null } = useAvailableLlmModel({
+    modelId: conversation?.selectedModel ?? null,
+    apiKeyId: conversation?.chatApiKeyId,
+  });
 
-  const currentProvider = selectedModel?.provider;
+  const currentProvider =
+    conversation?.selectedProvider ?? selectedModel?.provider;
   const selectedModelContextLength =
     selectedModel?.capabilities?.contextLength ?? null;
   const selectedModelInputModalities =
@@ -263,35 +260,34 @@ export function ScheduleTriggerRunPage({
   }, []);
 
   const handleModelChange = useCallback(
-    (modelId: string) => {
+    (modelId: string, provider?: SupportedProvider) => {
       if (!conversation) return;
 
-      const provider = chatModels.find((item) => item.id === modelId)?.provider;
       updateConversationMutation.mutate({
         id: conversation.id,
         selectedModel: modelId,
         selectedProvider: provider,
       });
     },
-    [chatModels, conversation, updateConversationMutation],
+    [conversation, updateConversationMutation],
   );
 
   const handleProviderChange = useCallback(
     (provider: SupportedProvider, chatApiKeyId: string) => {
       if (!conversation) return;
 
-      const providerModels = modelsByProvider[provider];
-      const bestModel =
-        providerModels?.find((item) => item.isBest) ?? providerModels?.[0];
+      const selectedKey = availableApiKeys.find(
+        (key) => key.id === chatApiKeyId && key.provider === provider,
+      );
 
       updateConversationMutation.mutate({
         id: conversation.id,
         chatApiKeyId,
-        selectedModel: bestModel?.id,
-        selectedProvider: bestModel ? provider : undefined,
+        selectedModel: selectedKey?.bestModelId ?? undefined,
+        selectedProvider: selectedKey?.bestModelId ? provider : undefined,
       });
     },
-    [conversation, modelsByProvider, updateConversationMutation],
+    [availableApiKeys, conversation, updateConversationMutation],
   );
 
   const handleSubmit = useCallback(

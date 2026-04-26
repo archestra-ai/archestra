@@ -31,19 +31,13 @@ describe("agent persistence", () => {
 });
 
 describe("resolveInitialModel", () => {
-  const baseModels = {
-    openai: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
-    anthropic: [{ id: "claude-3-5-sonnet" }],
-  };
-
   const baseChatApiKeys = [
-    { id: "key-openai", provider: "openai" },
-    { id: "key-anthropic", provider: "anthropic" },
+    { id: "key-openai", provider: "openai", bestModelId: "gpt-4o" },
+    { id: "key-anthropic", provider: "anthropic", bestModelId: null },
   ];
 
-  test("returns null when no models available", () => {
+  test("returns null when no configured or best model is available", () => {
     const result = resolveInitialModel({
-      modelsByProvider: {},
       agent: null,
       chatApiKeys: [],
       organization: null,
@@ -53,7 +47,6 @@ describe("resolveInitialModel", () => {
 
   test("prefers agent model over org default", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: { llmModel: "claude-3-5-sonnet", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
       organization: {
@@ -70,7 +63,6 @@ describe("resolveInitialModel", () => {
 
   test("uses org default when agent has no model configured", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: { llmModel: null, llmApiKeyId: null },
       chatApiKeys: baseChatApiKeys,
       organization: {
@@ -87,7 +79,6 @@ describe("resolveInitialModel", () => {
 
   test("uses agent model with agent API key", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: { llmModel: "claude-3-5-sonnet", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
       organization: null,
@@ -99,19 +90,21 @@ describe("resolveInitialModel", () => {
     });
   });
 
-  test("skips agent model when model is not in available models", () => {
+  test("uses agent model without requiring catalog validation", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: { llmModel: "deleted-model", llmApiKeyId: "agent-key" },
       chatApiKeys: baseChatApiKeys,
       organization: null,
     });
-    expect(result?.source).toBe("fallback");
+    expect(result).toEqual({
+      modelId: "deleted-model",
+      apiKeyId: "agent-key",
+      source: "agent",
+    });
   });
 
-  test("falls back to first available model", () => {
+  test("falls back to first API key best model", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: null,
       chatApiKeys: baseChatApiKeys,
       organization: null,
@@ -123,20 +116,17 @@ describe("resolveInitialModel", () => {
     });
   });
 
-  test("returns null apiKeyId when no matching key for provider", () => {
+  test("returns null when API keys have no best model", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: null,
-      chatApiKeys: [], // No keys at all
+      chatApiKeys: [{ id: "key-openai", provider: "openai" }],
       organization: null,
     });
-    expect(result?.modelId).toBe("gpt-4o");
-    expect(result?.apiKeyId).toBeNull();
+    expect(result).toBeNull();
   });
 
-  test("org default falls back to provider key when org API key is not available", () => {
+  test("org default clears unavailable org API key without provider fallback", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: null,
       chatApiKeys: baseChatApiKeys,
       organization: {
@@ -146,14 +136,13 @@ describe("resolveInitialModel", () => {
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
-      apiKeyId: "key-openai",
+      apiKeyId: null,
       source: "organization",
     });
   });
 
-  test("org default with no API key configured uses provider key", () => {
+  test("org default with no API key configured leaves key unset", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: null,
       chatApiKeys: baseChatApiKeys,
       organization: {
@@ -163,14 +152,13 @@ describe("resolveInitialModel", () => {
     });
     expect(result).toEqual({
       modelId: "gpt-4o",
-      apiKeyId: "key-openai",
+      apiKeyId: null,
       source: "organization",
     });
   });
 
-  test("skips org default when model is not in available models", () => {
+  test("uses org default without requiring catalog validation", () => {
     const result = resolveInitialModel({
-      modelsByProvider: baseModels,
       agent: null,
       chatApiKeys: baseChatApiKeys,
       organization: {
@@ -178,8 +166,30 @@ describe("resolveInitialModel", () => {
         defaultLlmApiKeyId: "key-openai",
       },
     });
-    expect(result?.source).toBe("fallback");
-    expect(result?.modelId).toBe("gpt-4o");
+    expect(result).toEqual({
+      modelId: "deleted-model",
+      apiKeyId: "key-openai",
+      source: "organization",
+    });
+  });
+
+  test("prefers saved user override without requiring catalog validation", () => {
+    localStorage.setItem(
+      CHAT_STORAGE_KEYS.userModelOverride,
+      "saved-user-model",
+    );
+
+    const result = resolveInitialModel({
+      agent: { llmModel: "claude-3-5-sonnet", llmApiKeyId: "agent-key" },
+      chatApiKeys: baseChatApiKeys,
+      organization: null,
+    });
+
+    expect(result).toEqual({
+      modelId: "saved-user-model",
+      apiKeyId: null,
+      source: "user",
+    });
   });
 });
 
@@ -268,14 +278,9 @@ describe("resolveAutoSelectedModel", () => {
 });
 
 describe("resolveModelForAgent", () => {
-  const baseModels = {
-    openai: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
-    anthropic: [{ id: "claude-3-5-sonnet" }],
-  };
-
   const baseChatApiKeys = [
-    { id: "key-openai", provider: "openai" },
-    { id: "key-anthropic", provider: "anthropic" },
+    { id: "key-openai", provider: "openai", bestModelId: "gpt-4o" },
+    { id: "key-anthropic", provider: "anthropic", bestModelId: null },
   ];
 
   const orgDefaults = {
@@ -284,7 +289,6 @@ describe("resolveModelForAgent", () => {
   };
 
   const baseContext = {
-    modelsByProvider: baseModels,
     chatApiKeys: baseChatApiKeys,
     organization: orgDefaults,
   };

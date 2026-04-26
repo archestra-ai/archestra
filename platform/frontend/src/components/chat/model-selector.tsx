@@ -82,7 +82,7 @@ interface ModelSelectorProps {
   /** Currently selected model */
   selectedModel: string;
   /** Callback when model is changed */
-  onModelChange: (model: string) => void;
+  onModelChange: (model: string, provider?: SupportedProvider) => void;
   /** Whether the selector should be disabled */
   disabled?: boolean;
   /** Callback when the selector opens or closes */
@@ -495,6 +495,7 @@ export function ModelSelector({
     isPending: isLoading,
     isFetching,
     isFetchingNextPage,
+    isFetched: isModelListFetched,
     isPlaceholderData,
     hasNextPage,
     fetchNextPage,
@@ -504,7 +505,7 @@ export function ModelSelector({
     inputModalities: Array.from(filters.modalities),
     supportsToolCalling: filters.toolCalling ? "true" : undefined,
     limit: 50,
-    enabled,
+    enabled: enabled && open,
   });
   const selectedModelQuery = useAvailableLlmModel({
     modelId: selectedModel || null,
@@ -602,7 +603,7 @@ export function ModelSelector({
     }
 
     handleOpenChange(false);
-    onModelChange(modelId);
+    onModelChange(modelId, parsed?.provider);
   };
 
   const isSelectedModelLoadedInList = modelIndexes.modelById.has(selectedModel);
@@ -616,6 +617,7 @@ export function ModelSelector({
   // Auto-select only when no explicit model is selected. A selected model may
   // simply be outside the currently loaded page.
   useEffect(() => {
+    if (!open) return;
     if (selectedModel) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
@@ -625,17 +627,7 @@ export function ModelSelector({
     if (modelToSelect) {
       onModelChange(modelToSelect);
     }
-  }, [isLoading, modelIndexes.allModels, selectedModel, onModelChange]);
-
-  // If loading, show loading state
-  if (isLoading && !open) {
-    return (
-      <PromptInputButton disabled>
-        <Loader2 className="size-4 animate-spin" />
-        <ModelSelectorName>Loading models...</ModelSelectorName>
-      </PromptInputButton>
-    );
-  }
+  }, [isLoading, modelIndexes.allModels, open, selectedModel, onModelChange]);
 
   // If no providers configured, show disabled state
   if (
@@ -643,6 +635,7 @@ export function ModelSelector({
     !selectedModel &&
     !hasActiveFilters &&
     !hasSearch &&
+    isModelListFetched &&
     availableProviders.length === 0
   ) {
     return (

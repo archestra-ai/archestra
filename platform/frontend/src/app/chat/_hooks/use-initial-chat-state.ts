@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clearModelOverride,
   getSavedAgent,
@@ -8,7 +8,6 @@ import {
   saveAgent,
   saveModelOverride,
 } from "@/lib/chat/use-chat-preferences";
-import type { LlmModel } from "@/lib/llm-models.query";
 import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 import {
   resolveChatModelState,
@@ -28,7 +27,8 @@ type InitialChatAgent = {
 
 type ChatApiKeyInfo = {
   id: string;
-  provider: string;
+  provider: SupportedProvider;
+  bestModelId?: string | null;
 };
 
 type OrganizationInfo = {
@@ -41,7 +41,6 @@ export function useInitialChatState(params: {
   internalAgents: InitialChatAgent[];
   defaultAgentId: string | null | undefined;
   searchParams: SearchParamsLike;
-  modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
   isOrgLoading: boolean;
@@ -63,7 +62,6 @@ export function useInitialChatState(params: {
 
       const resolved = resolveInitialAgentState({
         agent,
-        modelsByProvider: params.modelsByProvider,
         chatApiKeys: params.chatApiKeys,
         organization: params.organization
           ? {
@@ -83,7 +81,7 @@ export function useInitialChatState(params: {
         setInitialModelSource(null);
       }
     },
-    [params.modelsByProvider, params.chatApiKeys, params.organization],
+    [params.chatApiKeys, params.organization],
   );
 
   useEffect(() => {
@@ -153,7 +151,6 @@ export function useInitialChatState(params: {
 
     const resolved = resolveChatModelState({
       agent: resolvedAgentRef.current,
-      modelsByProvider: params.modelsByProvider,
       chatApiKeys: params.chatApiKeys,
       organization: params.organization
         ? {
@@ -173,7 +170,6 @@ export function useInitialChatState(params: {
     modelInitializedRef.current = true;
   }, [
     initialAgentId,
-    params.modelsByProvider,
     params.chatApiKeys,
     params.organization?.defaultLlmModel,
     params.organization?.defaultLlmApiKeyId,
@@ -199,10 +195,11 @@ export function useInitialChatState(params: {
   }, []);
 
   const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedProvider, _apiKeyId: string) => {
+    (newProvider: SupportedProvider, apiKeyId: string) => {
       const preferredModel = resolvePreferredModelForProvider({
         provider: newProvider,
-        modelsByProvider: params.modelsByProvider,
+        apiKeyId,
+        chatApiKeys: params.chatApiKeys,
       });
       if (preferredModel) {
         setInitialModel(preferredModel.modelId);
@@ -210,7 +207,7 @@ export function useInitialChatState(params: {
         saveModelOverride(preferredModel.modelId);
       }
     },
-    [params.modelsByProvider],
+    [params.chatApiKeys],
   );
 
   const handleResetModelOverride = useCallback(() => {
@@ -219,7 +216,6 @@ export function useInitialChatState(params: {
 
     const resolved = resolveChatModelState({
       agent: resolvedAgentRef.current,
-      modelsByProvider: params.modelsByProvider,
       chatApiKeys: params.chatApiKeys,
       organization: params.organization
         ? {
@@ -233,19 +229,13 @@ export function useInitialChatState(params: {
       setInitialModel(resolved.modelId);
       setInitialApiKeyId(resolved.apiKeyId);
       setInitialModelSource(resolved.modelSource);
+    } else {
+      setInitialModel("");
+      setInitialApiKeyId(null);
+      setInitialModelSource(null);
     }
     modelInitializedRef.current = true;
-  }, [params.modelsByProvider, params.chatApiKeys, params.organization]);
-
-  const initialProvider = useMemo((): SupportedProvider | undefined => {
-    if (!initialModel) return undefined;
-    for (const [provider, models] of Object.entries(params.modelsByProvider)) {
-      if (models?.some((model) => model.id === initialModel)) {
-        return provider as SupportedProvider;
-      }
-    }
-    return undefined;
-  }, [initialModel, params.modelsByProvider]);
+  }, [params.chatApiKeys, params.organization]);
 
   const resetInitialChatState = useCallback(() => {
     setInitialAgentId(null);
@@ -280,7 +270,6 @@ export function useInitialChatState(params: {
     initialApiKeyId,
     initialModel,
     initialModelSource,
-    initialProvider,
     resetInitialChatState,
     setInitialApiKeyId,
   };

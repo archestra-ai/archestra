@@ -131,22 +131,13 @@ function makeParams(
     internalAgents: [{ id: "agent-a" }, { id: "agent-b" }],
     defaultAgentId: undefined,
     searchParams: makeSearchParams(),
-    modelsByProvider: {
-      openai: [
-        { id: "gpt-4.1-mini", provider: "openai" } as never,
-        { id: "gpt-4.1", provider: "openai", isBest: true } as never,
-      ],
-      anthropic: [
-        {
-          id: "claude-3-5-sonnet",
-          provider: "anthropic",
-          isBest: true,
-        } as never,
-      ],
-    },
     chatApiKeys: [
-      { id: "key-openai", provider: "openai" },
-      { id: "key-anthropic", provider: "anthropic" },
+      { id: "key-openai", provider: "openai", bestModelId: "gpt-4.1" },
+      {
+        id: "key-anthropic",
+        provider: "anthropic",
+        bestModelId: "claude-3-5-sonnet",
+      },
     ],
     organization: null,
     isOrgLoading: false,

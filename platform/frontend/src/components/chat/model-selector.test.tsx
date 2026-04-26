@@ -89,6 +89,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: false,
       hasNextPage: false,
       fetchNextPage: vi.fn(),
@@ -117,9 +118,15 @@ describe("ModelSelector", () => {
     );
 
     expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+    expect(useInfiniteLlmModelsByProviderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
 
     await userEvent.click(screen.getByRole("button", { name: /GPT 4\.1/i }));
 
+    expect(useInfiniteLlmModelsByProviderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
     expect(screen.getByPlaceholderText("Search models...")).toBeInTheDocument();
     expect(screen.getByText("(gpt-4.1)")).toBeInTheDocument();
   });
@@ -133,6 +140,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: false,
       hasNextPage: true,
       fetchNextPage: vi.fn(),
@@ -146,6 +154,25 @@ describe("ModelSelector", () => {
 
     expect(screen.getByText("(gpt-4.1)")).toBeInTheDocument();
     expect(screen.queryByText("(gpt-4.1-mini)")).toBeNull();
+  });
+
+  it("passes the selected model provider to the change handler", async () => {
+    const onModelChange = vi.fn();
+
+    render(
+      <ModelSelector
+        selectedModel="different-model"
+        onModelChange={onModelChange}
+        enabled
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /different-model/i }),
+    );
+    await userEvent.click(screen.getByText("(gpt-4.1)"));
+
+    expect(onModelChange).toHaveBeenCalledWith("gpt-4.1", "openai");
   });
 
   it("sends debounced search and filter params to the query hook", async () => {
@@ -185,6 +212,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: false,
       hasNextPage: true,
       fetchNextPage,
@@ -214,6 +242,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: false,
       hasNextPage: true,
       fetchNextPage: vi.fn(),
@@ -242,6 +271,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: false,
       hasNextPage: true,
       fetchNextPage: vi.fn(),
@@ -282,6 +312,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: false,
       hasNextPage: false,
       fetchNextPage: vi.fn(),
@@ -317,6 +348,7 @@ describe("ModelSelector", () => {
       isPending: false,
       isFetching: true,
       isFetchingNextPage: false,
+      isFetched: true,
       isPlaceholderData: true,
       hasNextPage: false,
       fetchNextPage: vi.fn(),

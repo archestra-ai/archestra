@@ -67,7 +67,7 @@ interface ArchestraPromptInputProps {
   ) => void;
   status: ChatStatus;
   selectedModel: string;
-  onModelChange: (model: string) => void;
+  onModelChange: (model: string, provider?: SupportedProvider) => void;
   // Tools integration props
   agentId: string;
   /** Optional - if not provided, it's initial chat mode (no conversation yet) */

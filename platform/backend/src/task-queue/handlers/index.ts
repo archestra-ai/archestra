@@ -1,6 +1,6 @@
 import type { TaskQueueService } from "../task-queue";
-import { handleAssignAgentToolsFromLabels } from "./assign-agent-tools-from-labels-handler";
 import { handleAssignAgentToolsFromLabelsForAgent } from "./assign-agent-tools-from-labels-for-agent-handler";
+import { handleAssignAgentToolsFromLabels } from "./assign-agent-tools-from-labels-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";

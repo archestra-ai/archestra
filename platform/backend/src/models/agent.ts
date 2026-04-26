@@ -22,7 +22,6 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { id } from "zod/v4/locales";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import {
@@ -30,7 +29,6 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
 import type {
   Agent,
   AgentScope,
@@ -193,8 +191,9 @@ class AgentModel {
     const isMcpGateway = createdAgent.agentType === "mcp_gateway";
     const isAutomaticToolAssignment =
       createdAgent.toolAssignmentMode === "automatic";
+
     if (hasLabels && isMcpGateway && isAutomaticToolAssignment) {
-      await assignAgentToolsFromLabels(createdAgent.id);
+      await AgentToolModel.syncAgentToolsFromLabels(createdAgent.id);
     }
 
     // Assign knowledge bases if provided
@@ -1382,7 +1381,7 @@ class AgentModel {
       existingAgent.toolAssignmentMode !== "automatic";
 
     if (isMcpGateway && isSwitchingToAutomatic) {
-      await assignAgentToolsFromLabels(id);
+      await AgentToolModel.syncAgentToolsFromLabels(id);
     }
 
     // Sync knowledge base assignments if knowledgeBaseIds is provided
@@ -1408,14 +1407,7 @@ class AgentModel {
       currentConnectorIds,
       currentSuggestedPrompts,
     ] = await Promise.all([
-      db
-        .select({ tool: schema.toolsTable })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .where(eq(schema.agentToolsTable.agentId, updatedAgent?.id)),
+      AgentToolModel.getToolsForAgent(id),
       AgentTeamModel.getTeamDetailsForAgent(id),
       AgentLabelModel.getLabelsForAgent(id),
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
@@ -1427,7 +1419,7 @@ class AgentModel {
 
     return {
       ...updatedAgent,
-      tools: toolRows.map((row) => row.tool),
+      tools: toolRows,
       teams: currentTeams,
       labels: currentLabels,
       knowledgeBaseIds: currentKbIds,

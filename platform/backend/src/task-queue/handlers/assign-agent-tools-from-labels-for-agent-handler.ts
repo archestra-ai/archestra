@@ -1,4 +1,4 @@
-import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
+import { AgentToolModel } from "@/models";
 
 export async function handleAssignAgentToolsFromLabelsForAgent(
   payload: Record<string, unknown>,
@@ -11,5 +11,5 @@ export async function handleAssignAgentToolsFromLabelsForAgent(
     );
   }
 
-  await assignAgentToolsFromLabels(agentId);
+  await AgentToolModel.syncAgentToolsFromLabels(agentId);
 }

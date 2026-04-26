@@ -246,6 +246,7 @@ export async function handleLLMProxy<
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
+  let resolvedVirtualKeyId: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
 
@@ -288,6 +289,7 @@ export async function handleLLMProxy<
       );
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
+      resolvedVirtualKeyId = virtualResult.virtualKeyId;
       wasVirtualKeyResolved = true;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -312,7 +314,10 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId, {
+        userId,
+        virtualKeyId: resolvedVirtualKeyId,
+      });
 
     if (limitViolation) {
       const [_refusalMessage, contentMessage] = limitViolation;

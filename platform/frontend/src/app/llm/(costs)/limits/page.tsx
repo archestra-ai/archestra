@@ -39,8 +39,10 @@ import {
   useUpdateLimit,
 } from "@/lib/limits.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useMembersPaginated } from "@/lib/member.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
@@ -55,14 +57,15 @@ type LimitFormState = {
   entityType: LimitEntityType;
   entityId: string;
   limitValue: string;
-  model: string[];
+  /** null = "all models" global budget; string[] = specific models */
+  model: string[] | null;
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
   entityType: "organization",
   entityId: "",
   limitValue: "",
-  model: [],
+  model: null,
 };
 
 const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
@@ -92,6 +95,10 @@ export default function LimitsPage() {
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const { data: membersData } = useMembersPaginated({ limit: 100, offset: 0 });
+  const members = membersData?.data ?? [];
+  const { data: virtualKeysData } = useAllVirtualApiKeys({ limit: 100, offset: 0 });
+  const virtualKeys = virtualKeysData?.data ?? [];
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
@@ -151,7 +158,7 @@ export default function LimitsPage() {
       entityType: limit.entityType as LimitEntityType,
       entityId: limit.entityType === "organization" ? "" : limit.entityId,
       limitValue: String(limit.limitValue),
-      model: getLimitModels(limit),
+      model: limit.model === null ? null as unknown as string[] : getLimitModels(limit),
     });
     setModelToAdd("");
     setIsDialogOpen(true);
@@ -160,10 +167,21 @@ export default function LimitsPage() {
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
       if (limit.entityType === "organization") return "Organization";
-      const team = teams.find((candidate) => candidate.id === limit.entityId);
-      return team?.name ?? "Unknown team";
+      if (limit.entityType === "team") {
+        const team = teams.find((candidate) => candidate.id === limit.entityId);
+        return team?.name ?? "Unknown team";
+      }
+      if (limit.entityType === "user") {
+        const member = members.find((m) => m.userId === limit.entityId);
+        return member ? (member.name ?? member.email ?? "Unknown user") : "Unknown user";
+      }
+      if (limit.entityType === "virtual_key") {
+        const vk = virtualKeys.find((k) => k.id === limit.entityId);
+        return vk?.name ?? "Unknown virtual key";
+      }
+      return limit.entityId;
     },
-    [teams],
+    [teams, members, virtualKeys],
   );
 
   const getUsageStatus = useCallback(
@@ -202,6 +220,7 @@ export default function LimitsPage() {
         appliedToFilter === "all" || limit.entityType === appliedToFilter;
       const matchesModel =
         modelFilter === "all" ||
+        limit.model === null ||
         (Array.isArray(limit.model) && limit.model.includes(modelFilter));
 
       return matchesStatus && matchesAppliedTo && matchesModel;
@@ -242,15 +261,21 @@ export default function LimitsPage() {
       {
         accessorKey: "model",
         header: "Models",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {getLimitModels(row.original).map((model) => (
-              <Badge key={model} variant="outline" className="text-xs">
-                {model}
-              </Badge>
-            ))}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const models = getLimitModels(row.original);
+          if (row.original.model === null || models.length === 0) {
+            return <Badge variant="outline" className="text-xs">All models</Badge>;
+          }
+          return (
+            <div className="flex flex-wrap gap-1">
+              {models.map((model) => (
+                <Badge key={model} variant="outline" className="text-xs">
+                  {model}
+                </Badge>
+              ))}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "usage",
@@ -319,7 +344,7 @@ export default function LimitsPage() {
           : formState.entityId,
       limitType: "token_cost" as const,
       limitValue: Number(formState.limitValue),
-      model: formState.model,
+      model: formState.model === null ? null : (Array.isArray(formState.model) ? formState.model : []),
     };
 
     if (editingLimit) {
@@ -348,7 +373,8 @@ export default function LimitsPage() {
 
   const canSubmit =
     Number(formState.limitValue) > 0 &&
-    formState.model.length > 0 &&
+    // model: null = all models (valid), non-null empty array = invalid (must pick at least one)
+    (formState.model === null || (Array.isArray(formState.model) && formState.model.length > 0)) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
 
   return (
@@ -402,6 +428,8 @@ export default function LimitsPage() {
             <SelectItem value="all">All applied to</SelectItem>
             <SelectItem value="organization">Organization</SelectItem>
             <SelectItem value="team">Team</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+            <SelectItem value="virtual_key">Virtual key</SelectItem>
           </SelectContent>
         </Select>
 
@@ -439,7 +467,7 @@ export default function LimitsPage() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Configure scoped LLM token-cost limits for the organization or a team."
+        description="Configure scoped LLM token-cost limits for the organization, a team, a user, or a virtual key."
         size="small"
       >
         <DialogForm
@@ -469,6 +497,8 @@ export default function LimitsPage() {
                   <SelectContent>
                     <SelectItem value="organization">Organization</SelectItem>
                     <SelectItem value="team">Team</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="virtual_key">Virtual key</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -494,49 +524,117 @@ export default function LimitsPage() {
                     </SelectContent>
                   </Select>
                 )}
+
+                {formState.entityType === "user" && (
+                  <Select
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:flex-1">
+                      <SelectValue placeholder="Select member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map((member) => (
+                        <SelectItem key={member.userId} value={member.userId}>
+                          {member.name ?? member.email ?? member.userId}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {formState.entityType === "virtual_key" && (
+                  <Select
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:flex-1">
+                      <SelectValue placeholder="Select virtual key" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {virtualKeys.map((vk) => (
+                        <SelectItem key={vk.id} value={vk.id}>
+                          {vk.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Add model</Label>
-              <LlmModelSearchableSelect
-                value={modelToAdd}
+              <Label>Models</Label>
+              <Select
+                value={formState.model === null ? "__all__" : "__specific__"}
                 onValueChange={(value) => {
-                  setModelToAdd("");
-                  setFormState((current) => ({
-                    ...current,
-                    model: current.model.includes(value)
-                      ? current.model
-                      : [...current.model, value],
-                  }));
+                  if (value === "__all__") {
+                    setFormState((current) => ({ ...current, model: null as unknown as string[] }));
+                  } else {
+                    setFormState((current) => ({ ...current, model: [] }));
+                  }
                 }}
-                options={modelOptions}
-                placeholder="Select model..."
-                showPricing
-              />
-              <div className="flex flex-wrap gap-1">
-                {formState.model.map((model) => (
-                  <Badge key={model} variant="secondary" className="gap-1 pr-1">
-                    {model}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4"
-                      onClick={() =>
-                        setFormState((current) => ({
-                          ...current,
-                          model: current.model.filter(
-                            (currentModel) => currentModel !== model,
-                          ),
-                        }))
-                      }
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </Badge>
-                ))}
-              </div>
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All models (global budget)</SelectItem>
+                  <SelectItem value="__specific__">Specific models</SelectItem>
+                </SelectContent>
+              </Select>
+              {formState.model !== null && (
+                <>
+                  <LlmModelSearchableSelect
+                    value={modelToAdd}
+                    onValueChange={(value) => {
+                      setModelToAdd("");
+                      setFormState((current) => ({
+                        ...current,
+                        model: Array.isArray(current.model) && current.model.includes(value)
+                          ? current.model
+                          : [...(Array.isArray(current.model) ? current.model : []), value],
+                      }));
+                    }}
+                    options={modelOptions}
+                    placeholder="Add model..."
+                    showPricing
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {Array.isArray(formState.model) && formState.model.map((model) => (
+                      <Badge key={model} variant="secondary" className="gap-1 pr-1">
+                        {model}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4"
+                          onClick={() =>
+                            setFormState((current) => ({
+                              ...current,
+                              model: Array.isArray(current.model)
+                                ? current.model.filter((m) => m !== model)
+                                : current.model,
+                            }))
+                          }
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">

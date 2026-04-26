@@ -29272,7 +29272,7 @@ export type GetLimitsData = {
     body?: never;
     path?: never;
     query?: {
-        entityType?: 'organization' | 'team' | 'agent';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
     };
@@ -29344,7 +29344,7 @@ export type GetLimitsResponses = {
      */
     200: Array<{
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -29367,7 +29367,7 @@ export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
 
 export type CreateLimitData = {
     body: {
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -29446,7 +29446,7 @@ export type CreateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -29614,7 +29614,7 @@ export type GetLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -29631,7 +29631,7 @@ export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
     body: {
-        entityType?: 'organization' | 'team' | 'agent';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
@@ -29712,7 +29712,7 @@ export type UpdateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -34605,7 +34605,7 @@ export type GetOptimizationRulesResponses = {
      */
     200: Array<{
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         conditions: Array<{
             maxLength: number;
@@ -34625,7 +34625,7 @@ export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof G
 export type CreateOptimizationRuleData = {
     body: {
         id?: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         conditions: Array<{
             maxLength: number;
@@ -34708,7 +34708,7 @@ export type CreateOptimizationRuleResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         conditions: Array<{
             maxLength: number;
@@ -34807,7 +34807,7 @@ export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[key
 export type UpdateOptimizationRuleData = {
     body: {
         id?: string;
-        entityType?: 'organization' | 'team' | 'agent';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId?: string;
         conditions?: Array<{
             maxLength: number;
@@ -34892,7 +34892,7 @@ export type UpdateOptimizationRuleResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
         entityId: string;
         conditions: Array<{
             maxLength: number;

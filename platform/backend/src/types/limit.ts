@@ -10,7 +10,15 @@ import { schema } from "@/database";
  * Entity types that can have limits applied
  */
 // TODO: need to make a database migration to migrate agent -> profile
-export const LimitEntityTypeSchema = z.enum(["organization", "team", "agent"]);
+export const LimitEntityTypeSchema = z.enum([
+  "organization",
+  "team",
+  "agent",
+  /** Per-user budget: entity_id = user ID */
+  "user",
+  /** Per-virtual-key budget: entity_id = virtual API key ID */
+  "virtual_key",
+]);
 export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
 
 /**
@@ -73,16 +81,14 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
         return false;
       }
     }
-    // Validation: token_cost requires non-empty model array and should not have mcp or tool specificity
+    // Validation: token_cost either requires a non-empty model array or null/empty (global — all models)
+    // and should not have mcp or tool specificity
     if (data.limitType === "token_cost") {
-      if (
-        !data.model ||
-        !Array.isArray(data.model) ||
-        data.model.length === 0
-      ) {
+      if (data.mcpServerName || data.toolName) {
         return false;
       }
-      if (data.mcpServerName || data.toolName) {
+      // null model == "all models" global budget; explicit empty array is not allowed
+      if (Array.isArray(data.model) && data.model.length === 0) {
         return false;
       }
     }

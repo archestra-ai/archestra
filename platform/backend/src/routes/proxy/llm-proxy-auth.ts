@@ -48,6 +48,8 @@ export async function resolveAgent(
 export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  /** The ID of the resolved virtual API key (for per-key limit enforcement) */
+  virtualKeyId: string;
 }
 
 /**
@@ -107,6 +109,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
+    virtualKeyId: resolved.virtualKey.id,
   };
 }
 

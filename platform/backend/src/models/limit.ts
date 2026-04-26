@@ -11,6 +11,14 @@ import type {
 import AgentTeamModel from "./agent-team";
 import ModelModel from "./model";
 
+/**
+ * Sentinel model name used for "all models" (global) token-cost limits.
+ * When a limit's `model` column is NULL, usage is aggregated under this key
+ * in the `limit_model_usage` table so the existing per-model accounting
+ * mechanism can still be used without schema changes.
+ */
+const GLOBAL_MODEL_SENTINEL = "__all__";
+
 class LimitModel {
   /**
    * Create a new limit
@@ -22,12 +30,16 @@ class LimitModel {
       .returning();
 
     // For token_cost limits, initialize model usage records
-    if (
-      limit.limitType === "token_cost" &&
-      limit.model &&
-      Array.isArray(limit.model)
-    ) {
-      await LimitModel.initializeModelUsageRecords(limit.id, limit.model);
+    if (limit.limitType === "token_cost") {
+      if (limit.model && Array.isArray(limit.model) && limit.model.length > 0) {
+        // Specific models — initialize one record per model
+        await LimitModel.initializeModelUsageRecords(limit.id, limit.model);
+      } else if (!limit.model) {
+        // null model == global "all models" budget; use sentinel record
+        await LimitModel.initializeModelUsageRecords(limit.id, [
+          GLOBAL_MODEL_SENTINEL,
+        ]);
+      }
     }
 
     return limit;
@@ -247,17 +259,23 @@ class LimitModel {
       "[LimitModel] Update token limit usage",
     );
     try {
-      // Find all token_cost limits for this entity that include this model
+      // Find all token_cost limits for this entity that:
+      //   (a) include this specific model in their model array, OR
+      //   (b) have model = NULL (global "all models" budget)
       const limits = await db
-        .select({ id: schema.limitsTable.id })
+        .select({ id: schema.limitsTable.id, model: schema.limitsTable.model })
         .from(schema.limitsTable)
         .where(
           and(
             eq(schema.limitsTable.entityType, entityType),
             eq(schema.limitsTable.entityId, entityId),
             eq(schema.limitsTable.limitType, "token_cost"),
-            // Check if model is in the JSONB array
-            sql`${schema.limitsTable.model} ? ${model}`,
+            or(
+              // Specific model match
+              sql`${schema.limitsTable.model} ? ${model}`,
+              // Global "all models" limit
+              isNull(schema.limitsTable.model),
+            ),
           ),
         );
 
@@ -270,11 +288,15 @@ class LimitModel {
 
       // Update model usage for each limit
       for (const limit of limits) {
+        // For global limits (model IS NULL), accumulate under the sentinel key;
+        // for specific-model limits use the actual model name.
+        const usageKey = limit.model === null ? GLOBAL_MODEL_SENTINEL : model;
+
         await db
           .insert(schema.limitModelUsageTable)
           .values({
             limitId: limit.id,
-            model,
+            model: usageKey,
             currentUsageTokensIn: inputTokens,
             currentUsageTokensOut: outputTokens,
           })
@@ -291,7 +313,7 @@ class LimitModel {
           });
 
         logger.debug(
-          `[LimitModel] Updated model usage for limit ${limit.id}, model ${model}: +${inputTokens} in, +${outputTokens} out`,
+          `[LimitModel] Updated model usage for limit ${limit.id}, usage key ${usageKey}: +${inputTokens} in, +${outputTokens} out`,
         );
       }
     } catch (error) {
@@ -502,7 +524,14 @@ export class LimitValidationService {
    */
   static async checkLimitsBeforeRequest(
     agentId: string,
+    options?: {
+      /** User ID — used to enforce per-user budgets */
+      userId?: string | null;
+      /** Virtual API key ID — used to enforce per-virtual-key budgets */
+      virtualKeyId?: string | null;
+    },
   ): Promise<null | [string, string]> {
+    const { userId, virtualKeyId } = options ?? {};
     try {
       logger.info(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
@@ -642,6 +671,45 @@ export class LimitValidationService {
           );
         }
       }
+      // Check per-user limits if a user ID is available
+      if (userId) {
+        logger.info(
+          `[LimitValidation] Checking per-user limits for user: ${userId}`,
+        );
+        const userLimitViolation =
+          await LimitValidationService.checkEntityLimits("user", userId);
+        if (userLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by per-user limit for user: ${userId}`,
+          );
+          return userLimitViolation;
+        }
+        logger.info(
+          `[LimitValidation] Per-user limits OK for user: ${userId}`,
+        );
+      }
+
+      // Check per-virtual-key limits if a virtual key ID is available
+      if (virtualKeyId) {
+        logger.info(
+          `[LimitValidation] Checking per-virtual-key limits for key: ${virtualKeyId}`,
+        );
+        const vkLimitViolation =
+          await LimitValidationService.checkEntityLimits(
+            "virtual_key",
+            virtualKeyId,
+          );
+        if (vkLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by per-virtual-key limit for key: ${virtualKeyId}`,
+          );
+          return vkLimitViolation;
+        }
+        logger.info(
+          `[LimitValidation] Per-virtual-key limits OK for key: ${virtualKeyId}`,
+        );
+      }
+
       logger.info(
         `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
       );
@@ -659,7 +727,7 @@ export class LimitValidationService {
    * Check if current token cost usage has exceeded limits for a specific entity
    */
   private static async checkEntityLimits(
-    entityType: "organization" | "team" | "agent",
+    entityType: "organization" | "team" | "agent" | "user" | "virtual_key",
     entityId: string,
   ): Promise<null | [string, string]> {
     try {

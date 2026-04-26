@@ -105,6 +105,21 @@ class MessageModel {
     return MessageModel.findByContentId(id);
   }
 
+  /**
+   * Update the full content of a message by its database UUID.
+   * Used to persist state changes to existing messages (e.g. when a tool-call
+   * transitions from approval-requested to output-available/output-denied).
+   */
+  static async updateContent(
+    messageId: string,
+    content: unknown,
+  ): Promise<void> {
+    await db
+      .update(schema.messagesTable)
+      .set({ content, updatedAt: new Date() })
+      .where(eq(schema.messagesTable.id, messageId));
+  }
+
   static async updateTextPart(
     messageId: string,
     partIndex: number,

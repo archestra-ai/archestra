@@ -1966,6 +1966,18 @@ async function persistNewMessages(
       uiMessages,
     });
 
+    // Update existing messages whose approval state has been resolved.
+    // When a tool-call approval is granted/declined, the assistant message
+    // already in the DB still holds state "approval-requested". We update it
+    // so that on page refresh the resolved state is shown instead of
+    // re-rendering the approval form (fixes #4030).
+    if (context === "onFinish") {
+      await updateApprovalResolvedMessages({
+        existingMessages,
+        uiMessages,
+      });
+    }
+
     if (newMessages.length === 0) {
       return 0;
     }
@@ -2027,6 +2039,108 @@ async function persistNewMessages(
       `Failed to persist messages during ${context}`,
     );
     throw error;
+  }
+}
+
+/**
+ * Update existing DB messages whose tool-call approval state has been resolved.
+ *
+ * When the user approves or declines a tool call, the AI SDK transitions the
+ * tool-call part from state "approval-requested" to "output-available" /
+ * "output-denied". The DB row for that assistant message was written during
+ * the previous turn and still holds the old "approval-requested" state.
+ *
+ * This function detects such messages and overwrites the DB content so that
+ * page refreshes display the resolved state instead of re-rendering the
+ * approval form (fixes #4030).
+ */
+async function updateApprovalResolvedMessages(params: {
+  existingMessages: Array<{ id: string; content: unknown }>;
+  uiMessages: ChatMessage[];
+}): Promise<void> {
+  const { existingMessages, uiMessages } = params;
+
+  // Build a lookup: DB UUID → existing DB message
+  const existingById = new Map<string, { id: string; content: unknown }>();
+  // Also build a lookup: content.id (AI SDK nanoid) → DB UUID
+  const contentIdToDbId = new Map<string, string>();
+
+  for (const msg of existingMessages) {
+    existingById.set(msg.id, msg);
+    const contentId =
+      typeof msg.content === "object" &&
+      msg.content !== null &&
+      "id" in msg.content &&
+      typeof (msg.content as { id?: unknown }).id === "string"
+        ? (msg.content as { id: string }).id
+        : null;
+    if (contentId) {
+      contentIdToDbId.set(contentId, msg.id);
+    }
+  }
+
+  for (const uiMsg of uiMessages) {
+    if (!uiMsg.id || typeof uiMsg.id !== "string") continue;
+
+    // Resolve the DB UUID for this incoming message
+    const dbId =
+      existingById.has(uiMsg.id)
+        ? uiMsg.id
+        : contentIdToDbId.get(uiMsg.id) ?? null;
+
+    if (!dbId) continue; // Not an existing message – will be inserted as new
+
+    // Check whether any part in the incoming message was previously
+    // "approval-requested" in the DB but is now resolved.
+    const existingMsg = existingById.get(dbId);
+    if (!existingMsg) continue;
+
+    const existingContent =
+      typeof existingMsg.content === "object" && existingMsg.content !== null
+        ? (existingMsg.content as { parts?: unknown[] })
+        : null;
+
+    const existingParts = existingContent?.parts ?? [];
+    const hasApprovalRequestedInDb = existingParts.some(
+      (p) =>
+        typeof p === "object" &&
+        p !== null &&
+        "state" in p &&
+        (p as { state?: unknown }).state === "approval-requested",
+    );
+
+    if (!hasApprovalRequestedInDb) continue; // Nothing to update
+
+    // At least one part was "approval-requested" in the DB — check if it has
+    // changed in the incoming message.
+    const incomingParts = uiMsg.parts ?? [];
+    const stillPendingInIncoming = incomingParts.some(
+      (p) =>
+        typeof p === "object" &&
+        p !== null &&
+        "state" in p &&
+        (p as { state?: unknown }).state === "approval-requested",
+    );
+
+    if (stillPendingInIncoming) continue; // State not yet resolved
+
+    // The approval state was resolved — update the DB record so refreshes
+    // show the correct state.
+    const normalizedMsg = normalizeChatMessages([uiMsg])[0];
+    if (!normalizedMsg) continue;
+
+    try {
+      await MessageModel.updateContent(dbId, normalizedMsg);
+      logger.info(
+        { messageId: dbId },
+        "[Chat] Updated approval-resolved message in DB (#4030)",
+      );
+    } catch (err) {
+      logger.warn(
+        { error: err, messageId: dbId },
+        "[Chat] Failed to update approval-resolved message",
+      );
+    }
   }
 }
 

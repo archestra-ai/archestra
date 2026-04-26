@@ -131,3 +131,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @SaurabhCodesAI
 - @aadityaranjan01
 - @selenaalpha77-sketch
+- @vikrantwiz02

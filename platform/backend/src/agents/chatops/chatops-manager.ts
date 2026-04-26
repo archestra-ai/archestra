@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON } from "@shared";
 import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -6,12 +7,14 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
+  ChatOpsApprovalRequestModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
+import type { ChatOpsApprovalExecutionContext } from "@/models/chatops-approval-request";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import type {
   ChatOpsConnectionMode,
@@ -480,13 +483,54 @@ export class ChatOpsManager {
   }
 
   /**
-   * Handle an interactive payload (e.g. agent selection button click) from any provider.
-   * Covers: parse selection, verify user, verify agent, upsert binding, confirm.
+   * Handle an interactive payload (e.g. agent selection button click or
+   * approval Approve/Decline click) from any provider.
+   *
+   * Approval callbacks are detected first via the Slack provider's
+   * `parseApprovalPayload`; for MS Teams they arrive as separate
+   * Adaptive Card submissions with `action === "chatopsApprove|chatopsDecline"`.
    */
   async handleInteractiveSelection(
     provider: ChatOpsProvider,
     payload: unknown,
   ): Promise<void> {
+    // --- Approval response path (Slack Block Kit buttons) ---
+    if (provider.providerId === "slack") {
+      const slackProvider = provider as SlackProvider;
+      const approvalResult = slackProvider.parseApprovalPayload(payload);
+      if (approvalResult) {
+        await this.handleApprovalResponse(
+          provider,
+          approvalResult.token,
+          approvalResult.status,
+          approvalResult.userId,
+        );
+        return;
+      }
+    }
+
+    // --- MS Teams Adaptive Card approval submissions ---
+    if (provider.providerId === "ms-teams") {
+      const teamsPayload = payload as {
+        activity?: { value?: { action?: string; approvalToken?: string; from?: { id?: string } } };
+      };
+      const value = teamsPayload?.activity?.value;
+      if (
+        value?.action === "chatopsApprove" ||
+        value?.action === "chatopsDecline"
+      ) {
+        const token = value.approvalToken;
+        const status =
+          value.action === "chatopsApprove" ? "approved" : "declined";
+        const responderId = teamsPayload?.activity?.value?.from?.id || "unknown";
+        if (token) {
+          await this.handleApprovalResponse(provider, token, status, responderId);
+          return;
+        }
+      }
+    }
+
+    // --- Normal agent-selection path ---
     const selection = provider.parseInteractivePayload(payload);
     if (!selection) return;
 
@@ -556,6 +600,123 @@ export class ChatOpsManager {
     await provider.sendReply({
       originalMessage: message,
       text: `Agent *${agent.name}* is now assigned to this ${isDm ? "conversation" : "channel"}.\nSend a message to start interacting!`,
+    });
+  }
+
+  /**
+   * Handle an Approve or Decline response from a ChatOps provider.
+   *
+   * Flow:
+   * 1. Look up the approval request by token
+   * 2. Verify it is still pending and not expired
+   * 3. Persist the resolution (approved / declined)
+   * 4. Update the approval card in the channel to show status
+   * 5a. If approved: re-run the agent with the original message so it can
+   *     retry the tool without the approval gate
+   * 5b. If declined: send a refusal message back to the channel
+   */
+  async handleApprovalResponse(
+    provider: ChatOpsProvider,
+    token: string,
+    status: "approved" | "declined",
+    responderId: string,
+  ): Promise<void> {
+    // Look up the pending request
+    const request = await ChatOpsApprovalRequestModel.findByToken(token);
+    if (!request) {
+      logger.warn({ token }, "[ChatOps] Approval token not found");
+      return;
+    }
+
+    if (request.status !== "pending") {
+      logger.info(
+        { token, status: request.status },
+        "[ChatOps] Approval request already resolved",
+      );
+      return;
+    }
+
+    if (request.expiresAt < new Date()) {
+      await ChatOpsApprovalRequestModel.resolve(token, "declined");
+      logger.warn({ token }, "[ChatOps] Approval request has expired");
+      await provider.sendReply({
+        originalMessage: request.originalMessage,
+        text: `⏰ This approval request has expired. Please re-send your message to start a new request.`,
+      });
+      return;
+    }
+
+    // Persist resolution
+    const resolved = await ChatOpsApprovalRequestModel.resolve(token, status);
+    if (!resolved) {
+      logger.warn(
+        { token },
+        "[ChatOps] Failed to resolve approval (concurrent resolution?)",
+      );
+      return;
+    }
+
+    // Resolve responder display name
+    const responderName =
+      (await provider.getUserName?.(responderId)) || responderId;
+
+    // Update the approval card to show the result
+    if (provider.updateApprovalCard && request.approvalMessageTs) {
+      await provider
+        .updateApprovalCard({
+          channelId: request.channelId,
+          threadId: request.threadId,
+          approvalMessageTs: request.approvalMessageTs,
+          toolName: request.toolName,
+          status,
+          responderName,
+        })
+        .catch((err) => {
+          logger.warn(
+            { error: errorMessage(err) },
+            "[ChatOps] Failed to update approval card",
+          );
+        });
+    }
+
+    if (status === "declined") {
+      await provider.sendReply({
+        originalMessage: request.originalMessage,
+        text: `❌ Tool execution declined by *${responderName}*.\n\nThe agent has been notified and will not invoke \`${request.toolName}\`.`,
+      });
+      return;
+    }
+
+    // Approved — resume agent execution
+    // Re-build the original provider so the agent resumes in the correct context
+    const ctx = request.executionContext as ChatOpsApprovalExecutionContext;
+
+    await provider.sendReply({
+      originalMessage: request.originalMessage,
+      text: `✅ Approved by *${responderName}*. Resuming…`,
+    });
+
+    // Re-run the full agent pipeline with allowApprovalRequired=true so that
+    // the tool-invocation approval gate is bypassed for this execution.
+    const agentRecord = await AgentModel.findById(ctx.agentId);
+    const agentForResume = agentRecord
+      ? { id: agentRecord.id, name: agentRecord.name }
+      : { id: ctx.agentId, name: ctx.agentId };
+
+    this.executeAndReply({
+      agent: agentForResume,
+      binding: { organizationId: ctx.organizationId },
+      message: request.originalMessage,
+      provider,
+      fullMessage: ctx.fullMessage,
+      sendReply: true,
+      userId: ctx.userId,
+      allowApprovalRequired: true,
+    }).catch((err) => {
+      logger.error(
+        { error: errorMessage(err) },
+        "[ChatOps] Failed to resume agent after approval",
+      );
     });
   }
 
@@ -806,6 +967,22 @@ export class ChatOpsManager {
       logger.error(
         { error: errorMessage(error) },
         "[ChatOps] Failed to cleanup old processed messages",
+      );
+    }
+
+    // Expire stale approval requests
+    try {
+      const expiredCount = await ChatOpsApprovalRequestModel.expireOldRequests();
+      if (expiredCount > 0) {
+        logger.info(
+          { expiredCount },
+          "[ChatOps] Expired stale approval requests",
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to expire stale approval requests",
       );
     }
   }
@@ -1211,6 +1388,12 @@ export class ChatOpsManager {
     fullMessage: string;
     sendReply: boolean;
     userId: string;
+    /**
+     * When true the tool-invocation policy approval gate is removed so the
+     * agent can call tools that were previously approved via an interactive
+     * approval card.  Set to true only when called from handleApprovalResponse.
+     */
+    allowApprovalRequired?: boolean;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -1220,6 +1403,7 @@ export class ChatOpsManager {
       fullMessage,
       sendReply,
       userId,
+      allowApprovalRequired = false,
     } = params;
 
     // Send typing indicator before execution starts (non-fatal).
@@ -1279,6 +1463,9 @@ export class ChatOpsManager {
               message.attachments && message.attachments.length > 0
                 ? message.attachments
                 : undefined,
+            // Pass the allowApprovalRequired flag so the executor knows not
+            // to gate approved tools.
+            allowApprovalRequired,
           });
         },
       });
@@ -1312,13 +1499,41 @@ export class ChatOpsManager {
         interactionId: result.messageId,
       };
     } catch (error) {
+      const errMsg = errorMessage(error);
+
+      // -----------------------------------------------------------------------
+      // Approval-required gate: the A2A executor throws this error when a tool
+      // requires human approval but blockOnApprovalRequired=true.  Instead of
+      // surfacing an error to the user we store a pending approval request and
+      // post an interactive approval card to the channel.
+      // -----------------------------------------------------------------------
+      if (
+        !allowApprovalRequired &&
+        errMsg.includes(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON)
+      ) {
+        await this.handleApprovalRequired({
+          agent,
+          binding,
+          message,
+          provider,
+          fullMessage,
+          userId,
+          errMsg,
+        }).catch((approvalErr) => {
+          logger.error(
+            { error: errorMessage(approvalErr) },
+            "[ChatOps] Failed to post approval card",
+          );
+        });
+        return { success: true };
+      }
+
       logger.error(
-        { messageId: message.messageId, error: errorMessage(error) },
+        { messageId: message.messageId, error: errMsg },
         "[ChatOps] Failed to execute A2A message",
       );
 
       if (sendReply) {
-        const errMsg = errorMessage(error);
         // Show truncated error details as a subtle footer (max 500 chars)
         const errorDetail =
           errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
@@ -1330,8 +1545,106 @@ export class ChatOpsManager {
         });
       }
 
-      return { success: false, error: errorMessage(error) };
+      return { success: false, error: errMsg };
     }
+  }
+
+  /**
+   * Called when A2A execution is blocked because a tool requires approval.
+   * Creates a pending ChatOpsApprovalRequest in the DB and posts an
+   * interactive approval card to the channel.
+   *
+   * The `errMsg` from the A2A executor may include the tool name embedded
+   * in the TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON constant.
+   * We extract it best-effort; if we cannot, we use a generic label.
+   */
+  private async handleApprovalRequired(params: {
+    agent: { id: string; name: string };
+    binding: { organizationId: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    fullMessage: string;
+    userId: string;
+    errMsg: string;
+  }): Promise<void> {
+    const { agent, binding, message, provider, fullMessage, userId } = params;
+
+    if (!provider.sendApprovalCard) {
+      // Provider doesn't support approval cards; fall back to a text message.
+      await provider.sendReply({
+        originalMessage: message,
+        text:
+          "⚠️ This action requires human approval, but interactive approval is not supported in this channel.\n" +
+          "Please approve the action via the Archestra web interface.",
+      });
+      return;
+    }
+
+    // Attempt to extract the tool name from the error message.
+    // The A2A executor may include it as part of a larger message; we do a
+    // best-effort extraction.
+    const toolNameMatch = params.errMsg.match(/tool[:\s]+["']?([^"'\s,]+)/i);
+    const toolName = toolNameMatch?.[1] ?? "unknown tool";
+
+    const sessionId = buildChatOpsSessionId(
+      provider.providerId,
+      message.channelId,
+      message.threadId,
+    );
+
+    const executionContext: ChatOpsApprovalExecutionContext = {
+      agentId: agent.id,
+      organizationId: binding.organizationId,
+      sessionId,
+      source:
+        provider.providerId === "slack" ? "chatops:slack" : "chatops:ms-teams",
+      fullMessage,
+      userId,
+      attachments: message.attachments as unknown[],
+    };
+
+    // Create the pending approval request
+    const approvalRequest = await ChatOpsApprovalRequestModel.create({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId,
+      threadId: message.threadId,
+      agentId: agent.id,
+      userId,
+      toolName,
+      toolArgs: {},
+      executionContext,
+      originalMessage: message,
+    });
+
+    // Post the approval card
+    const expiresAt = approvalRequest.expiresAt;
+    const approvalMessageTs = await provider.sendApprovalCard({
+      message,
+      toolName,
+      toolArgs: {},
+      approveToken: approvalRequest.token,
+      declineToken: approvalRequest.token, // same token; status determined by button
+      expiresAt,
+    });
+
+    // Store the card message TS so we can update it later
+    if (approvalMessageTs) {
+      await ChatOpsApprovalRequestModel.setApprovalMessageTs(
+        approvalRequest.token,
+        approvalMessageTs,
+      );
+    }
+
+    logger.info(
+      {
+        approvalRequestId: approvalRequest.id,
+        agentId: agent.id,
+        toolName,
+        expiresAt,
+      },
+      "[ChatOps] Posted approval card for pending tool invocation",
+    );
   }
 }
 

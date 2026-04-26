@@ -35,6 +35,7 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  CHATOPS_APPROVAL,
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -636,8 +637,13 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   /**
-   * Parse a block_actions interactive payload (agent selection button click).
+   * Parse a block_actions interactive payload (agent selection button click or
+   * approval Approve/Decline button click).
    * Returns the selected agent ID and context, or null if not a valid selection.
+   *
+   * Approval payloads are detected by checking for the CHATOPS_APPROVAL action
+   * IDs.  If found, the payload is handled by handleApprovalResponse and this
+   * method returns null so the normal agent-selection path is skipped.
    */
   parseInteractivePayload(payload: unknown): {
     agentId: string;
@@ -654,6 +660,15 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const action = p.actions[0];
+
+    // Skip approval actions — they are handled by handleApprovalResponse
+    if (
+      action.action_id === CHATOPS_APPROVAL.ACTION_APPROVE ||
+      action.action_id === CHATOPS_APPROVAL.ACTION_DECLINE
+    ) {
+      return null;
+    }
+
     if (action.action_id !== "select_agent" || !action.selected_option?.value) {
       return null;
     }
@@ -666,6 +681,52 @@ class SlackProvider implements ChatOpsProvider {
       userId: p.user?.id || "unknown",
       userName: p.user?.name || "Unknown",
       responseUrl: p.response_url || "",
+    };
+  }
+
+  /**
+   * Parse a block_actions payload as an approval response.
+   * Returns the token, status and user info, or null if not an approval action.
+   */
+  parseApprovalPayload(payload: unknown): {
+    token: string;
+    status: "approved" | "declined";
+    userId: string;
+    userName: string;
+    channelId: string;
+    workspaceId: string | null;
+    threadTs?: string;
+  } | null {
+    const p = payload as SlackInteractivePayload;
+    if (p.type !== "block_actions" || !p.actions?.length) {
+      return null;
+    }
+
+    const action = p.actions[0];
+
+    let status: "approved" | "declined" | null = null;
+    if (action.action_id === CHATOPS_APPROVAL.ACTION_APPROVE) {
+      status = "approved";
+    } else if (action.action_id === CHATOPS_APPROVAL.ACTION_DECLINE) {
+      status = "declined";
+    }
+
+    if (!status) return null;
+
+    const value = action.value || "";
+    if (!value.startsWith(CHATOPS_APPROVAL.TOKEN_PREFIX)) return null;
+
+    const token = value.slice(CHATOPS_APPROVAL.TOKEN_PREFIX.length);
+    if (!token) return null;
+
+    return {
+      token,
+      status,
+      userId: p.user?.id || "unknown",
+      userName: p.user?.name || "Unknown",
+      channelId: p.channel?.id || "",
+      workspaceId: p.team?.id || null,
+      threadTs: p.message?.thread_ts || p.message?.ts,
     };
   }
 
@@ -897,6 +958,132 @@ class SlackProvider implements ChatOpsProvider {
       blocks,
       ...(params.threadId ? { thread_ts: params.threadId } : {}),
     });
+  }
+
+  /**
+   * Post an interactive approval card to the channel/thread with Approve and
+   * Decline buttons.  Each button's value encodes the approval token so the
+   * callback can look up the pending request.
+   */
+  async sendApprovalCard(params: {
+    message: IncomingChatMessage;
+    toolName: string;
+    toolArgs: Record<string, unknown>;
+    approveToken: string;
+    declineToken: string;
+    expiresAt: Date;
+  }): Promise<string | null> {
+    if (!this.client) {
+      throw new Error("SlackProvider not initialized");
+    }
+
+    const { message, toolName, toolArgs, approveToken, declineToken, expiresAt } =
+      params;
+
+    const argsText =
+      Object.keys(toolArgs).length > 0
+        ? `\`\`\`${JSON.stringify(toolArgs, null, 2)}\`\`\``
+        : "_no arguments_";
+
+    const expiryText = expiresAt.toUTCString();
+
+    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+    const blocks: any[] = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*🔐 Approval Required*\n\nThe agent wants to invoke the following tool and needs your approval before proceeding.`,
+        },
+      },
+      {
+        type: "section",
+        fields: [
+          { type: "mrkdwn", text: `*Tool:*\n\`${toolName}\`` },
+          { type: "mrkdwn", text: `*Arguments:*\n${argsText}` },
+        ],
+      },
+      {
+        type: "context",
+        elements: [
+          { type: "mrkdwn", text: `⏰ This request expires at ${expiryText}` },
+        ],
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            action_id: CHATOPS_APPROVAL.ACTION_APPROVE,
+            text: { type: "plain_text", text: "✅ Approve", emoji: true },
+            style: "primary",
+            value: `${CHATOPS_APPROVAL.TOKEN_PREFIX}${approveToken}`,
+          },
+          {
+            type: "button",
+            action_id: CHATOPS_APPROVAL.ACTION_DECLINE,
+            text: { type: "plain_text", text: "❌ Decline", emoji: true },
+            style: "danger",
+            value: `${CHATOPS_APPROVAL.TOKEN_PREFIX}${declineToken}`,
+          },
+        ],
+      },
+    ];
+
+    const result = await this.client.chat.postMessage({
+      channel: message.channelId,
+      text: `Approval required for tool: ${toolName}`,
+      blocks,
+      thread_ts: message.threadId,
+    });
+
+    return (result.ts as string) || null;
+  }
+
+  /**
+   * Update a previously-sent approval card to reflect the resolution.
+   * Replaces the interactive buttons with a static status line.
+   */
+  async updateApprovalCard(params: {
+    channelId: string;
+    threadId: string | null;
+    approvalMessageTs: string;
+    toolName: string;
+    status: "approved" | "declined";
+    responderName: string;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    const { channelId, approvalMessageTs, toolName, status, responderName } =
+      params;
+
+    const emoji = status === "approved" ? "✅" : "❌";
+    const verb = status === "approved" ? "Approved" : "Declined";
+
+    // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
+    const blocks: any[] = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*🔐 Tool Approval — ${emoji} ${verb}*\n\`${toolName}\` was ${verb.toLowerCase()} by *${responderName}*.`,
+        },
+      },
+    ];
+
+    try {
+      await this.client.chat.update({
+        channel: channelId,
+        ts: approvalMessageTs,
+        text: `Tool ${toolName} was ${verb.toLowerCase()} by ${responderName}`,
+        blocks,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] Failed to update approval card",
+      );
+    }
   }
 
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {

@@ -71,6 +71,20 @@ export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
 export { SLACK_SLASH_COMMANDS } from "@shared";
 
 /**
+ * Approval-flow action IDs embedded in Slack/Teams button values.
+ * Format: "<ACTION_PREFIX><token>" so we can distinguish approval callbacks
+ * from agent-selection callbacks inside handleInteractiveSelection.
+ */
+export const CHATOPS_APPROVAL = {
+  /** Slack/Teams action_id for the Approve button */
+  ACTION_APPROVE: "chatops_approve",
+  /** Slack/Teams action_id for the Decline button */
+  ACTION_DECLINE: "chatops_decline",
+  /** Prefix used in button values to embed the approval token */
+  TOKEN_PREFIX: "approval:",
+} as const;
+
+/**
  * Attachment limits for chatops file downloads.
  * Reuses the same limits as the incoming email module for consistency.
  */

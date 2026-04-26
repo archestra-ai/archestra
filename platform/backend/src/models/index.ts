@@ -8,6 +8,7 @@ export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as ApiKeyModel } from "./api-key";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
+export { default as ChatOpsApprovalRequestModel } from "./chatops-approval-request";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";

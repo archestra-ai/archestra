@@ -164,11 +164,49 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           },
           async (context: TurnContext) => {
-            // Check if this is a card submission (agent selection) FIRST
+            // Check if this is a card submission (agent selection or approval) FIRST
             // Card submissions have activity.value but no text, so we must check before parseWebhookNotification
             const activityValue = context.activity.value as
-              | { action?: string; channelId?: string; workspaceId?: string }
+              | {
+                  action?: string;
+                  channelId?: string;
+                  workspaceId?: string;
+                  approvalToken?: string;
+                }
               | undefined;
+
+            // Handle approval Approve/Decline card submissions
+            if (
+              activityValue?.action === "chatopsApprove" ||
+              activityValue?.action === "chatopsDecline"
+            ) {
+              const token = activityValue.approvalToken;
+              if (token) {
+                const status =
+                  activityValue.action === "chatopsApprove"
+                    ? "approved"
+                    : "declined";
+                const responderId =
+                  context.activity.from?.aadObjectId ||
+                  context.activity.from?.id ||
+                  "unknown";
+                chatOpsManager
+                  .handleApprovalResponse(provider, token, status, responderId)
+                  .catch((error) => {
+                    logger.error(
+                      {
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "[ChatOps] Failed to process Teams approval response",
+                    );
+                  });
+              }
+              return;
+            }
+
             if (activityValue?.action === "selectAgent") {
               // For card submissions, we need to construct a minimal message from the activity
               const cardMessage: IncomingChatMessage = {

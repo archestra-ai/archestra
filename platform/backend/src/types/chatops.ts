@@ -387,6 +387,34 @@ export interface ChatOpsProvider {
   notifyMissingScopes(message: IncomingChatMessage): Promise<void>;
 
   /**
+   * Send an interactive approval card for a pending tool-execution approval.
+   * Returns a provider-specific message identifier (e.g., Slack `ts`) that can
+   * be used later to update the card after the user responds.
+   */
+  sendApprovalCard?(params: {
+    message: IncomingChatMessage;
+    toolName: string;
+    toolArgs: Record<string, unknown>;
+    approveToken: string;
+    declineToken: string;
+    expiresAt: Date;
+  }): Promise<string | null>;
+
+  /**
+   * Update a previously-sent approval card after the user has responded.
+   * Used to replace the interactive buttons with a "Approved / Declined by X"
+   * status message so the channel history remains meaningful.
+   */
+  updateApprovalCard?(params: {
+    channelId: string;
+    threadId: string | null;
+    approvalMessageTs: string;
+    toolName: string;
+    status: "approved" | "declined";
+    responderName: string;
+  }): Promise<void>;
+
+  /**
    * Download files from thread history messages.
    * Reuses the provider's existing download logic (auth headers, SSRF protection, etc.).
    * @param files - File metadata from thread history messages
@@ -415,6 +443,17 @@ export interface ChatOpsEventHandler {
   handleInteractiveSelection(
     provider: ChatOpsProvider,
     payload: unknown,
+  ): Promise<void>;
+  /**
+   * Handle an approval response (Approve/Decline button click) from a ChatOps
+   * provider.  The token identifies the pending approval request; status is
+   * "approved" or "declined".
+   */
+  handleApprovalResponse(
+    provider: ChatOpsProvider,
+    token: string,
+    status: "approved" | "declined",
+    responderId: string,
   ): Promise<void>;
   getAccessibleChatopsAgents({
     senderEmail,

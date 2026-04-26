@@ -872,6 +872,141 @@ class MSTeamsProvider implements ChatOpsProvider {
     });
   }
 
+  /**
+   * Send an Adaptive Card with Approve/Decline actions to the Teams channel.
+   * Teams Adaptive Cards use Action.Submit which posts back to the bot, so the
+   * token is embedded in the submit data rather than a button value.
+   *
+   * NOTE: MS Teams approval cards are posted via continueConversationAsync using
+   * the stored conversation reference.  The `approvalMessageTs` for Teams is the
+   * activity ID of the card message.
+   */
+  async sendApprovalCard(params: {
+    message: IncomingChatMessage;
+    toolName: string;
+    toolArgs: Record<string, unknown>;
+    approveToken: string;
+    declineToken: string;
+    expiresAt: Date;
+  }): Promise<string | null> {
+    if (!this.adapter) {
+      throw new Error("MSTeamsProvider not initialized");
+    }
+
+    const { message, toolName, toolArgs, approveToken, declineToken, expiresAt } =
+      params;
+
+    const ref = message.metadata?.conversationReference as
+      | ConversationReference
+      | undefined;
+    if (!ref) return null;
+
+    const argsText =
+      Object.keys(toolArgs).length > 0
+        ? JSON.stringify(toolArgs, null, 2)
+        : "(no arguments)";
+
+    const expiryText = expiresAt.toUTCString();
+
+    const card = {
+      type: "AdaptiveCard",
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.4",
+      body: [
+        {
+          type: "TextBlock",
+          size: "Medium",
+          weight: "Bolder",
+          text: "🔐 Approval Required",
+        },
+        {
+          type: "TextBlock",
+          text: "The agent wants to invoke the following tool and needs your approval before proceeding.",
+          wrap: true,
+        },
+        {
+          type: "FactSet",
+          facts: [
+            { title: "Tool:", value: toolName },
+            { title: "Arguments:", value: argsText },
+          ],
+        },
+        {
+          type: "TextBlock",
+          text: `⏰ Expires at ${expiryText}`,
+          isSubtle: true,
+          wrap: true,
+        },
+      ],
+      actions: [
+        {
+          type: "Action.Submit",
+          title: "✅ Approve",
+          style: "positive",
+          data: {
+            action: "chatopsApprove",
+            approvalToken: approveToken,
+          },
+        },
+        {
+          type: "Action.Submit",
+          title: "❌ Decline",
+          style: "destructive",
+          data: {
+            action: "chatopsDecline",
+            approvalToken: declineToken,
+          },
+        },
+      ],
+    };
+
+    let messageId: string | null = null;
+    try {
+      await this.adapter.continueConversationAsync(
+        this.config.appId,
+        ref,
+        async (context) => {
+          const response = await context.sendActivity({
+            attachments: [
+              {
+                contentType: "application/vnd.microsoft.card.adaptive",
+                content: card,
+              },
+            ],
+          });
+          messageId = response?.id ?? null;
+        },
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Failed to send approval card",
+      );
+    }
+
+    return messageId;
+  }
+
+  /**
+   * Update the approval card after the user has responded.
+   * For Teams this is done by updating the activity via continueConversationAsync.
+   */
+  async updateApprovalCard(params: {
+    channelId: string;
+    threadId: string | null;
+    approvalMessageTs: string;
+    toolName: string;
+    status: "approved" | "declined";
+    responderName: string;
+  }): Promise<void> {
+    // Teams card update is best-effort; skipped if conversation reference is unavailable.
+    // The card is already non-interactive after a response is submitted.
+    logger.debug(
+      { approvalMessageTs: params.approvalMessageTs, status: params.status },
+      "[MSTeamsProvider] updateApprovalCard: no-op (Teams cards become static after submit)",
+    );
+  }
+
   hasMissingScopes(): boolean {
     return false;
   }

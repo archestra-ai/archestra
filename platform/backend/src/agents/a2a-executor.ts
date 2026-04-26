@@ -68,6 +68,13 @@ export interface A2AExecuteParams {
   parentContextIsTrusted?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+  /**
+   * When true, the tool-invocation policy approval gate is disabled for this
+   * execution.  Used by the ChatOps approval flow: after a user clicks Approve
+   * in Slack/Teams, the agent is re-run with this flag set so the previously
+   * blocked tool can execute without hitting the approval gate again.
+   */
+  allowApprovalRequired?: boolean;
 }
 
 export interface A2AExecuteResult {
@@ -100,6 +107,7 @@ export async function executeA2AMessage(
     attachments,
     parentContextIsTrusted,
     scheduleTriggerRunId,
+    allowApprovalRequired = false,
   } = params;
 
   // Generate isolation key for browser tab isolation.
@@ -178,7 +186,9 @@ export async function executeA2AMessage(
       delegationChain,
       conversationId: isolationKey,
       abortSignal,
-      blockOnApprovalRequired: true, // A2A/autonomous: block tools that require human approval
+      // Block approval-required tools in autonomous contexts unless the
+      // ChatOps approval flow has explicitly granted permission for this run.
+      blockOnApprovalRequired: !allowApprovalRequired,
       scheduleTriggerRunId,
     });
 

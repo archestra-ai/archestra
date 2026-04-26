@@ -179,7 +179,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 // Import the component after mocks are set up
-import ArchestraPromptInput from "./prompt-input";
+import ArchestraPromptInput from ".";
 
 describe("ArchestraPromptInput", () => {
   const defaultProps = {

@@ -1,4 +1,4 @@
-import { ChatPageContent } from "../page";
+import { ChatPageContent } from "../_components/chat-page-content";
 
 export default async function ConversationPage({
   params,

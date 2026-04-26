@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import ArchestraPromptInput from "@/app/chat/prompt-input";
+import ArchestraPromptInput from "@/app/chat/_components/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { LoadingSpinner } from "@/components/loading";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSharedConversationForkState } from "./shared-conversation-fork";
+import { resolveSharedConversationForkState } from "../_utils/shared-conversation-fork";
 
 describe("resolveSharedConversationForkState", () => {
   it("reuses the shared conversation agent when the user can access it", () => {

@@ -6,7 +6,7 @@ import {
   resolveInitialAgentState,
   resolvePreferredModelForProvider,
   shouldResetInitialChatState,
-} from "./chat-initial-state";
+} from "../_utils/chat-initial-state";
 
 describe("resolveInitialAgentState", () => {
   test("returns org default model for an agent without its own model", () => {

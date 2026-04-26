@@ -35003,6 +35003,13 @@
                               "type": "string"
                             }
                           },
+                          "toolExposureMode": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "search_and_run_only"
+                            ]
+                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -35309,6 +35316,7 @@
                           "llmModel",
                           "identityProviderId",
                           "passthroughHeaders",
+                          "toolExposureMode",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -35684,6 +35692,13 @@
                       "pattern": "^[a-zA-Z0-9-]+$"
                     }
                   },
+                  "toolExposureMode": {
+                    "type": "string",
+                    "enum": [
+                      "full",
+                      "search_and_run_only"
+                    ]
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -35921,6 +35936,13 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -36228,6 +36250,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -36628,6 +36651,13 @@
                           "type": "string"
                         }
                       },
+                      "toolExposureMode": {
+                        "type": "string",
+                        "enum": [
+                          "full",
+                          "search_and_run_only"
+                        ]
+                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -36934,6 +36964,7 @@
                       "llmModel",
                       "identityProviderId",
                       "passthroughHeaders",
+                      "toolExposureMode",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -37274,6 +37305,13 @@
                         "type": "string"
                       }
                     },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -37580,6 +37618,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -37920,6 +37959,13 @@
                         "type": "string"
                       }
                     },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38226,6 +38272,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38578,6 +38625,13 @@
                         "type": "string"
                       }
                     },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38884,6 +38938,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39211,6 +39266,13 @@
                       "pattern": "^[a-zA-Z0-9-]+$"
                     }
                   },
+                  "toolExposureMode": {
+                    "type": "string",
+                    "enum": [
+                      "full",
+                      "search_and_run_only"
+                    ]
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -39453,6 +39515,13 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -39760,6 +39829,7 @@
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
+                    "toolExposureMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",

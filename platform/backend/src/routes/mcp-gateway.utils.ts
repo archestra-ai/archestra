@@ -18,6 +18,8 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
@@ -64,6 +66,7 @@ import type {
   CommonToolCall,
   SelectTeamToken,
   SelectUserToken,
+  ToolExposureMode,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -174,13 +177,24 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+    const implicitMetaTools =
+      agent.toolExposureMode === "search_and_run_only"
+        ? getImplicitArchestraMetaTools()
+        : [];
+    const candidateTools = dedupeToolsByName(
+      [...mcpTools, ...implicitMetaTools].map(toMcpListTool),
+    );
+
     // Filter Archestra tools based on user RBAC permissions
     const permittedNames = await filterToolNamesByPermission(
-      mcpTools.map((t) => t.name),
+      candidateTools.map((t) => t.name),
       tokenAuth?.userId,
       tokenAuth?.organizationId,
     );
-    const permittedTools = mcpTools.filter((t) => permittedNames.has(t.name));
+    const permittedTools = filterExposedTools({
+      toolExposureMode: agent.toolExposureMode ?? "full",
+      tools: candidateTools.filter((t) => permittedNames.has(t.name)),
+    });
 
     // Dynamically enrich the knowledge sources tool description with
     // the agent's actual knowledge base names and connector types
@@ -1307,4 +1321,66 @@ export async function buildKnowledgeSourcesDescription(
   });
 
   return description;
+}
+
+function filterExposedTools(params: {
+  toolExposureMode: ToolExposureMode;
+  tools: McpListTool[];
+}) {
+  const { toolExposureMode, tools } = params;
+  return tools.filter((tool) => {
+    const isMetaTool = isArchestraMetaTool(tool.name);
+    return toolExposureMode === "search_and_run_only"
+      ? isMetaTool
+      : !isMetaTool;
+  });
+}
+
+type McpListTool = {
+  name: string;
+  description: string | null;
+  parameters: unknown;
+  meta?: {
+    annotations?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+  };
+};
+
+function toMcpListTool(tool: {
+  name: string;
+  description?: string | null;
+  parameters?: unknown;
+  meta?: {
+    annotations?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+  } | null;
+}): McpListTool {
+  return {
+    name: tool.name,
+    description: tool.description ?? null,
+    parameters: tool.parameters ?? {},
+    meta: tool.meta ?? undefined,
+  };
+}
+
+function getImplicitArchestraMetaTools() {
+  return getArchestraMcpTools().filter((tool) =>
+    isArchestraMetaTool(tool.name),
+  );
+}
+
+function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
+  const deduped = new Map<string, T>();
+  for (const tool of tools) {
+    deduped.set(tool.name, tool);
+  }
+  return Array.from(deduped.values());
+}
+
+function isArchestraMetaTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME
+  );
 }

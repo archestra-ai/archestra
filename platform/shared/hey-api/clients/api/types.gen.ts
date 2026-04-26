@@ -10729,6 +10729,7 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
+            toolExposureMode: 'full' | 'search_and_run_only';
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -10822,6 +10823,7 @@ export type CreateAgentData = {
         llmModel?: string | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
+        toolExposureMode?: 'full' | 'search_and_run_only';
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -10933,6 +10935,7 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11106,6 +11109,7 @@ export type GetAllAgentsResponses = {
         llmModel: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11262,6 +11266,7 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11418,6 +11423,7 @@ export type GetDefaultLlmProxyResponses = {
         llmModel: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11655,6 +11661,7 @@ export type GetAgentResponses = {
         llmModel: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11739,6 +11746,7 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
+        toolExposureMode?: 'full' | 'search_and_run_only';
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11852,6 +11860,7 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;

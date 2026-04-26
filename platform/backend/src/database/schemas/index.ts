@@ -1,4 +1,8 @@
 export { default as accountsTable } from "./account";
+export {
+  default as agentMemoriesTable,
+  memoryScopeTypeEnum,
+} from "./agent-memory";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";

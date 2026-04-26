@@ -39,6 +39,7 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
+  AgentMemoryModel,
   AgentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
@@ -238,19 +239,31 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Build template context only when prompts use Handlebars syntax
       let promptContext: UserSystemPromptContext | null = null;
+      let userTeams: { id: string; name: string }[] = [];
       if (promptNeedsRendering(agent.systemPrompt)) {
-        const userTeams = await TeamModel.getUserTeams(user.id);
+        userTeams = await TeamModel.getUserTeams(user.id);
         promptContext = buildUserSystemPromptContext({
           userName: user.name,
           userEmail: user.email,
           userTeams: userTeams.map((t) => t.name),
         });
+      } else {
+        // Still need teams for memory injection even without template rendering
+        userTeams = await TeamModel.getUserTeams(user.id);
       }
 
       const renderedPrompt = renderSystemPrompt(
         agent.systemPrompt,
         promptContext,
       );
+
+      // Inject durable agent memories into the system prompt
+      const memories = await AgentMemoryModel.findForContext({
+        organizationId,
+        userId: user.id,
+        teamIds: userTeams.map((t) => t.id),
+      });
+      const memoryBlock = AgentMemoryModel.formatMemoriesForPrompt(memories);
 
       let toolResultInstructions: string = "";
       // Add MCP UI instruction when tools are available
@@ -263,7 +276,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
       systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+        [
+          renderedPrompt,
+          memoryBlock,
+          toolDenialInstruction,
+          toolResultInstructions,
+        ]
           .filter(Boolean)
           .join("\n\n") || undefined;
 

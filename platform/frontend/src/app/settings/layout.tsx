@@ -33,6 +33,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "LLM",
     description: "Configure platform-wide LLM defaults and behavior.",
   },
+  "/settings/memories": {
+    title: "Agent Memories",
+    description:
+      "Manage persistent facts agents remember across sessions — scoped to your user, your teams, or your organization.",
+  },
   "/settings/mcp": {
     title: "MCP",
     description:

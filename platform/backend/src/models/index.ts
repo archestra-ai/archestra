@@ -1,4 +1,5 @@
 export { default as AccountModel } from "./account";
+export { default as AgentMemoryModel } from "./agent-memory";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";

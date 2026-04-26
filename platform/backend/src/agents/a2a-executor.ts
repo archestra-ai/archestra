@@ -12,7 +12,13 @@ import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
+import {
+  AgentMemoryModel,
+  AgentModel,
+  McpServerModel,
+  TeamModel,
+  UserModel,
+} from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
   promptNeedsRendering,
@@ -139,13 +145,15 @@ export async function executeA2AMessage(
   // Build system prompt from agent's systemPrompt field
   let systemPrompt: string | undefined;
 
+  // Always fetch teams — needed for both template rendering and memory injection
+  const [userDetails, userTeams] = await Promise.all([
+    UserModel.getById(userId),
+    TeamModel.getUserTeams(userId),
+  ]);
+
   // Build template context only when prompts use Handlebars syntax
   let promptContext: UserSystemPromptContext | null = null;
   if (promptNeedsRendering(agent.systemPrompt)) {
-    const [userDetails, userTeams] = await Promise.all([
-      UserModel.getById(userId),
-      TeamModel.getUserTeams(userId),
-    ]);
     promptContext = buildUserSystemPromptContext({
       userName: userDetails?.name ?? "",
       userEmail: userDetails?.email ?? "",
@@ -155,8 +163,17 @@ export async function executeA2AMessage(
 
   const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
 
-  if (renderedPrompt) {
-    systemPrompt = renderedPrompt;
+  // Inject durable agent memories into the system prompt
+  const memories = await AgentMemoryModel.findForContext({
+    organizationId,
+    userId,
+    teamIds: userTeams.map((t) => t.id),
+  });
+  const memoryBlock = AgentMemoryModel.formatMemoriesForPrompt(memories);
+
+  const promptParts = [renderedPrompt, memoryBlock].filter(Boolean);
+  if (promptParts.length > 0) {
+    systemPrompt = promptParts.join("\n\n");
   }
 
   // Track subagent execution so the browser preview can skip screenshots

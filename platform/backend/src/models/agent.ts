@@ -1,4 +1,5 @@
 import {
+  type AgentToolAssignmentMode,
   DEFAULT_LLM_PROXY_NAME,
   DEFAULT_MCP_GATEWAY_NAME,
   type PaginationQuery,
@@ -530,6 +531,44 @@ class AgentModel {
     }));
   }
 
+  static async findByLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      agentType: AgentType;
+      toolAssignmentMode: AgentToolAssignmentMode;
+    }[]
+  > {
+    if (pairs.length === 0) return [];
+
+    const rows = await db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        toolAssignmentMode: schema.agentsTable.toolAssignmentMode,
+      })
+      .from(schema.agentLabelsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.agentLabelsTable.keyId, pair.keyId),
+              eq(schema.agentLabelsTable.valueId, pair.valueId),
+            ),
+          ),
+        ),
+      );
+
+    return rows;
+  }
+
   /**
    * Find all non-personal internal agents (excluding built-in agents).
    * Used to populate the agent selection dropdown in Teams/Slack/etc channels.
@@ -1054,24 +1093,6 @@ class AgentModel {
     }
 
     return result;
-  }
-
-  /**
-   * Find IDs of all MCP gateway agents in automatic tool assignment mode.
-   * Used by the label-based tool reconciliation task queue fanout.
-   */
-  static async findAllAutomaticMcpGatewayIds(): Promise<string[]> {
-    const rows = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.agentType, "mcp_gateway"),
-          eq(schema.agentsTable.toolAssignmentMode, "automatic"),
-        ),
-      );
-
-    return rows.map((r) => r.id);
   }
 
   /**

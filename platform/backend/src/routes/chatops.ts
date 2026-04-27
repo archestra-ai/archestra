@@ -692,6 +692,109 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Telegram webhook endpoint
+   *
+   * Receives updates from Telegram Bot API webhooks.
+   * Validation via X-Telegram-Bot-Api-Secret-Token header.
+   */
+  fastify.post(
+    "/api/webhooks/chatops/telegram",
+    {
+      schema: {
+        description: "Telegram Bot webhook endpoint",
+        tags: ["ChatOps Webhooks"],
+        body: z.unknown(),
+        response: {
+          200: z.object({ ok: z.boolean() }),
+          400: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          429: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+          500: z.object({
+            error: z.object({
+              message: z.string(),
+              type: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getTelegramProvider();
+
+      if (!provider) {
+        logger.warn(
+          "[ChatOps] Telegram webhook called but provider not configured",
+        );
+        throw new ApiError(400, "Telegram chatops provider not configured");
+      }
+
+      // Rate limiting
+      const clientIp = request.ip || "unknown";
+      const rateLimitKey =
+        `${CacheKey.WebhookRateLimit}-chatops-telegram-${clientIp}` as AllowedCacheKey;
+      const rateLimitConfig = {
+        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+      };
+      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+        logger.warn(
+          { ip: clientIp },
+          "[ChatOps] Rate limit exceeded for Telegram webhook",
+        );
+        throw new ApiError(429, "Too many requests");
+      }
+
+      // Extract headers
+      const headers: Record<string, string | string[] | undefined> = {};
+      for (const [key, value] of Object.entries(request.headers)) {
+        headers[key] = value;
+      }
+
+      const isValid = await provider.validateWebhookRequest(
+        request.body,
+        headers,
+      );
+      if (!isValid) {
+        logger.warn("[ChatOps] Invalid Telegram webhook secret token");
+        throw new ApiError(400, "Invalid request signature");
+      }
+
+      try {
+        // Delegate to shared handler (async — return 200 immediately for Telegram)
+        chatOpsManager.handleIncomingMessage(provider, request.body).catch(
+          (error) => {
+            logger.error(
+              {
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "[ChatOps] Error processing Telegram message (async)",
+            );
+          },
+        );
+
+        return reply.send({ ok: true });
+      } catch (error) {
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[ChatOps] Error processing Telegram webhook",
+        );
+        throw new ApiError(500, "Internal server error");
+      }
+    },
+  );
+
+  /**
    * Slack interactive endpoint
    *
    * Receives block_actions payloads from Slack when users click buttons
@@ -1337,6 +1440,49 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Update Telegram chatops config.
+   * Persists to DB and reinitializes the chatops manager (which reloads from DB).
+   */
+  fastify.put(
+    "/api/chatops/config/telegram",
+    {
+      schema: {
+        description: "Update Telegram ChatOps configuration",
+        tags: ["ChatOps Config"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          botToken: z.string().max(512).optional(),
+          secretToken: z.string().max(256).optional(),
+        }),
+        response: {
+          200: z.object({ ok: z.boolean() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { enabled, botToken, secretToken } = request.body as {
+        enabled?: boolean;
+        botToken?: string;
+        secretToken?: string;
+      };
+
+      const existing = await ChatOpsConfigModel.getTelegramConfig();
+
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        botToken: botToken ?? existing?.botToken ?? "",
+        secretToken: secretToken ?? existing?.secretToken ?? "",
+      };
+
+      await ChatOpsConfigModel.saveTelegramConfig(merged);
+
+      await chatOpsManager.reinitialize().catch(() => {});
+
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the
@@ -1461,6 +1607,19 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
                 teamId: provider.getWorkspaceId() ?? undefined,
               }
             : undefined,
+      };
+    }
+    case "telegram": {
+      const provider = chatOpsManager.getTelegramProvider();
+      const dbConfig = await ChatOpsConfigModel.getTelegramConfig();
+      return {
+        id: "telegram",
+        displayName: "Telegram",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          botToken: maskValue(dbConfig?.botToken ?? ""),
+          signingSecret: dbConfig?.secretToken ? "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" : "",
+        },
       };
     }
   }

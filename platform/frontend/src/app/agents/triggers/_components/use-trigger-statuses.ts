@@ -36,6 +36,11 @@ export function useTriggerStatuses() {
       ? !!ngrokDomain && hasLlmKey && !!slack?.configured
       : hasLlmKey && !!slack?.configured;
 
+  // Note: SDK types only include ms-teams and slack until codegen is re-run.
+  // biome-ignore lint/suspicious/noExplicitAny: telegram pending SDK codegen
+  const telegram = (chatOpsProviders as any[])?.find((p) => p.id === "telegram");
+  const telegramActive = hasLlmKey && !!telegram?.configured;
+
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
 
@@ -46,6 +51,7 @@ export function useTriggerStatuses() {
   const triggers = [
     { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
     { active: slackActive, href: "/agents/triggers/slack" },
+    { active: telegramActive, href: "/agents/triggers/telegram" },
     { active: emailActive, href: "/agents/triggers/email" },
     { active: a2aActive, href: "/agents/triggers/a2a" },
   ] as const;
@@ -55,6 +61,7 @@ export function useTriggerStatuses() {
   return {
     msTeams: msTeamsActive,
     slack: slackActive,
+    telegram: telegramActive,
     email: emailActive,
     a2a: a2aActive,
     firstActiveHref,

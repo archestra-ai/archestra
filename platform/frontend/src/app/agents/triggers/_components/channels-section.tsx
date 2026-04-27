@@ -105,7 +105,8 @@ export function ChannelsSection({
     isLoading,
     isFetching,
   } = useChatOpsBindings({
-    provider: providerConfig.provider,
+    // biome-ignore lint/suspicious/noExplicitAny: telegram pending SDK codegen
+    provider: providerConfig.provider as "slack" | "ms-teams",
     limit: pageSize,
     offset,
     sortBy: sortByFromUrl,
@@ -275,7 +276,11 @@ export function ChannelsSection({
   };
 
   const handleDmAssignAgent = (agentId: string | null) => {
-    dmMutation.mutate({ provider: providerConfig.provider, agentId });
+    dmMutation.mutate({
+      // biome-ignore lint/suspicious/noExplicitAny: telegram pending SDK codegen
+      provider: providerConfig.provider as "slack" | "ms-teams",
+      agentId,
+    });
   };
 
   const handleBulkAssign = async (agentId: string | null) => {
@@ -291,7 +296,11 @@ export function ChannelsSection({
     }
     if (hasVirtualDm) {
       promises.push(
-        dmMutation.mutateAsync({ provider: providerConfig.provider, agentId }),
+        dmMutation.mutateAsync({
+          // biome-ignore lint/suspicious/noExplicitAny: telegram pending SDK codegen
+          provider: providerConfig.provider as "slack" | "ms-teams",
+          agentId,
+        }),
       );
     }
     await Promise.all(promises);
@@ -557,7 +566,12 @@ export function ChannelsSection({
         </>
       ) : (
         <ChannelsEmptyState
-          onRefresh={() => refreshMutation.mutate(providerConfig.provider)}
+          onRefresh={() =>
+            refreshMutation.mutate(
+              // biome-ignore lint/suspicious/noExplicitAny: telegram pending SDK codegen
+              providerConfig.provider as "slack" | "ms-teams",
+            )
+          }
           isRefreshing={refreshMutation.isPending}
           provider={providerConfig.provider}
         />

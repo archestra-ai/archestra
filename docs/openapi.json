@@ -35641,9 +35641,6 @@
                   "isDefault": {
                     "type": "boolean"
                   },
-                  "isPersonalGateway": {
-                    "type": "boolean"
-                  },
                   "considerContextUntrusted": {
                     "type": "boolean"
                   },
@@ -39236,9 +39233,6 @@
                     "type": "string"
                   },
                   "isDefault": {
-                    "type": "boolean"
-                  },
-                  "isPersonalGateway": {
                     "type": "boolean"
                   },
                   "considerContextUntrusted": {

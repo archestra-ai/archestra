@@ -28,7 +28,6 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import { isUniqueConstraintError } from "@/utils/db";
 import type {
   Agent,
   AgentScope,
@@ -38,6 +37,7 @@ import type {
   SortingQuery,
   UpdateAgent,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";

@@ -10816,7 +10816,6 @@ export type CreateAgentData = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
-        isPersonalGateway?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -11745,7 +11744,6 @@ export type UpdateAgentData = {
         scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;
-        isPersonalGateway?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;

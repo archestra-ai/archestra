@@ -143,7 +143,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @mjkvyjn5wn-ctrl
 - @mchugunov
 - @vpashkov
-- @wandrounik
 - @AsimMerchant
 - @ahmedabujumac-stack
 - @isi1314

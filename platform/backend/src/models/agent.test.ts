@@ -1823,74 +1823,6 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("getMCPGatewayOrCreateDefault Junction Table", () => {
-    test("getMCPGatewayOrCreateDefault returns tools from junction table", async ({
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Get the default MCP gateway
-      const defaultAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      // Add tools to the default agent via junction table
-      const tool1 = await makeTool({
-        name: "default_agent_tool_1",
-        description: "Tool 1",
-        parameters: {},
-      });
-      const tool2 = await makeTool({
-        name: "default_agent_tool_2",
-        description: "Tool 2",
-        parameters: {},
-      });
-
-      await makeAgentTool(defaultAgent.id, tool1.id);
-      await makeAgentTool(defaultAgent.id, tool2.id);
-
-      // Get the default MCP gateway again - should include the tools
-      const foundAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      expect(foundAgent).not.toBeNull();
-      expect(foundAgent.tools.length).toBeGreaterThanOrEqual(2);
-
-      const toolNames = foundAgent.tools.map((t) => t.name);
-      expect(toolNames).toContain("default_agent_tool_1");
-      expect(toolNames).toContain("default_agent_tool_2");
-    });
-
-    test("getMCPGatewayOrCreateDefault includes Archestra MCP tools", async ({
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Get the default MCP gateway
-      const defaultAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      // Add regular tools
-      const regularTool = await makeTool({
-        name: "default_regular_tool",
-        description: "Regular tool",
-        parameters: {},
-      });
-
-      // Add Archestra tools
-      const archestraTool = await makeTool({
-        name: "archestra__default_tool",
-        description: "Archestra tool",
-        parameters: {},
-      });
-
-      await makeAgentTool(defaultAgent.id, regularTool.id);
-      await makeAgentTool(defaultAgent.id, archestraTool.id);
-
-      // Get the default MCP gateway again
-      const foundAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      // Verify both regular and Archestra tools are included
-      const toolNames = foundAgent.tools.map((t) => t.name);
-      expect(toolNames).toContain("default_regular_tool");
-      expect(toolNames).toContain("archestra__default_tool");
-    });
-  });
-
   describe("getBuiltInAgent", () => {
     test("returns null when no built-in agent exists", async () => {
       const result = await AgentModel.getBuiltInAgent(
@@ -2335,6 +2267,97 @@ describe("AgentModel", () => {
       expect(default1).not.toBeNull();
       expect(default2).not.toBeNull();
       expect(default1).not.toBe(default2);
+    });
+  });
+
+  describe("ensurePersonalMcpGateway", () => {
+    test("creates a personal mcp_gateway with the expected fields when none exists", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(gateway.name).toBe("My Gateway");
+      expect(gateway.agentType).toBe("mcp_gateway");
+      expect(gateway.scope).toBe("personal");
+      expect(gateway.isPersonalGateway).toBe(true);
+      expect(gateway.authorId).toBe(user.id);
+      expect(gateway.organizationId).toBe(org.id);
+    });
+
+    test("is idempotent within the same (user, org) - second call returns the same row", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const first = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const second = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(first.id).toBe(second.id);
+
+      const allAgents = await AgentModel.findAll(user.id, true);
+      const personalGateways = allAgents.filter(
+        (a) =>
+          a.agentType === "mcp_gateway" &&
+          a.isPersonalGateway === true &&
+          a.authorId === user.id,
+      );
+      expect(personalGateways).toHaveLength(1);
+    });
+  });
+
+  describe("bulkBackfillPersonalMcpGateways", () => {
+    test("creates rows for members who lack a personal gateway and is idempotent on a second call", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const userA = await makeUser();
+      const userB = await makeUser();
+      await makeMember(userA.id, org.id);
+      await makeMember(userB.id, org.id);
+
+      const firstCount = await AgentModel.bulkBackfillPersonalMcpGateways();
+      expect(firstCount).toBeGreaterThanOrEqual(2);
+
+      const gatewayA = await AgentModel.getPersonalMcpGateway(userA.id, org.id);
+      const gatewayB = await AgentModel.getPersonalMcpGateway(userB.id, org.id);
+      expect(gatewayA?.isPersonalGateway).toBe(true);
+      expect(gatewayB?.isPersonalGateway).toBe(true);
+      expect(gatewayA?.id).not.toBe(gatewayB?.id);
+
+      const secondCount = await AgentModel.bulkBackfillPersonalMcpGateways();
+      expect(secondCount).toBe(0);
+
+      const stillGatewayA = await AgentModel.getPersonalMcpGateway(
+        userA.id,
+        org.id,
+      );
+      const stillGatewayB = await AgentModel.getPersonalMcpGateway(
+        userB.id,
+        org.id,
+      );
+      expect(stillGatewayA?.id).toBe(gatewayA?.id);
+      expect(stillGatewayB?.id).toBe(gatewayB?.id);
     });
   });
 

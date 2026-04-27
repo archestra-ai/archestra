@@ -86,6 +86,7 @@ export function useProfilesPaginated(
     teamIds,
     authorIds,
     excludeAuthorIds,
+    excludeOtherPersonalAgents,
     labels,
   } = params || {};
 
@@ -102,6 +103,7 @@ export function useProfilesPaginated(
     teamIds === undefined &&
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
+    excludeOtherPersonalAgents === undefined &&
     labels === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
@@ -119,6 +121,7 @@ export function useProfilesPaginated(
         teamIds,
         authorIds,
         excludeAuthorIds,
+        excludeOtherPersonalAgents,
         labels,
       },
     ],
@@ -136,6 +139,7 @@ export function useProfilesPaginated(
             teamIds,
             authorIds,
             excludeAuthorIds,
+            excludeOtherPersonalAgents,
             labels,
           },
         })

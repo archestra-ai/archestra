@@ -144,6 +144,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeAuthorIds: excludeAuthorIdsFromUrl
       ? excludeAuthorIdsFromUrl.split(",")
       : undefined,
+    excludeOtherPersonalAgents:
+      scopeFromUrl !== "personal" &&
+      !authorIdsFromUrl &&
+      !excludeAuthorIdsFromUrl
+        ? true
+        : undefined,
     labels: labelsFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -496,7 +502,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter showBuiltIn />
+                <AgentScopeFilter showBuiltIn ownerLabelPlural="agents" />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint

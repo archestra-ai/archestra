@@ -348,7 +348,7 @@ function SessionsTable({
                       variant="secondary"
                       className="text-xs max-w-[180px] cursor-default"
                     >
-                      <span className="truncate">{model}</span>
+                      <span className="min-w-0 truncate">{model}</span>
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>

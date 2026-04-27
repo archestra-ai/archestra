@@ -39,26 +39,9 @@ export async function verifyToolCallResultViaApi({
     | "org-token";
   toolName: string;
   cookieHeaders: string;
-  profileId?: string;
+  profileId: string;
 }) {
-  let effectiveProfileId = profileId;
-  if (!effectiveProfileId) {
-    const defaultMcpGatewayResponse =
-      await archestraApiSdk.getDefaultMcpGateway({
-        headers: { Cookie: cookieHeaders },
-      });
-    if (defaultMcpGatewayResponse.error) {
-      throw new Error(
-        `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
-      );
-    }
-    if (!defaultMcpGatewayResponse.data) {
-      throw new Error(
-        `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
-      );
-    }
-    effectiveProfileId = defaultMcpGatewayResponse.data.id;
-  }
+  const effectiveProfileId = profileId;
 
   let token: string;
   if (tokenToUse === "default-team") {
@@ -491,11 +474,13 @@ function stripStaticCredentialDescription(text: string): string {
   return text.split("Owned by")[0].trim();
 }
 
-export async function assignEngineeringTeamToDefaultProfileViaApi({
+export async function createSharedTestGatewayViaApi({
   cookieHeaders,
+  gatewayName,
 }: {
   cookieHeaders: string;
-}) {
+  gatewayName: string;
+}): Promise<{ id: string; name: string }> {
   const teamsResponse = await archestraApiSdk.getTeams({
     headers: { Cookie: cookieHeaders },
   });
@@ -528,32 +513,26 @@ export async function assignEngineeringTeamToDefaultProfileViaApi({
     );
   }
 
-  const defaultMcpGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
+  const createResponse = await archestraApiSdk.createAgent({
     headers: { Cookie: cookieHeaders },
-  });
-  if (defaultMcpGatewayResponse.error) {
-    throw new Error(
-      `Failed to get default MCP gateway: ${JSON.stringify(defaultMcpGatewayResponse.error)}`,
-    );
-  }
-  if (!defaultMcpGatewayResponse.data) {
-    throw new Error(
-      `No default MCP gateway returned from API. Response: ${JSON.stringify(defaultMcpGatewayResponse)}`,
-    );
-  }
-
-  const updateResponse = await archestraApiSdk.updateAgent({
-    headers: { Cookie: cookieHeaders },
-    path: { id: defaultMcpGatewayResponse.data.id },
     body: {
+      name: gatewayName,
+      agentType: "mcp_gateway",
+      scope: "team",
       teams: [defaultTeam.id, engineeringTeam.id],
     },
   });
-  if (updateResponse.error) {
+  if (createResponse.error) {
     throw new Error(
-      `Failed to update agent: ${JSON.stringify(updateResponse.error)}`,
+      `Failed to create shared test MCP gateway: ${JSON.stringify(createResponse.error)}`,
     );
   }
+  if (!createResponse.data) {
+    throw new Error(
+      `No data returned from createAgent. Response: ${JSON.stringify(createResponse)}`,
+    );
+  }
+  return { id: createResponse.data.id, name: createResponse.data.name };
 }
 
 export async function createTeamMcpGatewayViaApi({

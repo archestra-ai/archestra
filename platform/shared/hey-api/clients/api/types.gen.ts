@@ -10727,6 +10727,7 @@ export type GetAgentsResponses = {
             name: string;
             slug: string | null;
             isDefault: boolean;
+            isPersonalGateway: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -10939,6 +10940,7 @@ export type CreateAgentResponses = {
         name: string;
         slug: string | null;
         isDefault: boolean;
+        isPersonalGateway: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11119,6 +11121,7 @@ export type GetAllAgentsResponses = {
         name: string;
         slug: string | null;
         isDefault: boolean;
+        isPersonalGateway: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11282,6 +11285,7 @@ export type GetDefaultMcpGatewayResponses = {
         name: string;
         slug: string | null;
         isDefault: boolean;
+        isPersonalGateway: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11445,6 +11449,7 @@ export type GetDefaultLlmProxyResponses = {
         name: string;
         slug: string | null;
         isDefault: boolean;
+        isPersonalGateway: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11695,6 +11700,7 @@ export type GetAgentResponses = {
         name: string;
         slug: string | null;
         isDefault: boolean;
+        isPersonalGateway: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11900,6 +11906,7 @@ export type UpdateAgentResponses = {
         name: string;
         slug: string | null;
         isDefault: boolean;
+        isPersonalGateway: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;

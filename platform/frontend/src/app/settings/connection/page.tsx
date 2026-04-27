@@ -136,17 +136,17 @@ export default function ConnectionSettingsPage() {
                 disabled={updateMutation.isPending || !hasPermission}
               >
                 <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Default" />
+                  <SelectValue placeholder="Each user personal" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={DEFAULT_VALUE}>Default</SelectItem>
-                  {gatewayItems
-                    .filter((g) => !g.isDefault)
-                    .map((g) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.name}
-                      </SelectItem>
-                    ))}
+                  <SelectItem value={DEFAULT_VALUE}>
+                    Each user personal
+                  </SelectItem>
+                  {gatewayItems.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}
@@ -169,10 +169,12 @@ export default function ConnectionSettingsPage() {
                 disabled={updateMutation.isPending || !hasPermission}
               >
                 <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Default" />
+                  <SelectValue placeholder="Default LLM Proxy" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={DEFAULT_VALUE}>Default</SelectItem>
+                  <SelectItem value={DEFAULT_VALUE}>
+                    Default LLM Proxy
+                  </SelectItem>
                   {proxyItems
                     .filter((p) => !p.isDefault)
                     .map((p) => (

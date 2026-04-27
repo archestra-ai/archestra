@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerUserModel from "@/models/mcp-server-user";
@@ -1764,5 +1764,267 @@ describe("mcp server inspect route", () => {
     expect(syncedTools.map((tool) => tool.name)).toContain(
       "protected_remote_reinstall__whoami",
     );
+  });
+
+  describe("personal gateway auto-assignment on install", () => {
+    beforeEach(async ({ makeOrganization, makeMember }) => {
+      const org = await makeOrganization();
+      requestOrganizationId = org.id;
+      await makeMember(user.id, requestOrganizationId);
+    });
+
+    test("remote install with empty agentIds auto-assigns every tool to the installer's personal gateway", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const { default: AgentToolModel } = await import("@/models/agent-tool");
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Auto Assign Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "tool-a",
+          description: "tool a",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "tool-b",
+          description: "tool b",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Auto Assign Remote",
+          catalogId: catalog.id,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        requestOrganizationId,
+      );
+      if (!personalGateway) throw new Error("expected personal gateway");
+      const assignments = await AgentToolModel.findToolIdsByAgent(
+        personalGateway.id,
+      );
+      expect(assignments.length).toBe(2);
+    });
+
+    test("remote install with explicit agentIds still assigns tools to the personal gateway with no duplicate-key errors", async ({
+      makeInternalMcpCatalog,
+      makeAgent,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const { default: AgentToolModel } = await import("@/models/agent-tool");
+
+      const otherAgent = await makeAgent({
+        name: "Explicit Target",
+        agentType: "mcp_gateway",
+        scope: "personal",
+        organizationId: requestOrganizationId,
+        authorId: user.id,
+      });
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Auto Assign Remote With Explicit",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "tool-x",
+          description: "tool x",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Auto Assign Remote With Explicit",
+          catalogId: catalog.id,
+          agentIds: [otherAgent.id],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        requestOrganizationId,
+      );
+      if (!personalGateway) throw new Error("expected personal gateway");
+      const personalAssignments = await AgentToolModel.findToolIdsByAgent(
+        personalGateway.id,
+      );
+      const explicitAssignments = await AgentToolModel.findToolIdsByAgent(
+        otherAgent.id,
+      );
+      expect(personalAssignments.length).toBe(1);
+      expect(explicitAssignments.length).toBe(1);
+    });
+
+    test("does not assign tools to other users' personal gateways", async ({
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const { default: AgentToolModel } = await import("@/models/agent-tool");
+
+      const otherUser = await makeUser({ email: "other-install@example.com" });
+      await makeMember(otherUser.id, requestOrganizationId);
+      const otherPersonalGateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: otherUser.id,
+        organizationId: requestOrganizationId,
+      });
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Auto Assign Remote Isolated",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "tool-iso",
+          description: "isolated tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Auto Assign Remote Isolated",
+          catalogId: catalog.id,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const otherAssignments = await AgentToolModel.findToolIdsByAgent(
+        otherPersonalGateway.id,
+      );
+      expect(otherAssignments.length).toBe(0);
+    });
+
+    test("re-install pins mcp_server_id on newly inserted agent_tools rows", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Re-install Pinning",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      // First install: catalog has tool-a only.
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "tool-a",
+          description: "tool a",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const firstResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Re-install Pinning", catalogId: catalog.id },
+      });
+      expect(firstResponse.statusCode).toBe(200);
+      const installedServer = firstResponse.json();
+
+      // Catalog gains tool-b before the user re-installs.
+      const newTool = await makeTool({
+        name: "tool-b-new",
+        catalogId: catalog.id,
+      });
+
+      // Re-install — duplicate-personal branch fires.
+      const secondResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Re-install Pinning", catalogId: catalog.id },
+      });
+      expect(secondResponse.statusCode).toBe(200);
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        requestOrganizationId,
+      );
+      if (!personalGateway) throw new Error("expected personal gateway");
+
+      const newToolRow = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, personalGateway.id),
+            eq(schema.agentToolsTable.toolId, newTool.id),
+          ),
+        );
+      expect(newToolRow).toHaveLength(1);
+      expect(newToolRow[0].mcpServerId).toBe(installedServer.id);
+    });
+
+    test("team-scoped install does not auto-assign tools to the installer's personal gateway", async ({
+      makeInternalMcpCatalog,
+      makeTeam,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const { default: AgentToolModel } = await import("@/models/agent-tool");
+
+      const team = await makeTeam(requestOrganizationId, user.id, {
+        name: "Auto Assign Team",
+      });
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Auto Assign Team Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "tool-team",
+          description: "team tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Auto Assign Team Remote",
+          catalogId: catalog.id,
+          teamId: team.id,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        requestOrganizationId,
+      );
+      const personalAssignments = personalGateway
+        ? await AgentToolModel.findToolIdsByAgent(personalGateway.id)
+        : [];
+      expect(personalAssignments.length).toBe(0);
+    });
   });
 });

@@ -34952,6 +34952,9 @@
                           "isDefault": {
                             "type": "boolean"
                           },
+                          "isPersonalGateway": {
+                            "type": "boolean"
+                          },
                           "considerContextUntrusted": {
                             "type": "boolean"
                           },
@@ -35313,6 +35316,7 @@
                           "name",
                           "slug",
                           "isDefault",
+                          "isPersonalGateway",
                           "considerContextUntrusted",
                           "agentType",
                           "systemPrompt",
@@ -35904,6 +35908,9 @@
                     "isDefault": {
                       "type": "boolean"
                     },
+                    "isPersonalGateway": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -36265,6 +36272,7 @@
                     "name",
                     "slug",
                     "isDefault",
+                    "isPersonalGateway",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -36636,6 +36644,9 @@
                       "isDefault": {
                         "type": "boolean"
                       },
+                      "isPersonalGateway": {
+                        "type": "boolean"
+                      },
                       "considerContextUntrusted": {
                         "type": "boolean"
                       },
@@ -36997,6 +37008,7 @@
                       "name",
                       "slug",
                       "isDefault",
+                      "isPersonalGateway",
                       "considerContextUntrusted",
                       "agentType",
                       "systemPrompt",
@@ -37308,6 +37320,9 @@
                     "isDefault": {
                       "type": "boolean"
                     },
+                    "isPersonalGateway": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -37669,6 +37684,7 @@
                     "name",
                     "slug",
                     "isDefault",
+                    "isPersonalGateway",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -37980,6 +37996,9 @@
                     "isDefault": {
                       "type": "boolean"
                     },
+                    "isPersonalGateway": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -38341,6 +38360,7 @@
                     "name",
                     "slug",
                     "isDefault",
+                    "isPersonalGateway",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -38664,6 +38684,9 @@
                     "isDefault": {
                       "type": "boolean"
                     },
+                    "isPersonalGateway": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -39025,6 +39048,7 @@
                     "name",
                     "slug",
                     "isDefault",
+                    "isPersonalGateway",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -39573,6 +39597,9 @@
                     "isDefault": {
                       "type": "boolean"
                     },
+                    "isPersonalGateway": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -39934,6 +39961,7 @@
                     "name",
                     "slug",
                     "isDefault",
+                    "isPersonalGateway",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",

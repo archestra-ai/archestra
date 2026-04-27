@@ -1,4 +1,9 @@
+// biome-ignore-all lint/suspicious/noExplicitAny: synthetic UIMessage shapes for unit tests
 import { describe, expect, it, vi } from "vitest";
+import db, { schema } from "@/database";
+import { MessageModel } from "@/models";
+import { test } from "@/test";
+import { persistNewMessages as persistNewMessagesForTest } from "./persist-new-messages";
 
 // Mock the ai module before importing chat routes
 const mockGenerateText = vi.hoisted(() => vi.fn());
@@ -553,5 +558,201 @@ describe("title generation integration", () => {
     expect(prompt).toContain(
       "Assistant: I can help you debug that. What error are you seeing?",
     );
+  });
+});
+
+// Helpers for synthetic UIMessage shapes used by the sweep tests below.
+type SyntheticPart = Record<string, unknown> & { type: string };
+const userMsg = (id = "user-1", text = "go") =>
+  ({ id, role: "user", parts: [{ type: "text", text }] }) as any;
+const assistantMsg = (id: string, parts: SyntheticPart[]) =>
+  ({ id, role: "assistant", parts }) as any;
+const toolPart = (
+  state: string,
+  toolCallId = "tc-1",
+  approvalId: string | null = "appr-1",
+  extra: Record<string, unknown> = {},
+): SyntheticPart => ({
+  type: "tool-x",
+  input: {},
+  state,
+  toolCallId,
+  ...(approvalId !== null
+    ? { approval: { id: approvalId, ...(extra.approval ?? {}) } }
+    : {}),
+  ...extra,
+});
+
+const seedStaleApprovalRequested = async (
+  conversationId: string,
+  contentId = "ai-stale",
+  toolCallId = "tc-1",
+) => {
+  const [row] = await db
+    .insert(schema.messagesTable)
+    .values({
+      conversationId,
+      role: "assistant",
+      content: {
+        id: contentId,
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          toolPart("approval-requested", toolCallId),
+        ],
+      } as any,
+    })
+    .returning();
+  return row;
+};
+
+describe("persistNewMessages — approval resolution sweep", () => {
+  test("approve: removes the prior approval-requested row when a new batch carries approval-responded for the same toolCallId", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+    const stale = await seedStaleApprovalRequested(conv.id);
+    const decided = assistantMsg("ai-decided", [
+      { type: "step-start" },
+      toolPart("approval-responded", "tc-1", "appr-1", {
+        approval: { approved: true },
+      }),
+    ]);
+
+    await persistNewMessagesForTest(conv.id, [userMsg()], "onFinish");
+    await persistNewMessagesForTest(conv.id, [userMsg(), decided], "onFinish");
+
+    const remaining = await MessageModel.findByConversation(conv.id);
+    expect(remaining.find((m) => m.id === stale.id)).toBeUndefined();
+    expect(
+      remaining.some((m) => {
+        const c = m.content as { parts?: Array<{ state?: string }> };
+        return c.parts?.some((p) => p.state === "approval-responded");
+      }),
+    ).toBe(true);
+  });
+
+  test("decline: removes the prior approval-requested row when a new batch carries output-denied for the same toolCallId", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+    const stale = await seedStaleApprovalRequested(conv.id);
+    const declined = assistantMsg("ai-declined", [
+      toolPart("output-denied", "tc-1", "appr-1", {
+        approval: { approved: false, reason: "User denied" },
+      }),
+    ]);
+
+    await persistNewMessagesForTest(conv.id, [userMsg()], "onFinish");
+    await persistNewMessagesForTest(conv.id, [userMsg(), declined], "onFinish");
+
+    const remaining = await MessageModel.findByConversation(conv.id);
+    expect(remaining.find((m) => m.id === stale.id)).toBeUndefined();
+  });
+
+  test("replaying the same decided batch is a no-op", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+    const decided = assistantMsg("ai-decided", [
+      toolPart("approval-responded", "tc-1", "appr-1", {
+        approval: { approved: true },
+      }),
+    ]);
+
+    await persistNewMessagesForTest(conv.id, [userMsg(), decided], "onFinish");
+    const after1 = await MessageModel.findByConversation(conv.id);
+
+    await persistNewMessagesForTest(conv.id, [userMsg(), decided], "onFinish");
+    const after2 = await MessageModel.findByConversation(conv.id);
+
+    expect(after2.length).toBe(after1.length);
+  });
+
+  test("regular tool call (no approval object) is not swept even at terminal state", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+    const response = assistantMsg("ai-resp", [
+      toolPart("output-available", "tc-regular", null, { output: "result" }),
+    ]);
+
+    await persistNewMessagesForTest(conv.id, [userMsg(), response], "onFinish");
+
+    const all = await MessageModel.findByConversation(conv.id);
+    expect(all.length).toBe(2);
+  });
+
+  test("legacy approval-requested row self-heals on next decided batch", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+    const stale = await seedStaleApprovalRequested(conv.id);
+    const decided = assistantMsg("ai-decided-late", [
+      toolPart("approval-responded", "tc-1", "appr-1", {
+        approval: { approved: true },
+      }),
+    ]);
+
+    await persistNewMessagesForTest(conv.id, [userMsg(), decided], "onFinish");
+
+    const remaining = await MessageModel.findByConversation(conv.id);
+    expect(remaining.find((m) => m.id === stale.id)).toBeUndefined();
+  });
+
+  // Contract: earlyUserMsg must not snapshot the prior assistant in
+  // approval-responded state, otherwise onFinish's final output-available +
+  // text payload is dropped by content.id dedup.
+  test("earlyUserMsg passes user-only; onFinish writes the final assistant state with output and text", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conv = await makeConversation(agent.id);
+
+    const interim = assistantMsg("asst-1", [
+      { type: "step-start" },
+      toolPart("approval-responded", "tc-1", "appr-1", {
+        approval: { approved: true },
+      }),
+    ]);
+    const final = assistantMsg("asst-1", [
+      { type: "step-start" },
+      toolPart("output-available", "tc-1", "appr-1", {
+        approval: { approved: true },
+        output: "tool-result",
+      }),
+      { type: "step-start" },
+      { type: "text", state: "done", text: "all done" },
+    ]);
+
+    // Mirror routes.ts: earlyUserMsg filters to user role only.
+    await persistNewMessagesForTest(
+      conv.id,
+      [userMsg(), interim].filter((m) => m.role === "user"),
+      "earlyUserMsg",
+    );
+    await persistNewMessagesForTest(conv.id, [userMsg(), final], "onFinish");
+
+    const remaining = await MessageModel.findByConversation(conv.id);
+    const persisted = remaining.find((m) => m.role === "assistant");
+    const content = persisted?.content as {
+      parts?: Array<{ type?: string; state?: string; output?: unknown }>;
+    };
+    const tool = content?.parts?.find((p) => p.type?.startsWith("tool-"));
+    const text = content?.parts?.find((p) => p.type === "text");
+    expect(tool?.state).toBe("output-available");
+    expect(tool?.output).toBe("tool-result");
+    expect(text?.state).toBe("done");
   });
 });

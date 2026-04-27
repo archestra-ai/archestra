@@ -40,6 +40,7 @@ const uiTestMatch = [
   "**/auth-origin.spec.ts",
   "**/auth-redirect.spec.ts",
   "**/auth.spec.ts",
+  "**/chat-approval.spec.ts",
   "**/chat-auth-required.spec.ts",
   "**/chat-localstorage.spec.ts",
   "**/chat.spec.ts",

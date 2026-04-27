@@ -13,9 +13,9 @@ import {
   addCustomSelfHostedCatalogItem,
   addSharedLocalConnection,
   assignCatalogCredentialToGateway,
-  assignEngineeringTeamToDefaultProfileViaApi,
   clickButton,
   closeOpenDialogs,
+  createSharedTestGatewayViaApi,
   createTeamMcpGatewayViaApi,
   getVisibleCredentials,
   getVisibleStaticCredentials,
@@ -66,8 +66,12 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       const cookieHeaders = await extractCookieHeaders(adminPage);
       const pageCookieHeaders = await extractCookieHeaders(page);
       const catalogItemName = makeRandomString(10, "mcp");
+      let adminSharedGateway: { id: string; name: string } | undefined;
       if (user === "Admin") {
-        await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
+        adminSharedGateway = await createSharedTestGatewayViaApi({
+          cookieHeaders,
+          gatewayName: makeRandomString(10, "shared-gw"),
+        });
       }
 
       // Create catalog item as Admin
@@ -173,10 +177,17 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         }
 
         // Check TokenSelect shows correct credentials
+        const gatewayNameForAssignment =
+          teamGateway?.name ?? adminSharedGateway?.name;
+        if (!gatewayNameForAssignment) {
+          throw new Error(
+            `Expected a gateway for ${user} but none was provisioned`,
+          );
+        }
         await openGatewayCatalogToolAssignment({
           page,
           catalogItemName,
-          gatewayName: teamGateway?.name,
+          gatewayName: gatewayNameForAssignment,
         });
         const expectedAssignableCredentials =
           user === "Admin"
@@ -240,6 +251,13 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
             headers: { Cookie: cookieHeaders },
           });
         }
+      }
+      // Cleanup admin shared gateway
+      if (adminSharedGateway) {
+        await archestraApiSdk.deleteAgent({
+          path: { id: adminSharedGateway.id },
+          headers: { Cookie: cookieHeaders },
+        });
       }
 
       // CLEANUP: Delete created catalog items and mcp servers
@@ -335,8 +353,11 @@ test("Verify tool calling using different static credentials", async ({
   test.setTimeout(120_000); // 120 seconds - MCP server startup + tool discovery + tool calls
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  // Assign engineering team to default profile
-  await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
+  // Create a shared org-scope test gateway (default + engineering teams)
+  const sharedGateway = await createSharedTestGatewayViaApi({
+    cookieHeaders,
+    gatewayName: makeRandomString(10, "shared-gw"),
+  });
   // Create a team-scoped MCP gateway for editor (editor can't see org-scoped gateways)
   const teamGateway = await createTeamMcpGatewayViaApi({
     cookieHeaders,
@@ -380,6 +401,7 @@ test("Verify tool calling using different static credentials", async ({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
     credentialName: "admin@example.com",
+    gatewayName: sharedGateway.name,
   });
   // Verify tool call result using admin static credential
   await verifyToolCallResultViaApi({
@@ -388,6 +410,7 @@ test("Verify tool calling using different static credentials", async ({
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     cookieHeaders,
+    profileId: sharedGateway.id,
   });
 
   // Assign tool to profiles using editor static credential
@@ -414,6 +437,10 @@ test("Verify tool calling using different static credentials", async ({
   });
   await archestraApiSdk.deleteAgent({
     path: { id: teamGateway.id },
+    headers: { Cookie: cookieHeaders },
+  });
+  await archestraApiSdk.deleteAgent({
+    path: { id: sharedGateway.id },
     headers: { Cookie: cookieHeaders },
   });
 });

@@ -7,7 +7,7 @@ import {
 import { test } from "../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
-  assignEngineeringTeamToDefaultProfileViaApi,
+  createSharedTestGatewayViaApi,
   goToMcpRegistry,
   installLocalCatalogItem,
   settleRegistryAfterInstall,
@@ -26,7 +26,10 @@ test("Verify tool calling using dynamic credentials", async ({
   test.setTimeout(90_000); // 90 seconds
   const CATALOG_ITEM_NAME = makeRandomString(10, "mcp");
   const cookieHeaders = await extractCookieHeaders(adminPage);
-  await assignEngineeringTeamToDefaultProfileViaApi({ cookieHeaders });
+  const sharedGateway = await createSharedTestGatewayViaApi({
+    cookieHeaders,
+    gatewayName: makeRandomString(10, "shared-gw"),
+  });
 
   // Create catalog item as Admin
   // Editor and Member cannot add items to MCP Registry
@@ -109,15 +112,6 @@ test("Verify tool calling using dynamic credentials", async ({
     await install(config);
   }
 
-  const defaultGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
-    headers: { Cookie: cookieHeaders },
-  });
-  if (defaultGatewayResponse.error || !defaultGatewayResponse.data) {
-    throw new Error(
-      `Failed to get default MCP gateway: ${JSON.stringify(defaultGatewayResponse.error)}`,
-    );
-  }
-
   const toolsResponse = await archestraApiSdk.getTools({
     headers: { Cookie: cookieHeaders },
   });
@@ -135,7 +129,7 @@ test("Verify tool calling using dynamic credentials", async ({
     const assignResponse = await archestraApiSdk.assignToolToAgent({
       headers: { Cookie: cookieHeaders },
       path: {
-        agentId: defaultGatewayResponse.data.id,
+        agentId: sharedGateway.id,
         toolId,
       },
       body: {
@@ -191,12 +185,17 @@ test("Verify tool calling using dynamic credentials", async ({
       tokenToUse,
       toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
       cookieHeaders,
+      profileId: sharedGateway.id,
     });
   }
 
   // CLEANUP: Delete existing created MCP servers / installations
   await archestraApiSdk.deleteInternalMcpCatalogItem({
     path: { id: catalogItemId },
+    headers: { Cookie: cookieHeaders },
+  });
+  await archestraApiSdk.deleteAgent({
+    path: { id: sharedGateway.id },
     headers: { Cookie: cookieHeaders },
   });
 });

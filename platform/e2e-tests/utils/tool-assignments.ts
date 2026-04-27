@@ -1,6 +1,5 @@
 import { expect, type Page } from "@playwright/test";
 import {
-  DEFAULT_MCP_GATEWAY_NAME,
   E2eTestId,
   getAgentToolCatalogPillTestId,
   getAssignmentComboboxDisabledOptionTestId,
@@ -19,12 +18,12 @@ type AssignmentTarget = {
 
 export async function openGatewayCatalogToolAssignment(params: {
   page: Page;
-  gatewayName?: string;
+  gatewayName: string;
   catalogItemName: string;
 }) {
   return await openCatalogToolAssignment({
     page: params.page,
-    targetName: params.gatewayName ?? DEFAULT_MCP_GATEWAY_NAME,
+    targetName: params.gatewayName,
     catalogItemName: params.catalogItemName,
     pagePath: "/mcp/gateways",
     dialogTitle: "Edit MCP Gateway",
@@ -49,7 +48,7 @@ export async function assignCatalogCredentialToGateway(params: {
   page: Page;
   catalogItemName: string;
   credentialName: string;
-  gatewayName?: string;
+  gatewayName: string;
 }): Promise<void> {
   await openGatewayCatalogToolAssignment({
     page: params.page,

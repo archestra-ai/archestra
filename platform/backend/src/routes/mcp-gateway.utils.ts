@@ -7,6 +7,7 @@ import {
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
+  type ListToolsResult,
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -200,7 +201,7 @@ export async function createAgentServer(
     // the agent's actual knowledge base names and connector types
     const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
 
-    const toolsList = permittedTools.map(
+    const toolsList: McpListTool[] = permittedTools.map(
       ({ name, description, parameters, meta }) => ({
         name,
         title: archestraToolTitles.get(name) || name,
@@ -210,7 +211,7 @@ export async function createAgentServer(
               TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
             ) && kbToolDescription
             ? kbToolDescription
-            : description,
+            : (description ?? undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
@@ -1325,7 +1326,7 @@ export async function buildKnowledgeSourcesDescription(
 
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
-  tools: McpListTool[];
+  tools: McpListToolCandidate[];
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
@@ -1336,13 +1337,15 @@ function filterExposedTools(params: {
   });
 }
 
-type McpListTool = {
+type McpListTool = ListToolsResult["tools"][number];
+
+type McpListToolCandidate = {
   name: string;
   description: string | null;
-  parameters: unknown;
+  parameters: McpListTool["inputSchema"];
   meta?: {
-    annotations?: Record<string, unknown>;
-    _meta?: Record<string, unknown>;
+    annotations?: McpListTool["annotations"];
+    _meta?: McpListTool["_meta"];
   };
 };
 
@@ -1350,15 +1353,16 @@ function toMcpListTool(tool: {
   name: string;
   description?: string | null;
   parameters?: unknown;
+  inputSchema?: unknown;
   meta?: {
     annotations?: Record<string, unknown>;
     _meta?: Record<string, unknown>;
   } | null;
-}): McpListTool {
+}): McpListToolCandidate {
   return {
     name: tool.name,
     description: tool.description ?? null,
-    parameters: tool.parameters ?? {},
+    parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
     meta: tool.meta ?? undefined,
   };
 }
@@ -1375,6 +1379,18 @@ function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
     deduped.set(tool.name, tool);
   }
   return Array.from(deduped.values());
+}
+
+function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+  if (isRecord(schema) && schema.type === "object") {
+    return schema as McpListTool["inputSchema"];
+  }
+
+  return { type: "object", properties: {} };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isArchestraMetaTool(toolName: string) {

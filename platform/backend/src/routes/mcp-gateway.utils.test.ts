@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
@@ -45,6 +46,8 @@ const {
   validateExternalIdpToken,
   buildKnowledgeSourcesDescription,
 } = await import("./mcp-gateway.utils");
+
+type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -1244,12 +1247,7 @@ describe("createAgentServer tools/list", () => {
     const { server } = await createAgentServer(agent.id);
     const listToolsHandler = (
       server.server as unknown as {
-        _requestHandlers: Map<
-          string,
-          (request: unknown) => Promise<{
-            tools: Array<{ name: string; description?: string }>;
-          }>
-        >;
+        _requestHandlers: Map<string, TestListToolsHandler>;
       }
     )._requestHandlers.get("tools/list");
 
@@ -1285,12 +1283,7 @@ describe("createAgentServer tools/list", () => {
     const { server } = await createAgentServer(agent.id);
     const listToolsHandler = (
       server.server as unknown as {
-        _requestHandlers: Map<
-          string,
-          (request: unknown) => Promise<{
-            tools: Array<{ name: string; description?: string }>;
-          }>
-        >;
+        _requestHandlers: Map<string, TestListToolsHandler>;
       }
     )._requestHandlers.get("tools/list");
 
@@ -1307,6 +1300,9 @@ describe("createAgentServer tools/list", () => {
     expect(response.tools.map((tool) => tool.name).sort()).toEqual(
       [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
     );
+    expect(
+      response.tools.every((tool) => tool.inputSchema?.type === "object"),
+    ).toBe(true);
     expect(
       response.tools.some(
         (tool) => tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,

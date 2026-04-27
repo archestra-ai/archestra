@@ -18,7 +18,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { isMcpServerAssignableToTarget } from "@/services/agent-tool-assignment";
+import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
 import {
@@ -80,23 +80,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: assignmentTeamIds ?? [],
         };
 
-        allServers = (
-          await Promise.all(
-            allServers.map(async (server) =>
-              (await isMcpServerAssignableToTarget({
-                mcpServer: {
-                  ownerId: server.ownerId,
-                  teamId: server.teamId,
-                },
-                target,
-              }))
-                ? server
-                : null,
-            ),
-          )
-        ).filter(
-          (server): server is (typeof allServers)[number] => server != null,
-        );
+        allServers = await filterMcpServersAssignableToTarget({
+          mcpServers: allServers,
+          target,
+        });
       }
 
       return reply.send(allServers);

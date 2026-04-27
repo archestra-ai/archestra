@@ -4,7 +4,12 @@ import {
   TOOL_GET_MCP_GATEWAY_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
-import { AgentScopeSchema, UpdateAgentSchemaBase, UuidIdSchema } from "@/types";
+import {
+  AgentScopeSchema,
+  ToolExposureModeSchema,
+  UpdateAgentSchemaBase,
+  UuidIdSchema,
+} from "@/types";
 import {
   AgentDetailOutputSchema,
   ConnectorIdsToolInputSchema,
@@ -54,6 +59,9 @@ const EditMcpGatewayToolArgsSchema = z
       .describe("New name for the MCP gateway."),
     scope: AgentScopeSchema.optional().describe(
       "Updated visibility scope for the MCP gateway.",
+    ),
+    toolExposureMode: ToolExposureModeSchema.optional().describe(
+      "How tools should be exposed to MCP clients and models.",
     ),
     teams: z
       .array(UuidIdSchema)

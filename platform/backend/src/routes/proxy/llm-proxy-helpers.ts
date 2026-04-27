@@ -203,7 +203,9 @@ export function handleError(
   reply: FastifyReply,
   extractErrorMessage: (error: unknown) => string,
   isStreaming: boolean,
-  extractInternalCode: (error: unknown) => ArchestraInternalErrorCode | undefined,
+  extractInternalCode: (
+    error: unknown,
+  ) => ArchestraInternalErrorCode | undefined,
 ): FastifyReply | never {
   logger.error(error);
 

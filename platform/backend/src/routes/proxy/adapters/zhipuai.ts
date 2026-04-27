@@ -1026,7 +1026,9 @@ export const zhipuaiAdapterFactory: LLMProvider<
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
     // Zhipu returns a numeric string `error.code`; 1261 maps to
     // "Prompt exceeds max length".
-    if (get(error, "error.code") === ZhipuaiErrorTypes.CONTEXT_LENGTH_EXCEEDED) {
+    if (
+      get(error, "error.code") === ZhipuaiErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
     return undefined;

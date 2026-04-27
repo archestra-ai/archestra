@@ -1227,7 +1227,8 @@ describe("mapProviderError - context window exceeded (other providers)", () => {
         responseBody: JSON.stringify({
           error: {
             type: "invalid_request_error",
-            message: "prompt too long; exceeded max context length by 1024 tokens",
+            message:
+              "prompt too long; exceeded max context length by 1024 tokens",
             internal_code: "context_length_exceeded",
           },
         }),

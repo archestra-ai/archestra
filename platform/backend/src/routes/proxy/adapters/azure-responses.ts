@@ -1,6 +1,6 @@
+import { ArchestraInternalErrorCode } from "@shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
-import { ArchestraInternalErrorCode } from "@shared";
 import type {
   ResponseCreateParamsNonStreaming,
   ResponseCreateParamsStreaming,

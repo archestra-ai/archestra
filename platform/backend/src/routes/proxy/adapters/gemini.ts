@@ -1420,7 +1420,8 @@ export const geminiAdapterFactory: LLMProvider<
     // `error`.
     const status: unknown = get(error, "error.status") ?? get(error, "status");
     if (status !== "INVALID_ARGUMENT") return undefined;
-    const message: unknown = get(error, "error.message") ?? get(error, "message");
+    const message: unknown =
+      get(error, "error.message") ?? get(error, "message");
     if (typeof message !== "string") return undefined;
     const msg = message.toLowerCase();
     if (

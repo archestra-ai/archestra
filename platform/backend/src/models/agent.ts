@@ -1,6 +1,5 @@
 import {
   DEFAULT_LLM_PROXY_NAME,
-  DEFAULT_MCP_GATEWAY_NAME,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
   urlSlugify,
@@ -1126,16 +1125,6 @@ class AgentModel {
     return result;
   }
 
-  static async getMCPGatewayOrCreateDefault(
-    organizationId?: string,
-  ): Promise<Agent> {
-    return AgentModel.getOrCreateDefaultByType(
-      "mcp_gateway",
-      DEFAULT_MCP_GATEWAY_NAME,
-      organizationId,
-    );
-  }
-
   static async getLLMProxyOrCreateDefault(
     organizationId?: string,
   ): Promise<Agent> {
@@ -1195,7 +1184,7 @@ class AgentModel {
   }
 
   private static async getOrCreateDefaultByType(
-    agentType: "mcp_gateway" | "llm_proxy",
+    agentType: "llm_proxy",
     defaultName: string,
     organizationId?: string,
   ): Promise<Agent> {

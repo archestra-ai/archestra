@@ -1,15 +1,14 @@
 import type { archestraApiTypes } from "@shared";
-import { Github } from "lucide-react";
+import { Github, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
-
 type ConnectorIcon =
   | { kind: "img"; src: string }
   | { kind: "element"; render: (className?: string) => ReactNode };
 
-const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
+const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>>  = {
   jira: { kind: "img", src: "/icons/jira.png" },
   confluence: { kind: "img", src: "/icons/confluence.png" },
   github: {
@@ -21,6 +20,10 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   notion: { kind: "img", src: "/icons/notion.png" },
   sharepoint: { kind: "img", src: "/icons/sharepoint.png" },
   gdrive: { kind: "img", src: "/icons/gdrive.png" },
+  file_upload: {
+    kind: "element",
+    render: (className) => <Upload className={className} />,
+  },
   linear: { kind: "img", src: "/icons/linear.png" },
   dropbox: { kind: "img", src: "/icons/dropbox.png" },
   asana: { kind: "img", src: "/icons/asana.png" },

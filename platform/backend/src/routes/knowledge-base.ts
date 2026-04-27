@@ -6,6 +6,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import db, { schema } from "@/database";
 import config from "@/config";
 import {
   didKnowledgeSourceAclInputsChange,
@@ -14,12 +15,21 @@ import {
 } from "@/knowledge-base";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import logger from "@/logging";
+import { chunkDocument } from "@/knowledge-base/chunker";
+import {
+  extractTextFiles,
+  isSupportedMimeType,
+  MAX_FILE_SIZE_BYTES,
+  MAX_ZIP_TOTAL_BYTES,
+} from "@/knowledge-base/connectors/file-upload/file-processor";
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
+  KbChunkModel,
   KbDocumentModel,
+  KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
@@ -35,6 +45,7 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  EmbeddingStatusSchema,
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
@@ -1030,6 +1041,437 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(run);
     },
   );
+
+  // ===== File Upload Routes =====
+
+  const UploadResultSchema = z.object({
+    filename: z.string(),
+    status: z.enum([
+      "created",
+      "duplicate",
+      "unsupported",
+      "too_large",
+      "extraction_failed",
+    ]),
+    fileId: z.string().optional(),
+    existingTitle: z.string().optional(),
+  });
+
+  const UploadedFileSchema = z.object({
+    id: z.string(),
+    connectorId: z.string(),
+    originalName: z.string().min(1),
+    mimeType: z.string(),
+    fileSize: z.number().int().nonnegative(),
+    contentHash: z.string(),
+    createdAt: z.string(),
+    title: z.string().min(1),
+    embeddingStatus: EmbeddingStatusSchema,
+  });
+
+  fastify.post(
+    "/api/connectors/:id/files",
+    {
+      bodyLimit: config.api.bodyLimit,
+      schema: {
+        operationId: RouteId.UploadConnectorFiles,
+        description:
+          "Upload files to a file-upload connector. " +
+          "Send files as base64-encoded content in a JSON array.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          files: z.array(
+            z.object({
+              name: z.string(),
+              mimeType: z.string(),
+              content: z.string(), // base64-encoded file bytes
+            }),
+          ),
+        }),
+        response: constructResponseSchema(
+          z.object({ results: z.array(UploadResultSchema) }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { organizationId, user } = request;
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.connectorType !== "file_upload") {
+        throw new ApiError(
+          400,
+          "This endpoint is only available for file_upload connectors",
+        );
+      }
+
+      const acl =
+        knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
+          { connector },
+        );
+
+      const results: z.infer<typeof UploadResultSchema>[] = [];
+
+      for (const file of request.body.files) {
+        const filename = file.name;
+        const mimeType = file.mimeType;
+
+        if (!isSupportedMimeType(filename, mimeType)) {
+          results.push({ filename, status: "unsupported" });
+          continue;
+        }
+
+        const rawBuffer = Buffer.from(file.content, "base64");
+
+        const isZip =
+          filename.toLowerCase().endsWith(".zip") ||
+          mimeType === "application/zip" ||
+          mimeType === "application/x-zip-compressed";
+        const uploadSizeLimit = isZip
+          ? MAX_ZIP_TOTAL_BYTES
+          : MAX_FILE_SIZE_BYTES;
+
+        if (rawBuffer.byteLength > uploadSizeLimit) {
+          results.push({ filename, status: "too_large" });
+          continue;
+        }
+
+        let extraction: Awaited<ReturnType<typeof extractTextFiles>>;
+        try {
+          extraction = await extractTextFiles(rawBuffer, mimeType, filename);
+        } catch (error) {
+          logger.warn(
+            { err: error, filename, mimeType },
+            "Failed to extract text from uploaded file, skipping",
+          );
+          results.push({ filename, status: "extraction_failed" });
+          continue;
+        }
+
+        // Report skipped files (e.g., unsupported types or oversized files inside a ZIP)
+        for (const skip of extraction.skipped) {
+          const statusMap = {
+            too_large: "too_large",
+            unsupported: "unsupported",
+            extraction_failed: "extraction_failed",
+          } as const;
+          results.push({
+            filename: skip.filename,
+            status: statusMap[skip.reason],
+          });
+        }
+
+        for (const extractedFile of extraction.extracted) {
+          const contentHash = KbUploadedFileModel.computeContentHash(
+            extractedFile.text,
+          );
+
+          const existing = await KbUploadedFileModel.findByContentHash(
+            id,
+            contentHash,
+          );
+          if (existing) {
+            const existingDoc = await KbDocumentModel.findBySourceId({
+              connectorId: id,
+              sourceId: existing.id,
+            });
+            results.push({
+              filename: extractedFile.filename,
+              status: "duplicate",
+              existingTitle: existingDoc?.title,
+            });
+            continue;
+          }
+
+          const title = extractedFile.filename;
+          const chunks = await chunkDocument({
+            title,
+            content: extractedFile.text,
+            metadata: {
+              originalFilename: extractedFile.filename,
+              mimeType: extractedFile.mimeType,
+            },
+          });
+
+          let uploadedFileId: string;
+          let documentId: string;
+
+          try {
+            const txResult = await db.transaction(async (tx) => {
+              const [file] = await tx
+                .insert(schema.kbUploadedFilesTable)
+                .values({
+                  connectorId: id,
+                  organizationId,
+                  originalName: extractedFile.filename,
+                  mimeType: extractedFile.mimeType,
+                  fileSize: extractedFile.rawBytes.byteLength,
+                  contentHash,
+                  fileData: extractedFile.rawBytes,
+                })
+                .returning();
+
+              const [doc] = await tx
+                .insert(schema.kbDocumentsTable)
+                .values({
+                  organizationId,
+                  connectorId: id,
+                  sourceId: file.id,
+                  title,
+                  content: extractedFile.text,
+                  contentHash,
+                  acl,
+                  metadata: {
+                    originalFilename: extractedFile.filename,
+                    mimeType: extractedFile.mimeType,
+                  },
+                })
+                .returning();
+
+              if (chunks.length > 0) {
+                await tx.insert(schema.kbChunksTable).values(
+                  chunks.map((chunk) => ({
+                    documentId: doc.id,
+                    content: chunk.content,
+                    chunkIndex: chunk.chunkIndex,
+                    metadataSuffixSemantic: chunk.metadataSuffixSemantic,
+                    metadataSuffixKeyword: chunk.metadataSuffixKeyword,
+                    acl,
+                  })),
+                );
+              }
+
+              return { fileId: file.id, documentId: doc.id };
+            });
+
+            uploadedFileId = txResult.fileId;
+            documentId = txResult.documentId;
+          } catch (err) {
+            if (isContentHashConflict(err)) {
+              const race = await KbUploadedFileModel.findByContentHash(
+                id,
+                contentHash,
+              );
+              if (race) {
+                const existingDoc = await KbDocumentModel.findBySourceId({
+                  connectorId: id,
+                  sourceId: race.id,
+                });
+                results.push({
+                  filename: extractedFile.filename,
+                  status: "duplicate",
+                  existingTitle: existingDoc?.title,
+                });
+                continue;
+              }
+            }
+            throw err;
+          }
+
+          if (chunks.length > 0) {
+            await taskQueueService.enqueue({
+              taskType: "batch_embedding",
+              payload: {
+                documentIds: [documentId],
+                connectorRunId: null,
+              },
+            });
+          }
+
+          results.push({
+            filename: extractedFile.filename,
+            status: "created",
+            fileId: uploadedFileId,
+          });
+        }
+      }
+
+      return reply.send({ results });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/files",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorFiles,
+        description: "List files uploaded to a file-upload connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(
+          z.object({ data: z.array(UploadedFileSchema) }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({ id, organizationId, userId: user.id });
+
+      const uploadedFiles = await KbUploadedFileModel.findByConnector(id);
+
+      const docs = await KbDocumentModel.findBySourceIds({
+        connectorId: id,
+        sourceIds: uploadedFiles.map((f) => f.id),
+      });
+      const docBySourceId = new Map(docs.map((d) => [d.sourceId, d]));
+
+      const data = uploadedFiles.map((file) => {
+        const doc = docBySourceId.get(file.id);
+        return {
+          id: file.id,
+          connectorId: file.connectorId,
+          originalName: file.originalName,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize,
+          contentHash: file.contentHash,
+          createdAt: file.createdAt.toISOString(),
+          title: doc?.title ?? file.originalName,
+          embeddingStatus: doc?.embeddingStatus ?? "pending",
+        };
+      });
+
+      return reply.send({ data });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/files/:fileId",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorFile,
+        description: "Get a single uploaded file by ID",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string(), fileId: z.string() }),
+        response: constructResponseSchema(UploadedFileSchema),
+      },
+    },
+    async ({ params: { id, fileId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({ id, organizationId, userId: user.id });
+
+      const file = await KbUploadedFileModel.findById(fileId);
+      if (!file || file.connectorId !== id) {
+        throw new ApiError(404, "File not found");
+      }
+
+      const doc = await KbDocumentModel.findBySourceId({
+        connectorId: id,
+        sourceId: fileId,
+      });
+
+      return reply.send({
+        id: file.id,
+        connectorId: file.connectorId,
+        originalName: file.originalName,
+        mimeType: file.mimeType,
+        fileSize: file.fileSize,
+        contentHash: file.contentHash,
+        createdAt: file.createdAt.toISOString(),
+        title: doc?.title ?? file.originalName,
+        embeddingStatus: doc?.embeddingStatus ?? "pending",
+      });
+    },
+  );
+
+  fastify.patch(
+    "/api/connectors/:id/files/:fileId",
+    {
+      schema: {
+        operationId: RouteId.UpdateConnectorFile,
+        description: "Update the title of an uploaded file",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string(), fileId: z.string() }),
+        body: z.object({ title: z.string().min(1) }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id, fileId }, body, organizationId, user }, reply) => {
+      await findConnectorOrThrow({ id, organizationId, userId: user.id });
+
+      const file = await KbUploadedFileModel.findById(fileId);
+      if (!file || file.connectorId !== id) {
+        throw new ApiError(404, "File not found");
+      }
+
+      const doc = await KbDocumentModel.findBySourceId({
+        connectorId: id,
+        sourceId: fileId,
+      });
+
+      if (!doc) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      await KbDocumentModel.update(doc.id, {
+        title: body.title,
+        embeddingStatus: "pending",
+      });
+
+      await KbChunkModel.deleteByDocument(doc.id);
+      const chunks = await chunkDocument({
+        title: body.title,
+        content: doc.content,
+        metadata: doc.metadata as Record<string, unknown> | undefined,
+      });
+
+      if (chunks.length > 0) {
+        await KbChunkModel.insertMany(
+          chunks.map((chunk) => ({
+            documentId: doc.id,
+            content: chunk.content,
+            chunkIndex: chunk.chunkIndex,
+            metadataSuffixSemantic: chunk.metadataSuffixSemantic,
+            metadataSuffixKeyword: chunk.metadataSuffixKeyword,
+            acl: doc.acl,
+          })),
+        );
+
+        await taskQueueService.enqueue({
+          taskType: "batch_embedding",
+          payload: {
+            documentIds: [doc.id],
+            connectorRunId: null,
+          },
+        });
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/files/:fileId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorFile,
+        description: "Delete an uploaded file and its indexed content",
+        tags: ["Connectors"],
+        params: z.object({ id: z.string(), fileId: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, fileId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({ id, organizationId, userId: user.id });
+
+      const file = await KbUploadedFileModel.findById(fileId);
+      if (!file || file.connectorId !== id) {
+        throw new ApiError(404, "File not found");
+      }
+
+      await KbDocumentModel.deleteByConnectorAndSourceId({
+        connectorId: id,
+        sourceId: fileId,
+      });
+
+      await KbUploadedFileModel.delete(fileId);
+
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default knowledgeBaseRoutes;
@@ -1068,6 +1510,18 @@ async function findConnectorOrThrow(params: {
     throw new ApiError(404, "Connector not found");
   }
   return connector;
+}
+
+function isContentHashConflict(error: unknown): boolean {
+  let current: unknown = error;
+  while (typeof current === "object" && current !== null) {
+    const msg = (current as Record<string, unknown>)["message"];
+    if (typeof msg === "string" && msg.includes("kb_uploaded_files_content_hash_uidx")) {
+      return true;
+    }
+    current = (current as Record<string, unknown>)["cause"];
+  }
+  return false;
 }
 
 async function loadConnectorCredentials(

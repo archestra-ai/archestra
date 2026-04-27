@@ -1,6 +1,7 @@
 import type { Connector, ConnectorType } from "@/types";
 import { AsanaConnector } from "./asana/asana-connector";
 import { ConfluenceConnector } from "./confluence/confluence-connector";
+import { FileUploadConnector } from "./file-upload/file-upload-connector";
 import { DropboxConnector } from "./dropbox/dropbox-connector";
 import { GoogleDriveConnector } from "./gdrive/gdrive-connector";
 import { GithubConnector } from "./github/github-connector";
@@ -22,6 +23,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   notion: () => new NotionConnector(),
   sharepoint: () => new SharePointConnector(),
   gdrive: () => new GoogleDriveConnector(),
+  file_upload: () => new FileUploadConnector(),
   dropbox: () => new DropboxConnector(),
   outline: () => new OutlineConnector(),
   asana: () => new AsanaConnector(),

@@ -34,20 +34,24 @@ export function getEmbeddingColumnName(dimensions: number): string {
  * Display labels for connector types.
  * Used in UI placeholders and titles.
  */
-export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
+export const CONNECTOR_TYPE_LABELS = {
   jira: "Jira",
   confluence: "Confluence",
   github: "GitHub",
   gitlab: "GitLab",
   notion: "Notion",
+  servicenow: "ServiceNow",
   sharepoint: "SharePoint",
   gdrive: "Google Drive",
+  file_upload: "File Upload",
   dropbox: "Dropbox",
   asana: "Asana",
   linear: "Linear",
   outline: "Outline",
   salesforce: "Salesforce",
-};
+} as const;
+
+export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
   "Engineering",
@@ -64,7 +68,9 @@ const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
  * Generate a placeholder connector name like "Marketing Confluence Connector".
  * Picks a random department each call.
  */
-export function getConnectorNamePlaceholder(connectorType: string): string {
+export function getConnectorNamePlaceholder(
+  connectorType: ConnectorType,
+): string {
   const department =
     CONNECTOR_PLACEHOLDER_DEPARTMENTS[
       Math.floor(Math.random() * CONNECTOR_PLACEHOLDER_DEPARTMENTS.length)

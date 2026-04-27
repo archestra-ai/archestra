@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  AlertTriangle,
   ArrowLeft,
   Database,
   Logs,
@@ -18,6 +19,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ConnectorFilesSection } from "@/app/knowledge/connectors/_parts/connector-files-section";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -371,31 +373,41 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           </div>
         </div>
 
-        <h2 className="text-lg font-semibold">Sync Runs</h2>
+        {connector.connectorType === "file_upload" && (
+          <FileUploadConnectorWarnings connectorId={connectorId} />
+        )}
 
-        <LoadingWrapper
-          isPending={isRunsPending}
-          loadingFallback={<LoadingSpinner />}
-        >
-          {(runsData?.data ?? []).length === 0 ? (
-            <div className="text-muted-foreground">
-              No sync runs yet. Trigger a manual sync or wait for the scheduled
-              sync.
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={runsData?.data ?? []}
-              manualPagination={true}
-              pagination={{
-                pageIndex,
-                pageSize,
-                total: runsData?.pagination?.total ?? 0,
-              }}
-              onPaginationChange={handlePaginationChange}
-            />
-          )}
-        </LoadingWrapper>
+        {connector.connectorType === "file_upload" ? (
+          <ConnectorFilesSection connectorId={connectorId} />
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold">Sync Runs</h2>
+
+            <LoadingWrapper
+              isPending={isRunsPending}
+              loadingFallback={<LoadingSpinner />}
+            >
+              {(runsData?.data ?? []).length === 0 ? (
+                <div className="text-muted-foreground">
+                  No sync runs yet. Trigger a manual sync or wait for the
+                  scheduled sync.
+                </div>
+              ) : (
+                <DataTable
+                  columns={columns}
+                  data={runsData?.data ?? []}
+                  manualPagination={true}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: runsData?.pagination?.total ?? 0,
+                  }}
+                  onPaginationChange={handlePaginationChange}
+                />
+              )}
+            </LoadingWrapper>
+          </>
+        )}
 
         <ConnectorRunDetailsDialog
           connectorId={connectorId}
@@ -410,6 +422,34 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         />
       </div>
     </PageLayout>
+  );
+}
+
+function FileUploadConnectorWarnings({
+  connectorId,
+}: {
+  connectorId: string;
+}) {
+  const { data: assignedKbs, isPending } =
+    useConnectorKnowledgeBases(connectorId);
+
+  if (isPending || (assignedKbs?.data ?? []).length > 0) return null;
+
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-50/60 dark:bg-yellow-950/20 p-4 text-sm">
+      <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+      <div className="space-y-1">
+        <p className="font-medium text-yellow-800 dark:text-yellow-300">
+          Files are not searchable in chat
+        </p>
+        <p className="text-yellow-700 dark:text-yellow-400">
+          This connector is not assigned to any knowledge base. Assign it using
+          the <span className="font-medium">Knowledge Bases</span> field in the
+          metadata above, then assign that knowledge base to an agent so the
+          files can be retrieved in chat.
+        </p>
+      </div>
+    </div>
   );
 }
 

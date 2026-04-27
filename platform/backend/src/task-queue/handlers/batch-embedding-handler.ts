@@ -7,16 +7,14 @@ export async function handleBatchEmbedding(
   payload: Record<string, unknown>,
 ): Promise<void> {
   const documentIds = payload.documentIds as string[];
-  const connectorRunId = payload.connectorRunId as string;
+  const connectorRunId = (payload.connectorRunId as string | null) ?? null;
 
-  if (!documentIds?.length || !connectorRunId) {
-    throw new Error(
-      "Missing documentIds or connectorRunId in batch_embedding payload",
-    );
+  if (!documentIds?.length) {
+    throw new Error("Missing documentIds in batch_embedding payload");
   }
 
   try {
-    await embeddingService.processDocuments(documentIds, connectorRunId);
+    await embeddingService.processDocuments(documentIds, connectorRunId ?? undefined);
     metrics.rag.reportEmbeddingBatch({
       documentCount: documentIds.length,
       status: "success",
@@ -29,10 +27,12 @@ export async function handleBatchEmbedding(
     throw error;
   }
 
+  if (!connectorRunId) {
+    return;
+  }
+
   const updatedRun = await ConnectorRunModel.completeBatch(connectorRunId);
 
-  // If all batches are done, update the connector's sync status
-  // Skip if run was superseded/failed — a newer run owns the connector status
   if (
     updatedRun &&
     updatedRun.completedBatches !== null &&

@@ -421,6 +421,13 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
+  // Connector File Upload Routes
+  UploadConnectorFiles: "uploadConnectorFiles",
+  GetConnectorFiles: "getConnectorFiles",
+  GetConnectorFile: "getConnectorFile",
+  UpdateConnectorFile: "updateConnectorFile",
+  DeleteConnectorFile: "deleteConnectorFile",
+
   // Invitation Routes
   CheckInvitation: "checkInvitation",
 } as const;

@@ -66,6 +66,7 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   asana: CONNECTOR_TYPE_LABELS.asana,
   outline: CONNECTOR_TYPE_LABELS.outline,
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
+  file_upload: CONNECTOR_TYPE_LABELS.file_upload,
 };
 
 export const CONNECTOR_OPTIONS: ConnectorOption[] = [
@@ -134,72 +135,78 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     label: CONNECTOR_DISPLAY_LABELS.salesforce,
     description: "Sync CRM objects from Salesforce",
   },
+   {
+    type: "file_upload",
+    label: CONNECTOR_DISPLAY_LABELS.file_upload,
+    description: "Upload your own text files and zip archives",
+  },
 ];
 
 const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
-  {
-    jira: {
-      fieldName: "config.jiraBaseUrl",
-      label: "URL",
-      placeholder: "https://your-domain.atlassian.net",
-      description: "Your Jira instance URL.",
-    },
-    confluence: {
-      fieldName: "config.confluenceUrl",
-      label: "URL",
-      placeholder: "https://your-domain.atlassian.net/wiki",
-      description: "Your Confluence instance URL.",
-    },
-    github: {
-      fieldName: "config.githubUrl",
-      label: "GitHub API URL",
-      placeholder: "https://api.github.com",
-      description:
-        "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
-    },
-    gitlab: {
-      fieldName: "config.gitlabUrl",
-      label: "GitLab URL",
-      placeholder: "https://gitlab.com",
-      description: "Use https://gitlab.com or your self-hosted GitLab URL.",
-    },
-    linear: {
-      fieldName: "config.linearApiUrl",
-      label: "Linear API URL",
-      placeholder: "https://api.linear.app",
-      description: "Linear GraphQL API base URL.",
-    },
-    servicenow: {
-      fieldName: "config.instanceUrl",
-      label: "Instance URL",
-      placeholder: "https://your-instance.service-now.com",
-      description: "Your ServiceNow instance URL.",
-    },
-    notion: null,
-    sharepoint: {
-      fieldName: "config.siteUrl",
-      label: "Site URL",
-      placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
-      description: "Your SharePoint site URL.",
-    },
-    gdrive: null,
-    dropbox: null,
-    asana: null,
-    outline: {
-      fieldName: "config.outlineUrl",
-      label: "Instance URL",
-      placeholder: "https://app.getoutline.com",
-      description:
-        "Your Outline instance URL. Use https://app.getoutline.com for the cloud version, or your self-hosted URL.",
-    },
-    salesforce: {
-      fieldName: "config.loginUrl",
-      label: "Login URL",
-      placeholder: "https://login.salesforce.com",
-      description:
-        "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
-    },
-  };
+{
+  jira: {
+    fieldName: "config.jiraBaseUrl",
+    label: "URL",
+    placeholder: "https://your-domain.atlassian.net",
+    description: "Your Jira instance URL.",
+  },
+  confluence: {
+    fieldName: "config.confluenceUrl",
+    label: "URL",
+    placeholder: "https://your-domain.atlassian.net/wiki",
+    description: "Your Confluence instance URL.",
+  },
+  github: {
+    fieldName: "config.githubUrl",
+    label: "GitHub API URL",
+    placeholder: "https://api.github.com",
+    description:
+      "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
+  },
+  gitlab: {
+    fieldName: "config.gitlabUrl",
+    label: "GitLab URL",
+    placeholder: "https://gitlab.com",
+    description: "Use https://gitlab.com or your self-hosted GitLab URL.",
+  },
+  linear: {
+    fieldName: "config.linearApiUrl",
+    label: "Linear API URL",
+    placeholder: "https://api.linear.app",
+    description: "Linear GraphQL API base URL.",
+  },
+  servicenow: {
+    fieldName: "config.instanceUrl",
+    label: "Instance URL",
+    placeholder: "https://your-instance.service-now.com",
+    description: "Your ServiceNow instance URL.",
+  },
+  notion: null,
+  sharepoint: {
+    fieldName: "config.siteUrl",
+    label: "Site URL",
+    placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
+    description: "Your SharePoint site URL.",
+  },
+  gdrive: null,
+  dropbox: null,
+  asana: null,
+  outline: {
+    fieldName: "config.outlineUrl",
+    label: "Instance URL",
+    placeholder: "https://app.getoutline.com",
+    description:
+      "Your Outline instance URL. Use https://app.getoutline.com for the cloud version, or your self-hosted URL.",
+  },
+  salesforce: {
+    fieldName: "config.loginUrl",
+    label: "Login URL",
+    placeholder: "https://login.salesforce.com",
+    description:
+      "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
+  },
+  file_upload: null
+};
 
 const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   ConnectorType,
@@ -220,6 +227,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   asana: ({ form }) => <AsanaConfigFields form={form} hideWorkspaceGid />,
   outline: ({ form }) => <OutlineConfigFields form={form} />,
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
+  file_upload: () => null,
 };
 
 const EDIT_ADVANCED_CONFIG_FIELDS: Record<
@@ -284,6 +292,8 @@ export function getDefaultConnectorConfig(
     asana: { type },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
+    file_upload: { type },
+
   };
 
   return { ...defaultConfigs[type] };
@@ -322,6 +332,7 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal Access Token",
     asana: "Personal Access Token",
     salesforce: "Password + Security Token",
+    file_upload: "Personal Access Token",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string> = {
@@ -338,6 +349,7 @@ export function getConnectorCredentialConfig(params: {
     linear: "Your personal access token",
     asana: "Your personal access token",
     salesforce: "Your Salesforce password followed by your security token",
+    file_upload: "Your personal access token",
   };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string> = {
@@ -354,6 +366,7 @@ export function getConnectorCredentialConfig(params: {
     gitlab: "Leave empty to keep existing token",
     linear: "Leave empty to keep existing token",
     asana: "Leave empty to keep existing token",
+    file_upload: "Leave empty to keep existing token",
   };
 
   const apiTokenRequiredMessages: Record<ConnectorType, string> = {
@@ -370,6 +383,7 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal access token is required",
     asana: "Personal access token is required",
     salesforce: "Password and security token are required",
+    file_upload: "Personal access token is required",
   };
 
   const apiTokenHelpText = getApiTokenHelpText({

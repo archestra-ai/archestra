@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes, ConnectorType } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Database, Pencil, Trash2, Users } from "lucide-react";
@@ -51,7 +51,8 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
-] as const;
+  "file_upload",
+] as ConnectorType[];
 
 function formatAgentType(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType] ?? agentType;

@@ -132,6 +132,11 @@ const agentsTable = pgTable(
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    uniqueIndex("agents_personal_gateway_per_member_idx")
+      .on(table.organizationId, table.authorId)
+      .where(
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+      ),
   ],
 );
 

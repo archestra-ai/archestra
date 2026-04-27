@@ -1552,25 +1552,91 @@ class AgentModel {
     );
     if (existing) return existing;
 
-    const gateway = await AgentModel.create(
-      {
+    try {
+      const gateway = await AgentModel.create(
+        {
+          organizationId,
+          name: "My Gateway",
+          agentType: "mcp_gateway",
+          scope: "personal",
+          description:
+            "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
+          isPersonalGateway: true,
+        },
+        userId,
+      );
+
+      logger.info(
+        { userId, organizationId, agentId: gateway.id },
+        "Created personal MCP gateway",
+      );
+
+      return gateway;
+    } catch (error) {
+      // Lost a race against a concurrent caller — re-fetch the row that won.
+      const isUniqueViolation =
+        error instanceof Error &&
+        error.message.includes("agents_personal_gateway_per_member_idx");
+      if (!isUniqueViolation) throw error;
+
+      const winner = await AgentModel.getPersonalMcpGateway(
+        userId,
         organizationId,
-        name: "My Gateway",
-        agentType: "mcp_gateway",
-        scope: "personal",
-        description:
-          "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
-        isPersonalGateway: true,
-      },
-      userId,
-    );
+      );
+      if (!winner) throw error;
+      return winner;
+    }
+  }
 
-    logger.info(
-      { userId, organizationId, agentId: gateway.id },
-      "Created personal MCP gateway",
-    );
+  /**
+   * Bulk-creates personal MCP gateways for every member that lacks one. Uses
+   * a single LEFT JOIN to find the missing (userId, organizationId) pairs and
+   * a single bulk INSERT. Intended for the startup backfill — for new members
+   * created at runtime, use {@link AgentModel.ensurePersonalMcpGateway}.
+   * Returns the number of rows actually inserted.
+   */
+  static async bulkBackfillPersonalMcpGateways(): Promise<number> {
+    const missing = await db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+      })
+      .from(schema.membersTable)
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.agentsTable.authorId, schema.membersTable.userId),
+          eq(
+            schema.agentsTable.organizationId,
+            schema.membersTable.organizationId,
+          ),
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      )
+      .where(isNull(schema.agentsTable.id));
 
-    return gateway;
+    if (missing.length === 0) return 0;
+
+    const rows = missing.map((m) => ({
+      organizationId: m.organizationId,
+      authorId: m.userId,
+      name: "My Gateway",
+      description:
+        "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
+      agentType: "mcp_gateway" as const,
+      scope: "personal" as const,
+      isPersonalGateway: true,
+      slug: `my-gateway-${crypto.randomUUID().slice(0, 6)}`,
+    }));
+
+    const inserted = await db
+      .insert(schema.agentsTable)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning({ id: schema.agentsTable.id });
+
+    return inserted.length;
   }
 
   /**

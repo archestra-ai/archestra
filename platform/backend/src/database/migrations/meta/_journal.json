@@ -1534,6 +1534,13 @@
       "when": 1777280722356,
       "tag": "0218_jittery_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1777284984797,
+      "tag": "0219_broad_strong_guy",
+      "breakpoints": true
     }
   ]
 }

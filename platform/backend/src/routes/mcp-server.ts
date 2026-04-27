@@ -817,11 +817,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolIds.length > 0) {
             const targetAgentIds: string[] = [];
             if (!mcpServer.teamId) {
-              const personalGateway =
-                await AgentModel.ensurePersonalMcpGateway({
+              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
+                {
                   userId: user.id,
                   organizationId,
-                });
+                },
+              );
               targetAgentIds.push(personalGateway.id);
             }
             if (agentIds && agentIds.length > 0) {

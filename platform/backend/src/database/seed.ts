@@ -560,46 +560,21 @@ async function ensureExistingUsersHavePersonalChatAgents(): Promise<void> {
 
 /**
  * Ensures every member has a personal MCP gateway. Runs on startup to backfill
- * members created before this feature. Idempotent.
+ * members created before this feature. Single LEFT JOIN + bulk INSERT.
  */
 async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
-  const members = await db
-    .select({
-      userId: schema.membersTable.userId,
-      organizationId: schema.membersTable.organizationId,
-    })
-    .from(schema.membersTable);
-
-  if (members.length === 0) return;
-
-  let created = 0;
-  for (const member of members) {
-    try {
-      const before = await AgentModel.getPersonalMcpGateway(
-        member.userId,
-        member.organizationId,
-      );
-      await AgentModel.ensurePersonalMcpGateway({
-        userId: member.userId,
-        organizationId: member.organizationId,
-      });
-      if (!before) created++;
-    } catch (error) {
-      logger.error(
-        {
-          err: error,
-          userId: member.userId,
-          organizationId: member.organizationId,
-        },
-        "Failed to create personal MCP gateway for existing member",
+  try {
+    const created = await AgentModel.bulkBackfillPersonalMcpGateways();
+    if (created > 0) {
+      logger.info(
+        { count: created },
+        "Created personal MCP gateways for existing members",
       );
     }
-  }
-
-  if (created > 0) {
-    logger.info(
-      { count: created },
-      "Created personal MCP gateways for existing members",
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to backfill personal MCP gateways for existing members",
     );
   }
 }

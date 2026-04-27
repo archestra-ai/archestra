@@ -2,10 +2,24 @@ import { E2eTestId } from "@shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseOrganization, mockUseChatPlaceholder } = vi.hoisted(() => ({
-  mockUseOrganization: vi.fn(),
-  mockUseChatPlaceholder: vi.fn(),
-}));
+const {
+  mockSetInput,
+  mockUseChatPlaceholder,
+  mockUseOrganization,
+  mockTextInput,
+} = vi.hoisted(() => {
+  const mockTextInput = { value: "" };
+  const mockSetInput = vi.fn((value: string) => {
+    mockTextInput.value = value;
+  });
+
+  return {
+    mockSetInput,
+    mockTextInput,
+    mockUseOrganization: vi.fn(),
+    mockUseChatPlaceholder: vi.fn(),
+  };
+});
 
 // Mock ResizeObserver which is used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -85,16 +99,25 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
   PromptInputTextarea: ({
     placeholder,
+    onChange,
     onKeyDown,
     ...props
   }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <textarea placeholder={placeholder} onKeyDown={onKeyDown} {...props} />
+    <textarea
+      placeholder={placeholder}
+      onChange={(event) => {
+        mockTextInput.value = event.currentTarget.value;
+        onChange?.(event);
+      }}
+      onKeyDown={onKeyDown}
+      {...props}
+    />
   ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
   usePromptInputController: () => ({
-    textInput: { setInput: vi.fn() },
+    textInput: { value: mockTextInput.value, setInput: mockSetInput },
     attachments: { files: [] },
   }),
   usePromptInputAttachments: () => ({
@@ -197,6 +220,7 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTextInput.value = "";
     mockUseOrganization.mockReturnValue({
       data: null,
       isLoading: false,
@@ -352,7 +376,7 @@ describe("ArchestraPromptInput", () => {
       expect(screen.getByTestId("prompt-input")).toBeInTheDocument();
     });
 
-    it("should focus the last message when ArrowUp is pressed at the absolute start of the prompt", () => {
+    it("should focus the last message when Shift+ArrowUp is pressed at the absolute start of the prompt", () => {
       const onNavigateToLastMessage = vi.fn();
 
       render(
@@ -369,12 +393,36 @@ describe("ArchestraPromptInput", () => {
 
       textarea.focus();
       textarea.setSelectionRange(0, 0);
-      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      fireEvent.keyDown(textarea, { key: "ArrowUp", shiftKey: true });
 
       expect(onNavigateToLastMessage).toHaveBeenCalledTimes(1);
     });
 
-    it("should not focus the last message when ArrowUp is pressed away from the absolute start", () => {
+    it("should not focus the last message when plain ArrowUp is pressed at the absolute start", () => {
+      const onNavigateToLastMessage = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+          userMessageHistory={["Previous user message"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+
+      expect(onNavigateToLastMessage).not.toHaveBeenCalled();
+      expect(mockSetInput).toHaveBeenLastCalledWith("Previous user message");
+    });
+
+    it("should not focus the last message when Shift+ArrowUp is pressed away from the absolute start", () => {
       const onNavigateToLastMessage = vi.fn();
 
       render(
@@ -392,12 +440,12 @@ describe("ArchestraPromptInput", () => {
       fireEvent.change(textarea, { target: { value: "hello" } });
       textarea.focus();
       textarea.setSelectionRange(2, 2);
-      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      fireEvent.keyDown(textarea, { key: "ArrowUp", shiftKey: true });
 
       expect(onNavigateToLastMessage).not.toHaveBeenCalled();
     });
 
-    it("should not focus the last message when ArrowUp is pressed with a selection", () => {
+    it("should not focus the last message when Shift+ArrowUp is pressed with a selection", () => {
       const onNavigateToLastMessage = vi.fn();
 
       render(
@@ -415,8 +463,125 @@ describe("ArchestraPromptInput", () => {
       fireEvent.change(textarea, { target: { value: "hello" } });
       textarea.focus();
       textarea.setSelectionRange(0, 2);
+      fireEvent.keyDown(textarea, { key: "ArrowUp", shiftKey: true });
+
+      expect(onNavigateToLastMessage).not.toHaveBeenCalled();
+    });
+
+    it("should recall latest user message with ArrowUp at the absolute start", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          userMessageHistory={["Older message", "Latest message"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
       fireEvent.keyDown(textarea, { key: "ArrowUp" });
 
+      expect(mockSetInput).toHaveBeenLastCalledWith("Latest message");
+    });
+
+    it("should walk older and newer prompt history and restore the draft", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          userMessageHistory={[
+            "Oldest message",
+            "Middle message",
+            "Newest message",
+          ]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: "draft text" } });
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
+
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockSetInput).toHaveBeenLastCalledWith("Newest message");
+
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockSetInput).toHaveBeenLastCalledWith("Middle message");
+
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockSetInput).toHaveBeenLastCalledWith("Oldest message");
+
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      expect(mockSetInput).toHaveBeenLastCalledWith("Middle message");
+
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      expect(mockSetInput).toHaveBeenLastCalledWith("Newest message");
+
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      expect(mockSetInput).toHaveBeenLastCalledWith("draft text");
+    });
+
+    it("should not recall prompt history away from the absolute start or with a selection", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          userMessageHistory={["Previous message"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: "hello" } });
+      textarea.focus();
+      textarea.setSelectionRange(2, 2);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockSetInput).not.toHaveBeenCalledWith("Previous message");
+
+      textarea.setSelectionRange(0, 2);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      expect(mockSetInput).not.toHaveBeenCalledWith("Previous message");
+    });
+
+    it("should ignore prompt navigation and history during composition", () => {
+      const onNavigateToLastMessage = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+          userMessageHistory={["Previous message"]}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
+      mockSetInput.mockClear();
+      fireEvent.keyDown(textarea, {
+        key: "ArrowUp",
+        isComposing: true,
+      });
+      fireEvent.keyDown(textarea, {
+        key: "ArrowUp",
+        shiftKey: true,
+        isComposing: true,
+      });
+
+      expect(mockSetInput).not.toHaveBeenCalled();
       expect(onNavigateToLastMessage).not.toHaveBeenCalled();
     });
 

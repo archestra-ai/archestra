@@ -2076,6 +2076,7 @@ function getMessagesNotYetPersisted(params: {
   uiMessages: ChatMessage[];
 }): ChatMessage[] {
   const existingIds = new Set<string>();
+  const existingEmptyContentIdSignatures = new Map<string, number>();
 
   for (const message of params.existingMessages) {
     existingIds.add(message.id);
@@ -2084,26 +2085,96 @@ function getMessagesNotYetPersisted(params: {
     // in-flight useChat requests can still carry the original temporary content
     // ids. Track both forms so follow-up turns after swap_agent do not get
     // dropped just because the incoming thread is shorter than the DB thread.
-    const contentId =
-      typeof message.content === "object" &&
-      message.content !== null &&
-      "id" in message.content &&
-      typeof message.content.id === "string"
-        ? message.content.id
-        : null;
+    const contentId = getMessageContentId(message.content);
 
     if (contentId) {
       existingIds.add(contentId);
+      continue;
+    }
+
+    if (contentId === "") {
+      const signature = getMessageTextSignature(message.content);
+      if (signature) {
+        existingEmptyContentIdSignatures.set(
+          signature,
+          (existingEmptyContentIdSignatures.get(signature) ?? 0) + 1,
+        );
+      }
     }
   }
 
   return params.uiMessages.filter((message) => {
-    if (!message.id || typeof message.id !== "string") {
-      return true;
+    if (
+      message.id &&
+      typeof message.id === "string" &&
+      existingIds.has(message.id)
+    ) {
+      return false;
     }
 
-    return !existingIds.has(message.id);
+    const signature = getMessageTextSignature(message);
+    if (signature) {
+      const remainingMatches =
+        existingEmptyContentIdSignatures.get(signature) ?? 0;
+      if (remainingMatches > 0) {
+        if (remainingMatches === 1) {
+          existingEmptyContentIdSignatures.delete(signature);
+        } else {
+          existingEmptyContentIdSignatures.set(signature, remainingMatches - 1);
+        }
+        return false;
+      }
+    }
+
+    return true;
   });
+}
+
+function getMessageContentId(content: unknown): string | null {
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    "id" in content &&
+    typeof content.id === "string"
+  ) {
+    return content.id;
+  }
+
+  return null;
+}
+
+function getMessageTextSignature(message: unknown): string | null {
+  if (typeof message !== "object" || message === null) {
+    return null;
+  }
+
+  const role =
+    "role" in message && typeof message.role === "string" ? message.role : null;
+  const parts =
+    "parts" in message && Array.isArray(message.parts) ? message.parts : null;
+
+  if (!role || !parts) {
+    return null;
+  }
+
+  const text = parts
+    .filter(
+      (part): part is { type: "text"; text: string } =>
+        typeof part === "object" &&
+        part !== null &&
+        "type" in part &&
+        part.type === "text" &&
+        "text" in part &&
+        typeof part.text === "string",
+    )
+    .map((part) => part.text)
+    .join("\n");
+
+  if (!text) {
+    return null;
+  }
+
+  return `${role}\u0000${text}`;
 }
 
 function prepareMessagesForProvider(params: {

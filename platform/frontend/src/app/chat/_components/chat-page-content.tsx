@@ -294,6 +294,10 @@ export function ChatPageContent({
     })),
     queryClient,
   });
+  const userMessageHistory = useMemo(
+    () => getUserMessageHistory(messages),
+    [messages],
+  );
   const {
     closeBrowserPanel,
     handleInitialNavigateComplete,
@@ -1132,6 +1136,7 @@ export function ChatPageContent({
                         onNavigateToLastMessage={() =>
                           focusLastMessageRef.current?.()
                         }
+                        userMessageHistory={userMessageHistory}
                         onProviderChange={handleProviderChange}
                         allowFileUploads={
                           organization?.allowChatFileUploads ?? false
@@ -1249,6 +1254,7 @@ export function ChatPageContent({
                       onNavigateToLastMessage={() =>
                         focusLastMessageRef.current?.()
                       }
+                      userMessageHistory={userMessageHistory}
                       initialApiKeyId={initialApiKeyId}
                       onApiKeyChange={setInitialApiKeyId}
                       onProviderChange={handleInitialProviderChange}
@@ -1371,4 +1377,27 @@ export function ChatPageContent({
       </StandardDialog>
     </div>
   );
+}
+
+function getUserMessageHistory(messages: UIMessage[]) {
+  return messages.flatMap((message) => {
+    if (message.role !== "user") {
+      return [];
+    }
+
+    return (
+      message.parts?.flatMap((part) => {
+        if (
+          part.type !== "text" ||
+          !("text" in part) ||
+          typeof part.text !== "string" ||
+          !part.text.trim()
+        ) {
+          return [];
+        }
+
+        return [part.text];
+      }) ?? []
+    );
+  });
 }

@@ -24,6 +24,7 @@ export function MessageActions({
   editDisabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(textToCopy);
@@ -33,9 +34,11 @@ export function MessageActions({
 
   return (
     <div
+      data-message-actions
       className={cn(
-        "flex items-center gap-0.5 rounded-md border bg-background/95 shadow-sm p-0.5",
+        "flex items-center gap-0.5 px-4 py-0",
         className,
+        isTooltipOpen && "opacity-100 pointer-events-auto",
       )}
     >
       {isRegenerateConfirming ? (
@@ -54,7 +57,7 @@ export function MessageActions({
         </>
       ) : (
         <>
-          <Tooltip>
+          <Tooltip onOpenChange={setIsTooltipOpen}>
             <TooltipTrigger asChild>
               <Button
                 size="icon"
@@ -70,12 +73,12 @@ export function MessageActions({
                 <span className="sr-only">{copied ? "Copied" : "Copy"}</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">
+            <MessageActionTooltipContent>
               {copied ? "Copied" : "Copy"}
-            </TooltipContent>
+            </MessageActionTooltipContent>
           </Tooltip>
           {onEditClick && (
-            <Tooltip>
+            <Tooltip onOpenChange={setIsTooltipOpen}>
               <TooltipTrigger asChild>
                 <Button
                   size="icon"
@@ -88,11 +91,11 @@ export function MessageActions({
                   <span className="sr-only">Edit</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Edit</TooltipContent>
+              <MessageActionTooltipContent>Edit</MessageActionTooltipContent>
             </Tooltip>
           )}
           {onRegenerateClick && (
-            <Tooltip>
+            <Tooltip onOpenChange={setIsTooltipOpen}>
               <TooltipTrigger asChild>
                 <Button
                   size="icon"
@@ -105,11 +108,30 @@ export function MessageActions({
                   <span className="sr-only">Regenerate</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Regenerate</TooltipContent>
+              <MessageActionTooltipContent>
+                Regenerate
+              </MessageActionTooltipContent>
             </Tooltip>
           )}
         </>
       )}
     </div>
+  );
+}
+
+function MessageActionTooltipContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <TooltipContent
+      side="bottom"
+      sideOffset={4}
+      noArrow
+      className="animate-none data-[state=closed]:animate-none pointer-events-none"
+    >
+      {children}
+    </TooltipContent>
   );
 }

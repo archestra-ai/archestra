@@ -142,7 +142,7 @@ export function EditableUserMessage({
       <Message from="user" className="relative pb-9">
         <MessageContent
           aria-label="Message content"
-          className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-primary/90 ring-primary/50"
+          className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-secondary ring-primary/50"
         >
           <div>
             <Textarea
@@ -152,14 +152,14 @@ export function EditableUserMessage({
               onKeyDown={handleKeyDown}
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
-              className="max-h-[160px] resize-none border-0 focus-visible:ring-0 shadow-none bg-primary text-sm"
+              className="max-h-[160px] resize-none border-0 focus-visible:ring-0 shadow-none !bg-secondary text-sm"
               disabled={isSaving}
               placeholder="Edit your message..."
             />
             <div className="flex gap-2 py-3 justify-between items-start">
               <div className="flex gap-2 items-start">
                 <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0 mt-0.5" />
-                <span className="text-xs text-primary-foreground/80">
+                <span className="text-xs text-muted-foreground">
                   Editing this message will <strong>regenerate</strong> the
                   response and <strong>remove</strong> all subsequent messages.
                 </span>
@@ -204,7 +204,10 @@ export function EditableUserMessage({
     >
       <div
         data-message-focus-surface
-        className="relative flex w-full flex-col items-end transition-transform duration-150 ease-out motion-reduce:transform-none"
+        className={cn(
+          "relative flex w-full flex-col items-end transition-transform duration-150 ease-out motion-reduce:transform-none",
+          text && "pb-9",
+        )}
       >
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
@@ -249,7 +252,7 @@ export function EditableUserMessage({
         )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <MessageContent>
+          <MessageContent variant="flat">
             <UserMessageText text={text} />
           </MessageContent>
         )}
@@ -262,7 +265,7 @@ export function EditableUserMessage({
             isRegenerateConfirming={isRegenerateConfirming}
             editDisabled={editDisabled}
             className={cn(
-              "absolute -bottom-1 right-0 translate-y-full z-10 transition-opacity",
+              "absolute bottom-0 -right-1.5 z-10 transition-opacity",
               isRegenerateConfirming
                 ? "opacity-100 pointer-events-auto"
                 : "opacity-0 pointer-events-none group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto",

@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
-import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ai-elements/conversation", () => ({
@@ -994,13 +994,16 @@ describe("ChatMessages", () => {
     const navigableMessages = screen.getAllByLabelText(/Message \d+ of \d+/);
 
     expect(navigableMessages).toHaveLength(2);
-    expect(navigableMessages[0]).toHaveClass(
-      "rounded-2xl",
+    expect(navigableMessages[0]).toHaveClass("rounded-2xl");
+    expect(navigableMessages[0]).not.toHaveClass(
       "focus:bg-accent/30",
       "focus:shadow-sm",
+      "focus:[&_[data-message-actions]]:opacity-100",
+      "focus:[&_[data-message-actions]]:pointer-events-auto",
       "focus:[&_[data-message-focus-surface]]:-translate-x-2",
     );
-    expect(navigableMessages[1]).toHaveClass(
+    expect(navigableMessages[1]).toHaveClass("-mt-7", "pt-7");
+    expect(navigableMessages[1]).not.toHaveClass(
       "focus:[&_[data-message-focus-surface]]:translate-x-2",
     );
     expect(screen.getByTestId("inline-chat-error")).not.toHaveAttribute(
@@ -1008,7 +1011,7 @@ describe("ChatMessages", () => {
     );
   });
 
-  it("moves focus between messages with arrow keys and stops at the ends", () => {
+  it("moves focus between messages with shift arrow keys and stops at the ends", () => {
     const messages = [
       {
         id: "user-1",
@@ -1035,28 +1038,45 @@ describe("ChatMessages", () => {
       />,
     );
 
-    const [firstMessage, secondMessage, thirdMessage] = screen.getAllByLabelText(
-      /Message \d+ of \d+/,
-    );
+    const [firstMessage, secondMessage, thirdMessage] =
+      screen.getAllByLabelText(/Message \d+ of \d+/);
 
     firstMessage.focus();
+    expect(firstMessage).not.toHaveClass("focus:bg-accent/30");
+
     fireEvent.keyDown(firstMessage, { key: "ArrowUp" });
     expect(firstMessage).toHaveFocus();
 
     fireEvent.keyDown(firstMessage, { key: "ArrowDown" });
+    expect(firstMessage).toHaveFocus();
+
+    fireEvent.keyDown(firstMessage, { key: "ArrowUp", shiftKey: true });
+    expect(firstMessage).toHaveFocus();
+    expect(firstMessage).toHaveClass(
+      "focus:bg-accent/30",
+      "focus:[&_[data-message-focus-surface]]:-translate-x-2",
+    );
+
+    fireEvent.keyDown(firstMessage, { key: "ArrowDown", shiftKey: true });
     expect(secondMessage).toHaveFocus();
+    expect(secondMessage).toHaveClass(
+      "focus:bg-accent/30",
+      "focus:[&_[data-message-actions]]:opacity-100",
+      "focus:[&_[data-message-actions]]:pointer-events-auto",
+      "focus:[&_[data-message-focus-surface]]:translate-x-2",
+    );
 
-    fireEvent.keyDown(secondMessage, { key: "ArrowDown" });
+    fireEvent.keyDown(secondMessage, { key: "ArrowDown", shiftKey: true });
     expect(thirdMessage).toHaveFocus();
 
-    fireEvent.keyDown(thirdMessage, { key: "ArrowDown" });
+    fireEvent.keyDown(thirdMessage, { key: "ArrowDown", shiftKey: true });
     expect(thirdMessage).toHaveFocus();
 
-    fireEvent.keyDown(thirdMessage, { key: "ArrowUp" });
+    fireEvent.keyDown(thirdMessage, { key: "ArrowUp", shiftKey: true });
     expect(secondMessage).toHaveFocus();
   });
 
-  it("moves focus to the prompt textarea when arrowing down from the last message", () => {
+  it("moves focus to the prompt textarea when shift arrowing down from the last message", () => {
     const promptTextarea = document.createElement("textarea");
     document.body.append(promptTextarea);
     const promptTextareaRef = { current: promptTextarea };
@@ -1086,12 +1106,15 @@ describe("ChatMessages", () => {
     lastMessage.focus();
 
     fireEvent.keyDown(lastMessage, { key: "ArrowDown" });
+    expect(lastMessage).toHaveFocus();
+
+    fireEvent.keyDown(lastMessage, { key: "ArrowDown", shiftKey: true });
 
     expect(promptTextarea).toHaveFocus();
     promptTextarea.remove();
   });
 
-  it("moves focus to the next message when a nested message action is focused", () => {
+  it("moves focus to the next message with shift arrow when a nested message action is focused", () => {
     const messages = [
       {
         id: "user-1",
@@ -1120,6 +1143,9 @@ describe("ChatMessages", () => {
 
     actionButton.focus();
     fireEvent.keyDown(actionButton, { key: "ArrowDown" });
+    expect(actionButton).toHaveFocus();
+
+    fireEvent.keyDown(actionButton, { key: "ArrowDown", shiftKey: true });
 
     expect(secondMessage).toHaveFocus();
   });

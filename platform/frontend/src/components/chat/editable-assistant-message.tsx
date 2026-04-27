@@ -15,6 +15,7 @@ import { KnowledgeGraphCitations } from "@/components/chat/knowledge-graph-citat
 import { MessageActions } from "@/components/chat/message-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 interface EditableAssistantMessageProps {
   messageId: string;
@@ -170,9 +171,12 @@ export function EditableAssistantMessage({
     <Message from="assistant" className="group/message">
       <div
         data-message-focus-surface
-        className="relative flex w-full flex-col items-start transition-transform duration-150 ease-out motion-reduce:transform-none"
+        className={cn(
+          "relative flex w-full flex-col items-start transition-transform duration-150 ease-out motion-reduce:transform-none",
+          showActions && "pb-9",
+        )}
       >
-        <MessageContent>
+        <MessageContent variant="flat">
           <Response isStreaming={isStreaming}>{text}</Response>
           {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
         </MessageContent>
@@ -181,7 +185,7 @@ export function EditableAssistantMessage({
             textToCopy={text}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
-            className="absolute -bottom-1 left-0 translate-y-full z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto"
+            className="absolute bottom-0 -left-1.5 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto"
           />
         )}
       </div>

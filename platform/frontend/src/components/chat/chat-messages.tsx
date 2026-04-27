@@ -18,13 +18,13 @@ import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import {
   Fragment,
+  type MutableRefObject,
   memo,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
-  type MutableRefObject,
-  type RefObject,
   useRef,
   useState,
 } from "react";
@@ -399,14 +399,6 @@ export function ChatMessages({
     [messages],
   );
 
-  if (messages.length === 0 && chatErrors.length === 0) {
-    // Don't show "start conversation" message while loading - prevents flash of empty state
-    if (isLoadingConversation) {
-      return null;
-    }
-    return null;
-  }
-
   // Find the index of the message being edited
   const editingMessageIndex = editingMessageId
     ? messages.findIndex((m) => m.id === editingMessageId)
@@ -469,10 +461,17 @@ export function ChatMessages({
     chatErrors.some(
       (chatError) => chatError.error.message === liveErrorMessage,
     );
+  const [
+    isKeyboardMessageNavigationActive,
+    setIsKeyboardMessageNavigationActive,
+  ] = useState(false);
 
   const handleConversationKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      if (
+        !event.shiftKey ||
+        (event.key !== "ArrowUp" && event.key !== "ArrowDown")
+      ) {
         return;
       }
 
@@ -499,6 +498,8 @@ export function ChatMessages({
       if (currentIndex === -1) {
         return;
       }
+
+      setIsKeyboardMessageNavigationActive(true);
 
       const offset = event.key === "ArrowDown" ? 1 : -1;
       const nextMessage = navigableMessages[currentIndex + offset];
@@ -566,11 +567,20 @@ export function ChatMessages({
     };
   }, [focusLastMessageRef, focusLastNavigableMessage]);
 
+  if (messages.length === 0 && chatErrors.length === 0) {
+    // Don't show "start conversation" message while loading - prevents flash of empty state
+    if (isLoadingConversation) {
+      return null;
+    }
+    return null;
+  }
+
   return (
     <Conversation
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
       onKeyDown={handleConversationKeyDown}
+      onPointerDown={() => setIsKeyboardMessageNavigationActive(false)}
     >
       <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
@@ -607,7 +617,7 @@ export function ChatMessages({
               navigableMessageIndexMap.get(idx) ?? null;
 
             return (
-              <div
+              <article
                 key={message.id || idx}
                 data-message-nav-id={
                   navigableMessagePosition !== null
@@ -622,13 +632,21 @@ export function ChatMessages({
                 }
                 className={cn(
                   navigableMessagePosition !== null &&
-                    "rounded-2xl transition-[background-color,box-shadow,opacity] duration-150 ease-out focus:outline-none focus:bg-accent/30 focus:shadow-sm motion-reduce:transform-none",
+                    "rounded-2xl transition-[background-color,box-shadow,opacity] duration-150 ease-out focus:outline-none motion-reduce:transform-none",
                   navigableMessagePosition !== null &&
+                    isKeyboardMessageNavigationActive &&
+                    "focus:bg-accent/30 focus:shadow-sm focus:[&_[data-message-actions]]:opacity-100 focus:[&_[data-message-actions]]:pointer-events-auto",
+                  navigableMessagePosition !== null &&
+                    isKeyboardMessageNavigationActive &&
                     message.role === "user" &&
                     "focus:[&_[data-message-focus-surface]]:-translate-x-2",
                   navigableMessagePosition !== null &&
+                    isKeyboardMessageNavigationActive &&
                     message.role === "assistant" &&
                     "focus:[&_[data-message-focus-surface]]:translate-x-2",
+                  navigableMessagePosition !== null &&
+                    navigableMessagePosition > 0 &&
+                    "-mt-7 pt-7",
                   isDimmed && "opacity-40 transition-opacity",
                 )}
               >
@@ -1321,7 +1339,7 @@ export function ChatMessages({
                     hasToolError={hasSwapToolError}
                   />
                 )}
-              </div>
+              </article>
             );
           })}
           {/* Inline error display */}

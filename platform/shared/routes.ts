@@ -245,6 +245,12 @@ export const RouteId = {
   AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
   AzureResponsesWithAgent: "azureResponsesWithAgent",
 
+  // Proxy Routes - Unified
+  UnifiedChatCompletionsWithDefaultAgent:
+    "unifiedChatCompletionsWithDefaultAgent",
+  UnifiedChatCompletionsWithAgent: "unifiedChatCompletionsWithAgent",
+  UnifiedModels: "unifiedModels",
+
   // Chat Routes
   StreamChat: "streamChat",
   StopChatStream: "stopChatStream",

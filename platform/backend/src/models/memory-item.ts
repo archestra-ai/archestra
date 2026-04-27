@@ -508,6 +508,7 @@ class MemoryItemModel {
             organizationId: params.organizationId,
             teamIds,
             includeOrganizationScope: params.includeOrganizationScope ?? false,
+            isOrgAdmin: false,
           }),
           orphanedRecordPredicate ? not(orphanedRecordPredicate) : sql`true`,
         ),
@@ -563,6 +564,7 @@ class MemoryItemModel {
         organizationId: params.organizationId,
         teamIds,
         includeOrganizationScope: params.isOrgAdmin,
+        isOrgAdmin: params.isOrgAdmin,
       }),
     ];
 
@@ -597,6 +599,7 @@ class MemoryItemModel {
     organizationId: string;
     teamIds: string[];
     includeOrganizationScope: boolean;
+    isOrgAdmin: boolean;
   }): SQL {
     const scopePredicates: SQL[] = [
       and(
@@ -605,7 +608,12 @@ class MemoryItemModel {
       ) as SQL,
     ];
 
-    if (params.teamIds.length > 0) {
+    if (params.isOrgAdmin) {
+      // org-admin sees all team-scope items in the organization without requiring team membership
+      scopePredicates.push(
+        eq(schema.memoryItemsTable.scopeType, "team") as SQL,
+      );
+    } else if (params.teamIds.length > 0) {
       scopePredicates.push(
         and(
           eq(schema.memoryItemsTable.scopeType, "team"),
@@ -644,7 +652,12 @@ class MemoryItemModel {
       ) as SQL,
     ];
 
-    if (
+    if (normalizedRequesterRole === "admin") {
+      // admin sees all pending team-scope items in the organization without requiring team membership
+      scopePredicates.push(
+        eq(schema.memoryItemsTable.scopeType, "team") as SQL,
+      );
+    } else if (
       MemoryItemModel.canReviewTeamScope(normalizedRequesterRole) &&
       params.teamIds.length > 0
     ) {

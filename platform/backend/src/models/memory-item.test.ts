@@ -178,6 +178,20 @@ describe("MemoryItemModel", () => {
       "team",
     ]);
 
+    // admin without explicit team membership must still see all team-scope items
+    const adminVisibleNoTeams = await MemoryItemModel.listForUser({
+      userId: adminUser.id,
+      organizationId: organization.id,
+      teamIds: [],
+      isOrgAdmin: true,
+      limit: 20,
+      offset: 0,
+    });
+    expect(adminVisibleNoTeams.map((item) => item.scopeType).sort()).toEqual([
+      "organization",
+      "team",
+    ]);
+
     const searchCount = await MemoryItemModel.countForUser({
       userId: memberUser.id,
       organizationId: organization.id,
@@ -254,6 +268,15 @@ describe("MemoryItemModel", () => {
       teamIds: [team.id],
     });
     expect(orgAdminCount).toBe(2);
+
+    // admin without team membership must still see all team-scope pending items
+    const orgAdminCountNoTeams = await MemoryItemModel.countPendingReview({
+      organizationId: organization.id,
+      requesterUserId: orgAdminUser.id,
+      requesterRole: "admin",
+      teamIds: [],
+    });
+    expect(orgAdminCountNoTeams).toBe(2);
   });
 
   test("supports includeOrganizationScope in retrieval and excludes source-deleted", async ({
@@ -463,6 +486,48 @@ describe("MemoryItemModel", () => {
       idempotencyKey: "idem-1",
     });
     expect(exists).toBe(true);
+  });
+
+  test("team-admin without team membership cannot see other team items", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const teamAdmin = await makeUser();
+    const otherTeamOwner = await makeUser();
+    const otherTeam = await makeTeam(organization.id, otherTeamOwner.id);
+
+    await makeMember(teamAdmin.id, organization.id, { role: "member" });
+    await makeMember(otherTeamOwner.id, organization.id, { role: "member" });
+
+    await createMemoryItem({
+      organizationId: organization.id,
+      scopeType: "team",
+      scopeId: otherTeam.id,
+      status: "candidate",
+      content: "Secret team convention",
+      createdBy: otherTeamOwner.id,
+    });
+
+    const count = await MemoryItemModel.countPendingReview({
+      organizationId: organization.id,
+      requesterUserId: teamAdmin.id,
+      requesterRole: "team admin",
+      teamIds: [],
+    });
+    expect(count).toBe(0);
+
+    const list = await MemoryItemModel.listForUser({
+      userId: teamAdmin.id,
+      organizationId: organization.id,
+      teamIds: [],
+      isOrgAdmin: false,
+      limit: 20,
+      offset: 0,
+    });
+    expect(list.filter((item) => item.scopeType === "team")).toHaveLength(0);
   });
 });
 

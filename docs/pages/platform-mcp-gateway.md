@@ -41,6 +41,8 @@ In **Manual** mode, an admin picks each tool individually. Each assignment can b
 
 In **Automatic** mode, the gateway's tools are derived from labels. The gateway receives every tool from every [catalog entry](/docs/platform-private-registry#labels) that shares at least one `key: value` label pair with the gateway. For example, a gateway labeled `department: finance` automatically receives tools from every MCP catalog item tagged `department: finance`. These tools are kept in sync when labels are changed or new catalog items are added.
 
+When Automatic mode is used together with [Search-and-run tool mode](#search-and-run-tool-mode), matched tools are not exposed directly through MCP `tools/list`. The label-matched catalog tools define the full set of tools that `search_tools` can discover and `run_tool` can execute behind the scenes.
+
 **Automatic** mode puts some constraints on upstream MCP servers:
 
 1. The gateway will inherit _all_ tools from matched catalog items, not a configurable subset of the MCP server tools.

@@ -12,9 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   AgentScope,
-  AgentToolAssignmentMode,
   AgentType,
   BuiltInAgentConfig,
+  ToolAssignmentMode,
   ToolExposureMode,
 } from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
@@ -81,13 +81,6 @@ const agentsTable = pgTable(
     /** Allowed domain for 'internal' security mode (e.g., 'example.com') */
     incomingEmailAllowedDomain: text("incoming_email_allowed_domain"),
 
-    // Tool assignment mode settings
-    /** Tool assignment mode for the agent */
-    toolAssignmentMode: text("tool_assignment_mode")
-      .$type<AgentToolAssignmentMode>()
-      .notNull()
-      .default("manual"),
-
     // LLM configuration (allows per-agent model selection)
     /** API key ID for LLM calls */
     llmApiKeyId: uuid("llm_api_key_id").references(
@@ -113,6 +106,12 @@ const agentsTable = pgTable(
       .$type<ToolExposureMode>()
       .notNull()
       .default("full"),
+
+    /** Whether tools are assigned manually by an admin or automatically derived from catalog labels for MCP gateways */
+    toolAssignmentMode: text("tool_assignment_mode")
+      .$type<ToolAssignmentMode>()
+      .notNull()
+      .default("manual"),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(

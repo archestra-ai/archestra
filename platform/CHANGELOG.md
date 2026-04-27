@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.25](https://github.com/archestra-ai/archestra/compare/platform-v1.2.24...platform-v1.2.25) (2026-04-27)
+
+
+### Bug Fixes
+
+* chat permissions ([#4139](https://github.com/archestra-ai/archestra/issues/4139)) ([8d57729](https://github.com/archestra-ai/archestra/commit/8d57729a0c27f1c45c360e484efcba582b373167))
+
 ## [1.2.24](https://github.com/archestra-ai/archestra/compare/platform-v1.2.23...platform-v1.2.24) (2026-04-24)
 
 

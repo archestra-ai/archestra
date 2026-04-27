@@ -655,10 +655,7 @@ export function AgentDialog({
   );
   const gatewayLabelsDocsUrl =
     agentType === "mcp_gateway"
-      ? getFrontendDocsUrl(
-          DocsPage.PlatformMcpGateway,
-          "tool-assignment-mode",
-        )
+      ? getFrontendDocsUrl(DocsPage.PlatformMcpGateway, "tool-assignment-mode")
       : null;
   const showPrimarySettingsCard =
     !isBuiltIn ||

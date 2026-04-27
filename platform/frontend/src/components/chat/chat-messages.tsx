@@ -173,6 +173,30 @@ function isToolPart(part: any): part is {
   );
 }
 
+function ChatScrollButton({
+  assistantMessageCount,
+}: {
+  assistantMessageCount: number;
+}) {
+  const { isAtBottom } = useStickToBottomContext();
+  const lastSeenCountRef = useRef(assistantMessageCount);
+
+  useEffect(() => {
+    if (isAtBottom) {
+      lastSeenCountRef.current = assistantMessageCount;
+    }
+  }, [isAtBottom, assistantMessageCount]);
+
+  const hasNewMessages =
+    !isAtBottom && assistantMessageCount > lastSeenCountRef.current;
+
+  return (
+    <ConversationScrollButton
+      label={hasNewMessages ? "New messages" : undefined}
+    />
+  );
+}
+
 export function ChatMessages({
   conversationId,
   agentId,
@@ -193,6 +217,7 @@ export function ChatMessages({
   unsafeContextBoundary,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
+  const isSubmittedIndicatorVisible = useDelayedSubmittedIndicator(status);
   const { data: authSession } = useSession();
   const isDebugging = authSession?.user?.name?.endsWith("(debugging)") ?? false;
 
@@ -582,7 +607,7 @@ export function ChatMessages({
       onKeyDown={handleConversationKeyDown}
       onPointerDown={() => setIsKeyboardMessageNavigationActive(false)}
     >
-      <ScrollToBottomOnSubmit status={status} />
+      <ScrollToBottomOnSubmit messages={messages} status={status} />
       <ConversationContent>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
@@ -1376,7 +1401,7 @@ export function ChatMessages({
               toolIconMap={toolIconMap}
             />
           ))}
-          {(status === "submitted" ||
+          {((status === "submitted" && isSubmittedIndicatorVisible) ||
             (status === "streaming" && isStreamingStalled)) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
@@ -1477,48 +1502,60 @@ function useStreamingStallDetection(
   return isStreamingStalled;
 }
 
+function useDelayedSubmittedIndicator(status: ChatStatus): boolean {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (status !== "submitted") {
+      setIsVisible(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => setIsVisible(true), 250);
+    return () => clearTimeout(timeout);
+  }, [status]);
+
+  return isVisible;
+}
+
 // Re-engage stick-to-bottom when the user sends a new message.
 // If the user has scrolled up, the library keeps state.isAtBottom=false and
 // won't auto-scroll on content resize — this resets it on the submit transition.
-function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
+function ScrollToBottomOnSubmit({
+  messages,
+  status,
+}: {
+  messages: UIMessage[];
+  status: ChatStatus;
+}) {
   const { scrollToBottom } = useStickToBottomContext();
   const prevStatusRef = useRef(status);
+  const lastSubmittedUserMessageIdRef = useRef(getLastUserMessageId(messages));
 
   useEffect(() => {
     if (status === "submitted" && prevStatusRef.current !== "submitted") {
-      scrollToBottom();
+      const lastUserMessageId = getLastUserMessageId(messages);
+      if (
+        lastUserMessageId &&
+        lastUserMessageId !== lastSubmittedUserMessageIdRef.current
+      ) {
+        scrollToBottom();
+      }
+      lastSubmittedUserMessageIdRef.current = lastUserMessageId;
+    }
+
+    if (status === "ready") {
+      lastSubmittedUserMessageIdRef.current = getLastUserMessageId(messages);
     }
 
     prevStatusRef.current = status;
-  }, [status, scrollToBottom]);
+  }, [messages, status, scrollToBottom]);
 
   return null;
 }
 
-// Scroll-to-bottom FAB with a "New messages" label when a new assistant
-// message has arrived while the user is scrolled up.
-function ChatScrollButton({
-  assistantMessageCount,
-}: {
-  assistantMessageCount: number;
-}) {
-  const { isAtBottom } = useStickToBottomContext();
-  const lastSeenCountRef = useRef(assistantMessageCount);
-
-  useEffect(() => {
-    if (isAtBottom) {
-      lastSeenCountRef.current = assistantMessageCount;
-    }
-  }, [isAtBottom, assistantMessageCount]);
-
-  const hasNewMessages =
-    !isAtBottom && assistantMessageCount > lastSeenCountRef.current;
-
-  return (
-    <ConversationScrollButton
-      label={hasNewMessages ? "New messages" : undefined}
-    />
-  );
+function getLastUserMessageId(messages: UIMessage[]): string | undefined {
+  return [...messages].reverse().find((message) => message.role === "user")?.id;
 }
 
 const MessageTool = memo(

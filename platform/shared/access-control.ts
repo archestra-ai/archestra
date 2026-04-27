@@ -649,6 +649,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StopChatStream]: {
     chat: ["read"],
   },
+  [RouteId.GetActiveChatRun]: {
+    chat: ["read"],
+  },
   [RouteId.GetChatConversations]: {
     chat: ["read"],
   },

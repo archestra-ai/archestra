@@ -106,8 +106,19 @@ describe("POST /api/chat slim error payload", () => {
           callback(),
       );
       mockCreateUIMessageStream.mockImplementation(
-        ({ onError }: { onError: (error: Error) => string }) =>
-          onError(new Error("Failed to fetch")),
+        ({ onError }: { onError: (error: Error) => string }) => {
+          const errorPayload = onError(new Error("Failed to fetch"));
+          return {
+            tee: () => [
+              errorPayload,
+              new ReadableStream({
+                start(controller) {
+                  controller.close();
+                },
+              }),
+            ],
+          };
+        },
       );
       mockCreateUIMessageStreamResponse.mockImplementation(
         ({ stream }: { stream: string }) =>

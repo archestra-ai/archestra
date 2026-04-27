@@ -16,6 +16,7 @@ import {
   stepCountIs,
   streamText,
   type UIMessage,
+  type UIMessageChunk,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -39,6 +40,7 @@ import { browserStreamFeature } from "@/features/browser-stream/services/browser
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import logger from "@/logging";
 import {
+  ActiveChatRunModel,
   AgentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
@@ -51,6 +53,10 @@ import {
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
+import {
+  ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
+  activeChatRunService,
+} from "@/services/active-chat-run";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -140,6 +146,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       } = request;
       const chatAbortController = new AbortController();
+      let activeRunError: string | null = null;
 
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
@@ -191,228 +198,253 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const { agentId, agent } = conversation;
-
-      // Extract and ingest documents to agent's knowledge base (fire and forget)
-      // This runs asynchronously to avoid blocking the chat response
-      extractAndIngestDocuments(messages, agentId).catch((error) => {
-        logger.warn(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[Chat] Background document ingestion failed",
-        );
+      const activeRun = await activeChatRunService.createRun({
+        conversationId,
+        userId: user.id,
+        organizationId,
       });
 
-      const externalAgentId = agentId;
+      if (!activeRun) {
+        throw new ApiError(
+          409,
+          "This conversation already has an active response. Stop it before sending another message.",
+        );
+      }
 
-      // Fetch enabled tool IDs and custom selection status in parallel
-      const [enabledToolIds, hasCustomSelection, slimChatErrorUi] =
-        await Promise.all([
-          ConversationEnabledToolModel.findByConversation(conversationId),
-          ConversationEnabledToolModel.hasCustomSelection(conversationId),
-          OrganizationModel.getSlimChatErrorUi(organizationId),
+      const stopActiveRunPolling = activeChatRunService.startStopPolling({
+        runId: activeRun.id,
+        conversationId,
+        abortController: chatAbortController,
+      });
+
+      try {
+        const { agentId, agent } = conversation;
+
+        // Extract and ingest documents to agent's knowledge base (fire and forget)
+        // This runs asynchronously to avoid blocking the chat response
+        extractAndIngestDocuments(messages, agentId).catch((error) => {
+          logger.warn(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[Chat] Background document ingestion failed",
+          );
+        });
+
+        const externalAgentId = agentId;
+
+        // Fetch enabled tool IDs and custom selection status in parallel
+        const [enabledToolIds, hasCustomSelection, slimChatErrorUi] =
+          await Promise.all([
+            ConversationEnabledToolModel.findByConversation(conversationId),
+            ConversationEnabledToolModel.hasCustomSelection(conversationId),
+            OrganizationModel.getSlimChatErrorUi(organizationId),
+          ]);
+
+        // Fetch MCP tools with enabled tool filtering
+        // Pass undefined if no custom selection (use all tools)
+        // Pass the actual array (even if empty) if there is custom selection
+        const [mcpTools, toolUiResourceUris] = await Promise.all([
+          getChatMcpTools({
+            agentName: agent.name,
+            agentId,
+            userId: user.id,
+            enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
+            conversationId: conversation.id,
+            organizationId,
+            // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
+            sessionId: conversation.id,
+            // Pass agentId as initial delegation chain (will be extended by delegated agents)
+            delegationChain: agentId,
+            abortSignal: chatAbortController.signal,
+            user: { id: user.id, email: user.email, name: user.name },
+          }),
+          getChatMcpToolUiResourceUris(conversation.agentId),
         ]);
 
-      // Fetch MCP tools with enabled tool filtering
-      // Pass undefined if no custom selection (use all tools)
-      // Pass the actual array (even if empty) if there is custom selection
-      const [mcpTools, toolUiResourceUris] = await Promise.all([
-        getChatMcpTools({
-          agentName: agent.name,
-          agentId,
-          userId: user.id,
-          enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
-          conversationId: conversation.id,
-          organizationId,
-          // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
-          sessionId: conversation.id,
-          // Pass agentId as initial delegation chain (will be extended by delegated agents)
-          delegationChain: agentId,
-          abortSignal: chatAbortController.signal,
-          user: { id: user.id, email: user.email, name: user.name },
-        }),
-        getChatMcpToolUiResourceUris(conversation.agentId),
-      ]);
+        // Build system prompt from agent's systemPrompt field
+        let systemPrompt: string | undefined;
 
-      // Build system prompt from agent's systemPrompt field
-      let systemPrompt: string | undefined;
+        // Build template context only when prompts use Handlebars syntax
+        let promptContext: UserSystemPromptContext | null = null;
+        if (promptNeedsRendering(agent.systemPrompt)) {
+          const userTeams = await TeamModel.getUserTeams(user.id);
+          promptContext = buildUserSystemPromptContext({
+            userName: user.name,
+            userEmail: user.email,
+            userTeams: userTeams.map((t) => t.name),
+          });
+        }
 
-      // Build template context only when prompts use Handlebars syntax
-      let promptContext: UserSystemPromptContext | null = null;
-      if (promptNeedsRendering(agent.systemPrompt)) {
-        const userTeams = await TeamModel.getUserTeams(user.id);
-        promptContext = buildUserSystemPromptContext({
-          userName: user.name,
-          userEmail: user.email,
-          userTeams: userTeams.map((t) => t.name),
-        });
-      }
+        const renderedPrompt = renderSystemPrompt(
+          agent.systemPrompt,
+          promptContext,
+        );
 
-      const renderedPrompt = renderSystemPrompt(
-        agent.systemPrompt,
-        promptContext,
-      );
+        let toolResultInstructions: string = "";
+        // Add MCP UI instruction when tools are available
+        if (Object.keys(mcpTools).length > 0) {
+          toolResultInstructions =
+            "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
+        }
 
-      let toolResultInstructions: string = "";
-      // Add MCP UI instruction when tools are available
-      if (Object.keys(mcpTools).length > 0) {
-        toolResultInstructions =
-          "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
-      }
+        const toolDenialInstruction =
+          "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
-      const toolDenialInstruction =
-        "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+        systemPrompt =
+          [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+            .filter(Boolean)
+            .join("\n\n") || undefined;
 
-      systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
-          .filter(Boolean)
-          .join("\n\n") || undefined;
+        // Use stored provider if available, otherwise detect from model name for backward compatibility
+        // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
+        // so we can safely use detectProviderFromModel for them.
+        const provider = isSupportedProvider(conversation.selectedProvider)
+          ? conversation.selectedProvider
+          : detectProviderFromModel(conversation.selectedModel);
 
-      // Use stored provider if available, otherwise detect from model name for backward compatibility
-      // At the moment of migration, all supported providers (anthropic, openai, gemini) serve different models,
-      // so we can safely use detectProviderFromModel for them.
-      const provider = isSupportedProvider(conversation.selectedProvider)
-        ? conversation.selectedProvider
-        : detectProviderFromModel(conversation.selectedModel);
-
-      logger.info(
-        {
-          conversationId,
-          agentId,
-          userId: user.id,
-          orgId: organizationId,
-          toolCount: Object.keys(mcpTools).length,
-          hasCustomToolSelection: hasCustomSelection,
-          enabledToolCount: hasCustomSelection ? enabledToolIds.length : "all",
-          model: conversation.selectedModel,
-          provider,
-          providerSource: conversation.selectedProvider ? "stored" : "detected",
-          hasSystemPrompt: !!systemPrompt,
-          externalAgentId,
-        },
-        "Starting chat stream",
-      );
-
-      // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
-      // and MCP tool executions appear as children of a single trace.
-      return startActiveChatSpan({
-        agentName: agent.name,
-        agentId,
-        sessionId: conversationId,
-        user: { id: user.id, email: user.email, name: user.name },
-        callback: async () => {
-          // Create LLM model using shared service
-          // Pass conversationId as sessionId to group all requests in this chat session
-          // Pass agent's llmApiKeyId so it can be used without user access check
-          const { model } = await createLLMModelForAgent({
-            organizationId,
-            userId: user.id,
+        logger.info(
+          {
+            conversationId,
             agentId,
+            userId: user.id,
+            orgId: organizationId,
+            toolCount: Object.keys(mcpTools).length,
+            hasCustomToolSelection: hasCustomSelection,
+            enabledToolCount: hasCustomSelection
+              ? enabledToolIds.length
+              : "all",
             model: conversation.selectedModel,
             provider,
-            conversationId,
+            providerSource: conversation.selectedProvider
+              ? "stored"
+              : "detected",
+            hasSystemPrompt: !!systemPrompt,
             externalAgentId,
-            sessionId: conversationId,
-            source: "chat",
-            agentLlmApiKeyId: agent.llmApiKeyId,
-          });
+          },
+          "Starting chat stream",
+        );
 
-          // Normalize chat history before replaying it to the model.
-          // This dedupes repeated tool parts, drops dangling interrupted tool calls,
-          // and strips heavy image/browser payloads that would otherwise bloat context.
-          const normalizedMessagesForLLM = normalizeChatMessages(
-            messages as ChatMessage[],
-          );
-          const providerPreparedMessages = prepareMessagesForProvider({
-            messages: normalizedMessagesForLLM,
-            provider,
-          });
+        // Wrap the entire chat turn in a parent span so LLM calls (via proxy)
+        // and MCP tool executions appear as children of a single trace.
+        return startActiveChatSpan({
+          agentName: agent.name,
+          agentId,
+          sessionId: conversationId,
+          user: { id: user.id, email: user.email, name: user.name },
+          callback: async () => {
+            // Create LLM model using shared service
+            // Pass conversationId as sessionId to group all requests in this chat session
+            // Pass agent's llmApiKeyId so it can be used without user access check
+            const { model } = await createLLMModelForAgent({
+              organizationId,
+              userId: user.id,
+              agentId,
+              model: conversation.selectedModel,
+              provider,
+              conversationId,
+              externalAgentId,
+              sessionId: conversationId,
+              source: "chat",
+              agentLlmApiKeyId: agent.llmApiKeyId,
+            });
 
-          // Stream with AI SDK
-          // Build streamText config conditionally
-          // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime
-          const modelMessages = await convertToModelMessages(
-            providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
-          );
+            // Normalize chat history before replaying it to the model.
+            // This dedupes repeated tool parts, drops dangling interrupted tool calls,
+            // and strips heavy image/browser payloads that would otherwise bloat context.
+            const normalizedMessagesForLLM = normalizeChatMessages(
+              messages as ChatMessage[],
+            );
+            const providerPreparedMessages = prepareMessagesForProvider({
+              messages: normalizedMessagesForLLM,
+              provider,
+            });
 
-          // Perplexity does NOT support tool calling - it has built-in web search instead
-          // @see https://docs.perplexity.ai/api-reference/chat-completions-post
-          const supportsToolCalling = provider !== "perplexity";
+            // Stream with AI SDK
+            // Build streamText config conditionally
+            // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime
+            const modelMessages = await convertToModelMessages(
+              providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
+            );
 
-          const streamTextConfig: Parameters<typeof streamText>[0] = {
-            model,
-            messages: modelMessages,
-            ...(supportsToolCalling && { tools: mcpTools }),
-            stopWhen: buildChatStopConditions(),
-            abortSignal: chatAbortController.signal,
-            onFinish: async ({ usage, finishReason }) => {
-              removeAbortListeners();
-              logger.info(
-                {
-                  conversationId,
-                  usage,
-                  finishReason,
-                },
-                "Chat stream finished",
-              );
-            },
-          };
+            // Perplexity does NOT support tool calling - it has built-in web search instead
+            // @see https://docs.perplexity.ai/api-reference/chat-completions-post
+            const supportsToolCalling = provider !== "perplexity";
 
-          // Only include system property if we have actual content
-          if (systemPrompt) {
-            streamTextConfig.system = systemPrompt;
-          }
-
-          // For Gemini image generation models, enable image output via responseModalities
-          // Known image-capable model patterns:
-          // - gemini-2.0-flash-exp-image-generation
-          // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
-          // - gemini-2.5-flash-image
-          // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
-          // - Any model with "image" in the name (covers current and future image models)
-          //
-          // TODO: Use output modalities from the models DB table instead of hardcoded
-          // pattern matching. The `models` table has capability info that would be more
-          // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
-          // "capabilities unknown", so that needs to be fixed first.
-          const modelLower = conversation.selectedModel.toLowerCase();
-          const isGeminiImageModel =
-            provider === "gemini" &&
-            (modelLower.includes("image") ||
-              modelLower.includes("native-audio-dialog"));
-          if (isGeminiImageModel) {
-            streamTextConfig.providerOptions = {
-              google: {
-                responseModalities: ["TEXT", "IMAGE"],
+            const streamTextConfig: Parameters<typeof streamText>[0] = {
+              model,
+              messages: modelMessages,
+              ...(supportsToolCalling && { tools: mcpTools }),
+              stopWhen: buildChatStopConditions(),
+              abortSignal: chatAbortController.signal,
+              onFinish: async ({ usage, finishReason }) => {
+                removeAbortListeners();
+                stopActiveRunPolling();
+                logger.info(
+                  {
+                    conversationId,
+                    usage,
+                    finishReason,
+                  },
+                  "Chat stream finished",
+                );
               },
             };
-          }
 
-          // Persist user's new messages immediately so they're visible on page reload.
-          // Without this, a reload during streaming shows no messages because
-          // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
-          // saves messages beyond the existing count, so onFinish will only save
-          // the assistant response.
-          try {
-            await persistNewMessages(conversationId, messages, "earlyUserMsg");
-          } catch (error) {
-            logger.warn(
-              { error, conversationId },
-              "Failed to persist user messages early (will retry in onFinish)",
-            );
-          }
+            // Only include system property if we have actual content
+            if (systemPrompt) {
+              streamTextConfig.system = systemPrompt;
+            }
 
-          // Create stream with token usage data support
-          const response = createUIMessageStreamResponse({
-            headers: {
-              // Prevent compression middleware from buffering the stream
-              // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
-              "Content-Encoding": "none",
-            },
-            stream: createUIMessageStream({
+            // For Gemini image generation models, enable image output via responseModalities
+            // Known image-capable model patterns:
+            // - gemini-2.0-flash-exp-image-generation
+            // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
+            // - gemini-2.5-flash-image
+            // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
+            // - Any model with "image" in the name (covers current and future image models)
+            //
+            // TODO: Use output modalities from the models DB table instead of hardcoded
+            // pattern matching. The `models` table has capability info that would be more
+            // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
+            // "capabilities unknown", so that needs to be fixed first.
+            const modelLower = conversation.selectedModel.toLowerCase();
+            const isGeminiImageModel =
+              provider === "gemini" &&
+              (modelLower.includes("image") ||
+                modelLower.includes("native-audio-dialog"));
+            if (isGeminiImageModel) {
+              streamTextConfig.providerOptions = {
+                google: {
+                  responseModalities: ["TEXT", "IMAGE"],
+                },
+              };
+            }
+
+            // Persist user's new messages immediately so they're visible on page reload.
+            // Without this, a reload during streaming shows no messages because
+            // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
+            // saves messages beyond the existing count, so onFinish will only save
+            // the assistant response.
+            try {
+              await persistNewMessages(
+                conversationId,
+                messages,
+                "earlyUserMsg",
+              );
+            } catch (error) {
+              logger.warn(
+                { error, conversationId },
+                "Failed to persist user messages early (will retry in onFinish)",
+              );
+            }
+
+            // Create stream with token usage data support
+            const uiMessageStream = createUIMessageStream({
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
               onError: (error) => {
+                activeRunError =
+                  error instanceof Error ? error.message : String(error);
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
@@ -698,6 +730,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         );
                       }
 
+                      activeRunError =
+                        error instanceof Error ? error.message : String(error);
                       // Claim persistence before the async work below starts,
                       // otherwise onFinish can race and also persist (duplicates).
                       const shouldPersist =
@@ -761,6 +795,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                     onFinish: async ({ messages: finalMessages }) => {
                       removeAbortListeners();
+                      stopActiveRunPolling();
 
                       // Only persist if not already persisted by onError
                       if (!messagesPersisted && conversationId) {
@@ -815,32 +850,71 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 clearInterval(heartbeatInterval);
               },
-            }),
-          });
+            });
 
-          // Log response headers for debugging
-          logger.info(
-            {
+            const [responseStream, persistenceStream] = uiMessageStream.tee();
+            activeChatRunService.drainStreamToEvents({
+              runId: activeRun.id,
               conversationId,
-              headers: Object.fromEntries(response.headers.entries()),
-              hasBody: !!response.body,
-            },
-            "Streaming chat response",
-          );
+              stream: persistenceStream as ReadableStream<UIMessageChunk>,
+              getTerminalStatus: async () => {
+                const latestRun = await ActiveChatRunModel.findById(
+                  activeRun.id,
+                );
+                if (latestRun?.stopRequestedAt) {
+                  return { status: "cancelled" };
+                }
+                if (activeRunError) {
+                  return { status: "failed", error: activeRunError };
+                }
+                if (chatAbortController.signal.aborted) {
+                  return { status: "cancelled" };
+                }
+                return { status: "completed" };
+              },
+            });
 
-          // Copy headers from Response to Fastify reply
-          for (const [key, value] of response.headers.entries()) {
-            reply.header(key, value);
-          }
+            const response = createUIMessageStreamResponse({
+              headers: {
+                // Prevent compression middleware from buffering the stream
+                // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
+                "Content-Encoding": "none",
+              },
+              stream: responseStream as ReadableStream<UIMessageChunk>,
+            });
 
-          // Send the Response body stream directly
-          if (!response.body) {
-            throw new ApiError(400, "No response body");
-          }
-          // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-          return reply.send(response.body as any);
-        },
-      });
+            // Log response headers for debugging
+            logger.info(
+              {
+                conversationId,
+                headers: Object.fromEntries(response.headers.entries()),
+                hasBody: !!response.body,
+              },
+              "Streaming chat response",
+            );
+
+            // Copy headers from Response to Fastify reply
+            for (const [key, value] of response.headers.entries()) {
+              reply.header(key, value);
+            }
+
+            // Send the Response body stream directly
+            if (!response.body) {
+              throw new ApiError(400, "No response body");
+            }
+            // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
+            return reply.send(response.body as any);
+          },
+        });
+      } catch (error) {
+        stopActiveRunPolling();
+        await ActiveChatRunModel.markTerminal({
+          runId: activeRun.id,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
     },
   );
 
@@ -856,13 +930,77 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
+      await ActiveChatRunModel.requestStop(id);
+
       // Set stop flag in distributed cache so any pod can detect it on connection close.
       // When the frontend subsequently calls stop() to close the streaming connection,
       // the connection-close handler on the pod running the stream will find this flag
       // and abort the stream.
       const cacheKey = `${CacheKey.ChatStop}-${id}` as const;
-      await cacheManager.set(cacheKey, true, TimeInMs.Minute);
+      try {
+        await cacheManager.set(cacheKey, true, TimeInMs.Minute);
+      } catch (error) {
+        logger.warn(
+          { error, conversationId: id },
+          "Failed to set legacy chat stop cache flag",
+        );
+      }
       return reply.send({ stopped: true });
+    },
+  );
+
+  fastify.get(
+    "/api/chat/conversations/:id/active-run",
+    {
+      schema: {
+        operationId: RouteId.GetActiveChatRun,
+        description: "Reconnect to an active chat stream for a conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: {
+          204: z.undefined(),
+          ...ErrorResponsesSchema,
+        },
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const conversation = await ConversationModel.findAccessibleById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      const activeRun = await ActiveChatRunModel.findReplayableByConversation({
+        conversationId: id,
+        organizationId,
+        terminalGraceMs: ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
+      });
+
+      if (!activeRun) {
+        return reply.status(204).send();
+      }
+
+      const response = createUIMessageStreamResponse({
+        headers: {
+          "Content-Encoding": "none",
+        },
+        stream: activeChatRunService.createReplayStream(activeRun.id),
+      });
+
+      for (const [key, value] of response.headers.entries()) {
+        reply.header(key, value);
+      }
+
+      if (!response.body) {
+        throw new ApiError(400, "No response body");
+      }
+
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
+      return reply.send(response.body as any);
     },
   );
 

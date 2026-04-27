@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface with LLM API key configuration and MCP Apps support
-lastUpdated: 2026-03-11
+lastUpdated: 2026-04-27
 ---
 
 <!--
@@ -25,6 +25,12 @@ Chat will use LLM API Keys configured in Settings -> LLM API Keys. When a chat r
 ### Supported Providers
 
 See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.
+
+### Streaming and refresh
+
+Chat responses continue running if you refresh the page or briefly disconnect. When you reopen the conversation, Chat reconnects to the active response and replays streamed content that was already generated.
+
+Only one response can run in a conversation at a time. Stop the current response before sending another message.
 
 ## Security Notes
 

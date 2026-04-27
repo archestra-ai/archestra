@@ -76,7 +76,6 @@ import {
   resolveFastModelName,
   resolveSmartDefaultLlmForChat,
 } from "@/utils/llm-resolution";
-import { estimateMessagesSize } from "@/utils/message-size";
 import {
   parseMaxInputTokens,
   shouldProbeTextStreamForContextTrimRetry,
@@ -89,6 +88,10 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+import {
+  getMessagesNotYetPersisted,
+  persistNewMessages,
+} from "./persist-new-messages";
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -387,13 +390,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
           }
 
-          // Persist user's new messages immediately so they're visible on page reload.
-          // Without this, a reload during streaming shows no messages because
-          // onFinish hasn't fired yet. persistNewMessages is idempotent — it only
-          // saves messages beyond the existing count, so onFinish will only save
-          // the assistant response.
+          // Persist the user message early so it's visible on reload during a
+          // long stream. Filter to user role only — a continuation request body
+          // carries the prior assistant in an intermediate state, and
+          // persistNewMessages dedups by content.id, which would block onFinish
+          // from writing the final assistant state. onFinish owns the assistant
+          // write.
           try {
-            await persistNewMessages(conversationId, messages, "earlyUserMsg");
+            const earlyUserMessages = (messages as ChatMessage[]).filter(
+              (m) => m.role === "user",
+            );
+            await persistNewMessages(
+              conversationId,
+              earlyUserMessages,
+              "earlyUserMsg",
+            );
           } catch (error) {
             logger.warn(
               { error, conversationId },
@@ -488,6 +499,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     writer.write({
                       type: "data-heartbeat",
                       data: { timestamp: Date.now() },
+                      // UI-only chunk; transient so the AI SDK doesn't persist
+                      // it into messages.parts.
+                      transient: true,
                     });
                   } catch {
                     clearInterval(heartbeatInterval);
@@ -564,6 +578,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           csp: prefetched.csp,
                           permissions: prefetched.permissions,
                         },
+                        // FE consumes this via onData listener into the
+                        // earlyToolUiStarts ref; transient so the ~1 MB HTML
+                        // payload doesn't land in messages.parts.
+                        transient: true,
                       });
                     }
                   }
@@ -794,6 +812,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       outputTokens: usage.outputTokens,
                       totalTokens: usage.totalTokens,
                     } satisfies TokenUsage,
+                    // Telemetry; FE consumes via onData. Transient because it
+                    // can fire after streamText's assistant message scope has
+                    // closed and would otherwise spawn an empty assistant row.
+                    transient: true,
                   });
                 }
 
@@ -1942,94 +1964,6 @@ export async function generateConversationTitle(
 // Helper Functions
 // ============================================================================
 
-/**
- * Persists new messages to the database for a conversation.
- * Strips images if browser streaming is enabled and handles empty message parts.
- *
- * @param conversationId - The conversation ID to persist messages for
- * @param messages - All messages (existing + new) to determine which ones to save
- * @param context - Context for logging (e.g., "onFinish", "onError")
- * @returns Promise<number> - Number of messages persisted
- */
-async function persistNewMessages(
-  conversationId: string,
-  messages: unknown[],
-  context: string,
-): Promise<number> {
-  try {
-    // Get existing messages count to know how many are new
-    const existingMessages =
-      await MessageModel.findByConversation(conversationId);
-    const uiMessages = messages as ChatMessage[];
-    const newMessages = getMessagesNotYetPersisted({
-      existingMessages,
-      uiMessages,
-    });
-
-    if (newMessages.length === 0) {
-      return 0;
-    }
-
-    // Check if last message has empty parts and strip it if so
-    let messagesToSave = newMessages;
-    if (newMessages[newMessages.length - 1].parts?.length === 0) {
-      messagesToSave = newMessages.slice(0, -1);
-    }
-
-    if (messagesToSave.length === 0) {
-      return 0;
-    }
-
-    let messagesToStore: ChatMessage[];
-
-    // Strip base64 images and large browser tool results before storing
-    if (context === "onFinish") {
-      // Log size reduction only for onFinish (where we have complete messages)
-      const beforeSize = estimateMessagesSize(messagesToSave);
-      messagesToStore = normalizeChatMessages(messagesToSave);
-      const afterSize = estimateMessagesSize(messagesToStore);
-
-      logger.info(
-        {
-          messageCount: messagesToSave.length,
-          beforeSizeKB: Math.round(beforeSize.length / 1024),
-          afterSizeKB: Math.round(afterSize.length / 1024),
-          savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
-          sizeEstimateReliable:
-            !beforeSize.isEstimated && !afterSize.isEstimated,
-        },
-        "[Chat] Stripped messages before saving to DB",
-      );
-    } else {
-      // For onError, just strip without detailed logging
-      messagesToStore = normalizeChatMessages(messagesToSave);
-    }
-
-    // Append only new messages with timestamps
-    const now = Date.now();
-    const messageData = messagesToStore.map((msg, index) => ({
-      conversationId,
-      role: msg.role ?? "assistant",
-      content: msg,
-      createdAt: new Date(now + index),
-    }));
-
-    await MessageModel.bulkCreate(messageData);
-
-    logger.info(
-      `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
-    );
-
-    return messagesToSave.length;
-  } catch (error) {
-    logger.error(
-      { error, conversationId, context },
-      `Failed to persist messages during ${context}`,
-    );
-    throw error;
-  }
-}
-
 function persistConversationChatError(params: {
   conversationId: string;
   error: ChatErrorResponse;
@@ -2053,41 +1987,6 @@ function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
   } catch {
     return getMinimalFrontendError(error);
   }
-}
-
-function getMessagesNotYetPersisted(params: {
-  existingMessages: Array<{ id: string; content: unknown }>;
-  uiMessages: ChatMessage[];
-}): ChatMessage[] {
-  const existingIds = new Set<string>();
-
-  for (const message of params.existingMessages) {
-    existingIds.add(message.id);
-
-    // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
-    // in-flight useChat requests can still carry the original temporary content
-    // ids. Track both forms so follow-up turns after swap_agent do not get
-    // dropped just because the incoming thread is shorter than the DB thread.
-    const contentId =
-      typeof message.content === "object" &&
-      message.content !== null &&
-      "id" in message.content &&
-      typeof message.content.id === "string"
-        ? message.content.id
-        : null;
-
-    if (contentId) {
-      existingIds.add(contentId);
-    }
-  }
-
-  return params.uiMessages.filter((message) => {
-    if (!message.id || typeof message.id !== "string") {
-      return true;
-    }
-
-    return !existingIds.has(message.id);
-  });
 }
 
 function prepareMessagesForProvider(params: {

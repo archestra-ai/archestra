@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
@@ -58,6 +58,13 @@ class MessageModel {
     await db
       .delete(schema.messagesTable)
       .where(eq(schema.messagesTable.id, id));
+  }
+
+  static async bulkDelete(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+    await db
+      .delete(schema.messagesTable)
+      .where(inArray(schema.messagesTable.id, messageIds));
   }
 
   static async deleteByConversation(conversationId: string): Promise<void> {
@@ -174,6 +181,37 @@ class MessageModel {
           gt(schema.messagesTable.createdAt, message.createdAt),
         ),
       );
+  }
+
+  /**
+   * Find a prior assistant message in this conversation whose JSONB content
+   * contains a tool part with the given toolCallId in `approval-requested`
+   * state. Used by the persistence sweep to remove stale rows so `tool_use`
+   * ids stay unique across the conversation.
+   */
+  static async findPriorApprovalRequestedByToolCallId(params: {
+    conversationId: string;
+    toolCallId: string;
+  }): Promise<Message | null> {
+    const { conversationId, toolCallId } = params;
+    const [message] = await db
+      .select()
+      .from(schema.messagesTable)
+      .where(
+        and(
+          eq(schema.messagesTable.conversationId, conversationId),
+          sql`EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(${schema.messagesTable.content}->'parts') AS part
+            WHERE part->>'type' LIKE 'tool-%'
+              AND part->>'toolCallId' = ${toolCallId}
+              AND part->>'state' = 'approval-requested'
+          )`,
+        ),
+      )
+      .orderBy(schema.messagesTable.createdAt)
+      .limit(1);
+    return message ?? null;
   }
 
   /**

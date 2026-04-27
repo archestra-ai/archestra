@@ -142,3 +142,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @WarmSpark
 - @mjkvyjn5wn-ctrl
 - @mchugunov
+- @vpashkov

@@ -24,7 +24,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const getV1A2aByAgentIdWellKnownAgentJson = <ThrowOnError extends boolean = false>(options: Options<GetV1A2aByAgentIdWellKnownAgentJsonData, ThrowOnError>) => (options.client ?? client).get<GetV1A2aByAgentIdWellKnownAgentJsonResponses, unknown, ThrowOnError>({ url: '/v1/a2a/{agentId}/.well-known/agent.json', ...options });
 
 /**
- * Execute A2A JSON-RPC message on an internal agent (must be agentType='agent')
+ * Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.
  */
 export const postV1A2aByAgentId = <ThrowOnError extends boolean = false>(options: Options<PostV1A2aByAgentIdData, ThrowOnError>) => (options.client ?? client).post<PostV1A2aByAgentIdResponses, unknown, ThrowOnError>({
     url: '/v1/a2a/{agentId}',

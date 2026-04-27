@@ -65,10 +65,12 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
 describe("mcp server inspect route", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
+  let requestOrganizationId: string;
   const originalFetch = global.fetch;
 
   beforeEach(async ({ makeUser }) => {
     user = await makeUser();
+    requestOrganizationId = crypto.randomUUID();
     hasPermissionMock.mockResolvedValue({ success: true });
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
@@ -80,6 +82,8 @@ describe("mcp server inspect route", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: User }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        requestOrganizationId;
     });
 
     const { default: mcpServerRoutes } = await import("./mcp-server");
@@ -260,6 +264,108 @@ describe("mcp server inspect route", () => {
     expect(response.json().map((server: { id: string }) => server.id)).toEqual([
       ownPersonalServer.id,
     ]);
+  });
+
+  test("filters personal connections by organization membership for org assignment scope", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    hasPermissionMock.mockResolvedValueOnce({ success: true });
+
+    const organization = await makeOrganization();
+    requestOrganizationId = organization.id;
+    const memberOwner = await makeUser({ email: "member-owner@example.com" });
+    const outsideOwner = await makeUser({ email: "outside-owner@example.com" });
+    await makeMember(memberOwner.id, organization.id, { role: "member" });
+
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const memberOwnedServer = await makeMcpServer({
+      ownerId: memberOwner.id,
+      catalogId: catalog.id,
+    });
+    const orgOwnedServer = await makeMcpServer({
+      catalogId: catalog.id,
+    });
+    await makeMcpServer({
+      ownerId: outsideOwner.id,
+      catalogId: catalog.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mcp_server?assignmentScope=org",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response
+        .json()
+        .map((server: { id: string }) => server.id)
+        .sort(),
+    ).toEqual([memberOwnedServer.id, orgOwnedServer.id].sort());
+  });
+
+  test("filters connections for personal assignment scope", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    hasPermissionMock.mockResolvedValueOnce({ success: true });
+
+    const organization = await makeOrganization();
+    requestOrganizationId = organization.id;
+    const otherUser = await makeUser({ email: "personal-other@example.com" });
+    const authorTeam = await makeTeam(organization.id, user.id, {
+      name: "Author Team",
+    });
+    const otherTeam = await makeTeam(organization.id, user.id, {
+      name: "Other Team",
+    });
+    await makeTeamMember(authorTeam.id, user.id);
+
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const ownPersonalServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+    const authorTeamServer = await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+      teamId: authorTeam.id,
+    });
+    await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+      teamId: otherTeam.id,
+    });
+    const orgOwnedServer = await makeMcpServer({
+      catalogId: catalog.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mcp_server?assignmentScope=personal",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response
+        .json()
+        .map((server: { id: string }) => server.id)
+        .sort(),
+    ).toEqual(
+      [ownPersonalServer.id, authorTeamServer.id, orgOwnedServer.id].sort(),
+    );
   });
 
   test("automatically retries protected remote MCP server installation with the current identity-provider access token", async ({

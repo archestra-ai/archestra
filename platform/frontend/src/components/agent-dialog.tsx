@@ -19,6 +19,8 @@ import {
   MAX_SUGGESTED_PROMPTS,
   providerDisplayNames,
   type SupportedProvider,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -66,6 +68,7 @@ import {
 } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -154,6 +157,7 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
     };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type ToolExposureMode = Agent["toolExposureMode"];
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
@@ -622,6 +626,8 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [toolExposureMode, setToolExposureMode] =
+    useState<ToolExposureMode>("full");
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
@@ -638,6 +644,12 @@ export function AgentDialog({
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
+  const toolExposureDocsUrl = getDocsUrl(
+    agentType === "mcp_gateway"
+      ? DocsPage.PlatformMcpGateway
+      : DocsPage.PlatformAgents,
+    "search-and-run-tool-mode",
+  );
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -680,6 +692,7 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
+        setToolExposureMode(agentData.toolExposureMode ?? "full");
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -712,6 +725,7 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
+        setToolExposureMode("full");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -935,6 +949,7 @@ export function AgentDialog({
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
               connectorIds: connectorIds,
+              toolExposureMode,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -971,6 +986,7 @@ export function AgentDialog({
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
             connectorIds: connectorIds,
+            toolExposureMode,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1071,6 +1087,7 @@ export function AgentDialog({
     supportsIdentityProvider,
     passthroughHeaders,
     deleteAgent,
+    toolExposureMode,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1462,6 +1479,43 @@ export function AgentDialog({
                       onSelectionChange={setSelectedDelegationTargetIds}
                       currentAgentId={agent?.id}
                     />
+                  </div>
+
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="search-and-run-tool-mode"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="search-and-run-tool-mode"
+                          className="font-medium"
+                        >
+                          Search-and-run tool mode
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Expose only{" "}
+                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                          <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
+                          <code>tools/list</code>; assigned tools stay
+                          searchable and runnable.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Knowledge Sources */}

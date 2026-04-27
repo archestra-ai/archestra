@@ -350,6 +350,7 @@ describe.skip("AgentDialog", () => {
           description: null,
           systemPrompt: null,
           agentType: "agent",
+          toolExposureMode: "full",
           scope: "personal",
           isDefault: false,
           teams: [],

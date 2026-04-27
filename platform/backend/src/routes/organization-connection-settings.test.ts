@@ -194,6 +194,24 @@ describe("PATCH /api/organization/connection-settings", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("persists and clears the default client id", async () => {
+    const setResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionDefaultClientId: "cursor" },
+    });
+    expect(setResponse.statusCode).toBe(200);
+    expect(setResponse.json().connectionDefaultClientId).toBe("cursor");
+
+    const clearResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionDefaultClientId: null },
+    });
+    expect(clearResponse.statusCode).toBe(200);
+    expect(clearResponse.json().connectionDefaultClientId).toBeNull();
+  });
+
   test("allows clearing defaults with null", async ({ makeAgent }) => {
     const gateway = await makeAgent({
       organizationId,

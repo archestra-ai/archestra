@@ -112,15 +112,6 @@ test("Verify tool calling using dynamic credentials", async ({
     await install(config);
   }
 
-  const defaultGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
-    headers: { Cookie: cookieHeaders },
-  });
-  if (defaultGatewayResponse.error || !defaultGatewayResponse.data) {
-    throw new Error(
-      `Failed to get default MCP gateway: ${JSON.stringify(defaultGatewayResponse.error)}`,
-    );
-  }
-
   const toolsResponse = await archestraApiSdk.getTools({
     headers: { Cookie: cookieHeaders },
   });
@@ -138,7 +129,7 @@ test("Verify tool calling using dynamic credentials", async ({
     const assignResponse = await archestraApiSdk.assignToolToAgent({
       headers: { Cookie: cookieHeaders },
       path: {
-        agentId: defaultGatewayResponse.data.id,
+        agentId: sharedGateway.id,
         toolId,
       },
       body: {

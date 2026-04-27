@@ -343,14 +343,10 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
     await settleRegistryAfterInstall(adminPage);
 
-    const defaultGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
-      headers: { Cookie: cookieHeaders },
+    const sharedGateway = await createSharedTestGatewayViaApi({
+      cookieHeaders,
+      gatewayName: makeRandomString(10, "shared-gw"),
     });
-    if (defaultGatewayResponse.error || !defaultGatewayResponse.data) {
-      throw new Error(
-        `Failed to get default MCP gateway: ${JSON.stringify(defaultGatewayResponse.error)}`,
-      );
-    }
 
     const toolsResponse = await archestraApiSdk.getTools({
       headers: { Cookie: cookieHeaders },
@@ -382,7 +378,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       const assignResponse = await archestraApiSdk.assignToolToAgent({
         headers: { Cookie: cookieHeaders },
         path: {
-          agentId: defaultGatewayResponse.data.id,
+          agentId: sharedGateway.id,
           toolId,
         },
         body: { mcpServerId: defaultTeamServer.id },
@@ -401,7 +397,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
       cookieHeaders,
-      profileId: defaultGatewayResponse.data.id,
+      profileId: sharedGateway.id,
     });
 
     // CLEANUP: Delete the catalog item

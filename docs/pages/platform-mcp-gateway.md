@@ -46,6 +46,8 @@ In **Automatic** mode, the gateway's tools are derived from labels. The gateway 
 1. The gateway will inherit _all_ tools from matched catalog items, not a configurable subset of the MCP server tools.
 2. Credential resolution is set to **Resolve at call time** for all upstream MCP servers. Each caller must have their own access to the upstream MCP servers. Gateways that need a single shared service-account connection should stay in **Manual** mode.
 
+**Example.** A finance team owns five catalog entries today — Snowflake, NetSuite, Stripe, Salesforce, and Confluence — and expects to add more over time. The admin tags each entry `department: finance` and creates an MCP gateway labeled the same. The gateway picks up every tool from those five entries without manual wiring. When the team adds an SAP integration to the registry six months later, only that catalog entry needs the `department: finance` label; the gateway includes its tools on the next save. 
+
 ## Authentication
 
 Gateway authentication and upstream MCP server authentication are separate. The client authenticates to Archestra first. When a tool runs, Archestra resolves the credential needed by that specific upstream MCP server.

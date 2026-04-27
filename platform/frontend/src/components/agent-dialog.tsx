@@ -653,6 +653,13 @@ export function AgentDialog({
       : DocsPage.PlatformAgents,
     "search-and-run-tool-mode",
   );
+  const gatewayLabelsDocsUrl =
+    agentType === "mcp_gateway"
+      ? getFrontendDocsUrl(
+          DocsPage.PlatformMcpGateway,
+          "tool-assignment-mode",
+        )
+      : null;
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -1958,11 +1965,33 @@ export function AgentDialog({
                     <CollapsibleContent>
                       <div className="border-t p-4 space-y-4">
                         {/* Labels */}
-                        <ProfileLabels
-                          ref={agentLabelsRef}
-                          labels={labels}
-                          onLabelsChange={setLabels}
-                        />
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Label>Labels</Label>
+                              {agentType === "mcp_gateway" && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  Organize and drive automatic tool assignment
+                                </span>
+                              )}
+                            </div>
+                            {gatewayLabelsDocsUrl && (
+                              <ExternalDocsLink
+                                href={gatewayLabelsDocsUrl}
+                                className="text-xs text-muted-foreground underline shrink-0"
+                                showIcon={false}
+                              >
+                                Learn more
+                              </ExternalDocsLink>
+                            )}
+                          </div>
+                          <ProfileLabels
+                            ref={agentLabelsRef}
+                            labels={labels}
+                            onLabelsChange={setLabels}
+                            showLabel={false}
+                          />
+                        </div>
 
                         {/* Security (LLM Proxy and Agent only) */}
                         {showSecurity && (
@@ -2126,11 +2155,33 @@ export function AgentDialog({
               {/* Labels for built-in agents (outside advanced section since advanced is hidden) */}
               {isBuiltIn && (
                 <div className="rounded-lg border bg-card p-4 space-y-4">
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                  />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Label>Labels</Label>
+                        {agentType === "mcp_gateway" && (
+                          <span className="text-xs font-normal text-muted-foreground">
+                            Organize and drive automatic tool assignment
+                          </span>
+                        )}
+                      </div>
+                      {gatewayLabelsDocsUrl && (
+                        <ExternalDocsLink
+                          href={gatewayLabelsDocsUrl}
+                          className="text-xs text-muted-foreground underline shrink-0"
+                          showIcon={false}
+                        >
+                          Learn more
+                        </ExternalDocsLink>
+                      )}
+                    </div>
+                    <ProfileLabels
+                      ref={agentLabelsRef}
+                      labels={labels}
+                      onLabelsChange={setLabels}
+                      showLabel={false}
+                    />
+                  </div>
                 </div>
               )}
             </div>

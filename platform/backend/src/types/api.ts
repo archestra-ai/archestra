@@ -12,6 +12,7 @@ export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
     error: {
       message: string;
       type: T;
+      internal_code?: string;
     };
   };
 
@@ -24,6 +25,7 @@ export const generateErrorResponseSchema = <
     error: z.object({
       message: z.string(),
       type: z.literal(errorType),
+      internal_code: z.string().optional(),
     }),
   });
 

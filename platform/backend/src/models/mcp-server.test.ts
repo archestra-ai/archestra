@@ -118,7 +118,6 @@ describe("McpServerModel", () => {
       // findAll as admin (no access control)
       const allServers = await McpServerModel.findAll(undefined, true);
       const found = allServers.find((s) => s.id === server.id);
-
       expect(found).toBeDefined();
       if (!found) return;
       expect(found.users).toHaveLength(2);
@@ -137,7 +136,6 @@ describe("McpServerModel", () => {
 
       const allServers = await McpServerModel.findAll(undefined, true);
       const found = allServers.find((s) => s.id === server.id);
-
       expect(found).toBeDefined();
       if (!found) return;
       expect(found.users).toHaveLength(0);
@@ -162,6 +160,322 @@ describe("McpServerModel", () => {
       const matching = allServers.filter((s) => s.id === server.id);
       expect(matching).toHaveLength(1);
       expect(matching[0].users).toHaveLength(3);
+    });
+  });
+
+  describe("findAll with scope filter", () => {
+    test("returns an org-scoped server to any member of the organization", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const installer = await makeUser();
+      const otherMember = await makeUser();
+      await makeMember(installer.id, organization.id);
+      await makeMember(otherMember.id, organization.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "org",
+      });
+
+      const otherMemberView = await McpServerModel.findAll(
+        otherMember.id,
+        false,
+      );
+      expect(otherMemberView.find((s) => s.id === server.id)).toBeDefined();
+    });
+
+    test("returns a personal server only to its owner", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const owner = await makeUser();
+      const otherMember = await makeUser();
+      await makeMember(owner.id, organization.id);
+      await makeMember(otherMember.id, organization.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: owner.id,
+        userId: owner.id,
+        scope: "personal",
+      });
+
+      const ownerView = await McpServerModel.findAll(owner.id, false);
+      expect(ownerView.find((s) => s.id === server.id)).toBeDefined();
+
+      const otherView = await McpServerModel.findAll(otherMember.id, false);
+      expect(otherView.find((s) => s.id === server.id)).toBeUndefined();
+    });
+
+    test("returns a team server to team members and hides it from non-members", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const installer = await makeUser();
+      const teamMember = await makeUser();
+      const nonMember = await makeUser();
+      await makeMember(installer.id, organization.id);
+      await makeMember(teamMember.id, organization.id);
+      await makeMember(nonMember.id, organization.id);
+
+      const team = await makeTeam(organization.id, installer.id);
+      await makeTeamMember(team.id, teamMember.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "team",
+        teamId: team.id,
+      });
+
+      const memberView = await McpServerModel.findAll(teamMember.id, false);
+      expect(memberView.find((s) => s.id === server.id)).toBeDefined();
+
+      const nonMemberView = await McpServerModel.findAll(nonMember.id, false);
+      expect(nonMemberView.find((s) => s.id === server.id)).toBeUndefined();
+    });
+
+    test("returns all servers to an admin regardless of scope", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTeam,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const admin = await makeUser();
+      const installer = await makeUser();
+      await makeMember(admin.id, organization.id);
+      await makeMember(installer.id, organization.id);
+
+      const team = await makeTeam(organization.id, installer.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const orgServer = await McpServerModel.create({
+        name: `${catalog.name}-org`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "org",
+      });
+      const personalServer = await McpServerModel.create({
+        name: `${catalog.name}-personal`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "personal",
+      });
+      const teamServer = await McpServerModel.create({
+        name: `${catalog.name}-team`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "team",
+        teamId: team.id,
+      });
+
+      const adminView = await McpServerModel.findAll(admin.id, true);
+      const adminIds = adminView.map((s) => s.id);
+      expect(adminIds).toContain(orgServer.id);
+      expect(adminIds).toContain(personalServer.id);
+      expect(adminIds).toContain(teamServer.id);
+    });
+  });
+
+  describe("getUserPersonalServerForCatalog", () => {
+    test("does not return an org-scoped server owned by the user", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, organization.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        scope: "org",
+      });
+
+      const result = await McpServerModel.getUserPersonalServerForCatalog(
+        user.id,
+        catalog.id,
+      );
+      expect(result).toBeNull();
+    });
+
+    test("returns the personal server when both personal and org scopes exist", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, organization.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      await McpServerModel.create({
+        name: `${catalog.name}-org`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        scope: "org",
+      });
+      const personal = await McpServerModel.create({
+        name: `${catalog.name}-personal`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        userId: user.id,
+        scope: "personal",
+      });
+
+      const result = await McpServerModel.getUserPersonalServerForCatalog(
+        user.id,
+        catalog.id,
+      );
+      expect(result?.id).toBe(personal.id);
+    });
+  });
+
+  describe("getUserPersonalServersForCatalogs", () => {
+    test("does not return org-scoped servers owned by the user", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, organization.id);
+
+      const orgCatalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const personalCatalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      await McpServerModel.create({
+        name: orgCatalog.name,
+        serverType: "remote",
+        catalogId: orgCatalog.id,
+        ownerId: user.id,
+        scope: "org",
+      });
+      const personal = await McpServerModel.create({
+        name: personalCatalog.name,
+        serverType: "remote",
+        catalogId: personalCatalog.id,
+        ownerId: user.id,
+        userId: user.id,
+        scope: "personal",
+      });
+
+      const result = await McpServerModel.getUserPersonalServersForCatalogs(
+        user.id,
+        [orgCatalog.id, personalCatalog.id],
+      );
+      expect(result.has(orgCatalog.id)).toBe(false);
+      expect(result.get(personalCatalog.id)?.id).toBe(personal.id);
+    });
+  });
+
+  describe("constructServerName", () => {
+    const baseParams = {
+      baseName: "notion",
+      ownerId: "user-123",
+      teamId: "team-456",
+    };
+
+    test("remote server ignores scope when deriving the name", () => {
+      const remotePersonal = McpServerModel.constructServerName({
+        ...baseParams,
+        serverType: "remote",
+        scope: "personal",
+      });
+      const remoteTeam = McpServerModel.constructServerName({
+        ...baseParams,
+        serverType: "remote",
+        scope: "team",
+      });
+      const remoteOrg = McpServerModel.constructServerName({
+        ...baseParams,
+        serverType: "remote",
+        scope: "org",
+      });
+      expect(remotePersonal).toBe("notion");
+      expect(remoteTeam).toBe("notion");
+      expect(remoteOrg).toBe("notion");
+    });
+
+    test("local personal scope suffixes with ownerId", () => {
+      expect(
+        McpServerModel.constructServerName({
+          ...baseParams,
+          serverType: "local",
+          scope: "personal",
+        }),
+      ).toBe("notion-user-123");
+    });
+
+    test("local team scope suffixes with teamId", () => {
+      expect(
+        McpServerModel.constructServerName({
+          ...baseParams,
+          serverType: "local",
+          scope: "team",
+        }),
+      ).toBe("notion-team-456");
+    });
+
+    test("local org scope uses base name (no suffix)", () => {
+      expect(
+        McpServerModel.constructServerName({
+          ...baseParams,
+          serverType: "local",
+          scope: "org",
+        }),
+      ).toBe("notion");
     });
   });
 });

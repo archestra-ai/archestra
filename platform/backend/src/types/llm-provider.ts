@@ -29,6 +29,7 @@
  */
 
 import type {
+  ArchestraInternalErrorCode,
   InteractionSource,
   SupportedProvider,
   SupportedProviderDiscriminator,
@@ -412,6 +413,17 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * error.error.message structure), so this normalizes them to a string.
    */
   extractErrorMessage(error: unknown): string;
+
+  /**
+   * Classify a provider-specific SDK error into an Archestra-normalized
+   * internal code. Used by the proxy to emit a uniform `internal_code`
+   * field on the error response body, which downstream consumers (notably
+   * the chat-error mapper) can read without provider-specific knowledge.
+   *
+   * Returns `undefined` when the error doesn't match any known normalized
+   * category, in which case no `internal_code` is added to the envelope.
+   */
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined;
 }
 
 /**

@@ -196,6 +196,39 @@ class MemberModel {
     return results;
   }
 
+  /**
+   * List org members eligible to be impersonated by an admin: excludes a
+   * given user (typically the caller) and excludes anyone whose system-level
+   * `user.role` is "admin" (better-auth's adminRoles guard would reject
+   * those at impersonation time anyway).
+   */
+  static async findImpersonationCandidates(params: {
+    organizationId: string;
+    excludeUserId: string;
+  }) {
+    const rows = await db
+      .select({
+        id: schema.usersTable.id,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        role: schema.membersTable.role,
+        systemRole: schema.usersTable.role,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(eq(schema.membersTable.organizationId, params.organizationId))
+      .orderBy(schema.usersTable.name);
+
+    return rows
+      .filter(
+        (row) => row.id !== params.excludeUserId && row.systemRole !== "admin",
+      )
+      .map(({ systemRole: _systemRole, ...rest }) => rest);
+  }
+
   static async findUserIdsInOrganization(params: {
     organizationId: string;
     userIds: string[];

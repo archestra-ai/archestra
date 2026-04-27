@@ -75,3 +75,6 @@ playwright-report/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Local planning specs
+specs/

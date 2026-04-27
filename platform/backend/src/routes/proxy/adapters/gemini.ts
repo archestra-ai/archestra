@@ -9,6 +9,7 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
+import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
@@ -1408,6 +1409,28 @@ export const geminiAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // Gemini returns INVALID_ARGUMENT for context overflow with phrasing
+    // like "The input token count (X) exceeds the maximum number of tokens
+    // allowed (Y)". The ErrorInfo details array does not carry a structured
+    // reason for this case, so message sniffing is the only signal. The
+    // status and message can appear at the top level or nested under
+    // `error`.
+    const status: unknown = get(error, "error.status") ?? get(error, "status");
+    if (status !== "INVALID_ARGUMENT") return undefined;
+    const message: unknown =
+      get(error, "error.message") ?? get(error, "message");
+    if (typeof message !== "string") return undefined;
+    const msg = message.toLowerCase();
+    if (
+      msg.includes("input token count") ||
+      msg.includes("exceeds the maximum number of tokens")
+    ) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

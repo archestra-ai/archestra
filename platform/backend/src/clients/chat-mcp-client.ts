@@ -28,7 +28,7 @@ import {
   getAgentTools,
 } from "@/archestra-mcp-server";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -907,6 +907,11 @@ export async function getChatMcpTools({
                         sessionId,
                         scheduleTriggerRunId,
                         abortSignal,
+                        tokenAuth: buildTokenAuthContext({
+                          mcpGwToken,
+                          organizationId,
+                          userId,
+                        }),
                       },
                     );
 
@@ -1021,16 +1026,11 @@ export async function getChatMcpTools({
           // Pass delegation chain for tracking delegated agent calls
           delegationChain,
           abortSignal,
-          tokenAuth: mcpGwToken
-            ? {
-                tokenId: mcpGwToken.tokenId,
-                teamId: mcpGwToken.teamId,
-                isOrganizationToken: mcpGwToken.isOrganizationToken,
-                organizationId,
-                isUserToken: mcpGwToken.isUserToken,
-                userId: mcpGwToken.isUserToken ? userId : undefined,
-              }
-            : undefined,
+          tokenAuth: buildTokenAuthContext({
+            mcpGwToken,
+            organizationId,
+            userId,
+          }),
         };
 
         // Convert agent tools to AI SDK Tool format
@@ -1790,6 +1790,29 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+function buildTokenAuthContext({
+  mcpGwToken,
+  organizationId,
+  userId,
+}: {
+  mcpGwToken: Awaited<ReturnType<typeof selectMCPGatewayToken>>;
+  organizationId: string;
+  userId: string;
+}): TokenAuthContext | undefined {
+  if (!mcpGwToken) {
+    return undefined;
+  }
+
+  return {
+    tokenId: mcpGwToken.tokenId,
+    teamId: mcpGwToken.teamId,
+    isOrganizationToken: mcpGwToken.isOrganizationToken,
+    organizationId,
+    isUserToken: mcpGwToken.isUserToken,
+    userId: mcpGwToken.isUserToken ? userId : undefined,
+  };
 }
 
 function throwIfAborted(abortSignal?: AbortSignal): void {

@@ -92,6 +92,7 @@ test("Verify tool calling using dynamic credentials", async ({
       body: {
         name: catalogItemName,
         catalogId: catalogItemId,
+        scope: "team",
         teamId,
         environmentValues: {
           ARCHESTRA_TEST: `${team}-team-credential`,

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -926,6 +927,22 @@ function extractErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function extractInternalCode(
+  error: unknown,
+): ArchestraInternalErrorCode | undefined {
+  // Cohere 400 bodies are `{ message: string }` and the context-overflow
+  // messages start with "too many tokens: total number of tokens in the
+  // prompt cannot exceed N". No structured code in the public error schema.
+  const message: unknown = get(error, "error.message") ?? get(error, "message");
+  if (
+    typeof message === "string" &&
+    message.toLowerCase().includes("too many tokens")
+  ) {
+    return ArchestraInternalErrorCode.ContextLengthExceeded;
+  }
+  return undefined;
+}
+
 export function getUsageTokens(usage: Cohere.Types.Usage) {
   return {
     input:
@@ -978,6 +995,8 @@ export const cohereAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage,
+
+  extractInternalCode,
 
   extractApiKey(headers: CohereHeaders): string | undefined {
     const authHeader = headers.authorization;

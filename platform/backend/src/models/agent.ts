@@ -150,7 +150,7 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: InsertAgent & { isPersonalGateway?: boolean },
+    }: InsertAgent & { isPersonalGateway?: boolean; slug?: string },
     authorId?: string,
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -165,7 +165,7 @@ class AgentModel {
 
     const slug =
       agent.agentType === "mcp_gateway"
-        ? await AgentModel.generateUniqueSlug(agent.name)
+        ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
         : undefined;
 
     const [createdAgent] = await AgentModel.insertWithSlugRetry({
@@ -1553,11 +1553,20 @@ class AgentModel {
     );
     if (existing) return existing;
 
+    const [userRow] = await db
+      .select({ name: schema.usersTable.name })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, userId))
+      .limit(1);
+    const userPart = (userRow && urlSlugify(userRow.name)) || userId;
+    const slug = `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`;
+
     try {
       const gateway = await AgentModel.create(
         {
           organizationId,
           name: "My Gateway",
+          slug,
           agentType: "mcp_gateway",
           scope: "personal",
           description:

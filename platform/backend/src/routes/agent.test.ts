@@ -367,6 +367,46 @@ describe("agent routes", () => {
       expect(result.data[0].scope).toBe("personal");
       expect(result.data[0].name).toContain("Zulu Personal");
     });
+
+    test("excludeOtherPersonalAgents hides other users' personal agents for admin", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+
+      await makeAgent({
+        name: `Own Personal ${suffix}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Other Personal ${suffix}`,
+        organizationId,
+        scope: "personal",
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Org Agent ${suffix}`,
+        organizationId,
+        scope: "org",
+        authorId: otherUser.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&excludeOtherPersonalAgents=true`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const names = response.json().data.map((a: { name: string }) => a.name);
+      expect(names).toContain(`Own Personal ${suffix}`);
+      expect(names).toContain(`Org Agent ${suffix}`);
+      expect(names).not.toContain(`Other Personal ${suffix}`);
+    });
   });
 
   describe("GET /api/agents/all", () => {

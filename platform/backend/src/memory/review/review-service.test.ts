@@ -130,6 +130,9 @@ describe("memoryReviewService", () => {
     });
 
     expect(created?.status).toBe("candidate");
+    expect(created?.sourceType).toBe("manual");
+    expect(created?.sourceId).toContain(`manual:${owner.id}:`);
+    expect(created?.sourceMetadata).not.toBeNull();
   });
 
   test("manualCreate blocks secret-like content before persistence", async ({

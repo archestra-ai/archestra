@@ -6,12 +6,19 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
-import { reportMemoryCandidates } from "@/memory/telemetry/metrics";
+import { buildMcpToolSourceContract } from "@/memory/provenance/source-contract";
+import {
+  reportMemoryCandidateCreated,
+  reportMemoryCandidates,
+  reportMemoryDedupDrop,
+} from "@/memory/telemetry/metrics";
 import { MemoryItemModel } from "@/models";
 import {
   MemoryKindSchema,
   MemoryPolicyFlagSchema,
   MemoryScopeTypeSchema,
+  MemorySourceMetadataSchema,
+  MemorySourceTypeSchema,
   MemoryStatusSchema,
 } from "@/types";
 import type { MemoryItem } from "@/types/memory-item";
@@ -35,6 +42,13 @@ const MEMORY_ITEM_OUTPUT_SCHEMA = z.object({
   policyFlags: z
     .array(MemoryPolicyFlagSchema)
     .describe("Policy flags associated with the memory item."),
+  sourceType: MemorySourceTypeSchema.nullable().describe(
+    "Normalized memory source type.",
+  ),
+  sourceId: z.string().nullable().describe("Source identifier."),
+  sourceMetadata: MemorySourceMetadataSchema.nullable().describe(
+    "Normalized memory source metadata.",
+  ),
   createdBy: z
     .string()
     .nullable()
@@ -172,6 +186,34 @@ async function handleProposeMemoryCandidate(params: {
     return errorResult(policyScreen.message);
   }
 
+  const sourceContract = buildMcpToolSourceContract({
+    conversationId: context.conversationId,
+    sessionId: context.sessionId,
+    userId: context.userId,
+    agentId: context.agentId ?? context.agent.id,
+    toolName,
+    content: args.content,
+    policyFlags: policyScreen.policyFlags,
+    extractorVersion: "manual_mcp_propose",
+  });
+  const idempotencyKey = sourceContract.sourceMetadata.ingestion.idempotencyKey;
+  if (
+    idempotencyKey &&
+    (await MemoryItemModel.existsByIngestionIdempotencyKey({
+      organizationId: context.organizationId,
+      sourceType: sourceContract.sourceType,
+      idempotencyKey,
+    }))
+  ) {
+    reportMemoryDedupDrop({
+      sourceType: sourceContract.sourceType,
+      reason: "idempotency_key",
+    });
+    return errorResult(
+      "Memory candidate skipped: duplicate idempotency key detected.",
+    );
+  }
+
   const memoryItem = await MemoryItemModel.create({
     organizationId: context.organizationId,
     scopeType: "user",
@@ -181,6 +223,9 @@ async function handleProposeMemoryCandidate(params: {
     content: args.content,
     createdBy: context.userId,
     policyFlags: policyScreen.policyFlags,
+    sourceType: sourceContract.sourceType,
+    sourceId: sourceContract.sourceId,
+    sourceMetadata: sourceContract.sourceMetadata,
   });
 
   reportMemoryCandidates({
@@ -188,6 +233,7 @@ async function handleProposeMemoryCandidate(params: {
     extractorVersion: "manual_mcp_propose",
     policyFlags: policyScreen.policyFlags,
   });
+  reportMemoryCandidateCreated(sourceContract.sourceType);
 
   const result = { memoryItem: toMemoryItemOutput(memoryItem) };
   return structuredSuccessResult(result, JSON.stringify(result, null, 2));
@@ -233,6 +279,9 @@ function toMemoryItemOutput(item: MemoryItem) {
     status: item.status,
     content: item.content,
     policyFlags: item.policyFlags,
+    sourceType: item.sourceType,
+    sourceId: item.sourceId,
+    sourceMetadata: item.sourceMetadata,
     createdBy: item.createdBy,
     reviewedBy: item.reviewedBy,
     confidenceBand: item.confidenceBand,

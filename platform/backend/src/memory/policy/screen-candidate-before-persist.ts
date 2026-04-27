@@ -3,6 +3,7 @@ import type { MemoryPolicyFlag, MemoryScopeType } from "@/types/memory-item";
 import {
   reportMemoryMcpProposeBlock,
   reportMemoryPolicyBlocked,
+  reportMemorySafetyBlock,
   reportMemoryScreenDecision,
   reportMemoryTombstoneHit,
 } from "../telemetry/metrics";
@@ -164,10 +165,29 @@ function reportBlocked(
   },
 ): void {
   reportMemoryPolicyBlocked(params.policyReason);
+  reportMemorySafetyBlock({
+    sourceType: mapSourceToSourceType(source),
+    reason: params.policyReason,
+  });
   // Keep MCP-propose blocks separately visible because they cross an explicit tool boundary.
   if (source === "mcp_propose") {
     reportMemoryMcpProposeBlock(params.screenReason);
   }
+}
+
+function mapSourceToSourceType(
+  source: CandidatePersistSource,
+): "chat" | "manual" | "mcp_tool" | "system" {
+  if (source === "extractor") {
+    return "chat";
+  }
+  if (source === "manual_create") {
+    return "manual";
+  }
+  if (source === "mcp_propose") {
+    return "mcp_tool";
+  }
+  return "system";
 }
 
 function normalizeExternalContextInput(content: string): string {

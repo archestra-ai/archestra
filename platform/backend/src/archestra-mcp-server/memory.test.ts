@@ -119,6 +119,8 @@ describe("memory MCP tools", () => {
       status: string;
       kind: string;
       content: string;
+      sourceType: string | null;
+      sourceId: string | null;
     };
     expect(memoryItem).toMatchObject({
       scopeType: "user",
@@ -126,7 +128,9 @@ describe("memory MCP tools", () => {
       status: "candidate",
       kind: "instruction",
       content: "Answer in a concise style.",
+      sourceType: "mcp_tool",
     });
+    expect(memoryItem.sourceId).toContain("mcp:");
 
     const persisted = await MemoryItemModel.getById({
       id: memoryItem.id,
@@ -135,6 +139,8 @@ describe("memory MCP tools", () => {
     expect(persisted?.status).toBe("candidate");
     expect(persisted?.scopeType).toBe("user");
     expect(persisted?.scopeId).toBe(userId);
+    expect(persisted?.sourceType).toBe("mcp_tool");
+    expect(persisted?.sourceMetadata).not.toBeNull();
   });
 
   test("propose_memory_candidate hard-blocks secret markers", async () => {

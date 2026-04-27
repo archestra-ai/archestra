@@ -9,9 +9,16 @@ import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import logger from "@/logging";
 import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
 import {
+  buildChatExtractionSourceContract,
+  buildIdempotencyKey,
+  createSourceRunId,
+} from "@/memory/provenance/source-contract";
+import {
   type MemoryExtractionOutcome,
   type MemoryExtractionUnavailableReason,
+  reportMemoryCandidateCreated,
   reportMemoryCandidates,
+  reportMemoryDedupDrop,
   reportMemoryExtractionDuration,
   reportMemoryExtractionUnavailable,
 } from "@/memory/telemetry/metrics";
@@ -180,6 +187,7 @@ class MemoryExtractor {
 
           const seenHashes = new Set<string>();
           const sourceMessageIds = collectSourceMessageIds(messages);
+          const extractionRunId = createSourceRunId("chat_extract");
           const candidates = parsedOutput.candidates.slice(
             0,
             Math.min(config.memory.maxCandidatesPerExtraction, 5),
@@ -204,6 +212,10 @@ class MemoryExtractor {
               approvedHashes.has(contentHash)
             ) {
               // Skip duplicates both within this run and against already-approved memory.
+              reportMemoryDedupDrop({
+                sourceType: "chat",
+                reason: "content_hash_collision",
+              });
               skippedCount += 1;
               continue;
             }
@@ -221,6 +233,39 @@ class MemoryExtractor {
             }
             acceptedByPolicyScreenCount += 1;
 
+            const idempotencyKey = buildIdempotencyKey([
+              params.organizationId,
+              params.conversationId,
+              EXTRACTOR_PROMPT_VERSION,
+              preparedCandidate.kind,
+              contentHash,
+            ]);
+            const alreadyIngested =
+              await MemoryItemModel.existsByIngestionIdempotencyKey({
+                organizationId: params.organizationId,
+                sourceType: "chat",
+                idempotencyKey,
+              });
+            if (alreadyIngested) {
+              reportMemoryDedupDrop({
+                sourceType: "chat",
+                reason: "idempotency_key",
+              });
+              skippedCount += 1;
+              continue;
+            }
+
+            const sourceContract = buildChatExtractionSourceContract({
+              conversationId: params.conversationId,
+              messageIds: sourceMessageIds,
+              agentId: params.agentId,
+              runId: extractionRunId,
+              idempotencyKey,
+              dedupKey: contentHash,
+              extractorVersion: EXTRACTOR_PROMPT_VERSION,
+              policyFlags: policyScreen.policyFlags,
+            });
+
             await MemoryItemModel.create({
               organizationId: params.organizationId,
               scopeType: "user",
@@ -234,6 +279,9 @@ class MemoryExtractor {
               sourceConversationId: params.conversationId,
               sourceMessageIds:
                 sourceMessageIds.length > 0 ? sourceMessageIds : null,
+              sourceType: sourceContract.sourceType,
+              sourceId: sourceContract.sourceId,
+              sourceMetadata: sourceContract.sourceMetadata,
               confidenceBand: preparedCandidate.confidenceBand,
             });
 
@@ -242,6 +290,7 @@ class MemoryExtractor {
               extractorVersion: EXTRACTOR_PROMPT_VERSION,
               policyFlags: policyScreen.policyFlags,
             });
+            reportMemoryCandidateCreated(sourceContract.sourceType);
 
             seenHashes.add(contentHash);
             insertedCount += 1;

@@ -4,6 +4,7 @@ import type {
   MemoryPolicyFlag,
   MemoryRejectionReason,
   MemoryScopeType,
+  MemorySourceType,
   MemoryStatus,
 } from "@/types/memory-item";
 
@@ -46,6 +47,17 @@ export type MemoryExtractionUnavailableReason =
   | "missing_model"
   | "missing_api_key";
 
+export type MemorySafetyBlockReason =
+  | "sensitive"
+  | "high_risk_pii"
+  | "external_context"
+  | "instruction_like_high"
+  | "tombstone_hit";
+
+export type MemoryDedupDropReason =
+  | "idempotency_key"
+  | "content_hash_collision";
+
 let memoryCandidatesTotal: client.Counter<string>;
 let memoryReviewedTotal: client.Counter<string>;
 let memoryItemsTotal: client.Gauge<string>;
@@ -59,6 +71,10 @@ let memoryInjectionBlockTotal: client.Counter<string>;
 let memoryReviewPolicyBlockTotal: client.Counter<string>;
 let memoryTombstoneHitTotal: client.Counter<string>;
 let memoryMcpProposeBlockTotal: client.Counter<string>;
+let memoryCandidatesCreatedBySourceTotal: client.Counter<string>;
+let memoryReviewBySourceTotal: client.Counter<string>;
+let memorySafetyBlockBySourceTotal: client.Counter<string>;
+let memoryDedupDropBySourceTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -152,6 +168,30 @@ export function initializeMemoryMetrics(): void {
     labelNames: ["reason"],
   });
 
+  memoryCandidatesCreatedBySourceTotal = new client.Counter({
+    name: "archestra_memory_candidates_created_total",
+    help: "Total created memory candidates by normalized source type",
+    labelNames: ["source_type"],
+  });
+
+  memoryReviewBySourceTotal = new client.Counter({
+    name: "archestra_memory_review_outcome_total",
+    help: "Total memory review outcomes by normalized source type",
+    labelNames: ["source_type", "outcome"],
+  });
+
+  memorySafetyBlockBySourceTotal = new client.Counter({
+    name: "archestra_memory_safety_block_total",
+    help: "Total source-segmented memory safety blocks by reason",
+    labelNames: ["source_type", "reason"],
+  });
+
+  memoryDedupDropBySourceTotal = new client.Counter({
+    name: "archestra_memory_dedup_drop_total",
+    help: "Total source-segmented memory dedup drops by reason",
+    labelNames: ["source_type", "reason"],
+  });
+
   logger.info("Memory metrics initialized");
 }
 
@@ -178,6 +218,7 @@ export function reportMemoryReviewed(params: {
   scopeType: MemoryScopeType;
   outcome: MemoryReviewOutcome;
   rejectionReason?: MemoryRejectionReason | null;
+  sourceType?: MemorySourceType | null;
 }): void {
   if (!memoryReviewedTotal) {
     return;
@@ -187,6 +228,25 @@ export function reportMemoryReviewed(params: {
     scope_type: params.scopeType,
     outcome: params.outcome,
     rejection_reason: params.rejectionReason ?? "none",
+  });
+
+  if (memoryReviewBySourceTotal) {
+    memoryReviewBySourceTotal.inc({
+      source_type: params.sourceType ?? "unknown",
+      outcome: params.outcome,
+    });
+  }
+}
+
+export function reportMemoryCandidateCreated(
+  sourceType: MemorySourceType,
+): void {
+  if (!memoryCandidatesCreatedBySourceTotal) {
+    return;
+  }
+
+  memoryCandidatesCreatedBySourceTotal.inc({
+    source_type: sourceType,
   });
 }
 
@@ -343,6 +403,34 @@ export function reportMemoryMcpProposeBlock(reason: MemoryScreenReason): void {
   }
 
   memoryMcpProposeBlockTotal.inc({ reason });
+}
+
+export function reportMemorySafetyBlock(params: {
+  sourceType: MemorySourceType;
+  reason: MemorySafetyBlockReason;
+}): void {
+  if (!memorySafetyBlockBySourceTotal) {
+    return;
+  }
+
+  memorySafetyBlockBySourceTotal.inc({
+    source_type: params.sourceType,
+    reason: params.reason,
+  });
+}
+
+export function reportMemoryDedupDrop(params: {
+  sourceType: MemorySourceType;
+  reason: MemoryDedupDropReason;
+}): void {
+  if (!memoryDedupDropBySourceTotal) {
+    return;
+  }
+
+  memoryDedupDropBySourceTotal.inc({
+    source_type: params.sourceType,
+    reason: params.reason,
+  });
 }
 
 // =============================================================================

@@ -8,7 +8,9 @@ import {
   normalizeMemoryRequesterRole,
 } from "@/memory/policy/requester-role";
 import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
+import { buildManualSourceContract } from "@/memory/provenance/source-contract";
 import {
+  reportMemoryCandidateCreated,
   reportMemoryReviewed,
   reportMemoryReviewPolicyBlocked,
 } from "@/memory/telemetry/metrics";
@@ -57,8 +59,15 @@ export type ManualCreateMemoryData = Pick<
       | "confidenceBand"
       | "language"
       | "expiresAt"
+      | "sourceId"
     >
-  >;
+  > & {
+    sourceFuture?: {
+      projectId?: string | null;
+      workspaceId?: string | null;
+      sectionId?: string | null;
+    };
+  };
 
 export type ManualCreateMemoryParams = {
   organizationId: string;
@@ -169,6 +178,7 @@ export async function approve(
       reportMemoryReviewed({
         scopeType: approved.scopeType,
         outcome: "approved",
+        sourceType: approved.sourceType,
       });
     }
 
@@ -248,6 +258,7 @@ export async function reject(
       scopeType: updatedItem.scopeType,
       outcome: "rejected",
       rejectionReason: params.rejectionReason,
+      sourceType: updatedItem.sourceType,
     });
 
     return updatedItem;
@@ -289,7 +300,21 @@ export async function manualCreate(
     });
   }
 
-  return await MemoryItemModel.create({
+  const mergedPolicyFlags = mergePolicyFlags(
+    params.data.policyFlags ?? [],
+    policyScreen.policyFlags,
+  );
+  const sourceContract = buildManualSourceContract({
+    requesterUserId: params.requester.id,
+    scopeType: params.data.scopeType,
+    scopeId: params.data.scopeId,
+    policyFlags: mergedPolicyFlags,
+    extractorVersion: params.data.extractorVersion,
+    sourceId: params.data.sourceId,
+    future: params.data.sourceFuture,
+  });
+
+  const created = await MemoryItemModel.create({
     organizationId: params.organizationId,
     scopeType: params.data.scopeType,
     scopeId: params.data.scopeId,
@@ -297,17 +322,20 @@ export async function manualCreate(
     status: "candidate",
     content: params.data.content,
     createdBy: params.requester.id,
-    policyFlags: mergePolicyFlags(
-      params.data.policyFlags ?? [],
-      policyScreen.policyFlags,
-    ),
+    policyFlags: mergedPolicyFlags,
     extractorVersion: params.data.extractorVersion,
     sourceConversationId: params.data.sourceConversationId,
     sourceMessageIds: params.data.sourceMessageIds,
+    sourceType: sourceContract.sourceType,
+    sourceId: sourceContract.sourceId,
+    sourceMetadata: sourceContract.sourceMetadata,
     confidenceBand: params.data.confidenceBand,
     language: params.data.language,
     expiresAt: params.data.expiresAt,
   });
+
+  reportMemoryCandidateCreated(sourceContract.sourceType);
+  return created;
 }
 
 export async function proposeSupersedingEdit(
@@ -419,6 +447,7 @@ export async function archive(
       reportMemoryReviewed({
         scopeType: archived.scopeType,
         outcome: "archived",
+        sourceType: archived.sourceType,
       });
     }
 
@@ -475,6 +504,7 @@ export async function unarchive(
       reportMemoryReviewed({
         scopeType: restored.scopeType,
         outcome: "unarchived",
+        sourceType: restored.sourceType,
       });
     }
 

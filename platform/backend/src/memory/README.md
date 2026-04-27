@@ -4,6 +4,7 @@ Governed subsystem for storing approved, long-lived context as atomic records. S
 
 Public-facing documentation: [`docs/pages/platform-memory.md`](../../../../docs/pages/platform-memory.md).
 Security runbook (canonical): [`docs/security.md`](./docs/security.md).
+Source contract (canonical): [`docs/source-contract.md`](./docs/source-contract.md).
 
 ## Directory map
 
@@ -116,6 +117,10 @@ Metrics live in [`telemetry/metrics.ts`](./telemetry/metrics.ts); spans in [`tel
 - `archestra_memory_review_policy_block_total{reason}`
 - `archestra_memory_tombstone_hit_total{reason,match_type}`
 - `archestra_memory_mcp_propose_block_total{reason}`
+- `archestra_memory_candidates_created_total{source_type}`
+- `archestra_memory_review_outcome_total{source_type,outcome}`
+- `archestra_memory_safety_block_total{source_type,reason}`
+- `archestra_memory_dedup_drop_total{source_type,reason}`
 
 ## Frontend surface
 

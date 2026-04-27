@@ -1,6 +1,10 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "./api-fixtures";
 
+function makeMarker(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
 test.describe("Memory API lifecycle", () => {
   test("api lifecycle supports create approve reject archive unarchive delete", { tag: ["@memory"] }, async ({
     request,
@@ -17,7 +21,7 @@ test.describe("Memory API lifecycle", () => {
         scopeType: "organization",
         scopeId: organizationId,
         kind: "org_fact",
-        content: `memory-api-a-${Date.now()}`,
+        content: makeMarker("memory-api-a"),
       },
     });
     const createdA = await createdAResponse.json();
@@ -65,7 +69,7 @@ test.describe("Memory API lifecycle", () => {
         scopeType: "organization",
         scopeId: organizationId,
         kind: "org_fact",
-        content: `memory-api-b-${Date.now()}`,
+        content: makeMarker("memory-api-b"),
       },
     });
     const createdB = await createdBResponse.json();
@@ -116,7 +120,7 @@ test.describe("Memory API lifecycle", () => {
         scopeType: "organization",
         scopeId: organizationId,
         kind: "org_fact",
-        content: `memory-rbac-${Date.now()}`,
+        content: makeMarker("memory-rbac"),
       },
     });
     const created = await createdResponse.json();
@@ -157,8 +161,8 @@ test.describe("Memory UI workflows", () => {
     test.setTimeout(120_000);
 
     const organizationId = await getActiveOrganizationId(request);
-    const approvedMarker = `memory-ui-approved-${Date.now()}`;
-    const rejectedMarker = `memory-ui-rejected-${Date.now()}`;
+    const approvedMarker = makeMarker("memory-ui-approved");
+    const rejectedMarker = makeMarker("memory-ui-rejected");
 
     const createdApprovedResponse = await makeApiRequest({
       request,

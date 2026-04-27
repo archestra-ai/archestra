@@ -1,7 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import type { MemoryPolicyFlag, MemoryScopeType } from "@/types/memory-item";
+import type {
+  MemoryPolicyFlag,
+  MemoryScopeType,
+  MemorySourceMetadata,
+  MemorySourceType,
+} from "@/types/memory-item";
 import MemoryItemModel from "./memory-item";
 import MemoryTombstoneModel from "./memory-tombstone";
 
@@ -393,6 +398,72 @@ describe("MemoryItemModel", () => {
     });
     expect(invalidRestoreToApproved).toBeNull();
   });
+
+  test("supports sourceType/sourceId filters and idempotency lookup", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+
+    await createMemoryItem({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      status: "candidate",
+      content: "Chat sourced memory",
+      createdBy: user.id,
+      sourceType: "chat",
+      sourceId: "conversation-1",
+      sourceMetadata: {
+        origin: { channel: "chat", conversationId: "conversation-1" },
+        ingestion: { runId: "run-1", idempotencyKey: "idem-1" },
+        actor: { kind: "agent", agentId: "agent-1" },
+        quality: { extractorVersion: "v1.0.0" },
+        safety: { policyFlags: [] },
+        future: { projectId: null, workspaceId: null, sectionId: null },
+      },
+    });
+
+    await createMemoryItem({
+      organizationId: organization.id,
+      scopeType: "user",
+      scopeId: user.id,
+      status: "candidate",
+      content: "Manual sourced memory",
+      createdBy: user.id,
+      sourceType: "manual",
+      sourceId: "manual:user",
+      sourceMetadata: {
+        origin: { channel: "manual" },
+        ingestion: { runId: "run-2" },
+        actor: { kind: "user", userId: user.id },
+        quality: {},
+        safety: { policyFlags: [] },
+        future: { projectId: null, workspaceId: null, sectionId: null },
+      },
+    });
+
+    const filtered = await MemoryItemModel.listForUser({
+      userId: user.id,
+      organizationId: organization.id,
+      teamIds: [],
+      isOrgAdmin: false,
+      sourceType: "chat",
+      sourceId: "conversation-1",
+      limit: 10,
+      offset: 0,
+    });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.content).toContain("Chat sourced memory");
+
+    const exists = await MemoryItemModel.existsByIngestionIdempotencyKey({
+      organizationId: organization.id,
+      sourceType: "chat",
+      idempotencyKey: "idem-1",
+    });
+    expect(exists).toBe(true);
+  });
 });
 
 type CreateMemoryItemParams = {
@@ -403,6 +474,9 @@ type CreateMemoryItemParams = {
   content: string;
   policyFlags?: MemoryPolicyFlag[];
   createdBy?: string | null;
+  sourceType?: MemorySourceType;
+  sourceId?: string | null;
+  sourceMetadata?: MemorySourceMetadata | null;
 };
 
 async function createMemoryItem(params: CreateMemoryItemParams) {
@@ -415,5 +489,8 @@ async function createMemoryItem(params: CreateMemoryItemParams) {
     content: params.content,
     createdBy: params.createdBy ?? null,
     policyFlags: params.policyFlags ?? [],
+    sourceType: params.sourceType,
+    sourceId: params.sourceId ?? null,
+    sourceMetadata: params.sourceMetadata ?? null,
   });
 }

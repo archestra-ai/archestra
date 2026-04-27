@@ -31,8 +31,10 @@ describe("memory telemetry metrics", () => {
       metrics.reportMemoryReviewed({
         scopeType: "user",
         outcome: "approved",
+        sourceType: "manual",
       }),
     ).not.toThrow();
+    expect(() => metrics.reportMemoryCandidateCreated("manual")).not.toThrow();
     expect(() =>
       metrics.reportMemoryScopeViolationBlocked({
         scopeType: "user",
@@ -57,6 +59,18 @@ describe("memory telemetry metrics", () => {
         matchType: "normalized",
       }),
     ).not.toThrow();
+    expect(() =>
+      metrics.reportMemorySafetyBlock({
+        sourceType: "chat",
+        reason: "sensitive",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      metrics.reportMemoryDedupDrop({
+        sourceType: "chat",
+        reason: "idempotency_key",
+      }),
+    ).not.toThrow();
   });
 
   test("initializes and records metric values", async () => {
@@ -73,7 +87,9 @@ describe("memory telemetry metrics", () => {
       scopeType: "user",
       outcome: "rejected",
       rejectionReason: "sensitive",
+      sourceType: "chat",
     });
+    metrics.reportMemoryCandidateCreated("manual");
     metrics.reportMemoryExtractionDuration({
       scopeType: "user",
       outcome: "success",
@@ -100,6 +116,14 @@ describe("memory telemetry metrics", () => {
       matchType: "legacy_exact",
     });
     metrics.reportMemoryMcpProposeBlock("tombstone_hit");
+    metrics.reportMemorySafetyBlock({
+      sourceType: "mcp_tool",
+      reason: "external_context",
+    });
+    metrics.reportMemoryDedupDrop({
+      sourceType: "chat",
+      reason: "content_hash_collision",
+    });
 
     const candidatesMetric = client.register.getSingleMetric(
       "archestra_memory_candidates_total",
@@ -128,6 +152,18 @@ describe("memory telemetry metrics", () => {
     const mcpProposeBlockMetric = client.register.getSingleMetric(
       "archestra_memory_mcp_propose_block_total",
     );
+    const candidatesBySourceMetric = client.register.getSingleMetric(
+      "archestra_memory_candidates_created_total",
+    );
+    const reviewBySourceMetric = client.register.getSingleMetric(
+      "archestra_memory_review_outcome_total",
+    );
+    const safetyBlockBySourceMetric = client.register.getSingleMetric(
+      "archestra_memory_safety_block_total",
+    );
+    const dedupDropBySourceMetric = client.register.getSingleMetric(
+      "archestra_memory_dedup_drop_total",
+    );
 
     expect(candidatesMetric).toBeDefined();
     expect(reviewedMetric).toBeDefined();
@@ -138,6 +174,10 @@ describe("memory telemetry metrics", () => {
     expect(reviewPolicyBlockMetric).toBeDefined();
     expect(tombstoneHitMetric).toBeDefined();
     expect(mcpProposeBlockMetric).toBeDefined();
+    expect(candidatesBySourceMetric).toBeDefined();
+    expect(reviewBySourceMetric).toBeDefined();
+    expect(safetyBlockBySourceMetric).toBeDefined();
+    expect(dedupDropBySourceMetric).toBeDefined();
 
     const candidatesValues = await candidatesMetric?.get();
     const reviewedValues = await reviewedMetric?.get();
@@ -147,6 +187,10 @@ describe("memory telemetry metrics", () => {
     const reviewPolicyBlockValues = await reviewPolicyBlockMetric?.get();
     const tombstoneHitValues = await tombstoneHitMetric?.get();
     const mcpProposeBlockValues = await mcpProposeBlockMetric?.get();
+    const candidatesBySourceValues = await candidatesBySourceMetric?.get();
+    const reviewBySourceValues = await reviewBySourceMetric?.get();
+    const safetyBlockBySourceValues = await safetyBlockBySourceMetric?.get();
+    const dedupDropBySourceValues = await dedupDropBySourceMetric?.get();
 
     expect(candidatesValues?.values.some((value) => value.value === 1)).toBe(
       true,
@@ -171,6 +215,18 @@ describe("memory telemetry metrics", () => {
     );
     expect(
       mcpProposeBlockValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      candidatesBySourceValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      reviewBySourceValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      safetyBlockBySourceValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      dedupDropBySourceValues?.values.some((value) => value.value === 1),
     ).toBe(true);
   });
 });

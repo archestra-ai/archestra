@@ -1576,6 +1576,13 @@
       "when": 1777011514100,
       "tag": "0224_secret_santa_claus",
       "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "7",
+      "when": 1777305814834,
+      "tag": "0225_classy_anita_blake",
+      "breakpoints": true
     }
   ]
 }

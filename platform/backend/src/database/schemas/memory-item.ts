@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -13,6 +14,8 @@ import type {
   MemoryPolicyFlag,
   MemoryRejectionReason,
   MemoryScopeType,
+  MemorySourceMetadata,
+  MemorySourceType,
   MemoryStatus,
 } from "@/types/memory-item";
 import conversationsTable from "./conversation";
@@ -46,6 +49,9 @@ const memoryItemsTable = pgTable(
       .$type<MemoryPolicyFlag[]>()
       .notNull()
       .default(sql`'{}'::text[]`),
+    sourceType: text("source_type").$type<MemorySourceType>(),
+    sourceId: text("source_id"),
+    sourceMetadata: jsonb("source_metadata").$type<MemorySourceMetadata>(),
     sourceConversationId: uuid("source_conversation_id").references(
       () => conversationsTable.id,
       { onDelete: "set null" },
@@ -79,6 +85,11 @@ const memoryItemsTable = pgTable(
     ),
     index("memory_items_source_conversation_idx").on(
       table.sourceConversationId,
+    ),
+    index("memory_items_source_type_idx").on(table.sourceType),
+    index("memory_items_source_type_id_idx").on(
+      table.sourceType,
+      table.sourceId,
     ),
     index("memory_items_approved_scope_idx")
       .on(table.organizationId, table.scopeType, table.scopeId)

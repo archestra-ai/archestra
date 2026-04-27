@@ -19,6 +19,10 @@ import {
   type MemoryRequesterRole,
   normalizeMemoryRequesterRole,
 } from "@/memory/policy/requester-role";
+import {
+  buildFallbackSourceContract,
+  validateSourceContract,
+} from "@/memory/provenance/source-contract";
 import type {
   InsertMemoryItem,
   MemoryItem,
@@ -26,6 +30,7 @@ import type {
   MemoryPolicyFlag,
   MemoryRejectionReason,
   MemoryScopeType,
+  MemorySourceType,
   MemoryStatus,
   UpdateMemoryItem,
 } from "@/types/memory-item";
@@ -71,6 +76,8 @@ class MemoryItemModel {
     scopeType?: MemoryScopeType;
     status?: MemoryStatus;
     kind?: MemoryKind;
+    sourceType?: MemorySourceType;
+    sourceId?: string;
     search?: string;
     limit: number;
     offset: number;
@@ -94,6 +101,8 @@ class MemoryItemModel {
     scopeType?: MemoryScopeType;
     status?: MemoryStatus;
     kind?: MemoryKind;
+    sourceType?: MemorySourceType;
+    sourceId?: string;
     search?: string;
   }): Promise<number> {
     const conditions = MemoryItemModel.buildListForUserConditions(params);
@@ -168,9 +177,21 @@ class MemoryItemModel {
     organizationId: string;
     patch: UpdateMemoryItem;
   }): Promise<MemoryItem | null> {
+    const rawPatch = params.patch as UpdateMemoryItem & {
+      sourceType?: MemorySourceType;
+      sourceId?: string;
+      sourceMetadata?: unknown;
+    };
+    const {
+      sourceType: _sourceType,
+      sourceId: _sourceId,
+      sourceMetadata: _sourceMetadata,
+      ...safePatch
+    } = rawPatch;
+
     const [updated] = await db
       .update(schema.memoryItemsTable)
-      .set(params.patch)
+      .set(safePatch)
       .where(
         and(
           eq(schema.memoryItemsTable.id, params.id),
@@ -209,6 +230,24 @@ class MemoryItemModel {
         throw new Error("Only approved memory can be superseded");
       }
 
+      const sourceContract =
+        source.sourceType && source.sourceId && source.sourceMetadata
+          ? validateSourceContract({
+              sourceType: source.sourceType,
+              sourceId: source.sourceId,
+              sourceMetadata: source.sourceMetadata,
+            })
+          : buildFallbackSourceContract({
+              sourceConversationId: source.sourceConversationId,
+              sourceMessageIds: source.sourceMessageIds,
+              createdBy: source.createdBy,
+              scopeType: source.scopeType,
+              scopeId: source.scopeId,
+              policyFlags: source.policyFlags,
+              extractorVersion: source.extractorVersion,
+              future: null,
+            });
+
       const [created] = await tx
         .insert(schema.memoryItemsTable)
         .values({
@@ -223,6 +262,9 @@ class MemoryItemModel {
           policyFlags: params.policyFlags ?? source.policyFlags,
           sourceConversationId: source.sourceConversationId,
           sourceMessageIds: source.sourceMessageIds,
+          sourceType: sourceContract.sourceType,
+          sourceId: sourceContract.sourceId,
+          sourceMetadata: sourceContract.sourceMetadata,
           supersedesMemoryId: source.id,
           confidenceBand: source.confidenceBand,
           language: source.language,
@@ -478,6 +520,29 @@ class MemoryItemModel {
       .limit(params.limit);
   }
 
+  static async existsByIngestionIdempotencyKey(params: {
+    organizationId: string;
+    sourceType: MemorySourceType;
+    idempotencyKey: string;
+  }): Promise<boolean> {
+    if (!params.idempotencyKey.trim()) {
+      return false;
+    }
+
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.memoryItemsTable)
+      .where(
+        and(
+          eq(schema.memoryItemsTable.organizationId, params.organizationId),
+          eq(schema.memoryItemsTable.sourceType, params.sourceType),
+          sql`${schema.memoryItemsTable.sourceMetadata} -> 'ingestion' ->> 'idempotencyKey' = ${params.idempotencyKey}`,
+        ),
+      );
+
+    return Number(result?.total ?? 0) > 0;
+  }
+
   private static buildListForUserConditions(params: {
     userId: string;
     organizationId: string;
@@ -486,6 +551,8 @@ class MemoryItemModel {
     scopeType?: MemoryScopeType;
     status?: MemoryStatus;
     kind?: MemoryKind;
+    sourceType?: MemorySourceType;
+    sourceId?: string;
     search?: string;
   }): SQL[] {
     const teamIds = params.teamIds ?? [];
@@ -507,6 +574,14 @@ class MemoryItemModel {
     }
     if (params.kind) {
       conditions.push(eq(schema.memoryItemsTable.kind, params.kind));
+    }
+    if (params.sourceType) {
+      conditions.push(
+        eq(schema.memoryItemsTable.sourceType, params.sourceType),
+      );
+    }
+    if (params.sourceId) {
+      conditions.push(eq(schema.memoryItemsTable.sourceId, params.sourceId));
     }
     if (params.search) {
       conditions.push(

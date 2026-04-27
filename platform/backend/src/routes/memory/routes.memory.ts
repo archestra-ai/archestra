@@ -21,6 +21,7 @@ import {
   MemoryPolicyFlagSchema,
   MemoryRejectionReasonSchema,
   MemoryScopeTypeSchema,
+  MemorySourceTypeSchema,
   MemoryStatusSchema,
   SelectMemoryItemSchema,
   SupersedeMemoryItemSchema,
@@ -41,6 +42,8 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scopeType: MemoryScopeTypeSchema.optional(),
           status: MemoryStatusSchema.optional(),
           kind: MemoryKindSchema.optional(),
+          sourceType: MemorySourceTypeSchema.optional(),
+          sourceId: z.string().optional(),
           search: z.string().optional(),
         }),
         response: constructResponseSchema(
@@ -50,7 +53,16 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, scopeType, status, kind, search },
+        query: {
+          limit,
+          offset,
+          scopeType,
+          status,
+          kind,
+          sourceType,
+          sourceId,
+          search,
+        },
         user,
         organizationId,
       },
@@ -71,6 +83,8 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scopeType,
           status,
           kind,
+          sourceType,
+          sourceId,
           search,
           limit,
           offset,
@@ -83,6 +97,8 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scopeType,
           status,
           kind,
+          sourceType,
+          sourceId,
           search,
         }),
       ]);
@@ -234,6 +250,14 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
           confidenceBand: MemoryConfidenceBandSchema.nullable().optional(),
           expiresAt: z.coerce.date().nullable().optional(),
           language: z.string().optional(),
+          sourceId: z.string().min(1).optional(),
+          sourceFuture: z
+            .object({
+              projectId: z.string().nullable().optional(),
+              workspaceId: z.string().nullable().optional(),
+              sectionId: z.string().nullable().optional(),
+            })
+            .optional(),
         }),
         response: constructResponseSchema(SelectMemoryItemSchema),
       },
@@ -257,6 +281,8 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
             confidenceBand: body.confidenceBand ?? undefined,
             expiresAt: body.expiresAt ?? undefined,
             language: body.language,
+            sourceId: body.sourceId,
+            sourceFuture: body.sourceFuture,
           },
           requester: { id: user.id, role: member?.role },
           teamIds,

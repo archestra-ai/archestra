@@ -10657,6 +10657,7 @@ export type GetAgentsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10666,6 +10667,7 @@ export type GetAgentsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10675,6 +10677,7 @@ export type GetAgentsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10684,6 +10687,7 @@ export type GetAgentsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10693,6 +10697,7 @@ export type GetAgentsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10702,6 +10707,7 @@ export type GetAgentsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -10864,6 +10870,7 @@ export type CreateAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10873,6 +10880,7 @@ export type CreateAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10882,6 +10890,7 @@ export type CreateAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10891,6 +10900,7 @@ export type CreateAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10900,6 +10910,7 @@ export type CreateAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -10909,6 +10920,7 @@ export type CreateAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11038,6 +11050,7 @@ export type GetAllAgentsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11047,6 +11060,7 @@ export type GetAllAgentsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11056,6 +11070,7 @@ export type GetAllAgentsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11065,6 +11080,7 @@ export type GetAllAgentsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11074,6 +11090,7 @@ export type GetAllAgentsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11083,6 +11100,7 @@ export type GetAllAgentsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11195,6 +11213,7 @@ export type GetDefaultMcpGatewayErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11204,6 +11223,7 @@ export type GetDefaultMcpGatewayErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11213,6 +11233,7 @@ export type GetDefaultMcpGatewayErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11222,6 +11243,7 @@ export type GetDefaultMcpGatewayErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11231,6 +11253,7 @@ export type GetDefaultMcpGatewayErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11240,6 +11263,7 @@ export type GetDefaultMcpGatewayErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11352,6 +11376,7 @@ export type GetDefaultLlmProxyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11361,6 +11386,7 @@ export type GetDefaultLlmProxyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11370,6 +11396,7 @@ export type GetDefaultLlmProxyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11379,6 +11406,7 @@ export type GetDefaultLlmProxyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11388,6 +11416,7 @@ export type GetDefaultLlmProxyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11397,6 +11426,7 @@ export type GetDefaultLlmProxyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11511,6 +11541,7 @@ export type DeleteAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11520,6 +11551,7 @@ export type DeleteAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11529,6 +11561,7 @@ export type DeleteAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11538,6 +11571,7 @@ export type DeleteAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11547,6 +11581,7 @@ export type DeleteAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11556,6 +11591,7 @@ export type DeleteAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11590,6 +11626,7 @@ export type GetAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11599,6 +11636,7 @@ export type GetAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11608,6 +11646,7 @@ export type GetAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11617,6 +11656,7 @@ export type GetAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11626,6 +11666,7 @@ export type GetAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11635,6 +11676,7 @@ export type GetAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11789,6 +11831,7 @@ export type UpdateAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11798,6 +11841,7 @@ export type UpdateAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11807,6 +11851,7 @@ export type UpdateAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11816,6 +11861,7 @@ export type UpdateAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11825,6 +11871,7 @@ export type UpdateAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11834,6 +11881,7 @@ export type UpdateAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -11946,6 +11994,7 @@ export type GetLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11955,6 +12004,7 @@ export type GetLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11964,6 +12014,7 @@ export type GetLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11973,6 +12024,7 @@ export type GetLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11982,6 +12034,7 @@ export type GetLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -11991,6 +12044,7 @@ export type GetLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12026,6 +12080,7 @@ export type GetLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12035,6 +12090,7 @@ export type GetLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12044,6 +12100,7 @@ export type GetLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12053,6 +12110,7 @@ export type GetLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12062,6 +12120,7 @@ export type GetLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12071,6 +12130,7 @@ export type GetLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12101,6 +12161,7 @@ export type GetMemberDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12110,6 +12171,7 @@ export type GetMemberDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12119,6 +12181,7 @@ export type GetMemberDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12128,6 +12191,7 @@ export type GetMemberDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12137,6 +12201,7 @@ export type GetMemberDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12146,6 +12211,7 @@ export type GetMemberDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12198,6 +12264,7 @@ export type GetAllAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12207,6 +12274,7 @@ export type GetAllAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12216,6 +12284,7 @@ export type GetAllAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12225,6 +12294,7 @@ export type GetAllAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12234,6 +12304,7 @@ export type GetAllAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12243,6 +12314,7 @@ export type GetAllAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12319,6 +12391,7 @@ export type UnassignToolFromAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12328,6 +12401,7 @@ export type UnassignToolFromAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12337,6 +12411,7 @@ export type UnassignToolFromAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12346,6 +12421,7 @@ export type UnassignToolFromAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12355,6 +12431,7 @@ export type UnassignToolFromAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12364,6 +12441,7 @@ export type UnassignToolFromAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12403,6 +12481,7 @@ export type AssignToolToAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12412,6 +12491,7 @@ export type AssignToolToAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12421,6 +12501,7 @@ export type AssignToolToAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12430,6 +12511,7 @@ export type AssignToolToAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12439,6 +12521,7 @@ export type AssignToolToAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12448,6 +12531,7 @@ export type AssignToolToAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12488,6 +12572,7 @@ export type BulkAssignToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12497,6 +12582,7 @@ export type BulkAssignToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12506,6 +12592,7 @@ export type BulkAssignToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12515,6 +12602,7 @@ export type BulkAssignToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12524,6 +12612,7 @@ export type BulkAssignToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12533,6 +12622,7 @@ export type BulkAssignToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12579,6 +12669,7 @@ export type AutoConfigureAgentToolPoliciesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12588,6 +12679,7 @@ export type AutoConfigureAgentToolPoliciesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12597,6 +12689,7 @@ export type AutoConfigureAgentToolPoliciesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12606,6 +12699,7 @@ export type AutoConfigureAgentToolPoliciesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12615,6 +12709,7 @@ export type AutoConfigureAgentToolPoliciesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12624,6 +12719,7 @@ export type AutoConfigureAgentToolPoliciesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12668,6 +12764,7 @@ export type GetAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12677,6 +12774,7 @@ export type GetAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12686,6 +12784,7 @@ export type GetAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12695,6 +12794,7 @@ export type GetAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12704,6 +12804,7 @@ export type GetAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12713,6 +12814,7 @@ export type GetAgentToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12781,6 +12883,7 @@ export type UpdateAgentToolErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12790,6 +12893,7 @@ export type UpdateAgentToolErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12799,6 +12903,7 @@ export type UpdateAgentToolErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12808,6 +12913,7 @@ export type UpdateAgentToolErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12817,6 +12923,7 @@ export type UpdateAgentToolErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12826,6 +12933,7 @@ export type UpdateAgentToolErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12866,6 +12974,7 @@ export type GetAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12875,6 +12984,7 @@ export type GetAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12884,6 +12994,7 @@ export type GetAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12893,6 +13004,7 @@ export type GetAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12902,6 +13014,7 @@ export type GetAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12911,6 +13024,7 @@ export type GetAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -12950,6 +13064,7 @@ export type SyncAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12959,6 +13074,7 @@ export type SyncAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12968,6 +13084,7 @@ export type SyncAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12977,6 +13094,7 @@ export type SyncAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12986,6 +13104,7 @@ export type SyncAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -12995,6 +13114,7 @@ export type SyncAgentDelegationsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13031,6 +13151,7 @@ export type DeleteAgentDelegationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13040,6 +13161,7 @@ export type DeleteAgentDelegationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13049,6 +13171,7 @@ export type DeleteAgentDelegationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13058,6 +13181,7 @@ export type DeleteAgentDelegationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13067,6 +13191,7 @@ export type DeleteAgentDelegationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13076,6 +13201,7 @@ export type DeleteAgentDelegationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13108,6 +13234,7 @@ export type GetAllDelegationConnectionsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13117,6 +13244,7 @@ export type GetAllDelegationConnectionsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13126,6 +13254,7 @@ export type GetAllDelegationConnectionsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13135,6 +13264,7 @@ export type GetAllDelegationConnectionsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13144,6 +13274,7 @@ export type GetAllDelegationConnectionsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13153,6 +13284,7 @@ export type GetAllDelegationConnectionsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13212,6 +13344,7 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13221,6 +13354,7 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13230,6 +13364,7 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13239,6 +13374,7 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13248,6 +13384,7 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13257,6 +13394,7 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13305,6 +13443,7 @@ export type AnthropicMessagesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13314,6 +13453,7 @@ export type AnthropicMessagesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13323,6 +13463,7 @@ export type AnthropicMessagesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13332,6 +13473,7 @@ export type AnthropicMessagesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13341,6 +13483,7 @@ export type AnthropicMessagesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13350,6 +13493,7 @@ export type AnthropicMessagesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13380,6 +13524,7 @@ export type GetApiKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13389,6 +13534,7 @@ export type GetApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13398,6 +13544,7 @@ export type GetApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13407,6 +13554,7 @@ export type GetApiKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13416,6 +13564,7 @@ export type GetApiKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13425,6 +13574,7 @@ export type GetApiKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13475,6 +13625,7 @@ export type CreateApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13484,6 +13635,7 @@ export type CreateApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13493,6 +13645,7 @@ export type CreateApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13502,6 +13655,7 @@ export type CreateApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13511,6 +13665,7 @@ export type CreateApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13520,6 +13675,7 @@ export type CreateApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13570,6 +13726,7 @@ export type DeleteApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13579,6 +13736,7 @@ export type DeleteApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13588,6 +13746,7 @@ export type DeleteApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13597,6 +13756,7 @@ export type DeleteApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13606,6 +13766,7 @@ export type DeleteApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13615,6 +13776,7 @@ export type DeleteApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13649,6 +13811,7 @@ export type GetApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13658,6 +13821,7 @@ export type GetApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13667,6 +13831,7 @@ export type GetApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13676,6 +13841,7 @@ export type GetApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13685,6 +13851,7 @@ export type GetApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13694,6 +13861,7 @@ export type GetApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13836,6 +14004,7 @@ export type SubmitOAuthConsentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13845,6 +14014,7 @@ export type SubmitOAuthConsentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13854,6 +14024,7 @@ export type SubmitOAuthConsentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13863,6 +14034,7 @@ export type SubmitOAuthConsentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13872,6 +14044,7 @@ export type SubmitOAuthConsentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13881,6 +14054,7 @@ export type SubmitOAuthConsentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -13975,6 +14149,7 @@ export type GetOperatorsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13984,6 +14159,7 @@ export type GetOperatorsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -13993,6 +14169,7 @@ export type GetOperatorsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14002,6 +14179,7 @@ export type GetOperatorsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14011,6 +14189,7 @@ export type GetOperatorsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14020,6 +14199,7 @@ export type GetOperatorsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14053,6 +14233,7 @@ export type GetToolInvocationPoliciesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14062,6 +14243,7 @@ export type GetToolInvocationPoliciesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14071,6 +14253,7 @@ export type GetToolInvocationPoliciesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14080,6 +14263,7 @@ export type GetToolInvocationPoliciesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14089,6 +14273,7 @@ export type GetToolInvocationPoliciesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14098,6 +14283,7 @@ export type GetToolInvocationPoliciesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14149,6 +14335,7 @@ export type CreateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14158,6 +14345,7 @@ export type CreateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14167,6 +14355,7 @@ export type CreateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14176,6 +14365,7 @@ export type CreateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14185,6 +14375,7 @@ export type CreateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14194,6 +14385,7 @@ export type CreateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14238,6 +14430,7 @@ export type DeleteToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14247,6 +14440,7 @@ export type DeleteToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14256,6 +14450,7 @@ export type DeleteToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14265,6 +14460,7 @@ export type DeleteToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14274,6 +14470,7 @@ export type DeleteToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14283,6 +14480,7 @@ export type DeleteToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14317,6 +14515,7 @@ export type GetToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14326,6 +14525,7 @@ export type GetToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14335,6 +14535,7 @@ export type GetToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14344,6 +14545,7 @@ export type GetToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14353,6 +14555,7 @@ export type GetToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14362,6 +14565,7 @@ export type GetToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14415,6 +14619,7 @@ export type UpdateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14424,6 +14629,7 @@ export type UpdateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14433,6 +14639,7 @@ export type UpdateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14442,6 +14649,7 @@ export type UpdateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14451,6 +14659,7 @@ export type UpdateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14460,6 +14669,7 @@ export type UpdateToolInvocationPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14502,6 +14712,7 @@ export type GetTrustedDataPoliciesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14511,6 +14722,7 @@ export type GetTrustedDataPoliciesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14520,6 +14732,7 @@ export type GetTrustedDataPoliciesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14529,6 +14742,7 @@ export type GetTrustedDataPoliciesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14538,6 +14752,7 @@ export type GetTrustedDataPoliciesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14547,6 +14762,7 @@ export type GetTrustedDataPoliciesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14598,6 +14814,7 @@ export type CreateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14607,6 +14824,7 @@ export type CreateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14616,6 +14834,7 @@ export type CreateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14625,6 +14844,7 @@ export type CreateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14634,6 +14854,7 @@ export type CreateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14643,6 +14864,7 @@ export type CreateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14687,6 +14909,7 @@ export type DeleteTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14696,6 +14919,7 @@ export type DeleteTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14705,6 +14929,7 @@ export type DeleteTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14714,6 +14939,7 @@ export type DeleteTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14723,6 +14949,7 @@ export type DeleteTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14732,6 +14959,7 @@ export type DeleteTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14766,6 +14994,7 @@ export type GetTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14775,6 +15004,7 @@ export type GetTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14784,6 +15014,7 @@ export type GetTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14793,6 +15024,7 @@ export type GetTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14802,6 +15034,7 @@ export type GetTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14811,6 +15044,7 @@ export type GetTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14864,6 +15098,7 @@ export type UpdateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14873,6 +15108,7 @@ export type UpdateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14882,6 +15118,7 @@ export type UpdateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14891,6 +15128,7 @@ export type UpdateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14900,6 +15138,7 @@ export type UpdateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14909,6 +15148,7 @@ export type UpdateTrustedDataPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -14954,6 +15194,7 @@ export type BulkUpsertDefaultCallPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14963,6 +15204,7 @@ export type BulkUpsertDefaultCallPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14972,6 +15214,7 @@ export type BulkUpsertDefaultCallPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14981,6 +15224,7 @@ export type BulkUpsertDefaultCallPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14990,6 +15234,7 @@ export type BulkUpsertDefaultCallPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -14999,6 +15244,7 @@ export type BulkUpsertDefaultCallPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15035,6 +15281,7 @@ export type BulkUpsertDefaultResultPolicyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15044,6 +15291,7 @@ export type BulkUpsertDefaultResultPolicyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15053,6 +15301,7 @@ export type BulkUpsertDefaultResultPolicyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15062,6 +15311,7 @@ export type BulkUpsertDefaultResultPolicyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15071,6 +15321,7 @@ export type BulkUpsertDefaultResultPolicyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15080,6 +15331,7 @@ export type BulkUpsertDefaultResultPolicyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15123,6 +15375,7 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15132,6 +15385,7 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15141,6 +15395,7 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15150,6 +15405,7 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15159,6 +15415,7 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15168,6 +15425,7 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15307,6 +15565,7 @@ export type AzureResponsesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15316,6 +15575,7 @@ export type AzureResponsesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15325,6 +15585,7 @@ export type AzureResponsesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15334,6 +15595,7 @@ export type AzureResponsesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15343,6 +15605,7 @@ export type AzureResponsesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15352,6 +15615,7 @@ export type AzureResponsesWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15466,6 +15730,7 @@ export type AzureResponsesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15475,6 +15740,7 @@ export type AzureResponsesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15484,6 +15750,7 @@ export type AzureResponsesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15493,6 +15760,7 @@ export type AzureResponsesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15502,6 +15770,7 @@ export type AzureResponsesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15511,6 +15780,7 @@ export type AzureResponsesWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15593,6 +15863,7 @@ export type AzureChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15602,6 +15873,7 @@ export type AzureChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15611,6 +15883,7 @@ export type AzureChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15620,6 +15893,7 @@ export type AzureChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15629,6 +15903,7 @@ export type AzureChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15638,6 +15913,7 @@ export type AzureChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15791,6 +16067,7 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15800,6 +16077,7 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15809,6 +16087,7 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15818,6 +16097,7 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15827,6 +16107,7 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15836,6 +16117,7 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -15882,6 +16164,7 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15891,6 +16174,7 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15900,6 +16184,7 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15909,6 +16194,7 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15918,6 +16204,7 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -15927,6 +16214,7 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -16136,6 +16424,7 @@ export type BedrockConverseWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16145,6 +16434,7 @@ export type BedrockConverseWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16154,6 +16444,7 @@ export type BedrockConverseWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16163,6 +16454,7 @@ export type BedrockConverseWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16172,6 +16464,7 @@ export type BedrockConverseWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16181,6 +16474,7 @@ export type BedrockConverseWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -16442,6 +16736,7 @@ export type BedrockConverseWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16451,6 +16746,7 @@ export type BedrockConverseWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16460,6 +16756,7 @@ export type BedrockConverseWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16469,6 +16766,7 @@ export type BedrockConverseWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16478,6 +16776,7 @@ export type BedrockConverseWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -16487,6 +16786,7 @@ export type BedrockConverseWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17121,6 +17421,7 @@ export type BedrockConverseWithAgentAndModelErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17130,6 +17431,7 @@ export type BedrockConverseWithAgentAndModelErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17139,6 +17441,7 @@ export type BedrockConverseWithAgentAndModelErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17148,6 +17451,7 @@ export type BedrockConverseWithAgentAndModelErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17157,6 +17461,7 @@ export type BedrockConverseWithAgentAndModelErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17166,6 +17471,7 @@ export type BedrockConverseWithAgentAndModelErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17452,6 +17758,7 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17461,6 +17768,7 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17470,6 +17778,7 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17479,6 +17788,7 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17488,6 +17798,7 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17497,6 +17808,7 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17539,6 +17851,7 @@ export type CerebrasChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17548,6 +17861,7 @@ export type CerebrasChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17557,6 +17871,7 @@ export type CerebrasChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17566,6 +17881,7 @@ export type CerebrasChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17575,6 +17891,7 @@ export type CerebrasChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17584,6 +17901,7 @@ export type CerebrasChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17618,6 +17936,7 @@ export type StreamChatErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17627,6 +17946,7 @@ export type StreamChatErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17636,6 +17956,7 @@ export type StreamChatErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17645,6 +17966,7 @@ export type StreamChatErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17654,6 +17976,7 @@ export type StreamChatErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17663,6 +17986,7 @@ export type StreamChatErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17686,6 +18010,7 @@ export type StopChatStreamErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17695,6 +18020,7 @@ export type StopChatStreamErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17704,6 +18030,7 @@ export type StopChatStreamErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17713,6 +18040,7 @@ export type StopChatStreamErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17722,6 +18050,7 @@ export type StopChatStreamErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17731,6 +18060,7 @@ export type StopChatStreamErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17765,6 +18095,7 @@ export type GetChatConversationsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17774,6 +18105,7 @@ export type GetChatConversationsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17783,6 +18115,7 @@ export type GetChatConversationsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17792,6 +18125,7 @@ export type GetChatConversationsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17801,6 +18135,7 @@ export type GetChatConversationsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17810,6 +18145,7 @@ export type GetChatConversationsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -17895,6 +18231,7 @@ export type CreateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17904,6 +18241,7 @@ export type CreateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17913,6 +18251,7 @@ export type CreateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17922,6 +18261,7 @@ export type CreateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17931,6 +18271,7 @@ export type CreateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -17940,6 +18281,7 @@ export type CreateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18021,6 +18363,7 @@ export type DeleteChatConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18030,6 +18373,7 @@ export type DeleteChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18039,6 +18383,7 @@ export type DeleteChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18048,6 +18393,7 @@ export type DeleteChatConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18057,6 +18403,7 @@ export type DeleteChatConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18066,6 +18413,7 @@ export type DeleteChatConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18100,6 +18448,7 @@ export type GetChatConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18109,6 +18458,7 @@ export type GetChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18118,6 +18468,7 @@ export type GetChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18127,6 +18478,7 @@ export type GetChatConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18136,6 +18488,7 @@ export type GetChatConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18145,6 +18498,7 @@ export type GetChatConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18234,6 +18588,7 @@ export type UpdateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18243,6 +18598,7 @@ export type UpdateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18252,6 +18608,7 @@ export type UpdateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18261,6 +18618,7 @@ export type UpdateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18270,6 +18628,7 @@ export type UpdateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18279,6 +18638,7 @@ export type UpdateChatConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18360,6 +18720,7 @@ export type GetChatAgentMcpToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18369,6 +18730,7 @@ export type GetChatAgentMcpToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18378,6 +18740,7 @@ export type GetChatAgentMcpToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18387,6 +18750,7 @@ export type GetChatAgentMcpToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18396,6 +18760,7 @@ export type GetChatAgentMcpToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18405,6 +18770,7 @@ export type GetChatAgentMcpToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18443,6 +18809,7 @@ export type UnshareConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18452,6 +18819,7 @@ export type UnshareConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18461,6 +18829,7 @@ export type UnshareConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18470,6 +18839,7 @@ export type UnshareConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18479,6 +18849,7 @@ export type UnshareConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18488,6 +18859,7 @@ export type UnshareConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18522,6 +18894,7 @@ export type GetConversationShareErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18531,6 +18904,7 @@ export type GetConversationShareErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18540,6 +18914,7 @@ export type GetConversationShareErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18549,6 +18924,7 @@ export type GetConversationShareErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18558,6 +18934,7 @@ export type GetConversationShareErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18567,6 +18944,7 @@ export type GetConversationShareErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18612,6 +18990,7 @@ export type ShareConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18621,6 +19000,7 @@ export type ShareConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18630,6 +19010,7 @@ export type ShareConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18639,6 +19020,7 @@ export type ShareConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18648,6 +19030,7 @@ export type ShareConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18657,6 +19040,7 @@ export type ShareConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18698,6 +19082,7 @@ export type GetSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18707,6 +19092,7 @@ export type GetSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18716,6 +19102,7 @@ export type GetSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18725,6 +19112,7 @@ export type GetSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18734,6 +19122,7 @@ export type GetSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18743,6 +19132,7 @@ export type GetSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18827,6 +19217,7 @@ export type ForkSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18836,6 +19227,7 @@ export type ForkSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18845,6 +19237,7 @@ export type ForkSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18854,6 +19247,7 @@ export type ForkSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18863,6 +19257,7 @@ export type ForkSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18872,6 +19267,7 @@ export type ForkSharedConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -18958,6 +19354,7 @@ export type GenerateChatConversationTitleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18967,6 +19364,7 @@ export type GenerateChatConversationTitleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18976,6 +19374,7 @@ export type GenerateChatConversationTitleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18985,6 +19384,7 @@ export type GenerateChatConversationTitleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -18994,6 +19394,7 @@ export type GenerateChatConversationTitleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19003,6 +19404,7 @@ export type GenerateChatConversationTitleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19088,6 +19490,7 @@ export type UpdateChatMessageErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19097,6 +19500,7 @@ export type UpdateChatMessageErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19106,6 +19510,7 @@ export type UpdateChatMessageErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19115,6 +19520,7 @@ export type UpdateChatMessageErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19124,6 +19530,7 @@ export type UpdateChatMessageErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19133,6 +19540,7 @@ export type UpdateChatMessageErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19214,6 +19622,7 @@ export type DeleteConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19223,6 +19632,7 @@ export type DeleteConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19232,6 +19642,7 @@ export type DeleteConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19241,6 +19652,7 @@ export type DeleteConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19250,6 +19662,7 @@ export type DeleteConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19259,6 +19672,7 @@ export type DeleteConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19293,6 +19707,7 @@ export type GetConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19302,6 +19717,7 @@ export type GetConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19311,6 +19727,7 @@ export type GetConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19320,6 +19737,7 @@ export type GetConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19329,6 +19747,7 @@ export type GetConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19338,6 +19757,7 @@ export type GetConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19375,6 +19795,7 @@ export type UpdateConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19384,6 +19805,7 @@ export type UpdateConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19393,6 +19815,7 @@ export type UpdateConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19402,6 +19825,7 @@ export type UpdateConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19411,6 +19835,7 @@ export type UpdateConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19420,6 +19845,7 @@ export type UpdateConversationEnabledToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19635,6 +20061,7 @@ export type GetChatOpsStatusErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19644,6 +20071,7 @@ export type GetChatOpsStatusErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19653,6 +20081,7 @@ export type GetChatOpsStatusErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19662,6 +20091,7 @@ export type GetChatOpsStatusErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19671,6 +20101,7 @@ export type GetChatOpsStatusErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19680,6 +20111,7 @@ export type GetChatOpsStatusErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19739,6 +20171,7 @@ export type ListChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19748,6 +20181,7 @@ export type ListChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19757,6 +20191,7 @@ export type ListChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19766,6 +20201,7 @@ export type ListChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19775,6 +20211,7 @@ export type ListChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19784,6 +20221,7 @@ export type ListChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19849,6 +20287,7 @@ export type BulkUpdateChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19858,6 +20297,7 @@ export type BulkUpdateChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19867,6 +20307,7 @@ export type BulkUpdateChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19876,6 +20317,7 @@ export type BulkUpdateChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19885,6 +20327,7 @@ export type BulkUpdateChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19894,6 +20337,7 @@ export type BulkUpdateChatOpsBindingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -19939,6 +20383,7 @@ export type DeleteChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19948,6 +20393,7 @@ export type DeleteChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19957,6 +20403,7 @@ export type DeleteChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19966,6 +20413,7 @@ export type DeleteChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19975,6 +20423,7 @@ export type DeleteChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -19984,6 +20433,7 @@ export type DeleteChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20020,6 +20470,7 @@ export type UpdateChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20029,6 +20480,7 @@ export type UpdateChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20038,6 +20490,7 @@ export type UpdateChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20047,6 +20500,7 @@ export type UpdateChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20056,6 +20510,7 @@ export type UpdateChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20065,6 +20520,7 @@ export type UpdateChatOpsBindingErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20111,6 +20567,7 @@ export type CreateChatOpsDmBindingErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20120,6 +20577,7 @@ export type CreateChatOpsDmBindingErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20129,6 +20587,7 @@ export type CreateChatOpsDmBindingErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20138,6 +20597,7 @@ export type CreateChatOpsDmBindingErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20147,6 +20607,7 @@ export type CreateChatOpsDmBindingErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20156,6 +20617,7 @@ export type CreateChatOpsDmBindingErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20204,6 +20666,7 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20213,6 +20676,7 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20222,6 +20686,7 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20231,6 +20696,7 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20240,6 +20706,7 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20249,6 +20716,7 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20288,6 +20756,7 @@ export type UpdateSlackChatOpsConfigErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20297,6 +20766,7 @@ export type UpdateSlackChatOpsConfigErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20306,6 +20776,7 @@ export type UpdateSlackChatOpsConfigErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20315,6 +20786,7 @@ export type UpdateSlackChatOpsConfigErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20324,6 +20796,7 @@ export type UpdateSlackChatOpsConfigErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20333,6 +20806,7 @@ export type UpdateSlackChatOpsConfigErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20367,6 +20841,7 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20376,6 +20851,7 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20385,6 +20861,7 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20394,6 +20871,7 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20403,6 +20881,7 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20412,6 +20891,7 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20454,6 +20934,7 @@ export type CohereChatWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20463,6 +20944,7 @@ export type CohereChatWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20472,6 +20954,7 @@ export type CohereChatWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20481,6 +20964,7 @@ export type CohereChatWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20490,6 +20974,7 @@ export type CohereChatWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20499,6 +20984,7 @@ export type CohereChatWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20541,6 +21027,7 @@ export type CohereChatWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20550,6 +21037,7 @@ export type CohereChatWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20559,6 +21047,7 @@ export type CohereChatWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20568,6 +21057,7 @@ export type CohereChatWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20577,6 +21067,7 @@ export type CohereChatWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20586,6 +21077,7 @@ export type CohereChatWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20697,6 +21189,7 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20706,6 +21199,7 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20715,6 +21209,7 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20724,6 +21219,7 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20733,6 +21229,7 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20742,6 +21239,7 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20784,6 +21282,7 @@ export type DeepseekChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20793,6 +21292,7 @@ export type DeepseekChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20802,6 +21302,7 @@ export type DeepseekChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20811,6 +21312,7 @@ export type DeepseekChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20820,6 +21322,7 @@ export type DeepseekChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20829,6 +21332,7 @@ export type DeepseekChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20874,6 +21378,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20883,6 +21388,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20892,6 +21398,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20901,6 +21408,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20910,6 +21418,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20919,6 +21428,7 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -20964,6 +21474,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20973,6 +21484,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20982,6 +21494,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -20991,6 +21504,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21000,6 +21514,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21009,6 +21524,7 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21046,6 +21562,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21055,6 +21572,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21064,6 +21582,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21073,6 +21592,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21082,6 +21602,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21091,6 +21612,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21137,6 +21659,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21146,6 +21669,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21155,6 +21679,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21164,6 +21689,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21173,6 +21699,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21182,6 +21709,7 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21213,6 +21741,7 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21222,6 +21751,7 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21231,6 +21761,7 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21240,6 +21771,7 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21249,6 +21781,7 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21258,6 +21791,7 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21300,6 +21834,7 @@ export type GroqChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21309,6 +21844,7 @@ export type GroqChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21318,6 +21854,7 @@ export type GroqChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21327,6 +21864,7 @@ export type GroqChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21336,6 +21874,7 @@ export type GroqChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21345,6 +21884,7 @@ export type GroqChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21475,6 +22015,7 @@ export type GetAgentEmailAddressErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21484,6 +22025,7 @@ export type GetAgentEmailAddressErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21493,6 +22035,7 @@ export type GetAgentEmailAddressErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21502,6 +22045,7 @@ export type GetAgentEmailAddressErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21511,6 +22055,7 @@ export type GetAgentEmailAddressErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21520,6 +22065,7 @@ export type GetAgentEmailAddressErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21556,6 +22102,7 @@ export type GetIncomingEmailStatusErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21565,6 +22112,7 @@ export type GetIncomingEmailStatusErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21574,6 +22122,7 @@ export type GetIncomingEmailStatusErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21583,6 +22132,7 @@ export type GetIncomingEmailStatusErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21592,6 +22142,7 @@ export type GetIncomingEmailStatusErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21601,6 +22152,7 @@ export type GetIncomingEmailStatusErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21642,6 +22194,7 @@ export type SetupIncomingEmailWebhookErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21651,6 +22204,7 @@ export type SetupIncomingEmailWebhookErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21660,6 +22214,7 @@ export type SetupIncomingEmailWebhookErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21669,6 +22224,7 @@ export type SetupIncomingEmailWebhookErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21678,6 +22234,7 @@ export type SetupIncomingEmailWebhookErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21687,6 +22244,7 @@ export type SetupIncomingEmailWebhookErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21722,6 +22280,7 @@ export type RenewIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21731,6 +22290,7 @@ export type RenewIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21740,6 +22300,7 @@ export type RenewIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21749,6 +22310,7 @@ export type RenewIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21758,6 +22320,7 @@ export type RenewIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21767,6 +22330,7 @@ export type RenewIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21802,6 +22366,7 @@ export type DeleteIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21811,6 +22376,7 @@ export type DeleteIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21820,6 +22386,7 @@ export type DeleteIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21829,6 +22396,7 @@ export type DeleteIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21838,6 +22406,7 @@ export type DeleteIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21847,6 +22416,7 @@ export type DeleteIncomingEmailSubscriptionErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -21908,6 +22478,7 @@ export type GetInteractionsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21917,6 +22488,7 @@ export type GetInteractionsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21926,6 +22498,7 @@ export type GetInteractionsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21935,6 +22508,7 @@ export type GetInteractionsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21944,6 +22518,7 @@ export type GetInteractionsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -21953,6 +22528,7 @@ export type GetInteractionsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -23402,6 +23978,7 @@ export type GetInteractionSessionsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23411,6 +23988,7 @@ export type GetInteractionSessionsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23420,6 +23998,7 @@ export type GetInteractionSessionsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23429,6 +24008,7 @@ export type GetInteractionSessionsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23438,6 +24018,7 @@ export type GetInteractionSessionsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23447,6 +24028,7 @@ export type GetInteractionSessionsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -23516,6 +24098,7 @@ export type GetUniqueExternalAgentIdsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23525,6 +24108,7 @@ export type GetUniqueExternalAgentIdsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23534,6 +24118,7 @@ export type GetUniqueExternalAgentIdsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23543,6 +24128,7 @@ export type GetUniqueExternalAgentIdsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23552,6 +24138,7 @@ export type GetUniqueExternalAgentIdsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23561,6 +24148,7 @@ export type GetUniqueExternalAgentIdsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -23594,6 +24182,7 @@ export type GetUniqueUserIdsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23603,6 +24192,7 @@ export type GetUniqueUserIdsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23612,6 +24202,7 @@ export type GetUniqueUserIdsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23621,6 +24212,7 @@ export type GetUniqueUserIdsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23630,6 +24222,7 @@ export type GetUniqueUserIdsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23639,6 +24232,7 @@ export type GetUniqueUserIdsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -23674,6 +24268,7 @@ export type GetInteractionErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23683,6 +24278,7 @@ export type GetInteractionErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23692,6 +24288,7 @@ export type GetInteractionErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23701,6 +24298,7 @@ export type GetInteractionErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23710,6 +24308,7 @@ export type GetInteractionErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -23719,6 +24318,7 @@ export type GetInteractionErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -25127,6 +25727,7 @@ export type GetInternalMcpCatalogErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25136,6 +25737,7 @@ export type GetInternalMcpCatalogErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25145,6 +25747,7 @@ export type GetInternalMcpCatalogErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25154,6 +25757,7 @@ export type GetInternalMcpCatalogErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25163,6 +25767,7 @@ export type GetInternalMcpCatalogErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25172,6 +25777,7 @@ export type GetInternalMcpCatalogErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -25436,6 +26042,7 @@ export type CreateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25445,6 +26052,7 @@ export type CreateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25454,6 +26062,7 @@ export type CreateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25463,6 +26072,7 @@ export type CreateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25472,6 +26082,7 @@ export type CreateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25481,6 +26092,7 @@ export type CreateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -25632,6 +26244,7 @@ export type DeleteInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25641,6 +26254,7 @@ export type DeleteInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25650,6 +26264,7 @@ export type DeleteInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25659,6 +26274,7 @@ export type DeleteInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25668,6 +26284,7 @@ export type DeleteInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25677,6 +26294,7 @@ export type DeleteInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -25711,6 +26329,7 @@ export type GetInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25720,6 +26339,7 @@ export type GetInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25729,6 +26349,7 @@ export type GetInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25738,6 +26359,7 @@ export type GetInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25747,6 +26369,7 @@ export type GetInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -25756,6 +26379,7 @@ export type GetInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26021,6 +26645,7 @@ export type UpdateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26030,6 +26655,7 @@ export type UpdateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26039,6 +26665,7 @@ export type UpdateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26048,6 +26675,7 @@ export type UpdateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26057,6 +26685,7 @@ export type UpdateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26066,6 +26695,7 @@ export type UpdateInternalMcpCatalogItemErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26217,6 +26847,7 @@ export type GetInternalMcpCatalogToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26226,6 +26857,7 @@ export type GetInternalMcpCatalogToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26235,6 +26867,7 @@ export type GetInternalMcpCatalogToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26244,6 +26877,7 @@ export type GetInternalMcpCatalogToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26253,6 +26887,7 @@ export type GetInternalMcpCatalogToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26262,6 +26897,7 @@ export type GetInternalMcpCatalogToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26307,6 +26943,7 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26316,6 +26953,7 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26325,6 +26963,7 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26334,6 +26973,7 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26343,6 +26983,7 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26352,6 +26993,7 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26386,6 +27028,7 @@ export type GetDeploymentYamlPreviewErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26395,6 +27038,7 @@ export type GetDeploymentYamlPreviewErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26404,6 +27048,7 @@ export type GetDeploymentYamlPreviewErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26413,6 +27058,7 @@ export type GetDeploymentYamlPreviewErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26422,6 +27068,7 @@ export type GetDeploymentYamlPreviewErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26431,6 +27078,7 @@ export type GetDeploymentYamlPreviewErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26465,6 +27113,7 @@ export type ValidateDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26474,6 +27123,7 @@ export type ValidateDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26483,6 +27133,7 @@ export type ValidateDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26492,6 +27143,7 @@ export type ValidateDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26501,6 +27153,7 @@ export type ValidateDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26510,6 +27163,7 @@ export type ValidateDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26546,6 +27200,7 @@ export type ResetDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26555,6 +27210,7 @@ export type ResetDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26564,6 +27220,7 @@ export type ResetDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26573,6 +27230,7 @@ export type ResetDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26582,6 +27240,7 @@ export type ResetDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26591,6 +27250,7 @@ export type ResetDeploymentYamlErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26623,6 +27283,7 @@ export type GetK8sImagePullSecretsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26632,6 +27293,7 @@ export type GetK8sImagePullSecretsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26641,6 +27303,7 @@ export type GetK8sImagePullSecretsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26650,6 +27313,7 @@ export type GetK8sImagePullSecretsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26659,6 +27323,7 @@ export type GetK8sImagePullSecretsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26668,6 +27333,7 @@ export type GetK8sImagePullSecretsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26700,6 +27366,7 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26709,6 +27376,7 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26718,6 +27386,7 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26727,6 +27396,7 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26736,6 +27406,7 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26745,6 +27416,7 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26780,6 +27452,7 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26789,6 +27462,7 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26798,6 +27472,7 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26807,6 +27482,7 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26816,6 +27492,7 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26825,6 +27502,7 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26857,6 +27535,7 @@ export type CheckInvitationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26866,6 +27545,7 @@ export type CheckInvitationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26875,6 +27555,7 @@ export type CheckInvitationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26884,6 +27565,7 @@ export type CheckInvitationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26893,6 +27575,7 @@ export type CheckInvitationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26902,6 +27585,7 @@ export type CheckInvitationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -26945,6 +27629,7 @@ export type GetKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26954,6 +27639,7 @@ export type GetKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26963,6 +27649,7 @@ export type GetKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26972,6 +27659,7 @@ export type GetKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26981,6 +27669,7 @@ export type GetKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -26990,6 +27679,7 @@ export type GetKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27052,6 +27742,7 @@ export type CreateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27061,6 +27752,7 @@ export type CreateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27070,6 +27762,7 @@ export type CreateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27079,6 +27772,7 @@ export type CreateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27088,6 +27782,7 @@ export type CreateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27097,6 +27792,7 @@ export type CreateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27137,6 +27833,7 @@ export type DeleteKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27146,6 +27843,7 @@ export type DeleteKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27155,6 +27853,7 @@ export type DeleteKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27164,6 +27863,7 @@ export type DeleteKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27173,6 +27873,7 @@ export type DeleteKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27182,6 +27883,7 @@ export type DeleteKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27216,6 +27918,7 @@ export type GetKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27225,6 +27928,7 @@ export type GetKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27234,6 +27938,7 @@ export type GetKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27243,6 +27948,7 @@ export type GetKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27252,6 +27958,7 @@ export type GetKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27261,6 +27968,7 @@ export type GetKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27304,6 +28012,7 @@ export type UpdateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27313,6 +28022,7 @@ export type UpdateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27322,6 +28032,7 @@ export type UpdateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27331,6 +28042,7 @@ export type UpdateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27340,6 +28052,7 @@ export type UpdateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27349,6 +28062,7 @@ export type UpdateKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27389,6 +28103,7 @@ export type GetKnowledgeBaseHealthErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27398,6 +28113,7 @@ export type GetKnowledgeBaseHealthErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27407,6 +28123,7 @@ export type GetKnowledgeBaseHealthErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27416,6 +28133,7 @@ export type GetKnowledgeBaseHealthErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27425,6 +28143,7 @@ export type GetKnowledgeBaseHealthErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27434,6 +28153,7 @@ export type GetKnowledgeBaseHealthErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27473,6 +28193,7 @@ export type GetConnectorsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27482,6 +28203,7 @@ export type GetConnectorsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27491,6 +28213,7 @@ export type GetConnectorsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27500,6 +28223,7 @@ export type GetConnectorsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27509,6 +28233,7 @@ export type GetConnectorsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27518,6 +28243,7 @@ export type GetConnectorsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -27803,6 +28529,7 @@ export type CreateConnectorErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27812,6 +28539,7 @@ export type CreateConnectorErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27821,6 +28549,7 @@ export type CreateConnectorErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27830,6 +28559,7 @@ export type CreateConnectorErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27839,6 +28569,7 @@ export type CreateConnectorErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -27848,6 +28579,7 @@ export type CreateConnectorErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28003,6 +28735,7 @@ export type DeleteConnectorErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28012,6 +28745,7 @@ export type DeleteConnectorErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28021,6 +28755,7 @@ export type DeleteConnectorErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28030,6 +28765,7 @@ export type DeleteConnectorErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28039,6 +28775,7 @@ export type DeleteConnectorErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28048,6 +28785,7 @@ export type DeleteConnectorErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28082,6 +28820,7 @@ export type GetConnectorErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28091,6 +28830,7 @@ export type GetConnectorErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28100,6 +28840,7 @@ export type GetConnectorErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28109,6 +28850,7 @@ export type GetConnectorErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28118,6 +28860,7 @@ export type GetConnectorErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28127,6 +28870,7 @@ export type GetConnectorErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28398,6 +29142,7 @@ export type UpdateConnectorErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28407,6 +29152,7 @@ export type UpdateConnectorErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28416,6 +29162,7 @@ export type UpdateConnectorErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28425,6 +29172,7 @@ export type UpdateConnectorErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28434,6 +29182,7 @@ export type UpdateConnectorErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28443,6 +29192,7 @@ export type UpdateConnectorErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28598,6 +29348,7 @@ export type SyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28607,6 +29358,7 @@ export type SyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28616,6 +29368,7 @@ export type SyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28625,6 +29378,7 @@ export type SyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28634,6 +29388,7 @@ export type SyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28643,6 +29398,7 @@ export type SyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28678,6 +29434,7 @@ export type ForceResyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28687,6 +29444,7 @@ export type ForceResyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28696,6 +29454,7 @@ export type ForceResyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28705,6 +29464,7 @@ export type ForceResyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28714,6 +29474,7 @@ export type ForceResyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28723,6 +29484,7 @@ export type ForceResyncConnectorErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28758,6 +29520,7 @@ export type TestConnectorConnectionErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28767,6 +29530,7 @@ export type TestConnectorConnectionErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28776,6 +29540,7 @@ export type TestConnectorConnectionErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28785,6 +29550,7 @@ export type TestConnectorConnectionErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28794,6 +29560,7 @@ export type TestConnectorConnectionErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28803,6 +29570,7 @@ export type TestConnectorConnectionErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28838,6 +29606,7 @@ export type GetConnectorKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28847,6 +29616,7 @@ export type GetConnectorKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28856,6 +29626,7 @@ export type GetConnectorKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28865,6 +29636,7 @@ export type GetConnectorKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28874,6 +29646,7 @@ export type GetConnectorKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28883,6 +29656,7 @@ export type GetConnectorKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28927,6 +29701,7 @@ export type AssignConnectorToKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28936,6 +29711,7 @@ export type AssignConnectorToKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28945,6 +29721,7 @@ export type AssignConnectorToKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28954,6 +29731,7 @@ export type AssignConnectorToKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28963,6 +29741,7 @@ export type AssignConnectorToKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28972,6 +29751,7 @@ export type AssignConnectorToKnowledgeBasesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29007,6 +29787,7 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29016,6 +29797,7 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29025,6 +29807,7 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29034,6 +29817,7 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29043,6 +29827,7 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29052,6 +29837,7 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29089,6 +29875,7 @@ export type GetConnectorRunsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29098,6 +29885,7 @@ export type GetConnectorRunsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29107,6 +29895,7 @@ export type GetConnectorRunsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29116,6 +29905,7 @@ export type GetConnectorRunsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29125,6 +29915,7 @@ export type GetConnectorRunsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29134,6 +29925,7 @@ export type GetConnectorRunsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29194,6 +29986,7 @@ export type GetConnectorRunErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29203,6 +29996,7 @@ export type GetConnectorRunErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29212,6 +30006,7 @@ export type GetConnectorRunErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29221,6 +30016,7 @@ export type GetConnectorRunErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29230,6 +30026,7 @@ export type GetConnectorRunErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29239,6 +30036,7 @@ export type GetConnectorRunErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29291,6 +30089,7 @@ export type GetLimitsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29300,6 +30099,7 @@ export type GetLimitsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29309,6 +30109,7 @@ export type GetLimitsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29318,6 +30119,7 @@ export type GetLimitsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29327,6 +30129,7 @@ export type GetLimitsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29336,6 +30139,7 @@ export type GetLimitsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29393,6 +30197,7 @@ export type CreateLimitErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29402,6 +30207,7 @@ export type CreateLimitErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29411,6 +30217,7 @@ export type CreateLimitErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29420,6 +30227,7 @@ export type CreateLimitErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29429,6 +30237,7 @@ export type CreateLimitErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29438,6 +30247,7 @@ export type CreateLimitErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29482,6 +30292,7 @@ export type DeleteLimitErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29491,6 +30302,7 @@ export type DeleteLimitErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29500,6 +30312,7 @@ export type DeleteLimitErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29509,6 +30322,7 @@ export type DeleteLimitErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29518,6 +30332,7 @@ export type DeleteLimitErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29527,6 +30342,7 @@ export type DeleteLimitErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29561,6 +30377,7 @@ export type GetLimitErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29570,6 +30387,7 @@ export type GetLimitErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29579,6 +30397,7 @@ export type GetLimitErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29588,6 +30407,7 @@ export type GetLimitErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29597,6 +30417,7 @@ export type GetLimitErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29606,6 +30427,7 @@ export type GetLimitErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29659,6 +30481,7 @@ export type UpdateLimitErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29668,6 +30491,7 @@ export type UpdateLimitErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29677,6 +30501,7 @@ export type UpdateLimitErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29686,6 +30511,7 @@ export type UpdateLimitErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29695,6 +30521,7 @@ export type UpdateLimitErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29704,6 +30531,7 @@ export type UpdateLimitErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29750,6 +30578,7 @@ export type GetLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29759,6 +30588,7 @@ export type GetLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29768,6 +30598,7 @@ export type GetLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29777,6 +30608,7 @@ export type GetLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29786,6 +30618,7 @@ export type GetLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29795,6 +30628,7 @@ export type GetLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29843,6 +30677,7 @@ export type SyncLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29852,6 +30687,7 @@ export type SyncLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29861,6 +30697,7 @@ export type SyncLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29870,6 +30707,7 @@ export type SyncLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29879,6 +30717,7 @@ export type SyncLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29888,6 +30727,7 @@ export type SyncLlmModelsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -29920,6 +30760,7 @@ export type GetModelsWithApiKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29929,6 +30770,7 @@ export type GetModelsWithApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29938,6 +30780,7 @@ export type GetModelsWithApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29947,6 +30790,7 @@ export type GetModelsWithApiKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29956,6 +30800,7 @@ export type GetModelsWithApiKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -29965,6 +30810,7 @@ export type GetModelsWithApiKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30037,6 +30883,7 @@ export type UpdateModelErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30046,6 +30893,7 @@ export type UpdateModelErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30055,6 +30903,7 @@ export type UpdateModelErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30064,6 +30913,7 @@ export type UpdateModelErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30073,6 +30923,7 @@ export type UpdateModelErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30082,6 +30933,7 @@ export type UpdateModelErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30135,6 +30987,7 @@ export type GetLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30144,6 +30997,7 @@ export type GetLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30153,6 +31007,7 @@ export type GetLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30162,6 +31017,7 @@ export type GetLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30171,6 +31027,7 @@ export type GetLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30180,6 +31037,7 @@ export type GetLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30241,6 +31099,7 @@ export type CreateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30250,6 +31109,7 @@ export type CreateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30259,6 +31119,7 @@ export type CreateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30268,6 +31129,7 @@ export type CreateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30277,6 +31139,7 @@ export type CreateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30286,6 +31149,7 @@ export type CreateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30333,6 +31197,7 @@ export type GetAvailableLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30342,6 +31207,7 @@ export type GetAvailableLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30351,6 +31217,7 @@ export type GetAvailableLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30360,6 +31227,7 @@ export type GetAvailableLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30369,6 +31237,7 @@ export type GetAvailableLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30378,6 +31247,7 @@ export type GetAvailableLlmProviderApiKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30431,6 +31301,7 @@ export type DeleteLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30440,6 +31311,7 @@ export type DeleteLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30449,6 +31321,7 @@ export type DeleteLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30458,6 +31331,7 @@ export type DeleteLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30467,6 +31341,7 @@ export type DeleteLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30476,6 +31351,7 @@ export type DeleteLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30510,6 +31386,7 @@ export type GetLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30519,6 +31396,7 @@ export type GetLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30528,6 +31406,7 @@ export type GetLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30537,6 +31416,7 @@ export type GetLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30546,6 +31426,7 @@ export type GetLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30555,6 +31436,7 @@ export type GetLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30617,6 +31499,7 @@ export type UpdateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30626,6 +31509,7 @@ export type UpdateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30635,6 +31519,7 @@ export type UpdateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30644,6 +31529,7 @@ export type UpdateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30653,6 +31539,7 @@ export type UpdateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30662,6 +31549,7 @@ export type UpdateLlmProviderApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -30792,6 +31680,7 @@ export type GetMcpServerInstallationRequestsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30801,6 +31690,7 @@ export type GetMcpServerInstallationRequestsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30810,6 +31700,7 @@ export type GetMcpServerInstallationRequestsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30819,6 +31710,7 @@ export type GetMcpServerInstallationRequestsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30828,6 +31720,7 @@ export type GetMcpServerInstallationRequestsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -30837,6 +31730,7 @@ export type GetMcpServerInstallationRequestsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -31044,6 +31938,7 @@ export type CreateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31053,6 +31948,7 @@ export type CreateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31062,6 +31958,7 @@ export type CreateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31071,6 +31968,7 @@ export type CreateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31080,6 +31978,7 @@ export type CreateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31089,6 +31988,7 @@ export type CreateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -31217,6 +32117,7 @@ export type DeleteMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31226,6 +32127,7 @@ export type DeleteMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31235,6 +32137,7 @@ export type DeleteMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31244,6 +32147,7 @@ export type DeleteMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31253,6 +32157,7 @@ export type DeleteMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31262,6 +32167,7 @@ export type DeleteMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -31296,6 +32202,7 @@ export type GetMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31305,6 +32212,7 @@ export type GetMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31314,6 +32222,7 @@ export type GetMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31323,6 +32232,7 @@ export type GetMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31332,6 +32242,7 @@ export type GetMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31341,6 +32252,7 @@ export type GetMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -31560,6 +32472,7 @@ export type UpdateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31569,6 +32482,7 @@ export type UpdateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31578,6 +32492,7 @@ export type UpdateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31587,6 +32502,7 @@ export type UpdateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31596,6 +32512,7 @@ export type UpdateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31605,6 +32522,7 @@ export type UpdateMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -31735,6 +32653,7 @@ export type ApproveMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31744,6 +32663,7 @@ export type ApproveMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31753,6 +32673,7 @@ export type ApproveMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31762,6 +32683,7 @@ export type ApproveMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31771,6 +32693,7 @@ export type ApproveMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31780,6 +32703,7 @@ export type ApproveMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -31910,6 +32834,7 @@ export type DeclineMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31919,6 +32844,7 @@ export type DeclineMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31928,6 +32854,7 @@ export type DeclineMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31937,6 +32864,7 @@ export type DeclineMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31946,6 +32874,7 @@ export type DeclineMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -31955,6 +32884,7 @@ export type DeclineMcpServerInstallationRequestErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32085,6 +33015,7 @@ export type AddMcpServerInstallationRequestNoteErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32094,6 +33025,7 @@ export type AddMcpServerInstallationRequestNoteErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32103,6 +33035,7 @@ export type AddMcpServerInstallationRequestNoteErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32112,6 +33045,7 @@ export type AddMcpServerInstallationRequestNoteErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32121,6 +33055,7 @@ export type AddMcpServerInstallationRequestNoteErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32130,6 +33065,7 @@ export type AddMcpServerInstallationRequestNoteErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32260,6 +33196,7 @@ export type GetMcpServersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32269,6 +33206,7 @@ export type GetMcpServersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32278,6 +33216,7 @@ export type GetMcpServersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32287,6 +33226,7 @@ export type GetMcpServersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32296,6 +33236,7 @@ export type GetMcpServersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32305,6 +33246,7 @@ export type GetMcpServersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32386,6 +33328,7 @@ export type InstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32395,6 +33338,7 @@ export type InstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32404,6 +33348,7 @@ export type InstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32413,6 +33358,7 @@ export type InstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32422,6 +33368,7 @@ export type InstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32431,6 +33378,7 @@ export type InstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32492,6 +33440,7 @@ export type DeleteMcpServerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32501,6 +33450,7 @@ export type DeleteMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32510,6 +33460,7 @@ export type DeleteMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32519,6 +33470,7 @@ export type DeleteMcpServerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32528,6 +33480,7 @@ export type DeleteMcpServerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32537,6 +33490,7 @@ export type DeleteMcpServerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32571,6 +33525,7 @@ export type GetMcpServerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32580,6 +33535,7 @@ export type GetMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32589,6 +33545,7 @@ export type GetMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32598,6 +33555,7 @@ export type GetMcpServerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32607,6 +33565,7 @@ export type GetMcpServerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32616,6 +33575,7 @@ export type GetMcpServerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32687,6 +33647,7 @@ export type ReauthenticateMcpServerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32696,6 +33657,7 @@ export type ReauthenticateMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32705,6 +33667,7 @@ export type ReauthenticateMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32714,6 +33677,7 @@ export type ReauthenticateMcpServerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32723,6 +33687,7 @@ export type ReauthenticateMcpServerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32732,6 +33697,7 @@ export type ReauthenticateMcpServerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32793,6 +33759,7 @@ export type GetMcpServerInstallationStatusErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32802,6 +33769,7 @@ export type GetMcpServerInstallationStatusErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32811,6 +33779,7 @@ export type GetMcpServerInstallationStatusErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32820,6 +33789,7 @@ export type GetMcpServerInstallationStatusErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32829,6 +33799,7 @@ export type GetMcpServerInstallationStatusErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32838,6 +33809,7 @@ export type GetMcpServerInstallationStatusErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32873,6 +33845,7 @@ export type GetMcpServerToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32882,6 +33855,7 @@ export type GetMcpServerToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32891,6 +33865,7 @@ export type GetMcpServerToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32900,6 +33875,7 @@ export type GetMcpServerToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32909,6 +33885,7 @@ export type GetMcpServerToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32918,6 +33895,7 @@ export type GetMcpServerToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -32969,6 +33947,7 @@ export type InspectMcpServerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32978,6 +33957,7 @@ export type InspectMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32987,6 +33967,7 @@ export type InspectMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -32996,6 +33977,7 @@ export type InspectMcpServerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33005,6 +33987,7 @@ export type InspectMcpServerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33014,6 +33997,7 @@ export type InspectMcpServerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33057,6 +34041,7 @@ export type ReinstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33066,6 +34051,7 @@ export type ReinstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33075,6 +34061,7 @@ export type ReinstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33084,6 +34071,7 @@ export type ReinstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33093,6 +34081,7 @@ export type ReinstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33102,6 +34091,7 @@ export type ReinstallMcpServerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33182,6 +34172,7 @@ export type GetMcpToolCallsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33191,6 +34182,7 @@ export type GetMcpToolCallsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33200,6 +34192,7 @@ export type GetMcpToolCallsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33209,6 +34202,7 @@ export type GetMcpToolCallsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33218,6 +34212,7 @@ export type GetMcpToolCallsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33227,6 +34222,7 @@ export type GetMcpToolCallsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33289,6 +34285,7 @@ export type GetMcpToolCallErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33298,6 +34295,7 @@ export type GetMcpToolCallErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33307,6 +34305,7 @@ export type GetMcpToolCallErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33316,6 +34315,7 @@ export type GetMcpToolCallErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33325,6 +34325,7 @@ export type GetMcpToolCallErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33334,6 +34335,7 @@ export type GetMcpToolCallErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33395,6 +34397,7 @@ export type GetMembersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33404,6 +34407,7 @@ export type GetMembersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33413,6 +34417,7 @@ export type GetMembersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33422,6 +34427,7 @@ export type GetMembersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33431,6 +34437,7 @@ export type GetMembersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33440,6 +34447,7 @@ export type GetMembersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33491,6 +34499,7 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33500,6 +34509,7 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33509,6 +34519,7 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33518,6 +34529,7 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33527,6 +34539,7 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33536,6 +34549,7 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33571,6 +34585,7 @@ export type MinimaxChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33580,6 +34595,7 @@ export type MinimaxChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33589,6 +34605,7 @@ export type MinimaxChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33598,6 +34615,7 @@ export type MinimaxChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33607,6 +34625,7 @@ export type MinimaxChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33616,6 +34635,7 @@ export type MinimaxChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33656,6 +34676,7 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33665,6 +34686,7 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33674,6 +34696,7 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33683,6 +34706,7 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33692,6 +34716,7 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33701,6 +34726,7 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33743,6 +34769,7 @@ export type MistralChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33752,6 +34779,7 @@ export type MistralChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33761,6 +34789,7 @@ export type MistralChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33770,6 +34799,7 @@ export type MistralChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33779,6 +34809,7 @@ export type MistralChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33788,6 +34819,7 @@ export type MistralChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33821,6 +34853,7 @@ export type InitiateOAuthErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33830,6 +34863,7 @@ export type InitiateOAuthErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33839,6 +34873,7 @@ export type InitiateOAuthErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33848,6 +34883,7 @@ export type InitiateOAuthErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33857,6 +34893,7 @@ export type InitiateOAuthErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33866,6 +34903,7 @@ export type InitiateOAuthErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -33902,6 +34940,7 @@ export type HandleOAuthCallbackErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33911,6 +34950,7 @@ export type HandleOAuthCallbackErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33920,6 +34960,7 @@ export type HandleOAuthCallbackErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33929,6 +34970,7 @@ export type HandleOAuthCallbackErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33938,6 +34980,7 @@ export type HandleOAuthCallbackErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -33947,6 +34990,7 @@ export type HandleOAuthCallbackErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34046,6 +35090,7 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34055,6 +35100,7 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34064,6 +35110,7 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34073,6 +35120,7 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34082,6 +35130,7 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34091,6 +35140,7 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34133,6 +35183,7 @@ export type OllamaChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34142,6 +35193,7 @@ export type OllamaChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34151,6 +35203,7 @@ export type OllamaChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34160,6 +35213,7 @@ export type OllamaChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34169,6 +35223,7 @@ export type OllamaChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34178,6 +35233,7 @@ export type OllamaChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34218,6 +35274,7 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34227,6 +35284,7 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34236,6 +35294,7 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34245,6 +35304,7 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34254,6 +35314,7 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34263,6 +35324,7 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34305,6 +35367,7 @@ export type OpenAiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34314,6 +35377,7 @@ export type OpenAiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34323,6 +35387,7 @@ export type OpenAiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34332,6 +35397,7 @@ export type OpenAiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34341,6 +35407,7 @@ export type OpenAiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34350,6 +35417,7 @@ export type OpenAiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34390,6 +35458,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34399,6 +35468,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34408,6 +35478,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34417,6 +35488,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34426,6 +35498,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34435,6 +35508,7 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34477,6 +35551,7 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34486,6 +35561,7 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34495,6 +35571,7 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34504,6 +35581,7 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34513,6 +35591,7 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34522,6 +35601,7 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34552,6 +35632,7 @@ export type GetOptimizationRulesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34561,6 +35642,7 @@ export type GetOptimizationRulesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34570,6 +35652,7 @@ export type GetOptimizationRulesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34579,6 +35662,7 @@ export type GetOptimizationRulesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34588,6 +35672,7 @@ export type GetOptimizationRulesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34597,6 +35682,7 @@ export type GetOptimizationRulesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34655,6 +35741,7 @@ export type CreateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34664,6 +35751,7 @@ export type CreateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34673,6 +35761,7 @@ export type CreateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34682,6 +35771,7 @@ export type CreateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34691,6 +35781,7 @@ export type CreateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34700,6 +35791,7 @@ export type CreateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34746,6 +35838,7 @@ export type DeleteOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34755,6 +35848,7 @@ export type DeleteOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34764,6 +35858,7 @@ export type DeleteOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34773,6 +35868,7 @@ export type DeleteOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34782,6 +35878,7 @@ export type DeleteOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34791,6 +35888,7 @@ export type DeleteOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34839,6 +35937,7 @@ export type UpdateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34848,6 +35947,7 @@ export type UpdateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34857,6 +35957,7 @@ export type UpdateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34866,6 +35967,7 @@ export type UpdateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34875,6 +35977,7 @@ export type UpdateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34884,6 +35987,7 @@ export type UpdateOptimizationRuleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -34932,6 +36036,7 @@ export type GetRolesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34941,6 +36046,7 @@ export type GetRolesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34950,6 +36056,7 @@ export type GetRolesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34959,6 +36066,7 @@ export type GetRolesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34968,6 +36076,7 @@ export type GetRolesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -34977,6 +36086,7 @@ export type GetRolesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35035,6 +36145,7 @@ export type CreateRoleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35044,6 +36155,7 @@ export type CreateRoleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35053,6 +36165,7 @@ export type CreateRoleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35062,6 +36175,7 @@ export type CreateRoleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35071,6 +36185,7 @@ export type CreateRoleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35080,6 +36195,7 @@ export type CreateRoleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35127,6 +36243,7 @@ export type DeleteRoleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35136,6 +36253,7 @@ export type DeleteRoleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35145,6 +36263,7 @@ export type DeleteRoleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35154,6 +36273,7 @@ export type DeleteRoleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35163,6 +36283,7 @@ export type DeleteRoleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35172,6 +36293,7 @@ export type DeleteRoleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35209,6 +36331,7 @@ export type GetRoleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35218,6 +36341,7 @@ export type GetRoleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35227,6 +36351,7 @@ export type GetRoleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35236,6 +36361,7 @@ export type GetRoleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35245,6 +36371,7 @@ export type GetRoleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35254,6 +36381,7 @@ export type GetRoleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35307,6 +36435,7 @@ export type UpdateRoleErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35316,6 +36445,7 @@ export type UpdateRoleErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35325,6 +36455,7 @@ export type UpdateRoleErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35334,6 +36465,7 @@ export type UpdateRoleErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35343,6 +36475,7 @@ export type UpdateRoleErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35352,6 +36485,7 @@ export type UpdateRoleErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35394,6 +36528,7 @@ export type GetOrganizationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35403,6 +36538,7 @@ export type GetOrganizationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35412,6 +36548,7 @@ export type GetOrganizationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35421,6 +36558,7 @@ export type GetOrganizationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35430,6 +36568,7 @@ export type GetOrganizationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35439,6 +36578,7 @@ export type GetOrganizationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35521,6 +36661,7 @@ export type GetAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35530,6 +36671,7 @@ export type GetAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35539,6 +36681,7 @@ export type GetAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35548,6 +36691,7 @@ export type GetAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35557,6 +36701,7 @@ export type GetAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35566,6 +36711,7 @@ export type GetAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35646,6 +36792,7 @@ export type UpdateAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35655,6 +36802,7 @@ export type UpdateAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35664,6 +36812,7 @@ export type UpdateAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35673,6 +36822,7 @@ export type UpdateAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35682,6 +36832,7 @@ export type UpdateAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35691,6 +36842,7 @@ export type UpdateAppearanceSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35776,6 +36928,7 @@ export type UpdateSecuritySettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35785,6 +36938,7 @@ export type UpdateSecuritySettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35794,6 +36948,7 @@ export type UpdateSecuritySettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35803,6 +36958,7 @@ export type UpdateSecuritySettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35812,6 +36968,7 @@ export type UpdateSecuritySettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35821,6 +36978,7 @@ export type UpdateSecuritySettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -35907,6 +37065,7 @@ export type UpdateLlmSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35916,6 +37075,7 @@ export type UpdateLlmSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35925,6 +37085,7 @@ export type UpdateLlmSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35934,6 +37095,7 @@ export type UpdateLlmSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35943,6 +37105,7 @@ export type UpdateLlmSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -35952,6 +37115,7 @@ export type UpdateLlmSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36039,6 +37203,7 @@ export type UpdateAgentSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36048,6 +37213,7 @@ export type UpdateAgentSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36057,6 +37223,7 @@ export type UpdateAgentSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36066,6 +37233,7 @@ export type UpdateAgentSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36075,6 +37243,7 @@ export type UpdateAgentSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36084,6 +37253,7 @@ export type UpdateAgentSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36172,6 +37342,7 @@ export type UpdateConnectionSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36181,6 +37352,7 @@ export type UpdateConnectionSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36190,6 +37362,7 @@ export type UpdateConnectionSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36199,6 +37372,7 @@ export type UpdateConnectionSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36208,6 +37382,7 @@ export type UpdateConnectionSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36217,6 +37392,7 @@ export type UpdateConnectionSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36301,6 +37477,7 @@ export type UpdateMcpSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36310,6 +37487,7 @@ export type UpdateMcpSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36319,6 +37497,7 @@ export type UpdateMcpSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36328,6 +37507,7 @@ export type UpdateMcpSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36337,6 +37517,7 @@ export type UpdateMcpSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36346,6 +37527,7 @@ export type UpdateMcpSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36433,6 +37615,7 @@ export type UpdateKnowledgeSettingsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36442,6 +37625,7 @@ export type UpdateKnowledgeSettingsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36451,6 +37635,7 @@ export type UpdateKnowledgeSettingsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36460,6 +37645,7 @@ export type UpdateKnowledgeSettingsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36469,6 +37655,7 @@ export type UpdateKnowledgeSettingsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36478,6 +37665,7 @@ export type UpdateKnowledgeSettingsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36560,6 +37748,7 @@ export type DropEmbeddingConfigErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36569,6 +37758,7 @@ export type DropEmbeddingConfigErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36578,6 +37768,7 @@ export type DropEmbeddingConfigErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36587,6 +37778,7 @@ export type DropEmbeddingConfigErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36596,6 +37788,7 @@ export type DropEmbeddingConfigErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36605,6 +37798,7 @@ export type DropEmbeddingConfigErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36690,6 +37884,7 @@ export type TestEmbeddingConnectionErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36699,6 +37894,7 @@ export type TestEmbeddingConnectionErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36708,6 +37904,7 @@ export type TestEmbeddingConnectionErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36717,6 +37914,7 @@ export type TestEmbeddingConnectionErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36726,6 +37924,7 @@ export type TestEmbeddingConnectionErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36735,6 +37934,7 @@ export type TestEmbeddingConnectionErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36770,6 +37970,7 @@ export type CompleteOnboardingErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36779,6 +37980,7 @@ export type CompleteOnboardingErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36788,6 +37990,7 @@ export type CompleteOnboardingErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36797,6 +38000,7 @@ export type CompleteOnboardingErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36806,6 +38010,7 @@ export type CompleteOnboardingErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36815,6 +38020,7 @@ export type CompleteOnboardingErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36897,6 +38103,7 @@ export type GetOnboardingStatusErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36906,6 +38113,7 @@ export type GetOnboardingStatusErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36915,6 +38123,7 @@ export type GetOnboardingStatusErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36924,6 +38133,7 @@ export type GetOnboardingStatusErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36933,6 +38143,7 @@ export type GetOnboardingStatusErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36942,6 +38153,7 @@ export type GetOnboardingStatusErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -36975,6 +38187,7 @@ export type GetMemberSignupStatusErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36984,6 +38197,7 @@ export type GetMemberSignupStatusErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -36993,6 +38207,7 @@ export type GetMemberSignupStatusErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37002,6 +38217,7 @@ export type GetMemberSignupStatusErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37011,6 +38227,7 @@ export type GetMemberSignupStatusErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37020,6 +38237,7 @@ export type GetMemberSignupStatusErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37062,6 +38280,7 @@ export type DeletePendingSignupMemberErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37071,6 +38290,7 @@ export type DeletePendingSignupMemberErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37080,6 +38300,7 @@ export type DeletePendingSignupMemberErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37089,6 +38310,7 @@ export type DeletePendingSignupMemberErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37098,6 +38320,7 @@ export type DeletePendingSignupMemberErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37107,6 +38330,7 @@ export type DeletePendingSignupMemberErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37139,6 +38363,7 @@ export type GetOrganizationMembersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37148,6 +38373,7 @@ export type GetOrganizationMembersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37157,6 +38383,7 @@ export type GetOrganizationMembersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37166,6 +38393,7 @@ export type GetOrganizationMembersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37175,6 +38403,7 @@ export type GetOrganizationMembersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37184,6 +38413,7 @@ export type GetOrganizationMembersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37223,6 +38453,7 @@ export type GetOrganizationMemberErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37232,6 +38463,7 @@ export type GetOrganizationMemberErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37241,6 +38473,7 @@ export type GetOrganizationMemberErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37250,6 +38483,7 @@ export type GetOrganizationMemberErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37259,6 +38493,7 @@ export type GetOrganizationMemberErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37268,6 +38503,7 @@ export type GetOrganizationMemberErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37313,6 +38549,7 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37322,6 +38559,7 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37331,6 +38569,7 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37340,6 +38579,7 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37349,6 +38589,7 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37358,6 +38599,7 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37400,6 +38642,7 @@ export type PerplexityChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37409,6 +38652,7 @@ export type PerplexityChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37418,6 +38662,7 @@ export type PerplexityChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37427,6 +38672,7 @@ export type PerplexityChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37436,6 +38682,7 @@ export type PerplexityChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37445,6 +38692,7 @@ export type PerplexityChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37483,6 +38731,7 @@ export type GetScheduleTriggersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37492,6 +38741,7 @@ export type GetScheduleTriggersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37501,6 +38751,7 @@ export type GetScheduleTriggersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37510,6 +38761,7 @@ export type GetScheduleTriggersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37519,6 +38771,7 @@ export type GetScheduleTriggersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37528,6 +38781,7 @@ export type GetScheduleTriggersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37597,6 +38851,7 @@ export type CreateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37606,6 +38861,7 @@ export type CreateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37615,6 +38871,7 @@ export type CreateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37624,6 +38881,7 @@ export type CreateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37633,6 +38891,7 @@ export type CreateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37642,6 +38901,7 @@ export type CreateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37696,6 +38956,7 @@ export type DeleteScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37705,6 +38966,7 @@ export type DeleteScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37714,6 +38976,7 @@ export type DeleteScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37723,6 +38986,7 @@ export type DeleteScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37732,6 +38996,7 @@ export type DeleteScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37741,6 +39006,7 @@ export type DeleteScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37775,6 +39041,7 @@ export type GetScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37784,6 +39051,7 @@ export type GetScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37793,6 +39061,7 @@ export type GetScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37802,6 +39071,7 @@ export type GetScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37811,6 +39081,7 @@ export type GetScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37820,6 +39091,7 @@ export type GetScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37881,6 +39153,7 @@ export type UpdateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37890,6 +39163,7 @@ export type UpdateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37899,6 +39173,7 @@ export type UpdateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37908,6 +39183,7 @@ export type UpdateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37917,6 +39193,7 @@ export type UpdateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37926,6 +39203,7 @@ export type UpdateScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -37980,6 +39258,7 @@ export type EnableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37989,6 +39268,7 @@ export type EnableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -37998,6 +39278,7 @@ export type EnableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38007,6 +39288,7 @@ export type EnableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38016,6 +39298,7 @@ export type EnableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38025,6 +39308,7 @@ export type EnableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38079,6 +39363,7 @@ export type DisableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38088,6 +39373,7 @@ export type DisableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38097,6 +39383,7 @@ export type DisableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38106,6 +39393,7 @@ export type DisableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38115,6 +39403,7 @@ export type DisableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38124,6 +39413,7 @@ export type DisableScheduleTriggerErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38178,6 +39468,7 @@ export type RunScheduleTriggerNowErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38187,6 +39478,7 @@ export type RunScheduleTriggerNowErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38196,6 +39488,7 @@ export type RunScheduleTriggerNowErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38205,6 +39498,7 @@ export type RunScheduleTriggerNowErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38214,6 +39508,7 @@ export type RunScheduleTriggerNowErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38223,6 +39518,7 @@ export type RunScheduleTriggerNowErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38272,6 +39568,7 @@ export type GetScheduleTriggerRunsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38281,6 +39578,7 @@ export type GetScheduleTriggerRunsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38290,6 +39588,7 @@ export type GetScheduleTriggerRunsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38299,6 +39598,7 @@ export type GetScheduleTriggerRunsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38308,6 +39608,7 @@ export type GetScheduleTriggerRunsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38317,6 +39618,7 @@ export type GetScheduleTriggerRunsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38373,6 +39675,7 @@ export type GetScheduleTriggerRunErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38382,6 +39685,7 @@ export type GetScheduleTriggerRunErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38391,6 +39695,7 @@ export type GetScheduleTriggerRunErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38400,6 +39705,7 @@ export type GetScheduleTriggerRunErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38409,6 +39715,7 @@ export type GetScheduleTriggerRunErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38418,6 +39725,7 @@ export type GetScheduleTriggerRunErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38464,6 +39772,7 @@ export type CreateScheduleTriggerRunConversationErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38473,6 +39782,7 @@ export type CreateScheduleTriggerRunConversationErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38482,6 +39792,7 @@ export type CreateScheduleTriggerRunConversationErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38491,6 +39802,7 @@ export type CreateScheduleTriggerRunConversationErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38500,6 +39812,7 @@ export type CreateScheduleTriggerRunConversationErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38509,6 +39822,7 @@ export type CreateScheduleTriggerRunConversationErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38588,6 +39902,7 @@ export type GetSecretsTypeErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38597,6 +39912,7 @@ export type GetSecretsTypeErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38606,6 +39922,7 @@ export type GetSecretsTypeErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38615,6 +39932,7 @@ export type GetSecretsTypeErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38624,6 +39942,7 @@ export type GetSecretsTypeErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38633,6 +39952,7 @@ export type GetSecretsTypeErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38670,6 +39990,7 @@ export type GetSecretErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38679,6 +40000,7 @@ export type GetSecretErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38688,6 +40010,7 @@ export type GetSecretErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38697,6 +40020,7 @@ export type GetSecretErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38706,6 +40030,7 @@ export type GetSecretErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38715,6 +40040,7 @@ export type GetSecretErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38755,6 +40081,7 @@ export type CheckSecretsConnectivityErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38764,6 +40091,7 @@ export type CheckSecretsConnectivityErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38773,6 +40101,7 @@ export type CheckSecretsConnectivityErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38782,6 +40111,7 @@ export type CheckSecretsConnectivityErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38791,6 +40121,7 @@ export type CheckSecretsConnectivityErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38800,6 +40131,7 @@ export type CheckSecretsConnectivityErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38834,6 +40166,7 @@ export type GetTeamStatisticsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38843,6 +40176,7 @@ export type GetTeamStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38852,6 +40186,7 @@ export type GetTeamStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38861,6 +40196,7 @@ export type GetTeamStatisticsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38870,6 +40206,7 @@ export type GetTeamStatisticsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38879,6 +40216,7 @@ export type GetTeamStatisticsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -38924,6 +40262,7 @@ export type GetAgentStatisticsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38933,6 +40272,7 @@ export type GetAgentStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38942,6 +40282,7 @@ export type GetAgentStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38951,6 +40292,7 @@ export type GetAgentStatisticsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38960,6 +40302,7 @@ export type GetAgentStatisticsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -38969,6 +40312,7 @@ export type GetAgentStatisticsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39014,6 +40358,7 @@ export type GetModelStatisticsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39023,6 +40368,7 @@ export type GetModelStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39032,6 +40378,7 @@ export type GetModelStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39041,6 +40388,7 @@ export type GetModelStatisticsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39050,6 +40398,7 @@ export type GetModelStatisticsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39059,6 +40408,7 @@ export type GetModelStatisticsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39102,6 +40452,7 @@ export type GetOverviewStatisticsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39111,6 +40462,7 @@ export type GetOverviewStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39120,6 +40472,7 @@ export type GetOverviewStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39129,6 +40482,7 @@ export type GetOverviewStatisticsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39138,6 +40492,7 @@ export type GetOverviewStatisticsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39147,6 +40502,7 @@ export type GetOverviewStatisticsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39186,6 +40542,7 @@ export type GetCostSavingsStatisticsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39195,6 +40552,7 @@ export type GetCostSavingsStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39204,6 +40562,7 @@ export type GetCostSavingsStatisticsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39213,6 +40572,7 @@ export type GetCostSavingsStatisticsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39222,6 +40582,7 @@ export type GetCostSavingsStatisticsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39231,6 +40592,7 @@ export type GetCostSavingsStatisticsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39278,6 +40640,7 @@ export type GetTeamsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39287,6 +40650,7 @@ export type GetTeamsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39296,6 +40660,7 @@ export type GetTeamsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39305,6 +40670,7 @@ export type GetTeamsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39314,6 +40680,7 @@ export type GetTeamsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39323,6 +40690,7 @@ export type GetTeamsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39383,6 +40751,7 @@ export type CreateTeamErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39392,6 +40761,7 @@ export type CreateTeamErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39401,6 +40771,7 @@ export type CreateTeamErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39410,6 +40781,7 @@ export type CreateTeamErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39419,6 +40791,7 @@ export type CreateTeamErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39428,6 +40801,7 @@ export type CreateTeamErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39477,6 +40851,7 @@ export type DeleteTeamErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39486,6 +40861,7 @@ export type DeleteTeamErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39495,6 +40871,7 @@ export type DeleteTeamErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39504,6 +40881,7 @@ export type DeleteTeamErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39513,6 +40891,7 @@ export type DeleteTeamErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39522,6 +40901,7 @@ export type DeleteTeamErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39556,6 +40936,7 @@ export type GetTeamErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39565,6 +40946,7 @@ export type GetTeamErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39574,6 +40956,7 @@ export type GetTeamErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39583,6 +40966,7 @@ export type GetTeamErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39592,6 +40976,7 @@ export type GetTeamErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39601,6 +40986,7 @@ export type GetTeamErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39654,6 +41040,7 @@ export type UpdateTeamErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39663,6 +41050,7 @@ export type UpdateTeamErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39672,6 +41060,7 @@ export type UpdateTeamErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39681,6 +41070,7 @@ export type UpdateTeamErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39690,6 +41080,7 @@ export type UpdateTeamErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39699,6 +41090,7 @@ export type UpdateTeamErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39748,6 +41140,7 @@ export type GetTeamMembersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39757,6 +41150,7 @@ export type GetTeamMembersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39766,6 +41160,7 @@ export type GetTeamMembersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39775,6 +41170,7 @@ export type GetTeamMembersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39784,6 +41180,7 @@ export type GetTeamMembersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39793,6 +41190,7 @@ export type GetTeamMembersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39838,6 +41236,7 @@ export type AddTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39847,6 +41246,7 @@ export type AddTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39856,6 +41256,7 @@ export type AddTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39865,6 +41266,7 @@ export type AddTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39874,6 +41276,7 @@ export type AddTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39883,6 +41286,7 @@ export type AddTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -39923,6 +41327,7 @@ export type RemoveTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39932,6 +41337,7 @@ export type RemoveTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39941,6 +41347,7 @@ export type RemoveTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39950,6 +41357,7 @@ export type RemoveTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39959,6 +41367,7 @@ export type RemoveTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -39968,6 +41377,7 @@ export type RemoveTeamMemberErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40002,6 +41412,7 @@ export type GetTeamExternalGroupsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40011,6 +41422,7 @@ export type GetTeamExternalGroupsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40020,6 +41432,7 @@ export type GetTeamExternalGroupsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40029,6 +41442,7 @@ export type GetTeamExternalGroupsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40038,6 +41452,7 @@ export type GetTeamExternalGroupsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40047,6 +41462,7 @@ export type GetTeamExternalGroupsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40086,6 +41502,7 @@ export type AddTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40095,6 +41512,7 @@ export type AddTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40104,6 +41522,7 @@ export type AddTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40113,6 +41532,7 @@ export type AddTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40122,6 +41542,7 @@ export type AddTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40131,6 +41552,7 @@ export type AddTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40169,6 +41591,7 @@ export type RemoveTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40178,6 +41601,7 @@ export type RemoveTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40187,6 +41611,7 @@ export type RemoveTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40196,6 +41621,7 @@ export type RemoveTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40205,6 +41631,7 @@ export type RemoveTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40214,6 +41641,7 @@ export type RemoveTeamExternalGroupErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40251,6 +41679,7 @@ export type GetTokensErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40260,6 +41689,7 @@ export type GetTokensErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40269,6 +41699,7 @@ export type GetTokensErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40278,6 +41709,7 @@ export type GetTokensErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40287,6 +41719,7 @@ export type GetTokensErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40296,6 +41729,7 @@ export type GetTokensErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40345,6 +41779,7 @@ export type GetTokenValueErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40354,6 +41789,7 @@ export type GetTokenValueErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40363,6 +41799,7 @@ export type GetTokenValueErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40372,6 +41809,7 @@ export type GetTokenValueErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40381,6 +41819,7 @@ export type GetTokenValueErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40390,6 +41829,7 @@ export type GetTokenValueErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40424,6 +41864,7 @@ export type RotateTokenErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40433,6 +41874,7 @@ export type RotateTokenErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40442,6 +41884,7 @@ export type RotateTokenErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40451,6 +41894,7 @@ export type RotateTokenErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40460,6 +41904,7 @@ export type RotateTokenErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40469,6 +41914,7 @@ export type RotateTokenErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40511,6 +41957,7 @@ export type GetToolsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40520,6 +41967,7 @@ export type GetToolsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40529,6 +41977,7 @@ export type GetToolsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40538,6 +41987,7 @@ export type GetToolsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40547,6 +41997,7 @@ export type GetToolsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40556,6 +42007,7 @@ export type GetToolsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40638,6 +42090,7 @@ export type GetToolsWithAssignmentsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40647,6 +42100,7 @@ export type GetToolsWithAssignmentsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40656,6 +42110,7 @@ export type GetToolsWithAssignmentsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40665,6 +42120,7 @@ export type GetToolsWithAssignmentsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40674,6 +42130,7 @@ export type GetToolsWithAssignmentsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40683,6 +42140,7 @@ export type GetToolsWithAssignmentsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40762,6 +42220,7 @@ export type DeleteToolErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40771,6 +42230,7 @@ export type DeleteToolErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40780,6 +42240,7 @@ export type DeleteToolErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40789,6 +42250,7 @@ export type DeleteToolErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40798,6 +42260,7 @@ export type DeleteToolErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40807,6 +42270,7 @@ export type DeleteToolErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40839,6 +42303,7 @@ export type GetUserPermissionsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40848,6 +42313,7 @@ export type GetUserPermissionsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40857,6 +42323,7 @@ export type GetUserPermissionsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40866,6 +42333,7 @@ export type GetUserPermissionsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40875,6 +42343,7 @@ export type GetUserPermissionsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40884,6 +42353,7 @@ export type GetUserPermissionsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40916,6 +42386,7 @@ export type GetUserTokenErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40925,6 +42396,7 @@ export type GetUserTokenErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40934,6 +42406,7 @@ export type GetUserTokenErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40943,6 +42416,7 @@ export type GetUserTokenErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40952,6 +42426,7 @@ export type GetUserTokenErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -40961,6 +42436,7 @@ export type GetUserTokenErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -40997,6 +42473,7 @@ export type GetUserTokenValueErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41006,6 +42483,7 @@ export type GetUserTokenValueErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41015,6 +42493,7 @@ export type GetUserTokenValueErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41024,6 +42503,7 @@ export type GetUserTokenValueErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41033,6 +42513,7 @@ export type GetUserTokenValueErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41042,6 +42523,7 @@ export type GetUserTokenValueErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41074,6 +42556,7 @@ export type RotateUserTokenErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41083,6 +42566,7 @@ export type RotateUserTokenErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41092,6 +42576,7 @@ export type RotateUserTokenErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41101,6 +42586,7 @@ export type RotateUserTokenErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41110,6 +42596,7 @@ export type RotateUserTokenErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41119,6 +42606,7 @@ export type RotateUserTokenErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41161,6 +42649,7 @@ export type GetAllVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41170,6 +42659,7 @@ export type GetAllVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41179,6 +42669,7 @@ export type GetAllVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41188,6 +42679,7 @@ export type GetAllVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41197,6 +42689,7 @@ export type GetAllVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41206,6 +42699,7 @@ export type GetAllVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41267,6 +42761,7 @@ export type GetVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41276,6 +42771,7 @@ export type GetVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41285,6 +42781,7 @@ export type GetVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41294,6 +42791,7 @@ export type GetVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41303,6 +42801,7 @@ export type GetVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41312,6 +42811,7 @@ export type GetVirtualApiKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41360,6 +42860,7 @@ export type CreateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41369,6 +42870,7 @@ export type CreateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41378,6 +42880,7 @@ export type CreateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41387,6 +42890,7 @@ export type CreateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41396,6 +42900,7 @@ export type CreateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41405,6 +42910,7 @@ export type CreateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41455,6 +42961,7 @@ export type DeleteVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41464,6 +42971,7 @@ export type DeleteVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41473,6 +42981,7 @@ export type DeleteVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41482,6 +42991,7 @@ export type DeleteVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41491,6 +43001,7 @@ export type DeleteVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41500,6 +43011,7 @@ export type DeleteVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41540,6 +43052,7 @@ export type UpdateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41549,6 +43062,7 @@ export type UpdateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41558,6 +43072,7 @@ export type UpdateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41567,6 +43082,7 @@ export type UpdateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41576,6 +43092,7 @@ export type UpdateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41585,6 +43102,7 @@ export type UpdateVirtualApiKeyErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41641,6 +43159,7 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41650,6 +43169,7 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41659,6 +43179,7 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41668,6 +43189,7 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41677,6 +43199,7 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41686,6 +43209,7 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41728,6 +43252,7 @@ export type VllmChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41737,6 +43262,7 @@ export type VllmChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41746,6 +43272,7 @@ export type VllmChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41755,6 +43282,7 @@ export type VllmChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41764,6 +43292,7 @@ export type VllmChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41773,6 +43302,7 @@ export type VllmChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41813,6 +43343,7 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41822,6 +43353,7 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41831,6 +43363,7 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41840,6 +43373,7 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41849,6 +43383,7 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41858,6 +43393,7 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41900,6 +43436,7 @@ export type XaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41909,6 +43446,7 @@ export type XaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41918,6 +43456,7 @@ export type XaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41927,6 +43466,7 @@ export type XaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41936,6 +43476,7 @@ export type XaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41945,6 +43486,7 @@ export type XaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -41986,6 +43528,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -41995,6 +43538,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42004,6 +43548,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42013,6 +43558,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42022,6 +43568,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42031,6 +43578,7 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42074,6 +43622,7 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42083,6 +43632,7 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42092,6 +43642,7 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42101,6 +43652,7 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42110,6 +43662,7 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42119,6 +43672,7 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42149,6 +43703,7 @@ export type GetPublicIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42158,6 +43713,7 @@ export type GetPublicIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42167,6 +43723,7 @@ export type GetPublicIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42176,6 +43733,7 @@ export type GetPublicIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42185,6 +43743,7 @@ export type GetPublicIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42194,6 +43753,7 @@ export type GetPublicIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42227,6 +43787,7 @@ export type GetIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42236,6 +43797,7 @@ export type GetIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42245,6 +43807,7 @@ export type GetIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42254,6 +43817,7 @@ export type GetIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42263,6 +43827,7 @@ export type GetIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42272,6 +43837,7 @@ export type GetIdentityProvidersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42548,6 +44114,7 @@ export type CreateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42557,6 +44124,7 @@ export type CreateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42566,6 +44134,7 @@ export type CreateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42575,6 +44144,7 @@ export type CreateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42584,6 +44154,7 @@ export type CreateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42593,6 +44164,7 @@ export type CreateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42747,6 +44319,7 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42756,6 +44329,7 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42765,6 +44339,7 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42774,6 +44349,7 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42783,6 +44359,7 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42792,6 +44369,7 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42826,6 +44404,7 @@ export type DeleteIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42835,6 +44414,7 @@ export type DeleteIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42844,6 +44424,7 @@ export type DeleteIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42853,6 +44434,7 @@ export type DeleteIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42862,6 +44444,7 @@ export type DeleteIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42871,6 +44454,7 @@ export type DeleteIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -42905,6 +44489,7 @@ export type GetIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42914,6 +44499,7 @@ export type GetIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42923,6 +44509,7 @@ export type GetIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42932,6 +44519,7 @@ export type GetIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42941,6 +44529,7 @@ export type GetIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42950,6 +44539,7 @@ export type GetIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43227,6 +44817,7 @@ export type UpdateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43236,6 +44827,7 @@ export type UpdateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43245,6 +44837,7 @@ export type UpdateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43254,6 +44847,7 @@ export type UpdateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43263,6 +44857,7 @@ export type UpdateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43272,6 +44867,7 @@ export type UpdateIdentityProviderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43428,6 +45024,7 @@ export type DeleteTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43437,6 +45034,7 @@ export type DeleteTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43446,6 +45044,7 @@ export type DeleteTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43455,6 +45054,7 @@ export type DeleteTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43464,6 +45064,7 @@ export type DeleteTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43473,6 +45074,7 @@ export type DeleteTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43507,6 +45109,7 @@ export type GetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43516,6 +45119,7 @@ export type GetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43525,6 +45129,7 @@ export type GetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43534,6 +45139,7 @@ export type GetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43543,6 +45149,7 @@ export type GetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43552,6 +45159,7 @@ export type GetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43592,6 +45200,7 @@ export type SetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43601,6 +45210,7 @@ export type SetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43610,6 +45220,7 @@ export type SetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43619,6 +45230,7 @@ export type SetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43628,6 +45240,7 @@ export type SetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43637,6 +45250,7 @@ export type SetTeamVaultFolderErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43677,6 +45291,7 @@ export type CheckTeamVaultFolderConnectivityErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43686,6 +45301,7 @@ export type CheckTeamVaultFolderConnectivityErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43695,6 +45311,7 @@ export type CheckTeamVaultFolderConnectivityErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43704,6 +45321,7 @@ export type CheckTeamVaultFolderConnectivityErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43713,6 +45331,7 @@ export type CheckTeamVaultFolderConnectivityErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43722,6 +45341,7 @@ export type CheckTeamVaultFolderConnectivityErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43758,6 +45378,7 @@ export type ListTeamVaultFolderSecretsErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43767,6 +45388,7 @@ export type ListTeamVaultFolderSecretsErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43776,6 +45398,7 @@ export type ListTeamVaultFolderSecretsErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43785,6 +45408,7 @@ export type ListTeamVaultFolderSecretsErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43794,6 +45418,7 @@ export type ListTeamVaultFolderSecretsErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43803,6 +45428,7 @@ export type ListTeamVaultFolderSecretsErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -43840,6 +45466,7 @@ export type GetTeamVaultSecretKeysErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43849,6 +45476,7 @@ export type GetTeamVaultSecretKeysErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43858,6 +45486,7 @@ export type GetTeamVaultSecretKeysErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43867,6 +45496,7 @@ export type GetTeamVaultSecretKeysErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43876,6 +45506,7 @@ export type GetTeamVaultSecretKeysErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -43885,6 +45516,7 @@ export type GetTeamVaultSecretKeysErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };

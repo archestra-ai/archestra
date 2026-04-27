@@ -136,3 +136,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @vaibz99
 - @YelllowSunray
 - @Pearltechie
+- @sanrishi
+- @Mira-Mjodheim
+- @AbdellahBouarguan
+- @rajanarahul93
+- @WarmSpark

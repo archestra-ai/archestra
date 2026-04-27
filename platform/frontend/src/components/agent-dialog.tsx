@@ -1513,6 +1513,8 @@ export function AgentDialog({
                           onSelectedCountChange={setSelectedToolsCount}
                         />
                       </>
+                    ) : agent ? (
+                      <AgentToolsList agentId={agent.id} />
                     ) : null}
                   </div>
 

@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { uniqBy } from "lodash-es";
 import db, { schema } from "@/database";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
@@ -121,30 +122,59 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    await db.transaction(async (tx) => {
+    const affectedPairs = await db.transaction(async (tx) => {
+      const previousLabels = await tx
+        .select({
+          keyId: schema.mcpCatalogLabelsTable.keyId,
+          valueId: schema.mcpCatalogLabelsTable.valueId,
+        })
+        .from(schema.mcpCatalogLabelsTable)
+        .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
+
+      const insertedLabels: {
+        catalogId: string;
+        keyId: string;
+        valueId: string;
+      }[] = [];
+
+      // Delete all existing labels for this catalog item
       await tx
         .delete(schema.mcpCatalogLabelsTable)
         .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
 
+      // Upsert and assign new labels for this catalog item
       if (labels.length > 0) {
-        const labelInserts: {
-          catalogId: string;
-          keyId: string;
-          valueId: string;
-        }[] = [];
-
         for (const label of labels) {
-          const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
-          const valueId = await AgentLabelModel.getOrCreateValue(
-            label.value,
-            tx,
-          );
-          labelInserts.push({ catalogId, keyId, valueId });
+          const { key, value } = label;
+          const keyId = await AgentLabelModel.getOrCreateKey(key, tx);
+          const valueId = await AgentLabelModel.getOrCreateValue(value, tx);
+          insertedLabels.push({ catalogId, keyId, valueId });
         }
 
-        await tx.insert(schema.mcpCatalogLabelsTable).values(labelInserts);
+        await tx.insert(schema.mcpCatalogLabelsTable).values(insertedLabels);
       }
+
+      // Return union of affected labels
+      return uniqBy(
+        [...previousLabels, ...insertedLabels],
+        (l) => `${l.keyId}-${l.valueId}`,
+      );
     });
+
+    // For MCP gateways, re-assign matched tools when the tool assignment mode is automatic
+    if (affectedPairs.length > 0) {
+      const AgentModel = (await import("./agent")).default;
+      const AgentToolModel = (await import("./agent-tool")).default;
+
+      const matchedAgents = await AgentModel.findByLabels(affectedPairs);
+      const affectedGateways = matchedAgents
+        .filter((agent) => agent.agentType === "mcp_gateway")
+        .filter((agent) => agent.toolAssignmentMode === "automatic");
+
+      for (const gateway of affectedGateways) {
+        await AgentToolModel.syncAgentToolsFromLabels(gateway.id);
+      }
+    }
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});

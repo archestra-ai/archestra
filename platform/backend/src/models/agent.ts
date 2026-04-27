@@ -1,4 +1,5 @@
 import {
+  type AgentToolAssignmentMode,
   DEFAULT_LLM_PROXY_NAME,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -21,7 +22,6 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { id } from "zod/v4/locales";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import {
@@ -29,7 +29,6 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import { assignAgentToolsFromLabels } from "@/services/agent-tool-assignment";
 import type {
   Agent,
   AgentScope,
@@ -193,8 +192,9 @@ class AgentModel {
     const isMcpGateway = createdAgent.agentType === "mcp_gateway";
     const isAutomaticToolAssignment =
       createdAgent.toolAssignmentMode === "automatic";
+
     if (hasLabels && isMcpGateway && isAutomaticToolAssignment) {
-      await assignAgentToolsFromLabels(createdAgent.id);
+      await AgentToolModel.syncAgentToolsFromLabels(createdAgent.id);
     }
 
     // Assign knowledge bases if provided
@@ -529,6 +529,44 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+  }
+
+  static async findByLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      agentType: AgentType;
+      toolAssignmentMode: AgentToolAssignmentMode;
+    }[]
+  > {
+    if (pairs.length === 0) return [];
+
+    const rows = await db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        toolAssignmentMode: schema.agentsTable.toolAssignmentMode,
+      })
+      .from(schema.agentLabelsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.agentLabelsTable.keyId, pair.keyId),
+              eq(schema.agentLabelsTable.valueId, pair.valueId),
+            ),
+          ),
+        ),
+      );
+
+    return rows;
   }
 
   /**
@@ -1058,24 +1096,6 @@ class AgentModel {
   }
 
   /**
-   * Find IDs of all MCP gateway agents in automatic tool assignment mode.
-   * Used by the label-based tool reconciliation task queue fanout.
-   */
-  static async findAllAutomaticMcpGatewayIds(): Promise<string[]> {
-    const rows = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.agentType, "mcp_gateway"),
-          eq(schema.agentsTable.toolAssignmentMode, "automatic"),
-        ),
-      );
-
-    return rows.map((r) => r.id);
-  }
-
-  /**
    * Batch check if multiple agents exist.
    * Returns a Set of agent IDs that exist.
    */
@@ -1372,7 +1392,7 @@ class AgentModel {
       existingAgent.toolAssignmentMode !== "automatic";
 
     if (isMcpGateway && isSwitchingToAutomatic) {
-      await assignAgentToolsFromLabels(id);
+      await AgentToolModel.syncAgentToolsFromLabels(id);
     }
 
     // Sync knowledge base assignments if knowledgeBaseIds is provided
@@ -1398,14 +1418,7 @@ class AgentModel {
       currentConnectorIds,
       currentSuggestedPrompts,
     ] = await Promise.all([
-      db
-        .select({ tool: schema.toolsTable })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .where(eq(schema.agentToolsTable.agentId, updatedAgent?.id)),
+      AgentToolModel.getToolsForAgent(id),
       AgentTeamModel.getTeamDetailsForAgent(id),
       AgentLabelModel.getLabelsForAgent(id),
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
@@ -1417,7 +1430,7 @@ class AgentModel {
 
     return {
       ...updatedAgent,
-      tools: toolRows.map((row) => row.tool),
+      tools: toolRows,
       teams: currentTeams,
       labels: currentLabels,
       knowledgeBaseIds: currentKbIds,

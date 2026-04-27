@@ -34850,6 +34850,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeOtherPersonalAgents",
+            "required": false,
+            "description": "Hide personal agents owned by other users. Admin-only; no-op for non-admins."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,

@@ -11,6 +11,7 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
   AccountModel,
+  AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -135,7 +136,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user, headers }, reply) => {
+    async ({ body, user, headers, organizationId }, reply) => {
       let {
         agentIds,
         secretId,
@@ -237,17 +238,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (s) => s.ownerId === user.id && !s.teamId,
           );
           if (existingPersonal) {
-            // If agentIds provided, assign the server's tools to those agents
-            if (agentIds && agentIds.length > 0) {
-              const catalogTools = await ToolModel.findByCatalogId(
-                serverData.catalogId,
+            const catalogTools = await ToolModel.findByCatalogId(
+              serverData.catalogId,
+            );
+            const toolIds = catalogTools.map((t) => t.id);
+            if (toolIds.length > 0) {
+              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
+                {
+                  userId: user.id,
+                  organizationId,
+                },
               );
-              const toolIds = catalogTools.map((t) => t.id);
-              if (toolIds.length > 0) {
-                for (const agentId of agentIds) {
-                  await AgentToolModel.createManyIfNotExists(agentId, toolIds);
-                }
-              }
+              const targetAgentIds = Array.from(
+                new Set([personalGateway.id, ...(agentIds ?? [])]),
+              );
+              await AgentToolModel.bulkCreateForAgentsAndTools(
+                targetAgentIds,
+                toolIds,
+                { mcpServerId: existingPersonal.id },
+              );
             }
             return reply.send(existingPersonal);
           }
@@ -686,16 +695,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-                // If agentIds were provided, create agent-tool assignments pinned to this installation.
-                if (agentIds && agentIds.length > 0) {
+                // For personal installs, auto-assign every discovered tool to the
+                // installer's personal gateway alongside any explicit agentIds.
+                // Team-scoped installs only honor explicit agentIds.
+                {
                   const toolIds = createdTools.map((t) => t.id);
-                  await AgentToolModel.bulkCreateForAgentsAndTools(
-                    agentIds,
-                    toolIds,
-                    {
-                      mcpServerId: mcpServer.id,
-                    },
-                  );
+                  if (toolIds.length > 0) {
+                    const targetAgentIds: string[] = [];
+                    if (!mcpServer.teamId) {
+                      const personalGateway =
+                        await AgentModel.ensurePersonalMcpGateway({
+                          userId: user.id,
+                          organizationId,
+                        });
+                      targetAgentIds.push(personalGateway.id);
+                    }
+                    if (agentIds && agentIds.length > 0) {
+                      targetAgentIds.push(...agentIds);
+                    }
+                    const dedupedAgentIds = Array.from(new Set(targetAgentIds));
+                    if (dedupedAgentIds.length > 0) {
+                      await AgentToolModel.bulkCreateForAgentsAndTools(
+                        dedupedAgentIds,
+                        toolIds,
+                        { mcpServerId: mcpServer.id },
+                      );
+                    }
+                  }
                 }
 
                 // Set status to success after tools are fetched
@@ -782,12 +808,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-        // If agentIds were provided, create agent-tool assignments pinned to this installation.
-        if (agentIds && agentIds.length > 0) {
+        // For personal installs, auto-assign every discovered tool to the
+        // installer's personal gateway alongside any explicit agentIds.
+        // Team-scoped installs only honor explicit agentIds.
+        {
           const toolIds = createdTools.map((t) => t.id);
-          await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds, {
-            mcpServerId: mcpServer.id,
-          });
+          if (toolIds.length > 0) {
+            const targetAgentIds: string[] = [];
+            if (!mcpServer.teamId) {
+              const personalGateway = await AgentModel.ensurePersonalMcpGateway(
+                {
+                  userId: user.id,
+                  organizationId,
+                },
+              );
+              targetAgentIds.push(personalGateway.id);
+            }
+            if (agentIds && agentIds.length > 0) {
+              targetAgentIds.push(...agentIds);
+            }
+            const dedupedAgentIds = Array.from(new Set(targetAgentIds));
+            if (dedupedAgentIds.length > 0) {
+              await AgentToolModel.bulkCreateForAgentsAndTools(
+                dedupedAgentIds,
+                toolIds,
+                { mcpServerId: mcpServer.id },
+              );
+            }
+          }
         }
 
         // Set status to success for non-local servers

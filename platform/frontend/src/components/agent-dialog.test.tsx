@@ -353,6 +353,7 @@ describe.skip("AgentDialog", () => {
           toolExposureMode: "full",
           scope: "personal",
           isDefault: false,
+          isPersonalGateway: false,
           teams: [],
           tools: [],
           labels: [],

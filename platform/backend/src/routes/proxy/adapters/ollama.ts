@@ -4,6 +4,7 @@
  * Ollama exposes an OpenAI-compatible API, so this adapter is largely based on the OpenAI adapter.
  * See: https://github.com/ollama/ollama/blob/main/docs/openai.md
  */
+import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -1202,6 +1203,22 @@ export const ollamaAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // Ollama returns a plain message for context overflow — typical phrasing
+    // is "prompt too long; exceeded max context length by N tokens".
+    const message: unknown = get(error, "error.message");
+    if (typeof message === "string") {
+      const msg = message.toLowerCase();
+      if (
+        msg.includes("exceeded max context length") ||
+        msg.includes("prompt too long")
+      ) {
+        return ArchestraInternalErrorCode.ContextLengthExceeded;
+      }
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

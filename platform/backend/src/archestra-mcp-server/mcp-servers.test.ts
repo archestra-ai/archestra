@@ -253,3 +253,375 @@ describe("mcp server tool execution", () => {
     expect(updatedCatalog?.localConfig?.transportType).toBe("stdio");
   });
 });
+
+describe("deploy_mcp_server", () => {
+  const DEPLOY_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}deploy_mcp_server`;
+
+  test("personal install: admin succeeds", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "personal" },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("personal install: non-admin with create succeeds", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const callerRole = await makeCustomRole(org.id, {
+      permission: {
+        mcpRegistry: ["update"],
+        mcpServerInstallation: ["read", "create"],
+      },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: callerRole.role });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "personal" },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("team install: org admin can install for a team they don't belong to", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const notTeamMember = await makeUser();
+    const teamMember = await makeUser();
+    await makeMember(notTeamMember.id, org.id, { role: "admin" });
+    await makeMember(teamMember.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, teamMember.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: notTeamMember.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("team install: member of team and editor succeeds", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id, { role: "admin" });
+    const editorRole = await makeCustomRole(org.id, {
+      permission: {
+        mcpRegistry: ["update"],
+        mcpServerInstallation: ["read", "create", "update"],
+      },
+    });
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: editorRole.role });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, editor.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: editor.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("team install: member of team and non-editor is rejected", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id, { role: "admin" });
+    const callerOnlyRole = await makeCustomRole(org.id, {
+      permission: {
+        mcpRegistry: ["update"],
+        mcpServerInstallation: ["read", "create"],
+      },
+    });
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: callerOnlyRole.role });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, caller.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: caller.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "You don't have permission to create team MCP server installations",
+    );
+  });
+
+  test("team install: editor not a member of the target team is rejected", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id, { role: "admin" });
+    const editorRole = await makeCustomRole(org.id, {
+      permission: {
+        mcpRegistry: ["update"],
+        mcpServerInstallation: ["read", "create", "update"],
+      },
+    });
+    const notTeamMember = await makeUser();
+    await makeMember(notTeamMember.id, org.id, { role: editorRole.role });
+    const team = await makeTeam(org.id, owner.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: notTeamMember.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "You can only create MCP server installations for teams you are a member of",
+    );
+  });
+
+  test("org install: mcpServerInstallation:admin succeeds", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "org" },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("org install: non-admin (no mcpServerInstallation:admin) is rejected", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const callerRole = await makeCustomRole(org.id, {
+      permission: {
+        mcpRegistry: ["update"],
+        mcpServerInstallation: ["read", "create"],
+      },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: callerRole.role });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "org" },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Only mcpServerInstallation admins can install organization-scoped MCP servers",
+    );
+  });
+
+  test("org install: duplicate org-scoped install for the same catalog is rejected", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+    await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: user.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "org" },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "This organization already has an installation of this MCP server",
+    );
+  });
+
+  test("org install: scope=org with teamId is rejected", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "org", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "teamId should not be provided for non-team MCP server installations",
+    );
+  });
+});

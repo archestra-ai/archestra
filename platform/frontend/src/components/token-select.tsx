@@ -56,8 +56,15 @@ export function TokenSelect({
 
   // Get credentials for this catalogId from the grouped response
   const mcpServers = groupedCredentials?.[catalogId] ?? [];
-  const teamCredentials = mcpServers.filter((server) => server.teamDetails);
-  const userCredentials = mcpServers.filter((server) => !server.teamDetails);
+  const organizationCredentials = mcpServers.filter(
+    (server) => server.scope === "org",
+  );
+  const teamCredentials = mcpServers.filter(
+    (server) => server.scope === "team",
+  );
+  const userCredentials = mcpServers.filter(
+    (server) => server.scope === "personal",
+  );
 
   const isLoading = !groupedCredentials;
 
@@ -131,6 +138,24 @@ export function TokenSelect({
         </SelectItem>
         {mcpServers.length > 0 && (
           <>
+            {organizationCredentials.length > 0 && (
+              <>
+                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                  Static - Organization Credentials
+                </div>
+                {organizationCredentials.map((server) => (
+                  <SelectItem
+                    key={server.id}
+                    value={server.id}
+                    className="cursor-pointer"
+                    data-testid={E2eTestId.StaticCredentialToUse}
+                    description="Available to the organization"
+                  >
+                    Organization
+                  </SelectItem>
+                ))}
+              </>
+            )}
             <Divider className="my-2" />
             {teamCredentials.length > 0 && (
               <>

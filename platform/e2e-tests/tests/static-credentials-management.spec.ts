@@ -126,6 +126,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           body: {
             name: catalogItemName,
             catalogId: newCatalogItem.id,
+            scope: "team",
             teamId,
           },
         });

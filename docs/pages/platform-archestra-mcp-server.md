@@ -585,7 +585,8 @@ Required RBAC permission: `mcpRegistry:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `catalogId` | `string` | Yes | The catalog ID of the MCP server to deploy. |
-| `teamId` | `string` | No | Optional team ID for a team-scoped deployment. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope for the deployment: 'personal' (default), 'team' (requires teamId), or 'org' (admins only, visible to all org members). |
+| `teamId` | `string` | No | Optional team ID for a team-scoped deployment (required when scope='team'). |
 | `agentIds` | `string[]` | No | Optional agent IDs to assign the server's tools to after deployment. |
 
 

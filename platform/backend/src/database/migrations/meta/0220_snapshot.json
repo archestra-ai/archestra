@@ -1,5 +1,5 @@
 {
-  "id": "b9a78de9-0cc2-4d0d-a76f-74d4098add80",
+  "id": "278113c4-6a30-47a1-8b31-d9677f8b0b69",
   "prevId": "b00167ac-17be-41c7-bac7-2ebdce418d83",
   "version": "7",
   "dialect": "postgresql",
@@ -763,13 +763,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "tool_assignment_mode": {
-          "name": "tool_assignment_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'manual'"
         },
         "llm_api_key_id": {
           "name": "llm_api_key_id",
@@ -4788,6 +4781,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'personal'"
+        },
         "reinstall_required": {
           "name": "reinstall_required",
           "type": "boolean",
@@ -4836,7 +4836,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "mcp_server_scope_idx": {
+          "name": "mcp_server_scope_idx",
+          "columns": [
+            {
+              "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "mcp_server_catalog_id_internal_mcp_catalog_id_fk": {
           "name": "mcp_server_catalog_id_internal_mcp_catalog_id_fk",

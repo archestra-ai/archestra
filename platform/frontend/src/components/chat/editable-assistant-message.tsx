@@ -178,7 +178,7 @@ export function EditableAssistantMessage({
             textToCopy={text}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
-            className="absolute -bottom-1 left-0 translate-y-full z-10 opacity-0 group-hover/message:opacity-100 transition-opacity"
+            className="absolute -bottom-1 left-0 translate-y-full z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto"
           />
         )}
       </div>

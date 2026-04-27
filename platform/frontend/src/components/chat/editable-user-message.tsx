@@ -261,8 +261,8 @@ export function EditableUserMessage({
             className={cn(
               "absolute -bottom-1 right-0 translate-y-full z-10 transition-opacity",
               isRegenerateConfirming
-                ? "opacity-100"
-                : "opacity-0 group-hover/message:opacity-100",
+                ? "opacity-100 pointer-events-auto"
+                : "opacity-0 pointer-events-none group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto",
             )}
           />
         )}

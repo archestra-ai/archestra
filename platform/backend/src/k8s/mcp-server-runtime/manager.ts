@@ -535,7 +535,8 @@ export class McpServerRuntimeManager {
       throw new Error(`MCP server ${mcpServerId} not found`);
     }
     const oldNamespace = mcpServerBeforeStop.k8sNamespace ?? this.namespace;
-    const deploymentName = K8sDeployment.constructDeploymentName(mcpServerBeforeStop);
+    const deploymentName =
+      K8sDeployment.constructDeploymentName(mcpServerBeforeStop);
 
     await this.stopServer(mcpServerId);
     await this.waitForDeploymentDeletion(deploymentName, oldNamespace);

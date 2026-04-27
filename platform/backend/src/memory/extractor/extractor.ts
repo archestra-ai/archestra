@@ -226,8 +226,10 @@ class MemoryExtractor {
               scopeId: params.userId,
               content: preparedCandidate.content,
               source: "extractor",
+              kind: preparedCandidate.kind,
+              confidenceBand: preparedCandidate.confidenceBand,
             });
-            if (!policyScreen.allowed) {
+            if (!policyScreen.allowed && !policyScreen.quarantine) {
               skippedCount += 1;
               continue;
             }
@@ -255,6 +257,15 @@ class MemoryExtractor {
               continue;
             }
 
+            const candidateStatus = policyScreen.quarantine
+              ? "quarantined"
+              : "candidate";
+            const screenPolicyFlags = policyScreen.allowed
+              ? policyScreen.policyFlags
+              : policyScreen.quarantine
+                ? policyScreen.policyFlags
+                : [];
+
             const sourceContract = buildChatExtractionSourceContract({
               conversationId: params.conversationId,
               messageIds: sourceMessageIds,
@@ -263,19 +274,32 @@ class MemoryExtractor {
               idempotencyKey,
               dedupKey: contentHash,
               extractorVersion: EXTRACTOR_PROMPT_VERSION,
-              policyFlags: policyScreen.policyFlags,
+              policyFlags: screenPolicyFlags,
             });
+
+            const candidateScores =
+              policyScreen.allowed || policyScreen.quarantine
+                ? policyScreen.scores
+                : undefined;
+            const candidateClassifications =
+              policyScreen.allowed || policyScreen.quarantine
+                ? policyScreen.classifications
+                : undefined;
+            const candidateScorerVersion =
+              policyScreen.allowed || policyScreen.quarantine
+                ? policyScreen.scorerVersion
+                : undefined;
 
             await MemoryItemModel.create({
               organizationId: params.organizationId,
               scopeType: "user",
               scopeId: params.userId,
               kind: preparedCandidate.kind,
-              status: "candidate",
+              status: candidateStatus,
               content: preparedCandidate.content,
               createdBy: null,
               extractorVersion: EXTRACTOR_PROMPT_VERSION,
-              policyFlags: policyScreen.policyFlags,
+              policyFlags: screenPolicyFlags,
               sourceConversationId: params.conversationId,
               sourceMessageIds:
                 sourceMessageIds.length > 0 ? sourceMessageIds : null,
@@ -283,12 +307,15 @@ class MemoryExtractor {
               sourceId: sourceContract.sourceId,
               sourceMetadata: sourceContract.sourceMetadata,
               confidenceBand: preparedCandidate.confidenceBand,
+              scores: candidateScores,
+              classifications: candidateClassifications,
+              scorerVersion: candidateScorerVersion,
             });
 
             reportMemoryCandidates({
               scopeType: "user",
               extractorVersion: EXTRACTOR_PROMPT_VERSION,
-              policyFlags: policyScreen.policyFlags,
+              policyFlags: screenPolicyFlags,
             });
             reportMemoryCandidateCreated(sourceContract.sourceType);
 

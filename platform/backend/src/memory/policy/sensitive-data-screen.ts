@@ -23,6 +23,8 @@ export type SensitiveDataScreenResult = {
   blockReason: SensitiveDataBlockReason | null;
   policyFlags: MemoryPolicyFlag[];
   matchedDetectors: string[];
+  secretDetected: boolean;
+  piiCategories: string[];
 };
 
 export function screenSensitiveData(params: {
@@ -40,6 +42,8 @@ export function screenSensitiveData(params: {
       blockReason: "secret",
       policyFlags: [],
       matchedDetectors: toSortedUniqueList(secretMatches),
+      secretDetected: true,
+      piiCategories: [],
     };
   }
 
@@ -60,6 +64,8 @@ export function screenSensitiveData(params: {
       blockReason: "high_risk_pii",
       policyFlags: [],
       matchedDetectors: toSortedUniqueList(piiMatches),
+      secretDetected: false,
+      piiCategories: mapDetectorsToPiiCategories(piiMatches),
     };
   }
 
@@ -73,6 +79,8 @@ export function screenSensitiveData(params: {
       blockReason: "instruction_like_high",
       policyFlags: [],
       matchedDetectors: toSortedUniqueList(instructionClassification.detectors),
+      secretDetected: false,
+      piiCategories: [],
     };
   }
 
@@ -85,6 +93,8 @@ export function screenSensitiveData(params: {
       blockReason: null,
       policyFlags: ["instruction_like", "instruction_like_medium"],
       matchedDetectors: toSortedUniqueList(instructionClassification.detectors),
+      secretDetected: false,
+      piiCategories: [],
     };
   }
 
@@ -96,6 +106,8 @@ export function screenSensitiveData(params: {
     blockReason: null,
     policyFlags: [],
     matchedDetectors: [],
+    secretDetected: false,
+    piiCategories: [],
   };
 }
 
@@ -172,6 +184,29 @@ function toSortedUniqueList(values: string[]): string[] {
   return Array.from(new Set(values)).sort((left, right) =>
     left.localeCompare(right),
   );
+}
+
+const DETECTOR_TO_PII_CATEGORY: Record<string, string> = {
+  ssn_like: "ssn",
+  ssn_keyword: "ssn",
+  government_id_keyword: "government_id",
+  financial_account_keyword: "financial_account",
+  financial_sensitive_keyword: "financial",
+  minors_keyword: "minors",
+  health_sensitive_keyword: "health",
+  legal_sensitive_keyword: "legal",
+  credit_card: "credit_card",
+};
+
+function mapDetectorsToPiiCategories(detectors: string[]): string[] {
+  const categories = new Set<string>();
+  for (const detector of detectors) {
+    const category = DETECTOR_TO_PII_CATEGORY[detector];
+    if (category) {
+      categories.add(category);
+    }
+  }
+  return Array.from(categories).sort();
 }
 
 const SECRET_DETECTORS: readonly RegexDetector[] = [

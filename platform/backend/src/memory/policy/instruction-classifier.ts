@@ -3,6 +3,7 @@ export type InstructionLikeSeverity = "high" | "medium";
 export type InstructionClassification = {
   severity: InstructionLikeSeverity;
   detectors: string[];
+  injectionRisk: number;
 } | null;
 
 export function classifyInstructionLike(
@@ -20,6 +21,7 @@ export function classifyInstructionLike(
     return {
       severity: "high",
       detectors: dedupeSorted(highDetectors),
+      injectionRisk: 90,
     };
   }
 
@@ -30,6 +32,7 @@ export function classifyInstructionLike(
     return {
       severity: "medium",
       detectors: dedupeSorted(mediumDetectors),
+      injectionRisk: 55,
     };
   }
 
@@ -40,6 +43,7 @@ export function classifyInstructionLike(
     return {
       severity: "medium",
       detectors: ["instruction_imperative_cue_pair"],
+      injectionRisk: 55,
     };
   }
 

@@ -12,7 +12,8 @@ export type MemoryReviewOutcome =
   | "approved"
   | "rejected"
   | "archived"
-  | "unarchived";
+  | "unarchived"
+  | "quarantined";
 
 export type MemoryExtractionOutcome = "success" | "skipped" | "error";
 
@@ -39,7 +40,9 @@ export type MemoryInjectionBlockReason =
   | "external_tools_with_trusted_context"
   | "feature_flag_off";
 
-export type MemoryReviewPolicyBlockReason = "high_risk_policy_flags";
+export type MemoryReviewPolicyBlockReason =
+  | "high_risk_policy_flags"
+  | "quarantined_item";
 
 export type MemoryTombstoneMatchType = "normalized" | "legacy_exact";
 
@@ -75,6 +78,9 @@ let memoryCandidatesCreatedBySourceTotal: client.Counter<string>;
 let memoryReviewBySourceTotal: client.Counter<string>;
 let memorySafetyBlockBySourceTotal: client.Counter<string>;
 let memoryDedupDropBySourceTotal: client.Counter<string>;
+let memoryCandidateScoredTotal: client.Counter<string>;
+let memoryQuarantinedTotal: client.Counter<string>;
+let memoryRetrievedTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -190,6 +196,29 @@ export function initializeMemoryMetrics(): void {
     name: "archestra_memory_dedup_drop_total",
     help: "Total source-segmented memory dedup drops by reason",
     labelNames: ["source_type", "reason"],
+  });
+
+  memoryCandidateScoredTotal = new client.Counter({
+    name: "archestra_memory_candidate_scored_total",
+    help: "Total memory candidates scored by the deterministic scorer",
+    labelNames: [
+      "memory_type",
+      "scope_type",
+      "source_type",
+      "safety_score_bucket",
+    ],
+  });
+
+  memoryQuarantinedTotal = new client.Counter({
+    name: "archestra_memory_quarantined_total",
+    help: "Total memory candidates quarantined by reason and scope",
+    labelNames: ["reason", "scope_type"],
+  });
+
+  memoryRetrievedTotal = new client.Counter({
+    name: "archestra_memory_retrieved_total",
+    help: "Total memory items retrieved for injection",
+    labelNames: ["memory_type", "scope_type", "safety_score_bucket"],
   });
 
   logger.info("Memory metrics initialized");
@@ -430,6 +459,54 @@ export function reportMemoryDedupDrop(params: {
   memoryDedupDropBySourceTotal.inc({
     source_type: params.sourceType,
     reason: params.reason,
+  });
+}
+
+export function reportMemoryCandidateScored(params: {
+  memoryType: string;
+  scopeType: MemoryScopeType;
+  sourceType: MemorySourceType | null;
+  safetyScoreBucket: string;
+}): void {
+  if (!memoryCandidateScoredTotal) {
+    return;
+  }
+
+  memoryCandidateScoredTotal.inc({
+    memory_type: params.memoryType,
+    scope_type: params.scopeType,
+    source_type: params.sourceType ?? "unknown",
+    safety_score_bucket: params.safetyScoreBucket,
+  });
+}
+
+export function reportMemoryQuarantined(params: {
+  reason: string;
+  scopeType: MemoryScopeType;
+}): void {
+  if (!memoryQuarantinedTotal) {
+    return;
+  }
+
+  memoryQuarantinedTotal.inc({
+    reason: params.reason,
+    scope_type: params.scopeType,
+  });
+}
+
+export function reportMemoryRetrieved(params: {
+  memoryType: string;
+  scopeType: MemoryScopeType;
+  safetyScoreBucket: string;
+}): void {
+  if (!memoryRetrievedTotal) {
+    return;
+  }
+
+  memoryRetrievedTotal.inc({
+    memory_type: params.memoryType,
+    scope_type: params.scopeType,
+    safety_score_bucket: params.safetyScoreBucket,
   });
 }
 

@@ -175,8 +175,9 @@ async function handleProposeMemoryCandidate(params: {
     content: args.content,
     source: "mcp_propose",
     checkExternalContextMarkers: true,
+    kind: args.kind,
   });
-  if (!policyScreen.allowed) {
+  if (!policyScreen.allowed && !policyScreen.quarantine) {
     emitPolicyBlockAuditMetric({
       reason: policyScreen.code,
       toolName,
@@ -186,6 +187,12 @@ async function handleProposeMemoryCandidate(params: {
     return errorResult(policyScreen.message);
   }
 
+  const candidateStatus = policyScreen.quarantine ? "quarantined" : "candidate";
+  const screenPolicyFlags =
+    policyScreen.allowed || policyScreen.quarantine
+      ? policyScreen.policyFlags
+      : [];
+
   const sourceContract = buildMcpToolSourceContract({
     conversationId: context.conversationId,
     sessionId: context.sessionId,
@@ -193,7 +200,7 @@ async function handleProposeMemoryCandidate(params: {
     agentId: context.agentId ?? context.agent.id,
     toolName,
     content: args.content,
-    policyFlags: policyScreen.policyFlags,
+    policyFlags: screenPolicyFlags,
     extractorVersion: "manual_mcp_propose",
   });
   const idempotencyKey = sourceContract.sourceMetadata.ingestion.idempotencyKey;
@@ -219,19 +226,31 @@ async function handleProposeMemoryCandidate(params: {
     scopeType: "user",
     scopeId: context.userId,
     kind: args.kind,
-    status: "candidate",
+    status: candidateStatus,
     content: args.content,
     createdBy: context.userId,
-    policyFlags: policyScreen.policyFlags,
+    policyFlags: screenPolicyFlags,
     sourceType: sourceContract.sourceType,
     sourceId: sourceContract.sourceId,
     sourceMetadata: sourceContract.sourceMetadata,
+    scores:
+      policyScreen.allowed || policyScreen.quarantine
+        ? policyScreen.scores
+        : undefined,
+    classifications:
+      policyScreen.allowed || policyScreen.quarantine
+        ? policyScreen.classifications
+        : undefined,
+    scorerVersion:
+      policyScreen.allowed || policyScreen.quarantine
+        ? policyScreen.scorerVersion
+        : undefined,
   });
 
   reportMemoryCandidates({
     scopeType: "user",
     extractorVersion: "manual_mcp_propose",
-    policyFlags: policyScreen.policyFlags,
+    policyFlags: screenPolicyFlags,
   });
   reportMemoryCandidateCreated(sourceContract.sourceType);
 

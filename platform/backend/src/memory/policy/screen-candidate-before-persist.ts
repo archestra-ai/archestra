@@ -1,5 +1,17 @@
+import {
+  determinePolicyDecision,
+  SCORER_VERSION,
+  scoreMemoryCandidate,
+} from "@/memory/scoring/scorer";
 import MemoryTombstoneModel from "@/models/memory-tombstone";
-import type { MemoryPolicyFlag, MemoryScopeType } from "@/types/memory-item";
+import type {
+  MemoryConfidenceBand,
+  MemoryItemClassifications,
+  MemoryItemScores,
+  MemoryKind,
+  MemoryPolicyFlag,
+  MemoryScopeType,
+} from "@/types/memory-item";
 import {
   reportMemoryMcpProposeBlock,
   reportMemoryPolicyBlocked,
@@ -25,12 +37,28 @@ export type CandidatePersistBlockCode =
 export type CandidatePersistScreenResult =
   | {
       allowed: true;
+      quarantine: false;
       policyFlags: MemoryPolicyFlag[];
       matchedDetectors: string[];
       reason: "none" | "instruction_like_medium";
+      scores: MemoryItemScores;
+      classifications: MemoryItemClassifications;
+      scorerVersion: string;
     }
   | {
       allowed: false;
+      quarantine: true;
+      code: CandidatePersistBlockCode;
+      message: string;
+      matchedDetectors: string[];
+      policyFlags: MemoryPolicyFlag[];
+      scores: MemoryItemScores;
+      classifications: MemoryItemClassifications;
+      scorerVersion: string;
+    }
+  | {
+      allowed: false;
+      quarantine?: false;
       code: CandidatePersistBlockCode;
       message: string;
       matchedDetectors: string[];
@@ -43,6 +71,8 @@ export async function screenCandidateBeforePersist(params: {
   content: string;
   source: CandidatePersistSource;
   checkExternalContextMarkers?: boolean;
+  kind?: MemoryKind;
+  confidenceBand?: MemoryConfidenceBand | null;
 }): Promise<CandidatePersistScreenResult> {
   if (
     params.checkExternalContextMarkers &&
@@ -88,19 +118,18 @@ export async function screenCandidateBeforePersist(params: {
   }
 
   const sensitivity = screenSensitiveData({ content: params.content });
-  if (sensitivity.blocked) {
+
+  // Hard blocks: secrets and high-risk PII are never persisted.
+  if (
+    sensitivity.blocked &&
+    sensitivity.blockReason !== "instruction_like_high"
+  ) {
     const blockCode =
       sensitivity.blockReason === "high_risk_pii"
         ? "high_risk_pii"
-        : sensitivity.blockReason === "instruction_like_high"
-          ? "instruction_like_high"
-          : "sensitive";
+        : "sensitive";
     const screenReason =
-      sensitivity.blockReason === "high_risk_pii"
-        ? "high_risk_pii"
-        : sensitivity.blockReason === "instruction_like_high"
-          ? "instruction_like_high"
-          : "secret";
+      sensitivity.blockReason === "high_risk_pii" ? "high_risk_pii" : "secret";
     reportBlocked(params.source, {
       policyReason: blockCode,
       screenReason,
@@ -109,10 +138,87 @@ export async function screenCandidateBeforePersist(params: {
       allowed: false,
       code: blockCode,
       message:
-        sensitivity.blockReason === "instruction_like_high"
-          ? "Memory candidate blocked by policy: high-confidence instruction-like prompt injection detected."
-          : "Memory candidate blocked by policy: secret or sensitive markers detected.",
+        "Memory candidate blocked by policy: secret or sensitive markers detected.",
       matchedDetectors: sensitivity.matchedDetectors,
+    };
+  }
+
+  // Build classifications from screen results.
+  const userExplicitlyRequestedMemory =
+    params.source === "manual_create" ||
+    params.source === "mcp_propose" ||
+    params.source === "supersede";
+
+  const classifications: MemoryItemClassifications = {
+    secretDetected: sensitivity.secretDetected,
+    piiCategories: sensitivity.piiCategories,
+    instructionLike:
+      sensitivity.reason === "instruction_like_high" ||
+      sensitivity.reason === "instruction_like_medium",
+    userExplicitlyRequestedMemory,
+    derivedFromExternalContext: false,
+  };
+
+  // Determine policyFlags from screen result.
+  const policyFlags: MemoryPolicyFlag[] = [...sensitivity.policyFlags];
+  if (
+    sensitivity.blocked &&
+    sensitivity.blockReason === "instruction_like_high"
+  ) {
+    policyFlags.push("instruction_like", "instruction_like_high");
+  }
+
+  const sourceType = mapSourceToSourceType(params.source);
+  const kind: MemoryKind = params.kind ?? "preference";
+
+  const scores = scoreMemoryCandidate({
+    content: params.content,
+    kind,
+    scopeType: params.scopeType,
+    sourceType,
+    policyFlags,
+    classifications,
+    confidenceBand: params.confidenceBand,
+  });
+
+  const decision = determinePolicyDecision({
+    scores,
+    classifications,
+    kind,
+    scopeType: params.scopeType,
+  });
+
+  if (decision === "block") {
+    reportBlocked(params.source, {
+      policyReason: "sensitive",
+      screenReason: "secret",
+    });
+    return {
+      allowed: false,
+      code: "sensitive",
+      message:
+        "Memory candidate blocked by policy: secret or sensitive markers detected.",
+      matchedDetectors: sensitivity.matchedDetectors,
+    };
+  }
+
+  if (decision === "quarantine") {
+    const code: CandidatePersistBlockCode = "instruction_like_high";
+    reportBlocked(params.source, {
+      policyReason: "instruction_like_high",
+      screenReason: "instruction_like_high",
+    });
+    return {
+      allowed: false,
+      quarantine: true,
+      code,
+      message:
+        "Memory candidate quarantined: instruction-like or high-risk content requires security review before use.",
+      matchedDetectors: sensitivity.matchedDetectors,
+      policyFlags,
+      scores,
+      classifications,
+      scorerVersion: SCORER_VERSION,
     };
   }
 
@@ -123,10 +229,16 @@ export async function screenCandidateBeforePersist(params: {
 
   return {
     allowed: true,
-    policyFlags: sensitivity.policyFlags,
+    quarantine: false as const,
+    policyFlags,
     matchedDetectors: sensitivity.matchedDetectors,
     reason:
-      sensitivity.decision === "flag" ? "instruction_like_medium" : "none",
+      sensitivity.reason === "instruction_like_medium"
+        ? "instruction_like_medium"
+        : "none",
+    scores,
+    classifications,
+    scorerVersion: SCORER_VERSION,
   };
 }
 
@@ -146,6 +258,10 @@ export function hasExternalContextMarker(content: string): boolean {
     return collapsed.includes(marker.collapsedNeedle);
   });
 }
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
 
 function reportBlocked(
   source: CandidatePersistSource,

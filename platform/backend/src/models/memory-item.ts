@@ -210,6 +210,12 @@ class MemoryItemModel {
     patch: SupersedingPatch;
     requesterId: string;
     policyFlags?: MemoryPolicyFlag[];
+    status?: MemoryStatus;
+    scores?: import("@/types/memory-item").MemoryItemScores | null;
+    classifications?:
+      | import("@/types/memory-item").MemoryItemClassifications
+      | null;
+    scorerVersion?: string | null;
   }): Promise<MemoryItem> {
     return await db.transaction(async (tx) => {
       const [source] = await tx
@@ -255,7 +261,7 @@ class MemoryItemModel {
           scopeType: source.scopeType,
           scopeId: source.scopeId,
           kind: params.patch.kind ?? source.kind,
-          status: "candidate",
+          status: params.status ?? "candidate",
           content: params.patch.content ?? source.content,
           createdBy: params.requesterId,
           extractorVersion: source.extractorVersion,
@@ -269,6 +275,9 @@ class MemoryItemModel {
           confidenceBand: source.confidenceBand,
           language: source.language,
           expiresAt: params.patch.expiresAt ?? source.expiresAt,
+          scores: params.scores,
+          classifications: params.classifications,
+          scorerVersion: params.scorerVersion,
         })
         .returning();
 
@@ -692,6 +701,16 @@ class MemoryItemModel {
     return role === "admin";
   }
 
+  static async incrementRetrievalCount(id: string): Promise<void> {
+    await db
+      .update(schema.memoryItemsTable)
+      .set({
+        retrievalCount: sql`${schema.memoryItemsTable.retrievalCount} + 1`,
+        lastRetrievedAt: new Date(),
+      })
+      .where(eq(schema.memoryItemsTable.id, id));
+  }
+
   private static isTransitionAllowed(
     currentStatus: MemoryStatus,
     nextStatus: MemoryStatus,
@@ -700,7 +719,8 @@ class MemoryItemModel {
       return (
         nextStatus === "approved" ||
         nextStatus === "rejected" ||
-        nextStatus === "archived"
+        nextStatus === "archived" ||
+        nextStatus === "quarantined"
       );
     }
     if (currentStatus === "approved") {
@@ -711,6 +731,9 @@ class MemoryItemModel {
     }
     if (currentStatus === "archived") {
       return nextStatus === "candidate";
+    }
+    if (currentStatus === "quarantined") {
+      return nextStatus === "rejected" || nextStatus === "archived";
     }
 
     return false;

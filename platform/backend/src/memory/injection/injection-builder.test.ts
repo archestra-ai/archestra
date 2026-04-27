@@ -72,8 +72,9 @@ describe("memory injection builder", () => {
       teamIds: ["team-1"],
       scopesEnabled: ["user"],
     });
-    expect(result).toContain("<durable_memory>");
-    expect(result).toContain("[preference] Loves concise answers");
+    expect(result).toContain("<approved_user_memory>");
+    expect(result).toContain('type="preference"');
+    expect(result).toContain("Loves concise answers");
     expect(result).not.toContain("Uses keyboard shortcuts");
     expect(setAttribute).toHaveBeenCalledWith(
       "archestra.memory.injected_count",
@@ -138,6 +139,11 @@ function makeItem(id: string, content: string): MemoryItem {
     supersedesMemoryId: null,
     confidenceBand: null,
     language: null,
+    scores: null,
+    classifications: null,
+    scorerVersion: null,
+    lastRetrievedAt: null,
+    retrievalCount: 0,
     lastVerifiedAt: now,
     expiresAt: null,
     createdAt: now,

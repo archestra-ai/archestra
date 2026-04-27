@@ -1,3 +1,5 @@
+import { getSafetyScoreBucketLabel } from "@/memory/scoring/scorer";
+import { reportMemoryRetrieved } from "@/memory/telemetry/metrics";
 import MemoryItemModel from "@/models/memory-item";
 import type {
   MemoryItem,
@@ -26,9 +28,25 @@ export async function listForInjection(
     includeOrganizationScope,
   });
 
-  return approvedItems
+  const eligible = approvedItems
     .filter((item) => scopesEnabled.includes(item.scopeType))
-    .sort(compareMemoryItemsForInjection);
+    .filter(isEligibleForRetrieval);
+
+  const sorted = eligible.sort(compareMemoryItemsForInjection);
+
+  for (const item of sorted) {
+    const bucket = item.scores
+      ? getSafetyScoreBucketLabel(item.scores.safetyScore)
+      : "unknown";
+    reportMemoryRetrieved({
+      memoryType: item.kind,
+      scopeType: item.scopeType,
+      safetyScoreBucket: bucket,
+    });
+    void MemoryItemModel.incrementRetrievalCount(item.id);
+  }
+
+  return sorted;
 }
 
 export const memoryRetrievalService = {
@@ -39,7 +57,24 @@ export const memoryRetrievalService = {
 // Internal helpers
 // ============================================================================
 
+function isEligibleForRetrieval(item: MemoryItem): boolean {
+  if (item.status !== "approved") return false;
+  // Rollout 1: procedural instructions (kind=instruction) are not injected
+  if (item.kind === "instruction") return false;
+  if (item.expiresAt && item.expiresAt < new Date()) return false;
+  // backward compat: items without scores pass eligibility
+  if (!item.scores) return true;
+  if (item.scores.safetyScore < 40) return false;
+  if (item.scores.injectionRisk > 50) return false;
+  return true;
+}
+
 function compareMemoryItemsForInjection(a: MemoryItem, b: MemoryItem): number {
+  const rankA = computeRetrievalRankScore(a);
+  const rankB = computeRetrievalRankScore(b);
+  const rankDelta = rankB - rankA;
+  if (rankDelta !== 0) return rankDelta;
+
   const scopePriorityDelta =
     scopePriority(a.scopeType) - scopePriority(b.scopeType);
   if (scopePriorityDelta !== 0) {
@@ -51,12 +86,17 @@ function compareMemoryItemsForInjection(a: MemoryItem, b: MemoryItem): number {
     return recencyDelta;
   }
 
-  const kindPriorityDelta = kindPriority(a.kind) - kindPriority(b.kind);
-  if (kindPriorityDelta !== 0) {
-    return kindPriorityDelta;
-  }
-
   return b.id.localeCompare(a.id);
+}
+
+function computeRetrievalRankScore(item: MemoryItem): number {
+  if (!item.scores) return 50;
+  return (
+    0.35 * item.scores.salienceScore +
+    0.3 * item.scores.confidenceScore +
+    0.2 * item.scores.provenanceTrustScore +
+    0.15 * item.scores.safetyScore
+  );
 }
 
 function normalizeScopesEnabled(
@@ -89,10 +129,6 @@ function scopePriority(scopeType: MemoryScopeType): number {
   return SCOPE_PRIORITY[scopeType];
 }
 
-function kindPriority(kind: MemoryKind): number {
-  return KIND_PRIORITY[kind];
-}
-
 function toTimestamp(item: MemoryItem): number {
   return (
     item.lastVerifiedAt?.getTime() ??
@@ -109,10 +145,14 @@ const SCOPE_PRIORITY: Record<MemoryScopeType, number> = {
   organization: 2,
 };
 
-const KIND_PRIORITY: Record<MemoryKind, number> = {
+// kind priority is used only as tie-breaker when scores are absent
+const _KIND_PRIORITY: Record<MemoryKind, number> = {
   preference: 0,
   profile_fact: 1,
   instruction: 2,
   team_convention: 3,
   org_fact: 4,
+  episodic_summary: 5,
+  tool_usage_preference: 6,
+  temporary_context: 7,
 };

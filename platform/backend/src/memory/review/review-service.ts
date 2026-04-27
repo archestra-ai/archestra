@@ -90,7 +90,8 @@ export type MemoryReviewPolicyErrorReason =
   | "high_risk_pii"
   | "instruction_like_high"
   | "tombstone_hit"
-  | "high_risk_policy_flags";
+  | "high_risk_policy_flags"
+  | "quarantined_item";
 
 export class MemoryReviewPolicyError extends Error {
   readonly reason: MemoryReviewPolicyErrorReason;
@@ -148,6 +149,22 @@ export async function approve(
         "[memory] approve: blocked by authorization",
       );
       return null;
+    }
+
+    if (accessContext.item.status === "quarantined") {
+      logger.info(
+        {
+          itemId: params.itemId,
+          requesterId: params.reviewer.id,
+        },
+        "[memory] approve: blocked — item is quarantined",
+      );
+      reportMemoryReviewPolicyBlocked("quarantined_item");
+      throw new MemoryReviewPolicyError({
+        reason: "quarantined_item",
+        message:
+          "Memory candidate blocked by policy: quarantined items require security review before approval. Use the quarantine review path.",
+      });
     }
 
     if (hasHighRiskApprovalPolicyFlags(accessContext.item.policyFlags)) {
@@ -292,17 +309,25 @@ export async function manualCreate(
     scopeId: params.data.scopeId,
     content: params.data.content,
     source: "manual_create",
+    kind: params.data.kind,
+    confidenceBand: params.data.confidenceBand,
   });
-  if (!policyScreen.allowed) {
+  if (!policyScreen.allowed && !policyScreen.quarantine) {
     throw new MemoryReviewPolicyError({
       reason: policyScreen.code,
       message: policyScreen.message,
     });
   }
 
+  const candidateStatus = policyScreen.quarantine ? "quarantined" : "candidate";
+  const screenPolicyFlags =
+    policyScreen.allowed || policyScreen.quarantine
+      ? policyScreen.policyFlags
+      : [];
+
   const mergedPolicyFlags = mergePolicyFlags(
     params.data.policyFlags ?? [],
-    policyScreen.policyFlags,
+    screenPolicyFlags,
   );
   const sourceContract = buildManualSourceContract({
     requesterUserId: params.requester.id,
@@ -319,7 +344,7 @@ export async function manualCreate(
     scopeType: params.data.scopeType,
     scopeId: params.data.scopeId,
     kind: params.data.kind,
-    status: "candidate",
+    status: candidateStatus,
     content: params.data.content,
     createdBy: params.requester.id,
     policyFlags: mergedPolicyFlags,
@@ -332,6 +357,18 @@ export async function manualCreate(
     confidenceBand: params.data.confidenceBand,
     language: params.data.language,
     expiresAt: params.data.expiresAt,
+    scores:
+      policyScreen.allowed || policyScreen.quarantine
+        ? policyScreen.scores
+        : undefined,
+    classifications:
+      policyScreen.allowed || policyScreen.quarantine
+        ? policyScreen.classifications
+        : undefined,
+    scorerVersion:
+      policyScreen.allowed || policyScreen.quarantine
+        ? policyScreen.scorerVersion
+        : undefined,
   });
 
   reportMemoryCandidateCreated(sourceContract.sourceType);
@@ -368,19 +405,30 @@ export async function proposeSupersedingEdit(
   }
 
   const nextContent = params.patch.content ?? accessContext.item.content;
+  const nextKind = params.patch.kind ?? accessContext.item.kind;
   const policyScreen = await screenCandidateBeforePersist({
     organizationId: params.organizationId,
     scopeType: accessContext.item.scopeType,
     scopeId: accessContext.item.scopeId,
     content: nextContent,
     source: "supersede",
+    kind: nextKind,
+    confidenceBand: accessContext.item.confidenceBand,
   });
-  if (!policyScreen.allowed) {
+  if (!policyScreen.allowed && !policyScreen.quarantine) {
     throw new MemoryReviewPolicyError({
       reason: policyScreen.code,
       message: policyScreen.message,
     });
   }
+
+  const screenPolicyFlags =
+    policyScreen.allowed || policyScreen.quarantine
+      ? policyScreen.policyFlags
+      : [];
+  const supersedingStatus = policyScreen.quarantine
+    ? "quarantined"
+    : "candidate";
 
   try {
     return await MemoryItemModel.createSupersedingCandidate({
@@ -390,8 +438,21 @@ export async function proposeSupersedingEdit(
       requesterId: params.requester.id,
       policyFlags: mergePolicyFlags(
         accessContext.item.policyFlags,
-        policyScreen.policyFlags,
+        screenPolicyFlags,
       ),
+      status: supersedingStatus,
+      scores:
+        policyScreen.allowed || policyScreen.quarantine
+          ? policyScreen.scores
+          : undefined,
+      classifications:
+        policyScreen.allowed || policyScreen.quarantine
+          ? policyScreen.classifications
+          : undefined,
+      scorerVersion:
+        policyScreen.allowed || policyScreen.quarantine
+          ? policyScreen.scorerVersion
+          : undefined,
     });
   } catch {
     return null;
@@ -557,6 +618,56 @@ export async function hardDelete(
   });
 }
 
+export async function quarantineCandidate(
+  params: ApproveMemoryParams,
+): Promise<MemoryItem | null> {
+  return withMemorySpan("quarantine", async (span) => {
+    const accessContext = await getAccessContext({
+      itemId: params.itemId,
+      organizationId: params.organizationId,
+      requester: params.reviewer,
+      teamIds: params.teamIds ?? [],
+    });
+    if (!accessContext) {
+      return null;
+    }
+
+    setMemorySpanAttributes(span, {
+      scopeType: accessContext.item.scopeType,
+      scopeId: accessContext.item.scopeId,
+    });
+
+    if (
+      !canApproveMemory({
+        requesterUserId: params.reviewer.id,
+        requesterRole: accessContext.requesterRole,
+        organizationId: params.organizationId,
+        requesterTeamIds: accessContext.teamIds,
+        item: accessContext.item,
+      })
+    ) {
+      return null;
+    }
+
+    const quarantined = await MemoryItemModel.transitionStatus({
+      id: params.itemId,
+      organizationId: params.organizationId,
+      newStatus: "quarantined",
+      reviewerId: params.reviewer.id,
+    });
+
+    if (quarantined) {
+      reportMemoryReviewed({
+        scopeType: quarantined.scopeType,
+        outcome: "quarantined",
+        sourceType: quarantined.sourceType,
+      });
+    }
+
+    return quarantined;
+  });
+}
+
 export const memoryReviewService = {
   approve,
   reject,
@@ -565,6 +676,7 @@ export const memoryReviewService = {
   archive,
   unarchive,
   hardDelete,
+  quarantineCandidate,
 };
 
 // ============================================================================

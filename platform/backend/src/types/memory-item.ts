@@ -14,6 +14,7 @@ export const MemoryStatusSchema = z.enum([
   "approved",
   "rejected",
   "archived",
+  "quarantined",
 ]);
 export type MemoryStatus = z.infer<typeof MemoryStatusSchema>;
 
@@ -23,8 +24,38 @@ export const MemoryKindSchema = z.enum([
   "instruction",
   "team_convention",
   "org_fact",
+  "episodic_summary",
+  "tool_usage_preference",
+  "temporary_context",
 ]);
 export type MemoryKind = z.infer<typeof MemoryKindSchema>;
+
+export const MemoryItemScoresSchema = z.object({
+  safetyScore: z.number().min(0).max(100),
+  confidenceScore: z.number().min(0).max(100),
+  salienceScore: z.number().min(0).max(100),
+  sensitivityRisk: z.number().min(0).max(100),
+  injectionRisk: z.number().min(0).max(100),
+  provenanceTrustScore: z.number().min(0).max(100),
+  stabilityScore: z.number().min(0).max(100).optional(),
+  exfiltrationRisk: z.number().min(0).max(100).optional(),
+  toolActionRisk: z.number().min(0).max(100).optional(),
+  scopeRisk: z.number().min(0).max(100).optional(),
+});
+export type MemoryItemScores = z.infer<typeof MemoryItemScoresSchema>;
+
+export const MemoryItemClassificationsSchema = z.object({
+  piiCategories: z.array(z.string()).default([]),
+  secretDetected: z.boolean(),
+  instructionLike: z.boolean(),
+  userExplicitlyRequestedMemory: z.boolean(),
+  derivedFromExternalContext: z.boolean(),
+  containsExternalClaim: z.boolean().optional(),
+  containsPolicyLikeInstruction: z.boolean().optional(),
+});
+export type MemoryItemClassifications = z.infer<
+  typeof MemoryItemClassificationsSchema
+>;
 
 export const MemoryRejectionReasonSchema = z.enum([
   "inaccurate",
@@ -143,6 +174,8 @@ const extendedFields = {
   sourceType: MemorySourceTypeSchema.nullable(),
   sourceId: z.string().nullable(),
   sourceMetadata: MemorySourceMetadataSchema.nullable(),
+  scores: MemoryItemScoresSchema.nullable(),
+  classifications: MemoryItemClassificationsSchema.nullable(),
 };
 
 export const SelectMemoryItemSchema = createSelectSchema(
@@ -161,6 +194,8 @@ export const InsertMemoryItemSchema = createInsertSchema(
     sourceType: MemorySourceTypeSchema.nullable().optional(),
     sourceId: z.string().nullable().optional(),
     sourceMetadata: MemorySourceMetadataSchema.nullable().optional(),
+    scores: MemoryItemScoresSchema.nullable().optional(),
+    classifications: MemoryItemClassificationsSchema.nullable().optional(),
   },
 ).omit({
   id: true,

@@ -6,6 +6,7 @@ import { listForInjection } from "./retrieval-service";
 
 describe("memory retrieval service", () => {
   test("defaults to user scope only and keeps includeOrganizationScope disabled", async () => {
+    vi.spyOn(MemoryItemModel, "incrementRetrievalCount").mockResolvedValue();
     const listSpy = vi
       .spyOn(MemoryItemModel, "listApprovedForRetrieval")
       .mockResolvedValue([
@@ -38,6 +39,7 @@ describe("memory retrieval service", () => {
   });
 
   test("supports team and organization scopes when explicitly enabled", async () => {
+    vi.spyOn(MemoryItemModel, "incrementRetrievalCount").mockResolvedValue();
     vi.spyOn(MemoryItemModel, "listApprovedForRetrieval").mockResolvedValue([
       makeItem({
         id: "org-old",
@@ -74,15 +76,16 @@ describe("memory retrieval service", () => {
       scopesEnabled: ["team", "organization", "user"],
     });
 
+    // "user-recent" has kind=instruction and is filtered by isEligibleForRetrieval
     expect(result.map((item) => item.id)).toEqual([
       "user-recent-z",
-      "user-recent",
       "team-recent",
       "org-old",
     ]);
   });
 
   test("falls back to user scope when scopes list is invalid", async () => {
+    vi.spyOn(MemoryItemModel, "incrementRetrievalCount").mockResolvedValue();
     vi.spyOn(MemoryItemModel, "listApprovedForRetrieval").mockResolvedValue([
       makeItem({
         id: "user-item",
@@ -132,6 +135,11 @@ function makeItem(overrides: Partial<MemoryItem>): MemoryItem {
     supersedesMemoryId: overrides.supersedesMemoryId ?? null,
     confidenceBand: overrides.confidenceBand ?? null,
     language: overrides.language ?? null,
+    scores: overrides.scores ?? null,
+    classifications: overrides.classifications ?? null,
+    scorerVersion: overrides.scorerVersion ?? null,
+    lastRetrievedAt: overrides.lastRetrievedAt ?? null,
+    retrievalCount: overrides.retrievalCount ?? 0,
     lastVerifiedAt: overrides.lastVerifiedAt ?? now,
     expiresAt: overrides.expiresAt ?? null,
     createdAt: overrides.createdAt ?? now,

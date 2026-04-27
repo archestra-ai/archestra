@@ -13,7 +13,8 @@ export type MemoryOperation =
   | "reject"
   | "delete"
   | "archive"
-  | "unarchive";
+  | "unarchive"
+  | "quarantine";
 
 export type MemorySpanAttributes = {
   scopeType?: MemoryScopeType;

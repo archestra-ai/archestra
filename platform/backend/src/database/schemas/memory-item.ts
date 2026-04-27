@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -10,6 +11,8 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   MemoryConfidenceBand,
+  MemoryItemClassifications,
+  MemoryItemScores,
   MemoryKind,
   MemoryPolicyFlag,
   MemoryRejectionReason,
@@ -65,6 +68,12 @@ const memoryItemsTable = pgTable(
     language: text("language"),
     lastVerifiedAt: timestamp("last_verified_at", { mode: "date" }),
     expiresAt: timestamp("expires_at", { mode: "date" }),
+    scores: jsonb("scores").$type<MemoryItemScores>(),
+    classifications:
+      jsonb("classifications").$type<MemoryItemClassifications>(),
+    scorerVersion: text("scorer_version"),
+    lastRetrievedAt: timestamp("last_retrieved_at", { mode: "date" }),
+    retrievalCount: integer("retrieval_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

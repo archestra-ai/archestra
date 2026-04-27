@@ -147,3 +147,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @AsimMerchant
 - @ahmedabujumac-stack
 - @isi1314
+- @Ecialo

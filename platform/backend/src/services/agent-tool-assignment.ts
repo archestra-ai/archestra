@@ -1,9 +1,7 @@
 import {
-  AgentLabelModel,
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
-  McpCatalogLabelModel,
   McpServerModel,
   MemberModel,
   TeamModel,

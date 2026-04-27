@@ -13,7 +13,6 @@ import {
   eq,
   ilike,
   inArray,
-  is,
   isNull,
   min,
   ne,

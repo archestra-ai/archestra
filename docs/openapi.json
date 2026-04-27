@@ -34994,13 +34994,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "toolAssignmentMode": {
-                            "type": "string",
-                            "enum": [
-                              "automatic",
-                              "manual"
-                            ]
-                          },
                           "llmApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -35027,6 +35020,13 @@
                             "enum": [
                               "full",
                               "search_and_run_only"
+                            ]
+                          },
+                          "toolAssignmentMode": {
+                            "type": "string",
+                            "enum": [
+                              "automatic",
+                              "manual"
                             ]
                           },
                           "builtInAgentConfig": {
@@ -35332,12 +35332,12 @@
                           "incomingEmailEnabled",
                           "incomingEmailSecurityMode",
                           "incomingEmailAllowedDomain",
-                          "toolAssignmentMode",
                           "llmApiKeyId",
                           "llmModel",
                           "identityProviderId",
                           "passthroughHeaders",
                           "toolExposureMode",
+                          "toolAssignmentMode",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -35688,13 +35688,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "toolAssignmentMode": {
-                    "type": "string",
-                    "enum": [
-                      "automatic",
-                      "manual"
-                    ]
-                  },
                   "llmApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -35725,6 +35718,13 @@
                     "enum": [
                       "full",
                       "search_and_run_only"
+                    ]
+                  },
+                  "toolAssignmentMode": {
+                    "type": "string",
+                    "enum": [
+                      "automatic",
+                      "manual"
                     ]
                   },
                   "builtInAgentConfig": {
@@ -35947,13 +35947,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -35980,6 +35973,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -36285,12 +36285,12 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
-                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -36673,13 +36673,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "toolAssignmentMode": {
-                        "type": "string",
-                        "enum": [
-                          "automatic",
-                          "manual"
-                        ]
-                      },
                       "llmApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -36706,6 +36699,13 @@
                         "enum": [
                           "full",
                           "search_and_run_only"
+                        ]
+                      },
+                      "toolAssignmentMode": {
+                        "type": "string",
+                        "enum": [
+                          "automatic",
+                          "manual"
                         ]
                       },
                       "builtInAgentConfig": {
@@ -37011,12 +37011,12 @@
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
                       "incomingEmailAllowedDomain",
-                      "toolAssignmentMode",
                       "llmApiKeyId",
                       "llmModel",
                       "identityProviderId",
                       "passthroughHeaders",
                       "toolExposureMode",
+                      "toolAssignmentMode",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -37339,13 +37339,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -37372,6 +37365,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -37677,12 +37677,12 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
-                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38005,13 +38005,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -38038,6 +38031,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -38343,12 +38343,12 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
-                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38683,13 +38683,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -38716,6 +38709,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -39021,12 +39021,12 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
-                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39329,13 +39329,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "toolAssignmentMode": {
-                    "type": "string",
-                    "enum": [
-                      "automatic",
-                      "manual"
-                    ]
-                  },
                   "llmApiKeyId": {
                     "nullable": true,
                     "type": "string",
@@ -39366,6 +39359,13 @@
                     "enum": [
                       "full",
                       "search_and_run_only"
+                    ]
+                  },
+                  "toolAssignmentMode": {
+                    "type": "string",
+                    "enum": [
+                      "automatic",
+                      "manual"
                     ]
                   },
                   "builtInAgentConfig": {
@@ -39593,13 +39593,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "llmApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -39626,6 +39619,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -39931,12 +39931,12 @@
                     "incomingEmailEnabled",
                     "incomingEmailSecurityMode",
                     "incomingEmailAllowedDomain",
-                    "toolAssignmentMode",
                     "llmApiKeyId",
                     "llmModel",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",

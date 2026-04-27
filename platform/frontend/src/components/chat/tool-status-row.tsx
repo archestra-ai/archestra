@@ -7,12 +7,15 @@ type ToolStatusRowAction =
       onClick: () => void;
       variant?: "secondary" | "outline" | "default";
       icon?: ReactNode;
+      disabled?: boolean;
+      ariaLabel?: string;
     }
   | {
       label: string;
       href: string;
       variant?: "secondary" | "outline" | "default";
       icon?: ReactNode;
+      ariaLabel?: string;
     };
 
 interface ToolStatusRowProps {
@@ -72,6 +75,7 @@ export function ToolStatusRow({
                   variant={action.variant ?? "secondary"}
                   size="sm"
                   asChild
+                  aria-label={action.ariaLabel}
                 >
                   <a
                     href={action.href}
@@ -88,6 +92,8 @@ export function ToolStatusRow({
                   variant={action.variant ?? "secondary"}
                   size="sm"
                   onClick={action.onClick}
+                  disabled={action.disabled}
+                  aria-label={action.ariaLabel}
                 >
                   {action.icon}
                   {action.label}

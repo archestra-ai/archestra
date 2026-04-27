@@ -180,6 +180,7 @@ function ExpandedToolCard({
   const { part, toolResultPart, toolName, errorText } = tool;
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
+  const [isResolving, setIsResolving] = useState(false);
   const hasContent = Boolean(
     hasInput ||
       errorText ||
@@ -222,21 +223,31 @@ function ExpandedToolCard({
                   label: "Approve",
                   variant: "secondary",
                   icon: <CheckCircleIcon className="size-4" />,
-                  onClick: () =>
+                  disabled: isResolving,
+                  ariaLabel: `Approve calling ${toolName}`,
+                  onClick: () => {
+                    if (isResolving) return;
+                    setIsResolving(true);
                     onToolApprovalResponse({
                       id: (part as { approval: { id: string } }).approval.id,
                       approved: true,
-                    }),
+                    });
+                  },
                 },
                 {
                   label: "Decline",
                   variant: "outline",
-                  onClick: () =>
+                  disabled: isResolving,
+                  ariaLabel: `Decline calling ${toolName}`,
+                  onClick: () => {
+                    if (isResolving) return;
+                    setIsResolving(true);
                     onToolApprovalResponse({
                       id: (part as { approval: { id: string } }).approval.id,
                       approved: false,
                       reason: "User denied",
-                    }),
+                    });
+                  },
                 },
               ]}
             />

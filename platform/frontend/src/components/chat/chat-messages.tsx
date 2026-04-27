@@ -988,10 +988,12 @@ export function ChatMessages({
                       }
 
                       default: {
-                        // data-tool-ui-start: early MCP App initialisation.
-                        // This is the canonical render for the tool UI. It looks ahead
-                        // in the parts array to find the matching input/output parts so
-                        // a single <MessageTool> covers the full lifecycle.
+                        // Legacy: backend now emits data-tool-ui-start as
+                        // transient, so this part is absent from new
+                        // messages.parts. New conversations render through the
+                        // tool-* branch below using earlyToolUiStarts (live)
+                        // and tool-*.output._meta.ui.resourceUri (reload).
+                        // Kept to render older persisted conversations.
                         if (part.type?.startsWith("data-tool-ui-start")) {
                           // biome-ignore lint/suspicious/noExplicitAny: data-tool-ui-start shape is dynamic
                           const earlyPart = part as any;
@@ -1078,6 +1080,9 @@ export function ChatMessages({
                           part.type?.startsWith("tool-")
                         ) {
                           const tcId = part.toolCallId;
+                          // Legacy: skip when a sibling data-tool-ui-start part
+                          // owns the rendering for this toolCallId. Only true
+                          // for older persisted conversations.
                           const hasEarlyStart =
                             tcId &&
                             (message.parts ?? []).some(

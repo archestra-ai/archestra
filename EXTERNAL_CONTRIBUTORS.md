@@ -139,3 +139,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sanrishi
 - @Mira-Mjodheim
 - @AbdellahBouarguan
+- @rajanarahul93

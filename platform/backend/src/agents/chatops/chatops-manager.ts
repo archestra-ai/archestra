@@ -33,6 +33,7 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
+import { TelegramProvider } from "./telegram-provider";
 import { errorMessage, isSlackDmChannel } from "./utils";
 
 /**
@@ -41,10 +42,15 @@ import { errorMessage, isSlackDmChannel } from "./utils";
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   getMSTeamsProvider(): MSTeamsProvider | null {
     return this.msTeamsProvider;
+  }
+
+  getTelegramProvider(): TelegramProvider | null {
+    return this.telegramProvider;
   }
 
   getSlackProvider(): SlackProvider | null {
@@ -59,6 +65,8 @@ export class ChatOpsManager {
         return this.getMSTeamsProvider();
       case "slack":
         return this.getSlackProvider();
+      case "telegram":
+        return this.getTelegramProvider();
     }
   }
 
@@ -117,7 +125,8 @@ export class ChatOpsManager {
   isAnyProviderConfigured(): boolean {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
-      (this.slackProvider?.isConfigured() ?? false)
+      (this.slackProvider?.isConfigured() ?? false) ||
+      (this.telegramProvider?.isConfigured() ?? false)
     );
   }
 
@@ -203,7 +212,7 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig] = await Promise.all([
+    const [msTeamsConfig, slackConfig, telegramConfig] = await Promise.all([
       ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -215,6 +224,13 @@ export class ChatOpsManager {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
           "[ChatOps] Failed to load Slack config, skipping",
+        );
+        return null;
+      }),
+      ChatOpsConfigModel.getTelegramConfig().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[ChatOps] Failed to load Telegram config, skipping",
         );
         return null;
       }),
@@ -230,6 +246,9 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
+    if (telegramConfig) {
+      this.telegramProvider = new TelegramProvider(telegramConfig);
+    }
 
     if (!this.isAnyProviderConfigured()) {
       return;
@@ -238,6 +257,7 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      { name: "Telegram", provider: this.telegramProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -289,6 +309,10 @@ export class ChatOpsManager {
     if (this.slackProvider) {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
+    }
+    if (this.telegramProvider) {
+      await this.telegramProvider.cleanup();
+      this.telegramProvider = null;
     }
     this.stopCleanupInterval();
   }

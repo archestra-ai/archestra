@@ -5,7 +5,11 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
+export const ChatOpsProviderTypeSchema = z.enum([
+  "ms-teams",
+  "slack",
+  "telegram",
+]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
@@ -451,6 +455,14 @@ export interface MsTeamsDbConfig {
   graphTenantId: string;
   graphClientId: string;
   graphClientSecret: string;
+}
+
+export interface TelegramDbConfig {
+  enabled: boolean;
+  /** Telegram Bot API token from @BotFather */
+  botToken: string;
+  /** Secret token set during setWebhook call for request validation */
+  secretToken: string;
 }
 
 /** Slack config stored as a DB secret */

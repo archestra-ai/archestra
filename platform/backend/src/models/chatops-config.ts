@@ -1,7 +1,12 @@
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type { MsTeamsDbConfig, SecretValue, SlackDbConfig } from "@/types";
+import type {
+  MsTeamsDbConfig,
+  SecretValue,
+  SlackDbConfig,
+  TelegramDbConfig,
+} from "@/types";
 import SecretModel from "./secret";
 
 /**
@@ -13,6 +18,7 @@ const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
+const TELEGRAM_SECRET_NAME = "chatops-telegram";
 
 class ChatOpsConfigModel {
   async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
@@ -45,6 +51,18 @@ class ChatOpsConfigModel {
       value as unknown as SecretValue,
     );
     logger.info("ChatOpsConfigModel: saved MS Teams config to DB");
+  }
+
+  async getTelegramConfig(): Promise<TelegramDbConfig | null> {
+    return this.getConfig<TelegramDbConfig>(TELEGRAM_SECRET_NAME);
+  }
+
+  async saveTelegramConfig(value: TelegramDbConfig): Promise<void> {
+    await this.saveConfig(
+      TELEGRAM_SECRET_NAME,
+      value as unknown as SecretValue,
+    );
+    logger.info("ChatOpsConfigModel: saved Telegram config to DB");
   }
 
   async saveSlackConfig(value: SlackDbConfig): Promise<void> {

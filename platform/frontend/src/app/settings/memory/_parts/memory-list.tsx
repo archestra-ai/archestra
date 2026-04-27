@@ -185,11 +185,11 @@ export function MemoryList() {
   const handleBulkApprove = async () => {
     setIsBulkOperating(true);
     try {
-      for (const item of selectedItems.filter(
-        (i) => i.status === "candidate",
-      )) {
-        await approveMemory.mutateAsync(item.id);
-      }
+      await Promise.allSettled(
+        selectedItems
+          .filter((i) => i.status === "candidate")
+          .map((item) => approveMemory.mutateAsync(item.id)),
+      );
       setRowSelection({});
     } finally {
       setIsBulkOperating(false);
@@ -199,9 +199,9 @@ export function MemoryList() {
   const handleBulkDelete = async () => {
     setIsBulkOperating(true);
     try {
-      for (const item of selectedItems) {
-        await deleteMemory.mutateAsync(item.id);
-      }
+      await Promise.allSettled(
+        selectedItems.map((item) => deleteMemory.mutateAsync(item.id)),
+      );
       setRowSelection({});
     } finally {
       setIsBulkOperating(false);
@@ -211,15 +211,16 @@ export function MemoryList() {
   const handleBulkRepropose = async () => {
     setIsBulkOperating(true);
     try {
-      for (const item of selectedItems) {
-        const created = await createMemory.mutateAsync({
-          scopeType: item.scopeType,
-          scopeId: item.scopeId,
-          kind: item.kind,
-          content: item.content,
-        });
-        if (!created) return;
-      }
+      await Promise.allSettled(
+        selectedItems.map((item) =>
+          createMemory.mutateAsync({
+            scopeType: item.scopeType,
+            scopeId: item.scopeId,
+            kind: item.kind,
+            content: item.content,
+          }),
+        ),
+      );
       setRowSelection({});
     } finally {
       setIsBulkOperating(false);

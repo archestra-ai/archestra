@@ -10637,6 +10637,10 @@ export type GetAgentsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Hide personal agents owned by other users. Admin-only; no-op for non-admins.
+         */
+        excludeOtherPersonalAgents?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team';

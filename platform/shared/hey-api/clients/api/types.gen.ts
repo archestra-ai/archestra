@@ -42399,6 +42399,7 @@ export type GetImpersonableUsersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42408,6 +42409,7 @@ export type GetImpersonableUsersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42417,6 +42419,7 @@ export type GetImpersonableUsersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42426,6 +42429,7 @@ export type GetImpersonableUsersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42435,6 +42439,7 @@ export type GetImpersonableUsersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -42444,6 +42449,7 @@ export type GetImpersonableUsersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };

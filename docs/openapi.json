@@ -157333,6 +157333,9 @@
                           "enum": [
                             "api_validation_error"
                           ]
+                        },
+                        "internal_code": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -157368,6 +157371,9 @@
                           "enum": [
                             "api_authentication_error"
                           ]
+                        },
+                        "internal_code": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -157403,6 +157409,9 @@
                           "enum": [
                             "api_authorization_error"
                           ]
+                        },
+                        "internal_code": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -157438,6 +157447,9 @@
                           "enum": [
                             "api_not_found_error"
                           ]
+                        },
+                        "internal_code": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -157473,6 +157485,9 @@
                           "enum": [
                             "api_conflict_error"
                           ]
+                        },
+                        "internal_code": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -157508,6 +157523,9 @@
                           "enum": [
                             "api_internal_server_error"
                           ]
+                        },
+                        "internal_code": {
+                          "type": "string"
                         }
                       },
                       "required": [

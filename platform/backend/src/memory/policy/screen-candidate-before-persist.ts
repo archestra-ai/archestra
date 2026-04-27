@@ -135,6 +135,7 @@ export function hasExternalContextMarker(content: string): boolean {
     return false;
   }
 
+  // Also match compact variants like "unsafe_context-boundary" after separators collapse.
   const collapsed = normalized.replace(/[\s_-]+/g, "");
 
   return EXTERNAL_CONTEXT_MARKERS.some((marker) => {
@@ -163,6 +164,7 @@ function reportBlocked(
   },
 ): void {
   reportMemoryPolicyBlocked(params.policyReason);
+  // Keep MCP-propose blocks separately visible because they cross an explicit tool boundary.
   if (source === "mcp_propose") {
     reportMemoryMcpProposeBlock(params.screenReason);
   }

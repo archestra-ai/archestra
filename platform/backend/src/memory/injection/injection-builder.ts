@@ -126,6 +126,7 @@ export async function build(
           scopeType: "user",
           tokensApprox: 0,
         });
+        // Injection must never fail the chat request: we degrade to "no memory block".
         return null;
       }
     },

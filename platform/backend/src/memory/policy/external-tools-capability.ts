@@ -89,6 +89,7 @@ export function assessExternalToolCapabilities(
       continue;
     }
 
+    // Fall back to deterministic name classification only when explicit metadata is missing.
     const securityMetadata = getSecurityMetadata(tool) ?? {
       capabilities: [classifyToolName(toolName)],
       source: "fallback" as const,
@@ -111,6 +112,7 @@ export function assessExternalToolCapabilities(
 
   return {
     capabilities,
+    // Conservative policy: any detected capability (including unknown_external) means "external-capable".
     hasExternalCommunicationCapability: capabilities.size > 0,
     usedMetadata,
     usedFallback,

@@ -203,6 +203,7 @@ class MemoryExtractor {
               seenHashes.has(contentHash) ||
               approvedHashes.has(contentHash)
             ) {
+              // Skip duplicates both within this run and against already-approved memory.
               skippedCount += 1;
               continue;
             }
@@ -423,6 +424,7 @@ function buildTranscript(messages: ChatMessage[]): string {
     return transcript;
   }
 
+  // Keep the newest turns, because recency is more relevant for memory extraction.
   return transcript.slice(-MAX_TRANSCRIPT_CHARS);
 }
 

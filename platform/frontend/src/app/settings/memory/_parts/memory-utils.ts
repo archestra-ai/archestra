@@ -108,6 +108,7 @@ export function normalizeMemoryRole(
     normalizedRole === "team admin" ||
     normalizedRole === "editor"
   ) {
+    // "editor" is treated as team-admin for memory review permissions in OSS role mapping.
     return "team-admin";
   }
 

@@ -229,6 +229,7 @@ export async function reject(
     }
 
     if (shouldCreateRejectionTombstone(params.rejectionReason)) {
+      // Manipulative content gets a non-expiring tombstone to prevent replay.
       const tombstoneTtlDays =
         params.rejectionReason === "manipulative"
           ? null

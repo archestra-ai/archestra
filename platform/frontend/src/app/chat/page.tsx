@@ -236,7 +236,6 @@ export function ChatPageContent({
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
-    canSeeProviderSettings === true &&
     canReadLlmProvider === true &&
     canReadLlmModels === true;
 

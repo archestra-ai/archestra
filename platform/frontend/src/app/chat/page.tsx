@@ -236,9 +236,7 @@ export function ChatPageContent({
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
-    canSeeProviderSettings === true &&
-    canReadLlmProvider === true &&
-    canReadLlmModels === true;
+    canReadLlmProvider === true && canReadLlmModels === true;
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =

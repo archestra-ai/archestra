@@ -39,7 +39,7 @@ A gateway has a tool assignment mode: **Manual** (default) or **Automatic**.
 
 In **Manual** mode, an admin picks each tool individually. Each assignment can be pinned to a specific installed MCP server connection, or use **Resolve at call time** (see Gateway Model above).
 
-In **Automatic** mode, the gateway's tools are derived from labels. The gateway receives every tool from every catalog entry that shares at least one `key: value` label pair with the gateway. For example, a gateway labeled `department: finance` automatically receives tools from every MCP catalog item tagged `department: finance`. These tools are kept in sync when labels are changed or new catalog items are added.
+In **Automatic** mode, the gateway's tools are derived from labels. The gateway receives every tool from every [catalog entry](/docs/platform-private-registry#labels) that shares at least one `key: value` label pair with the gateway. For example, a gateway labeled `department: finance` automatically receives tools from every MCP catalog item tagged `department: finance`. These tools are kept in sync when labels are changed or new catalog items are added.
 
 **Automatic** mode puts some constraints on upstream MCP servers:
 

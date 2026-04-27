@@ -32,7 +32,7 @@ export function SetupStep({
           )}
         >
           <CardTitle>
-            <div className="flex items-center gap-4">
+            <div className="flex gap-4">
               {done ? (
                 <CheckCircle2 className="size-5 shrink-0 text-green-500" />
               ) : (

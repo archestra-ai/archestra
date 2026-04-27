@@ -1541,6 +1541,13 @@
       "when": 1777284984797,
       "tag": "0219_broad_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1777293382589,
+      "tag": "0220_luxuriant_silver_sable",
+      "breakpoints": true
     }
   ]
 }

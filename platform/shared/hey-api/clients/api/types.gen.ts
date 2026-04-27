@@ -32330,6 +32330,7 @@ export type GetMcpServersResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -32363,6 +32364,7 @@ export type InstallMcpServerData = {
         secretId?: string;
         ownerId?: string | null;
         teamId?: string | null;
+        scope?: 'personal' | 'team' | 'org';
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
@@ -32456,6 +32458,7 @@ export type InstallMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -32641,6 +32644,7 @@ export type GetMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -32757,6 +32761,7 @@ export type ReauthenticateMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -33127,6 +33132,7 @@ export type ReinstallMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;

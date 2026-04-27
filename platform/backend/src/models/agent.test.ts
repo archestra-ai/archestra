@@ -2338,6 +2338,60 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("ensurePersonalMcpGateway", () => {
+    test("creates a personal mcp_gateway with the expected fields when none exists", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(gateway.name).toBe("My Gateway");
+      expect(gateway.agentType).toBe("mcp_gateway");
+      expect(gateway.scope).toBe("personal");
+      expect(gateway.isPersonalGateway).toBe(true);
+      expect(gateway.authorId).toBe(user.id);
+      expect(gateway.organizationId).toBe(org.id);
+    });
+
+    test("is idempotent within the same (user, org) - second call returns the same row", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const first = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const second = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(first.id).toBe(second.id);
+
+      const allAgents = await AgentModel.findAll(user.id, true);
+      const personalGateways = allAgents.filter(
+        (a) =>
+          a.agentType === "mcp_gateway" &&
+          a.isPersonalGateway === true &&
+          a.authorId === user.id,
+      );
+      expect(personalGateways).toHaveLength(1);
+    });
+  });
+
   describe("isAgentDefault / deletion guard", () => {
     test("isAgentDefault returns true for a default agent", async ({
       makeUser,

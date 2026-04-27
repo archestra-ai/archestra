@@ -51,6 +51,7 @@ const agentsTable = pgTable(
     name: text("name").notNull(),
     slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
+    isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),

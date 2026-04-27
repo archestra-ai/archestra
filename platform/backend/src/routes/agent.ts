@@ -281,9 +281,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return reply.send(
-        await AgentModel.getMCPGatewayOrCreateDefault(request.organizationId),
-      );
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      return reply.send(gateway);
     },
   );
 
@@ -713,6 +715,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           403,
           "Cannot delete a default agent. Set another agent as default first.",
         );
+      }
+
+      // Prevent deletion of a user's personal MCP gateway
+      if (agent.isPersonalGateway) {
+        throw new ApiError(403, "Personal MCP gateways cannot be deleted.");
       }
 
       const success = await AgentModel.delete(id);

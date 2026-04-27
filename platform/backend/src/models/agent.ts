@@ -1510,6 +1510,70 @@ class AgentModel {
   }
 
   /**
+   * Returns the user's personal MCP gateway for the given organization, or null
+   * if none exists.
+   */
+  static async getPersonalMcpGateway(
+    userId: string,
+    organizationId: string,
+  ): Promise<Agent | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.authorId, userId),
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    return (await AgentModel.findById(row.id, userId, true)) ?? null;
+  }
+
+  /**
+   * Ensures the user has a personal MCP gateway for the given organization.
+   * Idempotent: returns the existing one if present, otherwise creates one.
+   * The personal gateway auto-collects tools from MCP servers the user installs
+   * and cannot be deleted.
+   */
+  static async ensurePersonalMcpGateway(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Agent> {
+    const { userId, organizationId } = params;
+
+    const existing = await AgentModel.getPersonalMcpGateway(
+      userId,
+      organizationId,
+    );
+    if (existing) return existing;
+
+    const gateway = await AgentModel.create(
+      {
+        organizationId,
+        name: "My Gateway",
+        agentType: "mcp_gateway",
+        scope: "personal",
+        description:
+          "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
+        isPersonalGateway: true,
+      },
+      userId,
+    );
+
+    logger.info(
+      { userId, organizationId, agentId: gateway.id },
+      "Created personal MCP gateway",
+    );
+
+    return gateway;
+  }
+
+  /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
    */

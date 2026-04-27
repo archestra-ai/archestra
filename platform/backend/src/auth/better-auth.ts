@@ -864,6 +864,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             "Failed to ensure personal chat agent on sign-in",
           );
         }
+        try {
+          await AgentModel.ensurePersonalMcpGateway({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal MCP gateway on sign-in",
+          );
+        }
       }
 
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims

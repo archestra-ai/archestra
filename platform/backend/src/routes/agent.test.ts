@@ -311,6 +311,27 @@ describe("agent routes", () => {
 
       expect(getResponse.statusCode).toBe(404);
     });
+
+    test("returns 403 when deleting a personal MCP gateway and the row remains", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId,
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${personalGateway.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(403);
+
+      const stillThere = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      expect(stillThere?.id).toBe(personalGateway.id);
+    });
   });
 
   describe("GET /api/agents (paginated)", () => {
@@ -442,7 +463,7 @@ describe("agent routes", () => {
   });
 
   describe("GET /api/mcp-gateways/default", () => {
-    test("should get default MCP gateway", async () => {
+    test("returns the caller's personal MCP gateway", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/mcp-gateways/default",
@@ -450,11 +471,81 @@ describe("agent routes", () => {
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
-      expect(agent).toHaveProperty("id");
-      expect(agent).toHaveProperty("name");
-      expect(agent.isDefault).toBe(true);
+      expect(agent.agentType).toBe("mcp_gateway");
+      expect(agent.scope).toBe("personal");
+      expect(agent.isPersonalGateway).toBe(true);
+      expect(agent.authorId).toBe(user.id);
       expect(Array.isArray(agent.tools)).toBe(true);
       expect(Array.isArray(agent.teams)).toBe(true);
+    });
+
+    test("returns different gateway ids for different users in the same org", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId);
+
+      const otherApp = createFastifyInstance();
+      otherApp.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & {
+            user: User;
+            organizationId: string;
+          }
+        ).user = otherUser;
+        (
+          request as typeof request & {
+            user: User;
+            organizationId: string;
+          }
+        ).organizationId = organizationId;
+      });
+      const { default: agentRoutes } = await import("./agent");
+      await otherApp.register(agentRoutes);
+
+      try {
+        const responseA = await app.inject({
+          method: "GET",
+          url: "/api/mcp-gateways/default",
+        });
+        const responseB = await otherApp.inject({
+          method: "GET",
+          url: "/api/mcp-gateways/default",
+        });
+
+        expect(responseA.statusCode).toBe(200);
+        expect(responseB.statusCode).toBe(200);
+        const agentA = responseA.json();
+        const agentB = responseB.json();
+        expect(agentA.id).not.toBe(agentB.id);
+        expect(agentA.authorId).toBe(user.id);
+        expect(agentB.authorId).toBe(otherUser.id);
+      } finally {
+        await otherApp.close();
+      }
+    });
+
+    test("lazily creates a personal gateway on first GET when none exists", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const before = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      expect(before).toBeNull();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp-gateways/default",
+      });
+      expect(response.statusCode).toBe(200);
+
+      const after = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      expect(after).not.toBeNull();
+      expect(response.json().id).toBe(after?.id);
     });
   });
 

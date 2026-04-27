@@ -161,18 +161,18 @@ class McpCatalogLabelModel {
       );
     });
 
-    // For MCP gateways, re-assign matched tools when the tool assignment mode is automatic
+    // Re-assign matched tools for agents and MCP gateways using automatic tool assignment.
     if (affectedPairs.length > 0) {
       const AgentModel = (await import("./agent")).default;
       const AgentToolModel = (await import("./agent-tool")).default;
 
       const matchedAgents = await AgentModel.findByLabels(affectedPairs);
-      const affectedGateways = matchedAgents
-        .filter((agent) => agent.agentType === "mcp_gateway")
+      const affectedAgents = matchedAgents
+        .filter((agent) => isAutomaticToolAssignmentSupported(agent.agentType))
         .filter((agent) => agent.toolAssignmentMode === "automatic");
 
-      for (const gateway of affectedGateways) {
-        await AgentToolModel.syncAgentToolsFromLabels(gateway.id);
+      for (const agent of affectedAgents) {
+        await AgentToolModel.syncAgentToolsFromLabels(agent.id);
       }
     }
 
@@ -244,3 +244,7 @@ class McpCatalogLabelModel {
 }
 
 export default McpCatalogLabelModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}

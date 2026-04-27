@@ -186,13 +186,19 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
-    // Assign tools for MCP gateways when tool assignment mode is automatic
+    // Assign tools for agents and MCP gateways when tool assignment mode is automatic
     const hasLabels = labels && labels.length > 0;
-    const isMcpGateway = createdAgent.agentType === "mcp_gateway";
+    const supportsAutomaticToolAssignment = isAutomaticToolAssignmentSupported(
+      createdAgent.agentType,
+    );
     const isAutomaticToolAssignment =
       createdAgent.toolAssignmentMode === "automatic";
 
-    if (hasLabels && isMcpGateway && isAutomaticToolAssignment) {
+    if (
+      hasLabels &&
+      supportsAutomaticToolAssignment &&
+      isAutomaticToolAssignment
+    ) {
       await AgentToolModel.syncAgentToolsFromLabels(createdAgent.id);
     }
 
@@ -1384,8 +1390,10 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
-    // Assign or unassign tools according to toolAssignmentMode changes for MCP gateways
-    const isMcpGateway = updatedAgent.agentType === "mcp_gateway";
+    // Assign or unassign tools according to toolAssignmentMode changes for agents and MCP gateways
+    const supportsAutomaticToolAssignment = isAutomaticToolAssignmentSupported(
+      updatedAgent.agentType,
+    );
     const labelsChanged = labels !== undefined;
     const isCurrentlyAutomatic =
       updatedAgent.toolAssignmentMode === "automatic";
@@ -1395,11 +1403,11 @@ class AgentModel {
       isCurrentlyAutomatic && !isPreviouslyAutomatic;
     const isSwitchingToManual = !isCurrentlyAutomatic && isPreviouslyAutomatic;
 
-    if (isMcpGateway) {
+    if (supportsAutomaticToolAssignment) {
       if ((isCurrentlyAutomatic && labelsChanged) || isSwitchingToAutomatic) {
         await AgentToolModel.syncAgentToolsFromLabels(id);
       } else if (isSwitchingToManual) {
-        await AgentToolModel.deleteAllForAgent(id);
+        await AgentToolModel.deleteCatalogToolsForAgent(id);
       }
     }
 
@@ -1813,3 +1821,7 @@ function errorMentions(error: unknown, needle: string): boolean {
 }
 
 export default AgentModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}

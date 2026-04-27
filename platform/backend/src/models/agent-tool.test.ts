@@ -1381,7 +1381,7 @@ describe("AgentToolModel.syncAgentToolsFromLabels", () => {
     expect(toolIds).toEqual([]);
   });
 
-  test("non-gateway agent is a no-op", async ({
+  test("profile is a no-op", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeTool,
@@ -1392,19 +1392,19 @@ describe("AgentToolModel.syncAgentToolsFromLabels", () => {
       { key: "team", value: "alpha" },
     ]);
 
-    const chatAgent = await makeAgent({
-      agentType: "agent",
+    const profile = await makeAgent({
+      agentType: "profile",
       toolAssignmentMode: "automatic",
       labels: [{ key: "team", value: "alpha" }],
     });
 
-    await AgentToolModel.syncAgentToolsFromLabels(chatAgent.id);
+    await AgentToolModel.syncAgentToolsFromLabels(profile.id);
 
-    const toolIds = await AgentToolModel.findToolIdsByAgent(chatAgent.id);
+    const toolIds = await AgentToolModel.findToolIdsByAgent(profile.id);
     expect(toolIds).toEqual([]);
   });
 
-  test("materializes tools from a matching catalog with dynamic credentials", async ({
+  test("materializes tools for an agent from a matching catalog with dynamic credentials", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeTool,
@@ -1416,24 +1416,24 @@ describe("AgentToolModel.syncAgentToolsFromLabels", () => {
       { key: "team", value: "alpha" },
     ]);
 
-    // Create the gateway without labels so the create-time reconcile is a no-op,
+    // Create the agent without labels so the create-time reconcile is a no-op,
     // then attach labels after the fact to isolate syncAgentToolsFromLabels.
-    const gateway = await makeAgent({
-      agentType: "mcp_gateway",
+    const agent = await makeAgent({
+      agentType: "agent",
       toolAssignmentMode: "automatic",
     });
-    await AgentLabelModel.syncAgentLabels(gateway.id, [
+    await AgentLabelModel.syncAgentLabels(agent.id, [
       { key: "team", value: "alpha" },
     ]);
 
-    expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([]);
+    expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([]);
 
-    await AgentToolModel.syncAgentToolsFromLabels(gateway.id);
+    await AgentToolModel.syncAgentToolsFromLabels(agent.id);
 
     const rows = await db
       .select()
       .from(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.agentId, gateway.id));
+      .where(eq(schema.agentToolsTable.agentId, agent.id));
 
     expect(rows).toHaveLength(2);
     expect(new Set(rows.map((r) => r.toolId))).toEqual(
@@ -1442,6 +1442,38 @@ describe("AgentToolModel.syncAgentToolsFromLabels", () => {
     for (const row of rows) {
       expect(row.credentialResolutionMode).toBe("dynamic");
       expect(row.mcpServerId).toBeNull();
+    }
+  });
+
+  test("preserves agent delegation tools while syncing automatic catalog tools", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const catalogTool = await makeTool({ catalogId: catalog.id });
+    await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
+      { key: "team", value: "alpha" },
+    ]);
+
+    const agent = await makeAgent({
+      agentType: "agent",
+      toolAssignmentMode: "automatic",
+    });
+    const targetAgent = await makeAgent({ agentType: "agent" });
+    await AgentToolModel.assignDelegation(agent.id, targetAgent.id);
+    const beforeSyncToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+    await AgentLabelModel.syncAgentLabels(agent.id, [
+      { key: "team", value: "alpha" },
+    ]);
+    await AgentToolModel.syncAgentToolsFromLabels(agent.id);
+
+    const afterSyncToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+    expect(afterSyncToolIds).toContain(catalogTool.id);
+    expect(afterSyncToolIds).toHaveLength(beforeSyncToolIds.length + 1);
+    for (const toolId of beforeSyncToolIds) {
+      expect(afterSyncToolIds).toContain(toolId);
     }
   });
 

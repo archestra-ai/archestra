@@ -338,6 +338,12 @@ class AgentToolModel {
     return result.rowCount ?? 0;
   }
 
+  static async deleteCatalogToolsForAgent(agentId: string): Promise<number> {
+    const catalogToolIds =
+      await AgentToolModel.findCatalogToolIdsByAgent(agentId);
+    return AgentToolModel.bulkDelete(agentId, catalogToolIds);
+  }
+
   static async bulkDelete(agentId: string, toolIds: string[]): Promise<number> {
     if (toolIds.length === 0) return 0;
 
@@ -358,6 +364,24 @@ class AgentToolModel {
       .select({ toolId: schema.agentToolsTable.toolId })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.agentId, agentId));
+    return results.map((r) => r.toolId);
+  }
+
+  static async findCatalogToolIdsByAgent(agentId: string): Promise<string[]> {
+    const results = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.catalogId),
+          isNull(schema.toolsTable.delegateToAgentId),
+        ),
+      );
     return results.map((r) => r.toolId);
   }
 
@@ -521,7 +545,7 @@ class AgentToolModel {
     const agent = await AgentModel.findById(agentId);
 
     if (!agent) return;
-    if (agent.agentType !== "mcp_gateway") return;
+    if (!isAutomaticToolAssignmentSupported(agent.agentType)) return;
     if (agent.toolAssignmentMode !== "automatic") return;
 
     // Fetch the agent's labels and determine which tools should be assigned based on those labels
@@ -547,7 +571,8 @@ class AgentToolModel {
     }
 
     // Fetch the agent's assigned tool IDs and determine which tools to add/remove
-    const currentToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+    const currentToolIds =
+      await AgentToolModel.findCatalogToolIdsByAgent(agentId);
     const currentToolIdsSet = new Set(currentToolIds);
 
     const desiredToolIds = Array.from(desiredToolIdsSet);
@@ -1107,6 +1132,10 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;

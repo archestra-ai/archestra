@@ -646,6 +646,8 @@ export function AgentDialog({
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
+  const supportsAutomaticToolAssignment =
+    agentType === "agent" || agentType === "mcp_gateway";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -653,10 +655,14 @@ export function AgentDialog({
       : DocsPage.PlatformAgents,
     "search-and-run-tool-mode",
   );
-  const gatewayLabelsDocsUrl =
-    agentType === "mcp_gateway"
-      ? getFrontendDocsUrl(DocsPage.PlatformMcpGateway, "tool-assignment-mode")
-      : null;
+  const toolAssignmentDocsUrl = supportsAutomaticToolAssignment
+    ? getDocsUrl(
+        agentType === "mcp_gateway"
+          ? DocsPage.PlatformMcpGateway
+          : DocsPage.PlatformAgents,
+        "tool-assignment-mode",
+      )
+    : null;
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -964,10 +970,12 @@ export function AgentDialog({
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
+            ...(supportsAutomaticToolAssignment && {
+              toolAssignmentMode,
+            }),
             ...(agentType === "mcp_gateway" && {
               passthroughHeaders:
                 passthroughHeaders.length > 0 ? passthroughHeaders : null,
-              toolAssignmentMode,
             }),
           },
         });
@@ -1002,10 +1010,12 @@ export function AgentDialog({
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
+          ...(supportsAutomaticToolAssignment && {
+            toolAssignmentMode,
+          }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
-            toolAssignmentMode,
           }),
         });
         if (!created) return;
@@ -1098,6 +1108,7 @@ export function AgentDialog({
     supportsIdentityProvider,
     passthroughHeaders,
     toolAssignmentMode,
+    supportsAutomaticToolAssignment,
     deleteAgent,
     toolExposureMode,
   ]);
@@ -1467,11 +1478,11 @@ export function AgentDialog({
                     <div className="flex items-center justify-between gap-2">
                       <Label>
                         Tools
-                        {(agentType !== "mcp_gateway" ||
+                        {(!supportsAutomaticToolAssignment ||
                           toolAssignmentMode === "manual") &&
                           ` (${selectedToolsCount})`}
                       </Label>
-                      {agentType === "mcp_gateway" && (
+                      {supportsAutomaticToolAssignment && (
                         <Select
                           value={toolAssignmentMode}
                           onValueChange={(value) =>
@@ -1492,15 +1503,15 @@ export function AgentDialog({
                         </Select>
                       )}
                     </div>
-                    {agentType === "mcp_gateway" &&
+                    {supportsAutomaticToolAssignment &&
                       toolAssignmentMode === "automatic" && (
                         <p className="text-xs text-muted-foreground">
                           Tools are auto-assigned from catalog entries that
-                          match this gateway's labels. Switch to Manual to edit
-                          directly.
+                          match this {agentTypeDisplayName[agentType]}'s labels.
+                          Switch to Manual to edit directly.
                         </p>
                       )}
-                    {agentType !== "mcp_gateway" ||
+                    {!supportsAutomaticToolAssignment ||
                     toolAssignmentMode === "manual" ? (
                       <>
                         {!agent && selectedToolsCount > 0 && (
@@ -1966,15 +1977,15 @@ export function AgentDialog({
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <Label>Labels</Label>
-                              {agentType === "mcp_gateway" && (
+                              {supportsAutomaticToolAssignment && (
                                 <span className="text-xs font-normal text-muted-foreground">
                                   Organize and drive automatic tool assignment
                                 </span>
                               )}
                             </div>
-                            {gatewayLabelsDocsUrl && (
+                            {toolAssignmentDocsUrl && (
                               <ExternalDocsLink
-                                href={gatewayLabelsDocsUrl}
+                                href={toolAssignmentDocsUrl}
                                 className="text-xs text-muted-foreground underline shrink-0"
                                 showIcon={false}
                               >
@@ -2156,15 +2167,15 @@ export function AgentDialog({
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Label>Labels</Label>
-                        {agentType === "mcp_gateway" && (
+                        {supportsAutomaticToolAssignment && (
                           <span className="text-xs font-normal text-muted-foreground">
                             Organize and drive automatic tool assignment
                           </span>
                         )}
                       </div>
-                      {gatewayLabelsDocsUrl && (
+                      {toolAssignmentDocsUrl && (
                         <ExternalDocsLink
-                          href={gatewayLabelsDocsUrl}
+                          href={toolAssignmentDocsUrl}
                           className="text-xs text-muted-foreground underline shrink-0"
                           showIcon={false}
                         >

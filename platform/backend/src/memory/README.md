@@ -30,6 +30,8 @@ memory/
 │   └── retrieval-service.ts
 ├── review/              # Candidate lifecycle transitions
 │   └── review-service.ts
+├── scoring/             # Deterministic governance scoring
+│   └── scorer.ts        # scoreMemoryCandidate(), determinePolicyDecision()
 ├── telemetry/           # Memory-specific metrics and spans
 │   ├── metrics.ts
 │   └── spans.ts
@@ -47,27 +49,35 @@ Chat completion ─▶ task-queue ─▶ extractor-task-handler ─▶ extractor
                                               screen-candidate-before-persist
                                               (secrets, PII, instruction-like,
                                                tombstone, external-context)
+                                              + scorer (safetyScore, injectionRisk,
+                                                        salienceScore, ...)
                                                              │
-                                            ┌────────────────┼────────────────┐
-                                            ▼                ▼                ▼
-                                          block            flag             allow
-                                                             │
-                                                             ▼
-                                                   memory-item (candidate)
+                                         ┌───────────────────┼────────────────┐
+                                         ▼                   ▼                ▼
+                                       block            quarantine           allow
+                                                             │                │
+                                                             ▼                ▼
+                                                   memory-item (quarantined / candidate)
                                                              │
                                        Settings → Memory (review-service)
                                                              │
-                                 ┌───────────────────────────┼───────────────────────┐
-                                 ▼                           ▼                       ▼
-                            approved                      rejected               archived
-                                 │
-                      chat request ─▶ retrieval-service (ACL, scope, top-K)
-                                                ▼
-                                      injection-builder
-                                    (budget, untrusted-context,
-                                     external-tools guard)
-                                                ▼
-                                  prompt-time memory block (or null)
+                          ┌──────────────────────────────────┼──────────────────────┐
+                          ▼                                  ▼                      ▼
+                       approved                           rejected              archived
+                          │
+               chat request ─▶ retrieval-service
+                                (eligibility: status=approved, kind≠instruction,
+                                 safetyScore≥40, injectionRisk≤50)
+                                         ▼
+                                rank-weighted sort
+                                (0.35×salience + 0.30×confidence
+                                 + 0.20×provenance + 0.15×safety)
+                                         ▼
+                               injection-builder
+                             (budget, untrusted-context,
+                              external-tools guard)
+                                         ▼
+                           <approved_user_memory> XML block (or null)
 ```
 
 Entry points:
@@ -102,8 +112,10 @@ Canonical document: [`docs/security.md`](./docs/security.md).
 Summary of enforced controls (read the runbook for reasons, metrics, and rollback):
 
 - **Candidate-only write boundary.** Automated paths never write approved memory.
-- **Pre-write screen** (`screen-candidate-before-persist`) runs for extractor, MCP propose, manual create, and supersede. Decisions: `allow`, `flag`, `block`.
-- **Approve-path guard.** Candidates carrying `instruction_like`, `instruction_like_high`, `instruction_like_medium`, or `external_context` cannot be approved through the normal endpoint.
+- **Pre-write screen** (`screen-candidate-before-persist`) runs for extractor, MCP propose, manual create, and supersede. Decisions: `allow`, `quarantine`, `block`. Quarantined items are persisted with status `quarantined` and require security review before they can be approved; they are never injected.
+- **Scoring.** Every non-hard-blocked candidate is scored by `scoring/scorer.ts` (`SCORER_VERSION = "1.0.0"`). Scores include `salienceScore`, `confidenceScore`, `injectionRisk`, `sensitivityRisk`, `provenanceTrustScore`, and `safetyScore` (`= 100 − max(all risks)`). The scorer drives both the quarantine decision and retrieval ranking.
+- **Approve-path guard.** Candidates with status `quarantined` or carrying `instruction_like`, `instruction_like_high`, `instruction_like_medium`, or `external_context` cannot be approved through the normal endpoint.
+- **Retrieval eligibility.** Items are excluded from injection if `kind === "instruction"`, expired, `safetyScore < 40`, or `injectionRisk > 50`.
 - **Prompt-time injection guard.** Injection is active only when the flag is on, the posture is trusted, and active tools do not expose external communication capability.
 - **Tombstones.** Deletions and rejections of high-risk content emit deterministic tombstones with normalized fallback matching.
 
@@ -121,6 +133,9 @@ Metrics live in [`telemetry/metrics.ts`](./telemetry/metrics.ts); spans in [`tel
 - `archestra_memory_review_outcome_total{source_type,outcome}`
 - `archestra_memory_safety_block_total{source_type,reason}`
 - `archestra_memory_dedup_drop_total{source_type,reason}`
+- `archestra_memory_candidate_scored_total{memory_type,scope_type,source_type,safety_score_bucket}`
+- `archestra_memory_quarantined_total{reason,scope_type}`
+- `archestra_memory_retrieved_total{memory_type,scope_type,safety_score_bucket}`
 
 ## Frontend surface
 

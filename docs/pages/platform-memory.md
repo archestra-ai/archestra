@@ -47,11 +47,14 @@ candidate ──approve──▶ approved ──archive──▶ archived
     ├──reject──▶ rejected  └──supersede──▶ candidate (new)
     │
     └──delete──▶ (tombstone, if high-risk)
+
+quarantined ──(security review)──▶ candidate or rejected
 ```
 
 States:
 
 - `candidate` — waiting for human review. All automated paths (extractor, MCP `memory_propose`, manual create, supersede) write here.
+- `quarantined` — created by the pre-write screen when content is instruction-like or scored as high injection-risk. Requires explicit security review before it can enter the normal review queue or be approved. Never injected into prompts.
 - `approved` — active memory, eligible for injection when rules allow.
 - `rejected` — reviewer declined; may emit a tombstone.
 - `archived` — formerly approved, now set aside; can be restored.
@@ -61,9 +64,12 @@ Deletions may create a **tombstone** to prevent immediate recreation of the same
 ## Review workflow
 
 1. A candidate enters the queue via extraction, MCP propose, or manual creation.
-2. Pre-write screening runs. Secrets, high-risk PII, high-confidence instruction-like content, external-context markers (MCP), and tombstone hits are **blocked before persistence**. Medium-confidence instruction-like content is **flagged** but still reviewable.
-3. Reviewer opens the candidate at **Settings → Memory**, inspects content and scope, and chooses an action.
-4. Approval with a high-risk policy flag is **blocked** by a review-path guard; the candidate remains reviewable but cannot become active memory through the normal approve path.
+2. Pre-write screening runs with deterministic scoring. Three outcomes are possible:
+   - **Block**: secrets, high-risk PII, tombstone hits — not persisted.
+   - **Quarantine**: high-confidence instruction-like content or high injection-risk score — persisted with `quarantined` status, not visible in the normal review queue, never injected.
+   - **Allow**: item becomes a `candidate` and enters the review queue (may carry `instruction_like_medium` flag for reviewer visibility).
+3. Reviewer opens the candidate at **Settings → Memory**, inspects content, scope, and policy flags, and chooses an action.
+4. Approval with a high-risk policy flag or `quarantined` status is **blocked** by a review-path guard; the candidate remains reviewable but cannot become active memory through the normal approve path.
 5. Rejection requires a reason drawn from the fixed taxonomy below.
 
 ### Rejection taxonomy
@@ -124,9 +130,12 @@ Memory emits a dedicated set of security counters. Full catalog, PromQL examples
 - `archestra_memory_policy_blocked_total{reason}` — pre-write blocks.
 - `archestra_memory_screen_decision_total{decision,reason}` — screening outcomes.
 - `archestra_memory_injection_block_total{reason}` — prompt-time blocks.
-- `archestra_memory_review_policy_block_total{reason}` — approve-path blocks for high-risk flagged candidates.
+- `archestra_memory_review_policy_block_total{reason}` — approve-path blocks for high-risk flagged or quarantined candidates.
 - `archestra_memory_tombstone_hit_total{reason,match_type}` — replay suppression.
 - `archestra_memory_mcp_propose_block_total{reason}` — MCP `memory_propose` tool-boundary blocks.
+- `archestra_memory_candidate_scored_total{memory_type,scope_type,source_type,safety_score_bucket}` — scored candidates by type and safety band.
+- `archestra_memory_quarantined_total{reason,scope_type}` — items placed into quarantine by the pre-write scorer.
+- `archestra_memory_retrieved_total{memory_type,scope_type,safety_score_bucket}` — items retrieved for prompt injection.
 
 A nonzero block rate is not automatically a fault in rollout 1; many blocks are expected evidence of enforcement.
 

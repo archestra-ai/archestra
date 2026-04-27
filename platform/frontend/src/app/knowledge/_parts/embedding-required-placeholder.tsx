@@ -32,7 +32,7 @@ export function EmbeddingRequiredPlaceholder() {
             variant="outline"
             onClick={() => router.push("/settings/knowledge")}
           >
-            <Settings className="mr-2 h-4 w-4" />
+            <Settings className="h-4 w-4" />
             Go to Knowledge Settings
           </Button>
         )}

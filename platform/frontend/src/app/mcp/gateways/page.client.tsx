@@ -415,7 +415,7 @@ function McpGateways({
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Create MCP Gateway
           </PermissionButton>
         }
@@ -456,11 +456,11 @@ function McpGateways({
                 onPaginationChange={handlePaginationChange}
                 hasActiveFilters={Boolean(
                   nameFilter ||
-                    scopeFromUrl ||
-                    teamIdsFromUrl ||
-                    authorIdsFromUrl ||
-                    excludeAuthorIdsFromUrl ||
-                    labelsFromUrl,
+                  scopeFromUrl ||
+                  teamIdsFromUrl ||
+                  authorIdsFromUrl ||
+                  excludeAuthorIdsFromUrl ||
+                  labelsFromUrl,
                 )}
                 onClearFilters={() =>
                   updateQueryParams({

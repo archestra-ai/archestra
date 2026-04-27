@@ -10,7 +10,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { mapThemeFontValue } from "./font-token-map";
 // Import theme configuration
 import {
   DARK_ONLY_THEMES,
@@ -76,7 +76,7 @@ function generateCSSVars(vars: Record<string, string>): string {
       }
       // Keep other included variables
       if (INCLUDED_VARS.includes(key)) {
-        return `  --${key}: ${value};`;
+        return `  --${key}: ${mapThemeFontValue(value)};`;
       }
       // ignore everything else
       return undefined;

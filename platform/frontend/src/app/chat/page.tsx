@@ -1485,13 +1485,13 @@ export function ChatPageContent({
                   : "You don't have permission to create agents"
               }
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Create Agent
             </ButtonWithTooltip>
           ) : (
             <Button asChild>
               <Link href="/agents?create=true">
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 Create Agent
               </Link>
             </Button>
@@ -1831,7 +1831,7 @@ export function ChatPageContent({
                             void handleForkSharedConversation();
                           }}
                         >
-                          <Plus className="h-4 w-4 mr-2" />
+                          <Plus className="h-4 w-4" />
                           Start New Chat from here
                         </Button>
                       </div>
@@ -1853,7 +1853,7 @@ export function ChatPageContent({
                         </span>
                       </div>
                       <Button onClick={() => router.push("/chat")}>
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4" />
                         New Conversation
                       </Button>
                     </div>
@@ -1999,9 +1999,9 @@ export function ChatPageContent({
                       inputModalities={selectedModelInputModalities}
                       agentLlmApiKeyId={
                         (
-                          internalAgents.find((a) => a.id === initialAgentId) as
-                            | Record<string, unknown>
-                            | undefined
+                          internalAgents.find(
+                            (a) => a.id === initialAgentId,
+                          ) as Record<string, unknown> | undefined
                         )?.llmApiKeyId as string | null
                       }
                       submitDisabled={isPlaywrightSetupVisible}
@@ -2217,7 +2217,7 @@ function NoApiKeySetup() {
           data-testid={E2eTestId.QuickstartAddApiKeyButton}
           onClick={() => setIsDialogOpen(true)}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add API Key
         </Button>
       </div>

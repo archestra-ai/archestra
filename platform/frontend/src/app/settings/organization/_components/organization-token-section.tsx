@@ -58,7 +58,7 @@ export function OrganizationTokenSection() {
                       setTokenDialogOpen(true);
                     }}
                   >
-                    <Key className="mr-2 h-4 w-4" />
+                    <Key className="h-4 w-4" />
                     Manage Token
                   </PermissionButton>
                 </div>

@@ -386,7 +386,7 @@ export default function InstallationRequestDetailPage({
                           className="flex-1"
                         >
                           {approveMutation.isPending && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           )}
                           Confirm Approval
                         </PermissionButton>
@@ -422,7 +422,7 @@ export default function InstallationRequestDetailPage({
                           className="flex-1"
                         >
                           {declineMutation.isPending && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           )}
                           Confirm Decline
                         </PermissionButton>
@@ -460,9 +460,9 @@ export default function InstallationRequestDetailPage({
                     size="sm"
                   >
                     {addNoteMutation.isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Send className="mr-2 h-4 w-4" />
+                      <Send className="h-4 w-4" />
                     )}
                     Add Note
                   </Button>

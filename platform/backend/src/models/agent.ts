@@ -1565,12 +1565,11 @@ class AgentModel {
       const gateway = await AgentModel.create(
         {
           organizationId,
-          name: "My Gateway",
+          name: PERSONAL_MCP_GATEWAY_NAME,
           slug,
           agentType: "mcp_gateway",
           scope: "personal",
-          description:
-            "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
+          description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
           isPersonalGateway: true,
         },
         userId,
@@ -1642,9 +1641,8 @@ class AgentModel {
       return {
         organizationId: m.organizationId,
         authorId: m.userId,
-        name: "My Gateway",
-        description:
-          "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
+        name: PERSONAL_MCP_GATEWAY_NAME,
+        description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
         agentType: "mcp_gateway" as const,
         scope: "personal" as const,
         isPersonalGateway: true,
@@ -1752,6 +1750,10 @@ class AgentModel {
     throw new Error("Unreachable");
   }
 }
+
+const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
+const PERSONAL_MCP_GATEWAY_DESCRIPTION =
+  "All MCP servers you install are automatically connected to this gateway.";
 
 function errorMentions(error: unknown, needle: string): boolean {
   if (!(error instanceof Error)) return false;

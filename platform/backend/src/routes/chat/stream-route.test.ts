@@ -217,9 +217,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       mockStreamText.mockImplementation(() => ({
         toUIMessageStream: (opts: {
           onError: (err: unknown) => string;
-          onFinish?: (args: {
-            messages: unknown[];
-          }) => Promise<void> | void;
+          onFinish?: (args: { messages: unknown[] }) => Promise<void> | void;
         }) => {
           capturedInnerOnError = opts.onError;
           capturedInnerOnFinish = opts.onFinish;

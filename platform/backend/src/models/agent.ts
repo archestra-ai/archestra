@@ -1386,12 +1386,21 @@ class AgentModel {
 
     // Assign or unassign tools according to toolAssignmentMode changes for MCP gateways
     const isMcpGateway = updatedAgent.agentType === "mcp_gateway";
+    const labelsChanged = labels !== undefined;
+    const isCurrentlyAutomatic =
+      updatedAgent.toolAssignmentMode === "automatic";
+    const isPreviouslyAutomatic =
+      existingAgent.toolAssignmentMode === "automatic";
     const isSwitchingToAutomatic =
-      updatedAgent.toolAssignmentMode === "automatic" &&
-      existingAgent.toolAssignmentMode !== "automatic";
+      isCurrentlyAutomatic && !isPreviouslyAutomatic;
+    const isSwitchingToManual = !isCurrentlyAutomatic && isPreviouslyAutomatic;
 
-    if (isMcpGateway && isSwitchingToAutomatic) {
-      await AgentToolModel.syncAgentToolsFromLabels(id);
+    if (isMcpGateway) {
+      if ((isCurrentlyAutomatic && labelsChanged) || isSwitchingToAutomatic) {
+        await AgentToolModel.syncAgentToolsFromLabels(id);
+      } else if (isSwitchingToManual) {
+        await AgentToolModel.deleteAllForAgent(id);
+      }
     }
 
     // Sync knowledge base assignments if knowledgeBaseIds is provided

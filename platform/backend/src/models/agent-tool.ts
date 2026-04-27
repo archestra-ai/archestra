@@ -331,6 +331,13 @@ class AgentToolModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  static async deleteAllForAgent(agentId: string): Promise<number> {
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+    return result.rowCount ?? 0;
+  }
+
   static async bulkDelete(agentId: string, toolIds: string[]): Promise<number> {
     if (toolIds.length === 0) return 0;
 

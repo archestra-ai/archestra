@@ -11,7 +11,7 @@ function InlineTag({ children, icon, className }: InlineTagProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap [&>svg]:h-3 [&>svg]:w-3",
+        "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded whitespace-nowrap [&>svg]:h-3 [&>svg]:w-3",
         className,
       )}
     >

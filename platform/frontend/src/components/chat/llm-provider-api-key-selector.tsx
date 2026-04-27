@@ -312,10 +312,7 @@ export function LlmProviderApiKeySelector({
                       {SCOPE_ICONS[key.scope]}
                       <span className="truncate">{key.name}</span>
                       {key.scope === "team" && key.teamName && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1 py-0"
-                        >
+                        <Badge variant="outline" className="text-xs px-1 py-0">
                           {key.teamName}
                         </Badge>
                       )}

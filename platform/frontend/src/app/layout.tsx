@@ -152,6 +152,13 @@ export default function RootLayout({
       <head>
         <PublicEnvScript />
         <link rel="icon" href="/favicon.ico" />
+        {/* Apply saved theme class before first paint to prevent FOUC */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: Safe usage - inline script reads localStorage to apply theme class before first paint
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('archestra-theme');if(t)document.documentElement.classList.add('theme-'+t)}catch(e){}})()`,
+          }}
+        />
       </head>
       <body
         className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} font-sans antialiased`}

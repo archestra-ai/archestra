@@ -703,8 +703,10 @@ export function ModelSelector({
   if (isLoading) {
     return (
       <PromptInputButton disabled>
-        <Loader2 className="size-4 animate-spin" />
-        <ModelSelectorName>Loading models...</ModelSelectorName>
+        <Loader2 className="size-4 animate-spin shrink-0" />
+        <ModelSelectorName className="whitespace-nowrap overflow-visible">
+          Loading models...
+        </ModelSelectorName>
       </PromptInputButton>
     );
   }
@@ -713,7 +715,9 @@ export function ModelSelector({
   if (availableProviders.length === 0) {
     return (
       <PromptInputButton disabled>
-        <ModelSelectorName>No models available</ModelSelectorName>
+        <ModelSelectorName className="whitespace-nowrap overflow-visible">
+          No models available
+        </ModelSelectorName>
       </PromptInputButton>
     );
   }

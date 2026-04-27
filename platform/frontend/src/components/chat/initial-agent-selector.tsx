@@ -763,7 +763,7 @@ function AgentSettingsView({
                 </button>
                 <AgentBadge
                   type={(agent.scope as AgentScope) ?? "personal"}
-                  className="text-[10px] px-1.5 py-0"
+                  className="text-xs px-1.5 py-0"
                 />
               </div>
             )}
@@ -780,7 +780,7 @@ function AgentSettingsView({
               const authorName = agent.authorName ?? appName;
               return (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
-                  <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-medium text-white shrink-0">
+                  <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center text-xs font-medium text-white shrink-0">
                     {authorName.charAt(0).toUpperCase()}
                   </div>
                   <span>
@@ -1070,7 +1070,7 @@ function AssignedToolsGrid({
               <span className="text-xs font-medium truncate w-full">
                 {catalog.name}
               </span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {info?.count ?? 0} {(info?.count ?? 0) === 1 ? "tool" : "tools"}
               </span>
             </button>
@@ -1333,16 +1333,13 @@ function AddToolView({
                       </p>
                     )}
                     {(isServerInstalling || isAdding) && (
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" />
                         {isAdding ? "Adding..." : "Installing..."}
                       </span>
                     )}
                     {!isAssigned && !hasCredentials && !isServerInstalling && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0"
-                      >
+                      <Badge variant="outline" className="text-xs px-1.5 py-0">
                         Install
                       </Badge>
                     )}
@@ -1707,7 +1704,7 @@ function AddDelegationView({
                 <div className="flex items-center gap-2 w-full mt-auto">
                   <AgentBadge
                     type={agent.scope}
-                    className="text-[10px] px-1.5 py-0"
+                    className="text-xs px-1.5 py-0"
                   />
                   <div className="flex-1" />
                   <AgentToolAvatars agentId={agent.id} />

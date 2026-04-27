@@ -26,7 +26,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
 
   if (effectiveLogo) {
     return (
-      <div className={`flex ${centered ? "justify-center" : "pl-8"}`}>
+      <div className={`flex ${centered ? "justify-center" : "pl-2"}`}>
         <div className="flex flex-col items-center gap-1">
           <Image
             src={effectiveLogo}
@@ -36,7 +36,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
             className="object-contain h-12 w-auto max-w-[calc(100vw-6rem)]"
           />
           {!config.enterpriseFeatures.fullWhiteLabeling && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Powered by {DEFAULT_APP_NAME}
             </p>
           )}
@@ -47,7 +47,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
 
   return (
     <div
-      className={`flex items-center gap-2 ${centered ? "justify-center" : "pl-8"}`}
+      className={`flex items-center gap-2 ${centered ? "justify-center" : "pl-2"}`}
     >
       <Image
         src={DEFAULT_APP_LOGO}

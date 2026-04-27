@@ -28,6 +28,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { isUniqueConstraintError } from "@/utils/db";
 import type {
   Agent,
   AgentScope,
@@ -149,7 +150,7 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: InsertAgent,
+    }: InsertAgent & { isPersonalGateway?: boolean },
     authorId?: string,
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -1574,10 +1575,14 @@ class AgentModel {
       return gateway;
     } catch (error) {
       // Lost a race against a concurrent caller — re-fetch the row that won.
-      const isUniqueViolation =
-        error instanceof Error &&
-        error.message.includes("agents_personal_gateway_per_member_idx");
-      if (!isUniqueViolation) throw error;
+      // Drizzle wraps the pg error, so use the cause-walking helper rather than
+      // checking error.message directly (the index name lives on error.cause).
+      if (
+        !isUniqueConstraintError(error) ||
+        !errorMentions(error, "agents_personal_gateway_per_member_idx")
+      ) {
+        throw error;
+      }
 
       const winner = await AgentModel.getPersonalMcpGateway(
         userId,
@@ -1600,8 +1605,13 @@ class AgentModel {
       .select({
         userId: schema.membersTable.userId,
         organizationId: schema.membersTable.organizationId,
+        userName: schema.usersTable.name,
       })
       .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.usersTable.id, schema.membersTable.userId),
+      )
       .leftJoin(
         schema.agentsTable,
         and(
@@ -1618,25 +1628,61 @@ class AgentModel {
 
     if (missing.length === 0) return 0;
 
-    const rows = missing.map((m) => ({
-      organizationId: m.organizationId,
-      authorId: m.userId,
-      name: "My Gateway",
-      description:
-        "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
-      agentType: "mcp_gateway" as const,
-      scope: "personal" as const,
-      isPersonalGateway: true,
-      slug: `my-gateway-${crypto.randomUUID().slice(0, 6)}`,
-    }));
+    const rows = missing.map((m) => {
+      const userPart = urlSlugify(m.userName) || m.userId;
+      return {
+        organizationId: m.organizationId,
+        authorId: m.userId,
+        name: "My Gateway",
+        description:
+          "Your personal MCP gateway. All MCP servers installed by you are automatically connected",
+        agentType: "mcp_gateway" as const,
+        scope: "personal" as const,
+        isPersonalGateway: true,
+        slug: `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`,
+      };
+    });
 
     const inserted = await db
       .insert(schema.agentsTable)
       .values(rows)
-      .onConflictDoNothing()
+      .onConflictDoNothing({
+        target: [
+          schema.agentsTable.organizationId,
+          schema.agentsTable.authorId,
+        ],
+        where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true`,
+      })
       .returning({ id: schema.agentsTable.id });
 
+    if (inserted.length < missing.length) {
+      logger.warn(
+        { missing: missing.length, inserted: inserted.length },
+        "bulkBackfillPersonalMcpGateways inserted fewer rows than expected",
+      );
+    }
+
     return inserted.length;
+  }
+
+  /**
+   * Deletes every personal MCP gateway authored by the given user across all
+   * organizations. Called from the better-auth user.delete hook so the personal
+   * gateway is removed alongside its owner — the agents.author_id FK is
+   * ON DELETE SET NULL (to preserve authorship of non-personal agents), so
+   * without this the personal gateway row would orphan with author_id = NULL
+   * and become permanently undeletable through the API guard.
+   */
+  static async deletePersonalMcpGatewaysForUser(userId: string): Promise<void> {
+    await db
+      .delete(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.authorId, userId),
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      );
   }
 
   /**
@@ -1696,6 +1742,12 @@ class AgentModel {
     }
     throw new Error("Unreachable");
   }
+}
+
+function errorMentions(error: unknown, needle: string): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message.includes(needle)) return true;
+  return errorMentions((error as { cause?: unknown }).cause, needle);
 }
 
 export default AgentModel;

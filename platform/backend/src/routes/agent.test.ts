@@ -332,6 +332,52 @@ describe("agent routes", () => {
       );
       expect(stillThere?.id).toBe(personalGateway.id);
     });
+
+    test("ignores isPersonalGateway in PUT body so the deletion guard cannot be bypassed", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId,
+      });
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${personalGateway.id}`,
+        payload: { isPersonalGateway: false },
+      });
+      expect(updateResponse.statusCode).toBe(200);
+
+      const reread = await AgentModel.findById(
+        personalGateway.id,
+        user.id,
+        true,
+      );
+      expect(reread?.isPersonalGateway).toBe(true);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${personalGateway.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(403);
+    });
+
+    test("ignores isPersonalGateway in POST body so phantom flagged rows cannot be created", async () => {
+      const name = `Phantom ${crypto.randomUUID().slice(0, 8)}`;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name,
+          scope: "personal",
+          teams: [],
+          isPersonalGateway: true,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const created = response.json();
+      expect(created.isPersonalGateway).toBe(false);
+    });
   });
 
   describe("GET /api/agents (paginated)", () => {

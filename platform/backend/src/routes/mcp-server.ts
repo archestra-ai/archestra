@@ -249,15 +249,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organizationId,
                 },
               );
-              await AgentToolModel.createManyIfNotExists(
-                personalGateway.id,
-                toolIds,
+              const targetAgentIds = Array.from(
+                new Set([personalGateway.id, ...(agentIds ?? [])]),
               );
-              if (agentIds && agentIds.length > 0) {
-                for (const agentId of agentIds) {
-                  await AgentToolModel.createManyIfNotExists(agentId, toolIds);
-                }
-              }
+              await AgentToolModel.bulkCreateForAgentsAndTools(
+                targetAgentIds,
+                toolIds,
+                { mcpServerId: existingPersonal.id },
+              );
             }
             return reply.send(existingPersonal);
           }

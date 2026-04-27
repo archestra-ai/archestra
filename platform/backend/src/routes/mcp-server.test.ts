@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerUserModel from "@/models/mcp-server-user";
@@ -1917,6 +1917,68 @@ describe("mcp server inspect route", () => {
         otherPersonalGateway.id,
       );
       expect(otherAssignments.length).toBe(0);
+    });
+
+    test("re-install pins mcp_server_id on newly inserted agent_tools rows", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Re-install Pinning",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      // First install: catalog has tool-a only.
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "tool-a",
+          description: "tool a",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const firstResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Re-install Pinning", catalogId: catalog.id },
+      });
+      expect(firstResponse.statusCode).toBe(200);
+      const installedServer = firstResponse.json();
+
+      // Catalog gains tool-b before the user re-installs.
+      const newTool = await makeTool({
+        name: "tool-b-new",
+        catalogId: catalog.id,
+      });
+
+      // Re-install — duplicate-personal branch fires.
+      const secondResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Re-install Pinning", catalogId: catalog.id },
+      });
+      expect(secondResponse.statusCode).toBe(200);
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        requestOrganizationId,
+      );
+      if (!personalGateway) throw new Error("expected personal gateway");
+
+      const newToolRow = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, personalGateway.id),
+            eq(schema.agentToolsTable.toolId, newTool.id),
+          ),
+        );
+      expect(newToolRow).toHaveLength(1);
+      expect(newToolRow[0].mcpServerId).toBe(installedServer.id);
     });
 
     test("team-scoped install does not auto-assign tools to the installer's personal gateway", async ({

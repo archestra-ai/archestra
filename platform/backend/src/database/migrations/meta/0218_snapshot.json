@@ -1,5 +1,5 @@
 {
-  "id": "3094696e-c0ac-4c68-a8db-d4cd5b2bf776",
+  "id": "241b6594-4fbd-4f08-bca0-97917c1dfb22",
   "prevId": "5ebe015a-e90a-41cb-9ca9-0973c3e95a69",
   "version": "7",
   "dialect": "postgresql",
@@ -705,6 +705,13 @@
           "notNull": true,
           "default": false
         },
+        "is_personal_gateway": {
+          "name": "is_personal_gateway",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "consider_context_untrusted": {
           "name": "consider_context_untrusted",
           "type": "boolean",
@@ -756,13 +763,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "tool_assignment_mode": {
-          "name": "tool_assignment_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'manual'"
         },
         "llm_api_key_id": {
           "name": "llm_api_key_id",

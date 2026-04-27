@@ -48,6 +48,7 @@ function makeBuiltInAgent(params: {
     name: params.name,
     slug: null,
     isDefault: false,
+    isPersonalGateway: false,
     considerContextUntrusted: false,
     agentType: "agent",
     toolExposureMode: "full",

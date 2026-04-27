@@ -91,7 +91,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @gentlementlegen
 - @janfaiengineer
 - @Aqil-Ahmad
-- @mjkvyjn5wn-ctrl
 - @xenohunter
 - @mohitjeswani01
 - @reverb256
@@ -130,3 +129,16 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @papica777-eng
 - @SaurabhCodesAI
 - @aadityaranjan01
+- @selenaalpha77-sketch
+- @vikrantwiz02
+- @Pranith124
+- @vaibz99
+- @YelllowSunray
+- @Pearltechie
+- @sanrishi
+- @Mira-Mjodheim
+- @AbdellahBouarguan
+- @rajanarahul93
+- @WarmSpark
+- @mjkvyjn5wn-ctrl
+- @mchugunov

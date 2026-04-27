@@ -132,6 +132,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     excludeAuthorIds: excludeAuthorIdsFromUrl
       ? excludeAuthorIdsFromUrl.split(",")
       : undefined,
+    excludeOtherPersonalAgents:
+      scopeFromUrl !== "personal" &&
+      !authorIdsFromUrl &&
+      !excludeAuthorIdsFromUrl
+        ? true
+        : undefined,
     labels: labelsFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -373,7 +379,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter />
+                <AgentScopeFilter ownerLabelPlural="LLM proxies" />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint

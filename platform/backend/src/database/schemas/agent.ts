@@ -51,6 +51,7 @@ const agentsTable = pgTable(
     name: text("name").notNull(),
     slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
+    isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
@@ -131,6 +132,11 @@ const agentsTable = pgTable(
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    uniqueIndex("agents_personal_gateway_per_member_idx")
+      .on(table.organizationId, table.authorId)
+      .where(
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+      ),
   ],
 );
 

@@ -221,6 +221,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    isPersonalGateway: true,
   });
 
 // Full schema with validation refinement
@@ -250,6 +251,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    isPersonalGateway: true,
   });
 
 // Full schema with validation refinement

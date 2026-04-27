@@ -74,6 +74,7 @@ export const E2eTestId = {
     "manage-credentials-shared-connections-section",
   ManageCredentialsSharedConnectionsEmptyState:
     "manage-credentials-shared-connections-empty-state",
+  ManageCredentialsAddToOrgButton: "manage-credentials-add-to-org-button",
   ManageCredentialsAddToTeamButton: "manage-credentials-add-to-team-button",
   ManageCredentialsAddToTeamOption: "manage-credentials-add-to-team-option",
   ManageMembersButton: "manage-members-button",

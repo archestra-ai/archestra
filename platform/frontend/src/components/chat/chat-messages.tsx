@@ -425,6 +425,38 @@ export function ChatMessages({
     return nextMessage.role !== "assistant";
   });
   const timelineItems = buildMessageTimeline({ messages, chatErrors });
+  const navigableMessages = useMemo(
+    () =>
+      timelineItems.flatMap((item) => {
+        if (item.kind !== "message") return [];
+        if (item.message.role !== "user" && item.message.role !== "assistant") {
+          return [];
+        }
+        if (!isDebugging && isSwapAgentPokeMessage(item.message)) {
+          return [];
+        }
+        return [
+          {
+            messageId: getNavigableMessageId(
+              item.message.id,
+              item.messageIndex,
+            ),
+            messageIndex: item.messageIndex,
+          },
+        ];
+      }),
+    [timelineItems, isDebugging],
+  );
+  const navigableMessageIndexMap = useMemo(
+    () =>
+      new Map(
+        navigableMessages.map((message, index) => [
+          message.messageIndex,
+          index,
+        ]),
+      ),
+    [navigableMessages],
+  );
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
@@ -432,10 +464,67 @@ export function ChatMessages({
       (chatError) => chatError.error.message === liveErrorMessage,
     );
 
+  const handleConversationKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || isTextEntryElement(target)) {
+        return;
+      }
+
+      const currentMessageElement = target.closest<HTMLElement>(
+        "[data-message-nav-id]",
+      );
+      if (!currentMessageElement) {
+        return;
+      }
+
+      const currentMessageId = currentMessageElement.dataset.messageNavId;
+      if (!currentMessageId) {
+        return;
+      }
+
+      const currentIndex = navigableMessages.findIndex(
+        (message) => message.messageId === currentMessageId,
+      );
+      if (currentIndex === -1) {
+        return;
+      }
+
+      const offset = event.key === "ArrowDown" ? 1 : -1;
+      const nextMessage = navigableMessages[currentIndex + offset];
+      if (!nextMessage) {
+        return;
+      }
+
+      const conversationElement = event.currentTarget;
+      const nextMessageElement = conversationElement.querySelector<HTMLElement>(
+        `[data-message-nav-id="${nextMessage.messageId}"]`,
+      );
+      if (!nextMessageElement) {
+        return;
+      }
+
+      event.preventDefault();
+      nextMessageElement.focus({ preventScroll: true });
+      if (typeof nextMessageElement.scrollIntoView === "function") {
+        nextMessageElement.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+        });
+      }
+    },
+    [navigableMessages],
+  );
+
   return (
     <Conversation
       className="h-full"
       resize={instantResize || initialLoad ? "instant" : "smooth"}
+      onKeyDown={handleConversationKeyDown}
     >
       <ScrollToBottomOnSubmit status={status} />
       <ConversationContent>
@@ -468,11 +557,34 @@ export function ChatMessages({
 
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
+            const navigableMessagePosition =
+              navigableMessageIndexMap.get(idx) ?? null;
 
             return (
               <div
                 key={message.id || idx}
-                className={cn(isDimmed && "opacity-40 transition-opacity")}
+                data-message-nav-id={
+                  navigableMessagePosition !== null
+                    ? getNavigableMessageId(message.id, idx)
+                    : undefined
+                }
+                tabIndex={navigableMessagePosition !== null ? -1 : undefined}
+                aria-label={
+                  navigableMessagePosition !== null
+                    ? `Message ${navigableMessagePosition + 1} of ${navigableMessages.length}`
+                    : undefined
+                }
+                className={cn(
+                  navigableMessagePosition !== null &&
+                    "rounded-2xl transition-[background-color,box-shadow,opacity] duration-150 ease-out focus:outline-none focus:bg-accent/30 focus:shadow-sm motion-reduce:transform-none",
+                  navigableMessagePosition !== null &&
+                    message.role === "user" &&
+                    "focus:[&_[data-message-focus-surface]]:-translate-x-2",
+                  navigableMessagePosition !== null &&
+                    message.role === "assistant" &&
+                    "focus:[&_[data-message-focus-surface]]:translate-x-2",
+                  isDimmed && "opacity-40 transition-opacity",
+                )}
               >
                 {(() => {
                   const { groupMap, consumedIndices } =
@@ -2262,6 +2374,26 @@ function hasMessageAuthToolError(message: UIMessage): boolean {
       ];
     }),
   );
+}
+
+function getNavigableMessageId(
+  messageId: string | undefined,
+  messageIndex: number,
+): string {
+  return messageId ?? `message-${messageIndex}`;
+}
+
+function isTextEntryElement(element: HTMLElement): boolean {
+  const tagName = element.tagName.toLowerCase();
+  if (tagName === "input" || tagName === "textarea" || tagName === "select") {
+    return true;
+  }
+
+  if (element.isContentEditable) {
+    return true;
+  }
+
+  return !!element.closest("[contenteditable='true']");
 }
 
 function buildMessageTimeline(params: {

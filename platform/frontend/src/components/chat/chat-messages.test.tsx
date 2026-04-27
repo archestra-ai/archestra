@@ -1,13 +1,20 @@
 import type { UIMessage } from "@ai-sdk/react";
+import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ai-elements/conversation", () => ({
-  Conversation: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  Conversation: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>{children}</div>
   ),
-  ConversationContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  ConversationContent: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>{children}</div>
   ),
   ConversationScrollButton: () => null,
 }));
@@ -62,16 +69,75 @@ vi.mock("@/components/ai-elements/tool", () => ({
 }));
 
 vi.mock("@/components/chat/editable-assistant-message", () => ({
-  EditableAssistantMessage: ({ text }: { text: string }) => <div>{text}</div>,
+  EditableAssistantMessage: ({
+    text,
+    partKey,
+    isEditing,
+    showActions,
+    onStartEdit,
+  }: {
+    text: string;
+    partKey: string;
+    isEditing: boolean;
+    showActions: boolean;
+    onStartEdit: (partKey: string) => void;
+  }) => (
+    <div>
+      <div>{text}</div>
+      {isEditing ? (
+        <textarea aria-label={`Edit ${text}`} defaultValue={text} />
+      ) : (
+        <button type="button" onClick={() => onStartEdit(partKey)}>
+          Edit {text}
+        </button>
+      )}
+      {showActions ? (
+        <button type="button" aria-label={`Action ${text}`}>
+          Action {text}
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/editable-user-message", () => ({
-  EditableUserMessage: ({ text }: { text: string }) => <div>{text}</div>,
+  EditableUserMessage: ({
+    text,
+    partKey,
+    messageId,
+    isEditing,
+    onStartEdit,
+  }: {
+    text: string;
+    partKey: string;
+    messageId: string;
+    isEditing: boolean;
+    onStartEdit: (partKey: string, messageId: string) => void;
+  }) => (
+    <div>
+      <div>{text}</div>
+      {isEditing ? (
+        <textarea aria-label={`Edit ${text}`} defaultValue={text} />
+      ) : (
+        <button type="button" onClick={() => onStartEdit(partKey, messageId)}>
+          Edit {text}
+        </button>
+      )}
+      <button type="button" aria-label={`Action ${text}`}>
+        Action {text}
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/inline-chat-error", () => ({
   InlineChatError: ({ error }: { error: Error }) => (
-    <div data-testid="inline-chat-error">{error.message}</div>
+    <div data-testid="inline-chat-error">
+      {error.message}
+      <button type="button" aria-label="Inline error action">
+        Error action
+      </button>
+    </div>
   ),
 }));
 
@@ -889,5 +955,173 @@ describe("ChatMessages", () => {
     expect(
       screen.queryByText(/Please re-authenticate by visiting this URL/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("registers only top-level user and assistant messages for arrow navigation", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Assistant reply" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        chatErrors={[
+          {
+            id: "error-1",
+            conversationId: "conv-1",
+            createdAt: "2026-04-22T12:01:00.000Z",
+            error: {
+              code: "server_error",
+              message: "Provider failed",
+              isRetryable: true,
+            },
+          },
+        ]}
+      />,
+    );
+
+    const navigableMessages = screen.getAllByLabelText(/Message \d+ of \d+/);
+
+    expect(navigableMessages).toHaveLength(2);
+    expect(navigableMessages[0]).toHaveClass(
+      "rounded-2xl",
+      "focus:bg-accent/30",
+      "focus:shadow-sm",
+      "focus:[&_[data-message-focus-surface]]:-translate-y-px",
+      "focus:[&_[data-message-focus-surface]]:-translate-x-px",
+    );
+    expect(navigableMessages[1]).toHaveClass(
+      "focus:[&_[data-message-focus-surface]]:translate-x-px",
+    );
+    expect(screen.getByTestId("inline-chat-error")).not.toHaveAttribute(
+      "data-message-nav-id",
+    );
+  });
+
+  it("moves focus between messages with arrow keys and stops at the ends", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Assistant reply" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Second user" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const [firstMessage, secondMessage, thirdMessage] = screen.getAllByLabelText(
+      /Message \d+ of \d+/,
+    );
+
+    firstMessage.focus();
+    fireEvent.keyDown(firstMessage, { key: "ArrowUp" });
+    expect(firstMessage).toHaveFocus();
+
+    fireEvent.keyDown(firstMessage, { key: "ArrowDown" });
+    expect(secondMessage).toHaveFocus();
+
+    fireEvent.keyDown(secondMessage, { key: "ArrowDown" });
+    expect(thirdMessage).toHaveFocus();
+
+    fireEvent.keyDown(thirdMessage, { key: "ArrowDown" });
+    expect(thirdMessage).toHaveFocus();
+
+    fireEvent.keyDown(thirdMessage, { key: "ArrowUp" });
+    expect(secondMessage).toHaveFocus();
+  });
+
+  it("moves focus to the next message when a nested message action is focused", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Second user" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const [, secondMessage] = screen.getAllByLabelText(/Message \d+ of \d+/);
+    const actionButton = screen.getByRole("button", {
+      name: "Action First user",
+    });
+
+    actionButton.focus();
+    fireEvent.keyDown(actionButton, { key: "ArrowDown" });
+
+    expect(secondMessage).toHaveFocus();
+  });
+
+  it("does not intercept arrow keys while editing a message textarea", async () => {
+    const user = userEvent.setup();
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Editable user" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Second user" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit Editable user" }));
+
+    const textarea = screen.getByRole("textbox", { name: "Edit Editable user" });
+    const [, secondMessage] = screen.getAllByLabelText(/Message \d+ of \d+/);
+
+    textarea.focus();
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+
+    expect(textarea).toHaveFocus();
+    expect(secondMessage).not.toHaveFocus();
   });
 });

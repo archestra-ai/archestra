@@ -2404,24 +2404,16 @@ describe("AgentModel", () => {
       await makeMember(userA.id, org.id);
       await makeMember(userB.id, org.id);
 
-      const firstCount =
-        await AgentModel.bulkBackfillPersonalMcpGateways();
+      const firstCount = await AgentModel.bulkBackfillPersonalMcpGateways();
       expect(firstCount).toBeGreaterThanOrEqual(2);
 
-      const gatewayA = await AgentModel.getPersonalMcpGateway(
-        userA.id,
-        org.id,
-      );
-      const gatewayB = await AgentModel.getPersonalMcpGateway(
-        userB.id,
-        org.id,
-      );
+      const gatewayA = await AgentModel.getPersonalMcpGateway(userA.id, org.id);
+      const gatewayB = await AgentModel.getPersonalMcpGateway(userB.id, org.id);
       expect(gatewayA?.isPersonalGateway).toBe(true);
       expect(gatewayB?.isPersonalGateway).toBe(true);
       expect(gatewayA?.id).not.toBe(gatewayB?.id);
 
-      const secondCount =
-        await AgentModel.bulkBackfillPersonalMcpGateways();
+      const secondCount = await AgentModel.bulkBackfillPersonalMcpGateways();
       expect(secondCount).toBe(0);
 
       const stillGatewayA = await AgentModel.getPersonalMcpGateway(

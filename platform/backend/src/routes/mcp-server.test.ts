@@ -1812,9 +1812,9 @@ describe("mcp server inspect route", () => {
         user.id,
         requestOrganizationId,
       );
-      expect(personalGateway).not.toBeNull();
+      if (!personalGateway) throw new Error("expected personal gateway");
       const assignments = await AgentToolModel.findToolIdsByAgent(
-        personalGateway!.id,
+        personalGateway.id,
       );
       expect(assignments.length).toBe(2);
     });
@@ -1863,9 +1863,9 @@ describe("mcp server inspect route", () => {
         user.id,
         requestOrganizationId,
       );
-      expect(personalGateway).not.toBeNull();
+      if (!personalGateway) throw new Error("expected personal gateway");
       const personalAssignments = await AgentToolModel.findToolIdsByAgent(
-        personalGateway!.id,
+        personalGateway.id,
       );
       const explicitAssignments = await AgentToolModel.findToolIdsByAgent(
         otherAgent.id,

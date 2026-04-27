@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.26](https://github.com/archestra-ai/archestra/compare/platform-v1.2.25...platform-v1.2.26) (2026-04-27)
+
+
+### Bug Fixes
+
+* hide connection page ([#4151](https://github.com/archestra-ai/archestra/issues/4151)) ([2491397](https://github.com/archestra-ai/archestra/commit/2491397f9c6f40075684c82425989ab0a294b92a))
+
 ## [1.2.25](https://github.com/archestra-ai/archestra/compare/platform-v1.2.24...platform-v1.2.25) (2026-04-27)
 
 

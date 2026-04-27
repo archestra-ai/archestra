@@ -123,6 +123,7 @@ export function ChatPageContent({
   }, []);
   const userMessageJustEdited = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusLastMessageRef = useRef<(() => void) | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
@@ -998,6 +999,8 @@ export function ChatPageContent({
                     agentId={currentProfileId || initialAgentId || undefined}
                     messages={messages}
                     status={status}
+                    promptTextareaRef={textareaRef}
+                    focusLastMessageRef={focusLastMessageRef}
                     optimisticToolCalls={optimisticToolCalls}
                     isLoadingConversation={isLoadingConversation}
                     onMessagesUpdate={setMessages}
@@ -1126,6 +1129,9 @@ export function ChatPageContent({
                         }
                         currentProvider={currentProvider}
                         textareaRef={textareaRef}
+                        onNavigateToLastMessage={() =>
+                          focusLastMessageRef.current?.()
+                        }
                         onProviderChange={handleProviderChange}
                         allowFileUploads={
                           organization?.allowChatFileUploads ?? false
@@ -1240,6 +1246,9 @@ export function ChatPageContent({
                       agentId={newChatAgentId}
                       currentProvider={currentProvider}
                       textareaRef={textareaRef}
+                      onNavigateToLastMessage={() =>
+                        focusLastMessageRef.current?.()
+                      }
                       initialApiKeyId={initialApiKeyId}
                       onApiKeyChange={setInitialApiKeyId}
                       onProviderChange={handleInitialProviderChange}

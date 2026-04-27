@@ -875,6 +875,8 @@ export type PromptInputTextareaProps = ComponentProps<
 
 export const PromptInputTextarea = ({
   onChange,
+  onKeyDown: externalOnKeyDown,
+  ref: forwardedRef,
   className,
   placeholder = "What would you like to know?",
   disableEnterSubmit = false,
@@ -930,6 +932,8 @@ export const PromptInputTextarea = ({
         attachments.remove(lastAttachment.id);
       }
     }
+
+    externalOnKeyDown?.(e);
   };
 
   const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
@@ -978,9 +982,28 @@ export const PromptInputTextarea = ({
     setIsFullscreen((prev) => !prev);
   }, []);
 
+  const handleTextareaRef = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      textareaRef.current = node;
+
+      if (!forwardedRef) {
+        return;
+      }
+
+      if (typeof forwardedRef === "function") {
+        forwardedRef(node);
+        return;
+      }
+
+      forwardedRef.current = node;
+    },
+    [forwardedRef],
+  );
+
   return (
     <div ref={containerRef} className="relative w-full">
       <InputGroupTextarea
+        {...props}
         className={cn(
           "field-sizing-content",
           isFullscreen ? "max-h-[75vh]" : "max-h-48 min-h-16",
@@ -992,8 +1015,7 @@ export const PromptInputTextarea = ({
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         placeholder={placeholder}
-        ref={textareaRef}
-        {...props}
+        ref={handleTextareaRef}
         {...controlledProps}
       />
 

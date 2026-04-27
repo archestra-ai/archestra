@@ -998,11 +998,10 @@ describe("ChatMessages", () => {
       "rounded-2xl",
       "focus:bg-accent/30",
       "focus:shadow-sm",
-      "focus:[&_[data-message-focus-surface]]:-translate-y-px",
-      "focus:[&_[data-message-focus-surface]]:-translate-x-px",
+      "focus:[&_[data-message-focus-surface]]:-translate-x-2",
     );
     expect(navigableMessages[1]).toHaveClass(
-      "focus:[&_[data-message-focus-surface]]:translate-x-px",
+      "focus:[&_[data-message-focus-surface]]:translate-x-2",
     );
     expect(screen.getByTestId("inline-chat-error")).not.toHaveAttribute(
       "data-message-nav-id",
@@ -1055,6 +1054,41 @@ describe("ChatMessages", () => {
 
     fireEvent.keyDown(thirdMessage, { key: "ArrowUp" });
     expect(secondMessage).toHaveFocus();
+  });
+
+  it("moves focus to the prompt textarea when arrowing down from the last message", () => {
+    const promptTextarea = document.createElement("textarea");
+    document.body.append(promptTextarea);
+    const promptTextareaRef = { current: promptTextarea };
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Assistant reply" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        promptTextareaRef={promptTextareaRef}
+      />,
+    );
+
+    const [, lastMessage] = screen.getAllByLabelText(/Message \d+ of \d+/);
+    lastMessage.focus();
+
+    fireEvent.keyDown(lastMessage, { key: "ArrowDown" });
+
+    expect(promptTextarea).toHaveFocus();
+    promptTextarea.remove();
   });
 
   it("moves focus to the next message when a nested message action is focused", () => {
@@ -1123,5 +1157,36 @@ describe("ChatMessages", () => {
 
     expect(textarea).toHaveFocus();
     expect(secondMessage).not.toHaveFocus();
+  });
+
+  it("exposes a callback that focuses the current last message", () => {
+    const focusLastMessageRef = { current: null as (() => void) | null };
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "First user" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Assistant reply" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        focusLastMessageRef={focusLastMessageRef}
+      />,
+    );
+
+    const [, lastMessage] = screen.getAllByLabelText(/Message \d+ of \d+/);
+
+    focusLastMessageRef.current?.();
+
+    expect(lastMessage).toHaveFocus();
   });
 });

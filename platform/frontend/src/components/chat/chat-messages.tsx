@@ -23,6 +23,8 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  type MutableRefObject,
+  type RefObject,
   useRef,
   useState,
 } from "react";
@@ -114,6 +116,8 @@ interface ChatMessagesProps {
   agentId?: string;
   messages: UIMessage[];
   status: ChatStatus;
+  promptTextareaRef?: RefObject<HTMLTextAreaElement | null>;
+  focusLastMessageRef?: MutableRefObject<(() => void) | null>;
   optimisticToolCalls?: Array<{
     toolCallId: string;
     toolName: string;
@@ -174,6 +178,8 @@ export function ChatMessages({
   agentId,
   messages,
   status,
+  promptTextareaRef,
+  focusLastMessageRef,
   optimisticToolCalls = [],
   isLoadingConversation = false,
   onMessagesUpdate,
@@ -497,6 +503,16 @@ export function ChatMessages({
       const offset = event.key === "ArrowDown" ? 1 : -1;
       const nextMessage = navigableMessages[currentIndex + offset];
       if (!nextMessage) {
+        if (
+          event.key === "ArrowDown" &&
+          currentIndex === navigableMessages.length - 1
+        ) {
+          const promptTextarea = promptTextareaRef?.current;
+          if (promptTextarea) {
+            event.preventDefault();
+            promptTextarea.focus();
+          }
+        }
         return;
       }
 
@@ -517,8 +533,38 @@ export function ChatMessages({
         });
       }
     },
-    [navigableMessages],
+    [navigableMessages, promptTextareaRef],
   );
+
+  const focusLastNavigableMessage = useCallback(() => {
+    const lastMessage = navigableMessages.at(-1);
+    if (!lastMessage) {
+      return;
+    }
+
+    const messageElement = document.querySelector<HTMLElement>(
+      `[data-message-nav-id="${lastMessage.messageId}"]`,
+    );
+    messageElement?.focus({ preventScroll: true });
+    if (typeof messageElement?.scrollIntoView === "function") {
+      messageElement.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
+  }, [navigableMessages]);
+
+  useEffect(() => {
+    if (!focusLastMessageRef) {
+      return;
+    }
+
+    focusLastMessageRef.current = focusLastNavigableMessage;
+
+    return () => {
+      focusLastMessageRef.current = null;
+    };
+  }, [focusLastMessageRef, focusLastNavigableMessage]);
 
   return (
     <Conversation

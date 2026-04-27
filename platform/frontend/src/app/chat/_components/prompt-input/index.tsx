@@ -111,6 +111,8 @@ interface ArchestraPromptInputProps {
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
+  /** Focus the last navigable conversation message from the prompt textarea */
+  onNavigateToLastMessage?: () => void;
 }
 
 // Inner component that has access to the controller context
@@ -141,6 +143,7 @@ const PromptInputContent = ({
   onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
+  onNavigateToLastMessage,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -270,6 +273,25 @@ const PromptInputContent = ({
     [showFileUploadButton],
   );
   const submitStatus = status === "error" ? "ready" : status;
+  const handlePromptTextareaKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key !== "ArrowUp" || event.nativeEvent.isComposing) {
+        return;
+      }
+
+      if (
+        !onNavigateToLastMessage ||
+        event.currentTarget.selectionStart !== 0 ||
+        event.currentTarget.selectionEnd !== 0
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      onNavigateToLastMessage();
+    },
+    [onNavigateToLastMessage],
+  );
 
   return (
     <PromptInput
@@ -302,6 +324,7 @@ const PromptInputContent = ({
             disabled={submitDisabled}
             disableEnterSubmit={status !== "ready" && status !== "error"}
             data-testid={E2eTestId.ChatPromptTextarea}
+            onKeyDown={handlePromptTextareaKeyDown}
           />
         )}
       </PromptInputBody>
@@ -636,6 +659,7 @@ const ArchestraPromptInput = ({
   onModelSelectorOpenChange,
   modelSource,
   onResetModelOverride,
+  onNavigateToLastMessage,
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
@@ -667,6 +691,7 @@ const ArchestraPromptInput = ({
           onModelSelectorOpenChange={onModelSelectorOpenChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          onNavigateToLastMessage={onNavigateToLastMessage}
         />
       </PromptInputProvider>
     </div>

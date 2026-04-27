@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockUseOrganization, mockUseChatPlaceholder } = vi.hoisted(() => ({
@@ -83,8 +83,12 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       Submit {status ?? "unset"}
     </button>
   ),
-  PromptInputTextarea: ({ placeholder }: { placeholder?: string }) => (
-    <textarea placeholder={placeholder} />
+  PromptInputTextarea: ({
+    placeholder,
+    onKeyDown,
+    ...props
+  }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+    <textarea placeholder={placeholder} onKeyDown={onKeyDown} {...props} />
   ),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
@@ -346,6 +350,74 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(screen.getByTestId("prompt-input")).toBeInTheDocument();
+    });
+
+    it("should focus the last message when ArrowUp is pressed at the absolute start of the prompt", () => {
+      const onNavigateToLastMessage = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+
+      expect(onNavigateToLastMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not focus the last message when ArrowUp is pressed away from the absolute start", () => {
+      const onNavigateToLastMessage = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: "hello" } });
+      textarea.focus();
+      textarea.setSelectionRange(2, 2);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+
+      expect(onNavigateToLastMessage).not.toHaveBeenCalled();
+    });
+
+    it("should not focus the last message when ArrowUp is pressed with a selection", () => {
+      const onNavigateToLastMessage = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          onNavigateToLastMessage={onNavigateToLastMessage}
+        />,
+      );
+
+      const textarea = screen.getByTestId(
+        E2eTestId.ChatPromptTextarea,
+      ) as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: "hello" } });
+      textarea.focus();
+      textarea.setSelectionRange(0, 2);
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+
+      expect(onNavigateToLastMessage).not.toHaveBeenCalled();
     });
 
     it("should show the submit state as ready after an error", () => {

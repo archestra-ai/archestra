@@ -1,6 +1,6 @@
 import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { K8sClusterModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const VALID_KUBECONFIG = `
 apiVersion: v1
@@ -170,7 +170,7 @@ describe("K8sClusterModel", () => {
       await db.insert(schema.mcpServersTable).values({
         name: "server-using-cluster",
         serverType: "local",
-        catalogId: catalog[0]!.id,
+        catalogId: catalog[0]?.id,
         k8sClusterId: cluster.id,
       });
 

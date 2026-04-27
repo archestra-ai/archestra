@@ -18,7 +18,6 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { validateK8sNamespace } from "@/services/k8s-namespace-validation";
 import {
   autoReinstallServer,
   requiresNewUserInputForReinstall,
@@ -612,23 +611,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Detect and validate namespace/cluster change for local servers
-      const incomingNamespace = restBody.k8sNamespace;
-      const incomingClusterId = restBody.k8sClusterId;
-      const namespaceChanged =
-        originalCatalogItem.serverType === "local" &&
-        incomingNamespace !== undefined &&
-        incomingNamespace !== originalCatalogItem.k8sNamespace;
-      const clusterChanged =
-        originalCatalogItem.serverType === "local" &&
-        incomingClusterId !== undefined &&
-        incomingClusterId !== originalCatalogItem.k8sClusterId;
-      const locationChanged = namespaceChanged || clusterChanged;
-
-      if (namespaceChanged && incomingNamespace) {
-        await validateK8sNamespace(incomingNamespace);
-      }
-
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
@@ -640,57 +622,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const installedServers = await McpServerModel.findByCatalogId(id);
 
       if (installedServers.length > 0) {
-        if (locationChanged) {
-          // Location migration: stop in old namespace/cluster, start in new one
-          logger.info(
-            {
-              catalogId: id,
-              serverCount: installedServers.length,
-              newNamespace: catalogItem.k8sNamespace,
-              newClusterId: catalogItem.k8sClusterId,
-            },
-            "Catalog namespace/cluster changed - migrating installed servers to new location",
-          );
-          setImmediate(async () => {
-            for (const server of installedServers) {
-              try {
-                await McpServerModel.update(server.id, {
-                  localInstallationStatus: "pending",
-                  localInstallationError: null,
-                });
-                await mcpServerRuntimeManager.restartServerInNewLocation(
-                  server.id,
-                  catalogItem.k8sNamespace,
-                  catalogItem.k8sClusterId ?? null,
-                );
-                await McpServerModel.update(server.id, {
-                  localInstallationStatus: "success",
-                  localInstallationError: null,
-                });
-                logger.info(
-                  {
-                    serverId: server.id,
-                    newNamespace: catalogItem.k8sNamespace,
-                    newClusterId: catalogItem.k8sClusterId,
-                  },
-                  "Migrated MCP server to new location successfully",
-                );
-              } catch (error) {
-                const errorMessage =
-                  error instanceof Error ? error.message : "Unknown error";
-                logger.error(
-                  { err: error, serverId: server.id },
-                  "Failed to migrate MCP server to new location - marking for manual reinstall",
-                );
-                await McpServerModel.update(server.id, {
-                  reinstallRequired: true,
-                  localInstallationStatus: "error",
-                  localInstallationError: errorMessage,
-                });
-              }
-            }
-          });
-        } else if (
+        if (
           requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
         ) {
           // Manual reinstall required: mark servers and let user trigger reinstall

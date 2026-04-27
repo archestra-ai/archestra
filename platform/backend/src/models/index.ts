@@ -17,8 +17,8 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
-export { default as K8sClusterModel } from "./k8s-cluster";
 export { default as InvitationModel } from "./invitation";
+export { default as K8sClusterModel } from "./k8s-cluster";
 export { default as KbChunkModel } from "./kb-chunk";
 export { default as KbDocumentModel } from "./kb-document";
 export { default as KnowledgeBaseModel } from "./knowledge-base";

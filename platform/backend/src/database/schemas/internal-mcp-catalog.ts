@@ -16,7 +16,6 @@ import type {
   OAuthConfig,
   UserConfig,
 } from "@/types";
-import k8sClustersTable from "./k8s-cluster";
 import secretTable from "./secret";
 import usersTable from "./user";
 
@@ -71,10 +70,6 @@ const internalMcpCatalogTable = pgTable(
       onDelete: "set null",
     }),
     scope: mcpCatalogScopeEnum("scope").notNull().default("org"),
-    k8sNamespace: text("k8s_namespace"),
-    k8sClusterId: uuid("k8s_cluster_id").references(() => k8sClustersTable.id, {
-      onDelete: "set null",
-    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

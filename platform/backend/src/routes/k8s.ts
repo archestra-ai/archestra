@@ -7,8 +7,8 @@ import { loadKubeConfigFromString } from "@/k8s/shared";
 import { K8sClusterModel } from "@/models";
 import {
   ApiError,
-  constructResponseSchema,
   CreateK8sClusterBodySchema,
+  constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectK8sClusterSchema,
   UpdateK8sClusterSchema,
@@ -54,7 +54,8 @@ const k8sRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateK8sCluster,
-        description: "Register a custom Kubernetes cluster for the organization",
+        description:
+          "Register a custom Kubernetes cluster for the organization",
         tags: ["K8s"],
         body: CreateK8sClusterBodySchema,
         response: constructResponseSchema(SelectK8sClusterSchema),

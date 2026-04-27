@@ -164,7 +164,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         k8sNamespace: k8sNamespaceFromRequest,
         ...restDataFromRequestBody
       } = body;
-      let k8sNamespace = k8sNamespaceFromRequest;
+      const k8sNamespace = k8sNamespaceFromRequest;
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
       } = {
@@ -184,7 +184,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         );
         if (!cluster) {
-          throw new ApiError(400, "K8s cluster not found or does not belong to this organization");
+          throw new ApiError(
+            400,
+            "K8s cluster not found or does not belong to this organization",
+          );
         }
       }
 
@@ -224,15 +227,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           headers,
         });
-
-        // Fall back to catalog's k8sNamespace if not explicitly provided in the request
-        if (
-          !k8sNamespace &&
-          catalogItem.serverType === "local" &&
-          catalogItem.k8sNamespace
-        ) {
-          k8sNamespace = catalogItem.k8sNamespace;
-        }
 
         // Validate k8sNamespace: reject early before idempotent early-return paths
         if (k8sNamespace && catalogItem.serverType !== "local") {

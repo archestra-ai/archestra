@@ -185,7 +185,9 @@ describe("McpServerModel", () => {
         name: "Test Cluster",
         kubeconfig: VALID_KUBECONFIG,
       });
-      const server = await makeMcpServer({ k8sClusterId: cluster.id } as Parameters<typeof makeMcpServer>[0] & { k8sClusterId?: string });
+      const server = await makeMcpServer({
+        k8sClusterId: cluster.id,
+      } as Parameters<typeof makeMcpServer>[0] & { k8sClusterId?: string });
 
       const result = await McpServerModel.findWithClusterContext(server.id);
       expect(result).not.toBeNull();

@@ -2,10 +2,10 @@ import * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
   isK8sNotFoundError,
+  type K8sClients,
   loadKubeConfig,
   loadKubeConfigFromString,
   sanitizeLabelValue,
-  type K8sClients,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
@@ -177,9 +177,7 @@ export class McpServerRuntimeManager {
    * Returns names sorted alphabetically.
    */
   async listNamespaces(cluster?: K8sCluster | null): Promise<string[]> {
-    const api = cluster
-      ? await getClusterCoreApi(cluster)
-      : this.k8sApi;
+    const api = cluster ? await getClusterCoreApi(cluster) : this.k8sApi;
 
     if (!api) {
       return [];
@@ -288,7 +286,7 @@ export class McpServerRuntimeManager {
         );
         if (cluster) {
           const kc = loadKubeConfigFromString(cluster.kubeconfig);
-          const targetNamespace = catalogItem?.k8sNamespace ?? this.namespace;
+          const targetNamespace = this.namespace;
           clusterClients = createK8sClients(kc, targetNamespace);
         }
       }
@@ -644,7 +642,11 @@ export class McpServerRuntimeManager {
     mcpServerId: string,
     newNamespace: string | null,
   ): Promise<void> {
-    return this.restartServerInNewLocation(mcpServerId, newNamespace, undefined);
+    return this.restartServerInNewLocation(
+      mcpServerId,
+      newNamespace,
+      undefined,
+    );
   }
 
   async restartServerInNewLocation(
@@ -663,7 +665,8 @@ export class McpServerRuntimeManager {
       throw new Error(`MCP server ${mcpServerId} not found`);
     }
     const oldNamespace = mcpServerBeforeStop.k8sNamespace ?? this.namespace;
-    const deploymentName = K8sDeployment.constructDeploymentName(mcpServerBeforeStop);
+    const deploymentName =
+      K8sDeployment.constructDeploymentName(mcpServerBeforeStop);
 
     await this.stopServer(mcpServerId);
     await this.waitForDeploymentDeletion(deploymentName, oldNamespace);
@@ -671,7 +674,8 @@ export class McpServerRuntimeManager {
     // Persist the new namespace/cluster in DB
     const updates: Parameters<typeof McpServerModel.update>[1] = {};
     if (newNamespace !== undefined) updates.k8sNamespace = newNamespace;
-    if (newClusterId !== undefined) updates.k8sClusterId = newClusterId ?? undefined;
+    if (newClusterId !== undefined)
+      updates.k8sClusterId = newClusterId ?? undefined;
     await McpServerModel.update(mcpServerId, updates);
 
     // Re-read full server record with updated location
@@ -1076,9 +1080,7 @@ export class McpServerRuntimeManager {
 
 export default new McpServerRuntimeManager();
 
-async function getClusterCoreApi(
-  cluster: K8sCluster,
-): Promise<k8s.CoreV1Api> {
+async function getClusterCoreApi(cluster: K8sCluster): Promise<k8s.CoreV1Api> {
   const kc = loadKubeConfigFromString(cluster.kubeconfig);
   return kc.makeApiClient(k8s.CoreV1Api);
 }

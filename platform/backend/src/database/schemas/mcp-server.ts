@@ -12,8 +12,8 @@ import type {
   LocalMcpServerInstallationStatus,
   ResourceVisibilityScope,
 } from "@/types";
-import k8sClustersTable from "./k8s-cluster";
 import mcpCatalogTable from "./internal-mcp-catalog";
+import k8sClustersTable from "./k8s-cluster";
 import secretTable from "./secret";
 import { team } from "./team";
 import usersTable from "./user";

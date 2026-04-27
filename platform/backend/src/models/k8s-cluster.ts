@@ -1,7 +1,7 @@
 import { and, asc, count, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { ApiError } from "@/types";
 import type { InsertK8sCluster, K8sCluster, UpdateK8sCluster } from "@/types";
+import { ApiError } from "@/types";
 import {
   decryptSecretValue,
   encryptSecretValue,
@@ -60,7 +60,10 @@ class K8sClusterModel {
     data: UpdateK8sCluster,
   ): Promise<K8sCluster> {
     const updateData = data.kubeconfig
-      ? { ...data, kubeconfig: encryptSecretValue({ kubeconfig: data.kubeconfig }) }
+      ? {
+          ...data,
+          kubeconfig: encryptSecretValue({ kubeconfig: data.kubeconfig }),
+        }
       : data;
     const [cluster] = await db
       .update(schema.k8sClustersTable)

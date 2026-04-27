@@ -100,7 +100,10 @@ describe("K8s routes", () => {
       expect(response.statusCode).toBe(200);
       const { clusters } = response.json();
       expect(clusters).toHaveLength(2);
-      expect(clusters[0]).toMatchObject({ id: null, name: "Default (platform cluster)" });
+      expect(clusters[0]).toMatchObject({
+        id: null,
+        name: "Default (platform cluster)",
+      });
       expect(clusters[1]).toMatchObject({ name: "My Cluster" });
     });
 
@@ -148,7 +151,10 @@ describe("K8s routes", () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/k8s/clusters",
-        payload: { name: "Bad", kubeconfig: "this is not valid yaml kubeconfig" },
+        payload: {
+          name: "Bad",
+          kubeconfig: "this is not valid yaml kubeconfig",
+        },
       });
 
       expect(response.statusCode).toBe(400);

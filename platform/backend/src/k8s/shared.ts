@@ -105,7 +105,9 @@ export function loadKubeConfig(): {
  * Loads and validates a KubeConfig from a raw YAML string.
  * Throws descriptive errors for invalid or incomplete kubeconfig content.
  */
-export function loadKubeConfigFromString(kubeconfigYaml: string): k8s.KubeConfig {
+export function loadKubeConfigFromString(
+  kubeconfigYaml: string,
+): k8s.KubeConfig {
   const kc = new k8s.KubeConfig();
 
   try {

@@ -42,7 +42,10 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
-  useListK8sNamespaces: vi.fn(() => ({ data: [] })),
+  useListK8sNamespaces: vi.fn(() => ({
+    data: { namespaces: [], defaultNamespace: "" },
+    isLoading: false,
+  })),
 }));
 
 vi.mock("@/lib/secrets.query", () => ({

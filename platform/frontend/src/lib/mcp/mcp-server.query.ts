@@ -367,8 +367,11 @@ export function useListK8sNamespaces() {
     queryKey: ["k8s", "namespaces"],
     queryFn: async () => {
       const res = await listK8sNamespaces();
-      if (!res.data) return { namespaces: [], defaultNamespace: "" };
-      return res.data;
+      if (res.error) {
+        handleApiError(res.error);
+        return null;
+      }
+      return res.data ?? null;
     },
     enabled: !!isK8sEnabled,
     staleTime: 30_000,

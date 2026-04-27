@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
+  isK8sNotFoundError,
   loadKubeConfig,
   sanitizeLabelValue,
 } from "@/k8s/shared";
@@ -528,10 +529,16 @@ export class McpServerRuntimeManager {
       "Migrating MCP server to new namespace",
     );
 
-    // Stop and delete resources in the OLD namespace (reads current namespace from DB)
-    await this.stopServer(mcpServerId);
+    // Capture old namespace and deployment name before stopping
+    const mcpServerBeforeStop = await McpServerModel.findById(mcpServerId);
+    if (!mcpServerBeforeStop) {
+      throw new Error(`MCP server ${mcpServerId} not found`);
+    }
+    const oldNamespace = mcpServerBeforeStop.k8sNamespace ?? this.namespace;
+    const deploymentName = K8sDeployment.constructDeploymentName(mcpServerBeforeStop);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await this.stopServer(mcpServerId);
+    await this.waitForDeploymentDeletion(deploymentName, oldNamespace);
 
     // Persist the new namespace in DB
     await McpServerModel.update(mcpServerId, { k8sNamespace: newNamespace });
@@ -814,6 +821,31 @@ export class McpServerRuntimeManager {
       );
       return [];
     }
+  }
+
+  private async waitForDeploymentDeletion(
+    deploymentName: string,
+    namespace: string,
+    maxAttempts = 30,
+    intervalMs = 2000,
+  ): Promise<void> {
+    if (!this.k8sAppsApi) return;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        await this.k8sAppsApi.readNamespacedDeployment({
+          name: deploymentName,
+          namespace,
+        });
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      } catch (err) {
+        if (isK8sNotFoundError(err)) return;
+        throw err;
+      }
+    }
+    logger.warn(
+      { deploymentName, namespace, maxAttempts },
+      "Deployment not deleted after max attempts, proceeding anyway",
+    );
   }
 
   getDefaultNamespace(): string {

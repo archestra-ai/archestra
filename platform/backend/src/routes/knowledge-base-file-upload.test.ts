@@ -1,14 +1,16 @@
+import { eq } from "drizzle-orm";
 import JSZip from "jszip";
+import db, { schema } from "@/database";
 import * as fileProcessor from "@/knowledge-base/connectors/file-upload/file-processor";
-import { KnowledgeBaseConnectorModel, KbUploadedFileModel } from "@/models";
+import { KbUploadedFileModel, KnowledgeBaseConnectorModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
-import db, { schema } from "@/database";
-import { eq } from "drizzle-orm";
 
-function buildJsonBody(files: Array<{ name: string; content: Buffer; mimeType: string }>): {
+function buildJsonBody(
+  files: Array<{ name: string; content: Buffer; mimeType: string }>,
+): {
   payload: object;
 } {
   return {
@@ -26,7 +28,9 @@ describe("connector file upload routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  let fileUploadConnector: Awaited<ReturnType<typeof KnowledgeBaseConnectorModel.create>>;
+  let fileUploadConnector: Awaited<
+    ReturnType<typeof KnowledgeBaseConnectorModel.create>
+  >;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     user = await makeUser();
@@ -115,7 +119,10 @@ describe("connector file upload routes", () => {
     });
 
     test("rejects files larger than the 10MB size limit", async () => {
-      const oversized = Buffer.alloc(fileProcessor.MAX_FILE_SIZE_BYTES + 1, 0x61);
+      const oversized = Buffer.alloc(
+        fileProcessor.MAX_FILE_SIZE_BYTES + 1,
+        0x61,
+      );
       const { payload } = buildJsonBody([
         { name: "toobig.txt", content: oversized, mimeType: "text/plain" },
       ]);
@@ -200,7 +207,11 @@ describe("connector file upload routes", () => {
       });
 
       const { payload } = buildJsonBody([
-        { name: "test.txt", content: Buffer.from("text"), mimeType: "text/plain" },
+        {
+          name: "test.txt",
+          content: Buffer.from("text"),
+          mimeType: "text/plain",
+        },
       ]);
 
       const response = await app.inject({
@@ -214,7 +225,11 @@ describe("connector file upload routes", () => {
 
     test("returns 404 for a non-existent connector", async () => {
       const { payload } = buildJsonBody([
-        { name: "test.txt", content: Buffer.from("text"), mimeType: "text/plain" },
+        {
+          name: "test.txt",
+          content: Buffer.from("text"),
+          mimeType: "text/plain",
+        },
       ]);
 
       const response = await app.inject({
@@ -232,7 +247,11 @@ describe("connector file upload routes", () => {
       const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
 
       const { payload } = buildJsonBody([
-        { name: "archive.zip", content: zipBuffer, mimeType: "application/zip" },
+        {
+          name: "archive.zip",
+          content: zipBuffer,
+          mimeType: "application/zip",
+        },
       ]);
 
       const response = await app.inject({
@@ -271,8 +290,14 @@ describe("connector file upload routes", () => {
       expect(result.results).toHaveLength(2);
       expect(result.results).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ filename: "docs/readme.txt", status: "created" }),
-          expect.objectContaining({ filename: "docs/subfolder/notes.txt", status: "created" }),
+          expect.objectContaining({
+            filename: "docs/readme.txt",
+            status: "created",
+          }),
+          expect.objectContaining({
+            filename: "docs/subfolder/notes.txt",
+            status: "created",
+          }),
         ]),
       );
     });
@@ -284,7 +309,11 @@ describe("connector file upload routes", () => {
       const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
 
       const { payload } = buildJsonBody([
-        { name: "reports.zip", content: zipBuffer, mimeType: "application/zip" },
+        {
+          name: "reports.zip",
+          content: zipBuffer,
+          mimeType: "application/zip",
+        },
       ]);
 
       const response = await app.inject({
@@ -299,8 +328,14 @@ describe("connector file upload routes", () => {
       expect(result.results).toHaveLength(2);
       expect(result.results).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ filename: "draft/report.txt", status: "created" }),
-          expect.objectContaining({ filename: "final/report.txt", status: "created" }),
+          expect.objectContaining({
+            filename: "draft/report.txt",
+            status: "created",
+          }),
+          expect.objectContaining({
+            filename: "final/report.txt",
+            status: "created",
+          }),
         ]),
       );
 
@@ -311,7 +346,9 @@ describe("connector file upload routes", () => {
       });
       const files = listResponse.json().data;
       expect(files).toHaveLength(2);
-      const originalNames = files.map((f: { originalName: string }) => f.originalName);
+      const originalNames = files.map(
+        (f: { originalName: string }) => f.originalName,
+      );
       expect(originalNames).toContain("draft/report.txt");
       expect(originalNames).toContain("final/report.txt");
     });
@@ -365,7 +402,9 @@ describe("connector file upload routes", () => {
       expect(first.statusCode).toBe(200);
       expect(first.json().results[0].status).toBe("created");
 
-      vi.spyOn(KbUploadedFileModel, "findByContentHash").mockResolvedValueOnce(null);
+      vi.spyOn(KbUploadedFileModel, "findByContentHash").mockResolvedValueOnce(
+        null,
+      );
 
       const { payload: secondPayload } = buildJsonBody([
         { name: "race-second.txt", content, mimeType: "text/plain" },
@@ -389,7 +428,9 @@ describe("connector file upload routes", () => {
       const rows = await db
         .select()
         .from(schema.kbUploadedFilesTable)
-        .where(eq(schema.kbUploadedFilesTable.connectorId, fileUploadConnector.id));
+        .where(
+          eq(schema.kbUploadedFilesTable.connectorId, fileUploadConnector.id),
+        );
       expect(rows).toHaveLength(1);
     });
 
@@ -397,7 +438,8 @@ describe("connector file upload routes", () => {
       const originalTransaction = db.transaction.bind(db);
       vi.spyOn(db, "transaction").mockImplementationOnce(
         async (callback: Parameters<typeof db.transaction>[0]) => {
-          return originalTransaction(async (realTx: typeof db) => {
+          // biome-ignore lint/suspicious/noExplicitAny: test mock needs to intercept transaction internals
+          return originalTransaction(async (realTx: any) => {
             let insertCount = 0;
 
             const proxyTx = new Proxy(realTx, {
@@ -421,7 +463,7 @@ describe("connector file upload routes", () => {
               },
             });
 
-            return (callback as (tx: typeof db) => Promise<unknown>)(proxyTx);
+            return (callback as (tx: unknown) => Promise<unknown>)(proxyTx);
           });
         },
       );
@@ -447,7 +489,9 @@ describe("connector file upload routes", () => {
       const orphans = await db
         .select()
         .from(schema.kbUploadedFilesTable)
-        .where(eq(schema.kbUploadedFilesTable.connectorId, fileUploadConnector.id));
+        .where(
+          eq(schema.kbUploadedFilesTable.connectorId, fileUploadConnector.id),
+        );
       expect(orphans).toHaveLength(0);
     });
   });

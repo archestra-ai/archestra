@@ -8,7 +8,7 @@ type ConnectorIcon =
   | { kind: "img"; src: string }
   | { kind: "element"; render: (className?: string) => ReactNode };
 
-const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>>  = {
+const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   jira: { kind: "img", src: "/icons/jira.png" },
   confluence: { kind: "img", src: "/icons/confluence.png" },
   github: {

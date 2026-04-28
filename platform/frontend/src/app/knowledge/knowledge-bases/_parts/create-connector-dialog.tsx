@@ -512,50 +512,49 @@ export function CreateConnectorDialog({
                 {connectorType === "file_upload" && (
                   <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                     No credentials needed. After creating the connector, you can
-                    upload text files or ZIP archives directly from the connector
-                    page.
+                    upload text files or ZIP archives directly from the
+                    connector page.
                   </div>
                 )}
 
                 {connectorType !== "file_upload" && (
-                <>
-                <FormField
-                  control={form.control}
-                  name="apiToken"
-                  rules={{ required: apiTokenRequiredMessage }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{apiTokenLabel}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder={apiTokenPlaceholder}
-                          {...field}
-                        />
-                      </FormControl>
-                      {apiTokenHelpText}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <Collapsible>
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                    <span className="text-sm font-medium">Advanced</span>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-4 space-y-4">
-                    <SchedulePicker form={form} name="schedule" />
-                    <ConnectorAdvancedConfigFields
-                      connectorType={connectorType}
-                      form={form}
-                      mode="create"
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="apiToken"
+                      rules={{ required: apiTokenRequiredMessage }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{apiTokenLabel}</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder={apiTokenPlaceholder}
+                              {...field}
+                            />
+                          </FormControl>
+                          {apiTokenHelpText}
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </CollapsibleContent>
-                </Collapsible>
-                </>
-                )}
 
+                    <Collapsible>
+                      <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                        <span className="text-sm font-medium">Advanced</span>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-4 space-y-4">
+                        <SchedulePicker form={form} name="schedule" />
+                        <ConnectorAdvancedConfigFields
+                          connectorType={connectorType}
+                          form={form}
+                          mode="create"
+                        />
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </>
+                )}
               </DialogBody>
 
               <DialogStickyFooter className="mt-0">

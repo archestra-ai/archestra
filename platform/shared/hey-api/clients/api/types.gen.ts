@@ -45688,7 +45688,7 @@ export type UploadConnectorFilesResponses = {
     200: {
         results: Array<{
             filename: string;
-            status: 'created' | 'duplicate' | 'unsupported' | 'too_large';
+            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed';
             fileId?: string;
             existingTitle?: string;
         }>;

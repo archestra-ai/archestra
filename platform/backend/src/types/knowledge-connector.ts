@@ -239,6 +239,7 @@ export type FileUploadConfig = z.infer<typeof FileUploadConfigSchema>;
 
 export const FileUploadCheckpointSchema = z.object({
   type: FILE_UPLOAD,
+  lastSyncedAt: z.string().optional(),
 });
 export type FileUploadCheckpoint = z.infer<typeof FileUploadCheckpointSchema>;
 // ===== Asana Config & Checkpoint =====

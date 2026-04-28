@@ -425,11 +425,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   );
 }
 
-function FileUploadConnectorWarnings({
-  connectorId,
-}: {
-  connectorId: string;
-}) {
+function FileUploadConnectorWarnings({ connectorId }: { connectorId: string }) {
   const { data: assignedKbs, isPending } =
     useConnectorKnowledgeBases(connectorId);
 

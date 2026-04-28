@@ -6,15 +6,13 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
-import { getConnector } from "@/knowledge-base/connectors/registry";
-import logger from "@/logging";
 import { chunkDocument } from "@/knowledge-base/chunker";
 import {
   extractTextFiles,
@@ -22,6 +20,8 @@ import {
   MAX_FILE_SIZE_BYTES,
   MAX_ZIP_TOTAL_BYTES,
 } from "@/knowledge-base/connectors/file-upload/file-processor";
+import { getConnector } from "@/knowledge-base/connectors/registry";
+import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
@@ -1515,11 +1515,14 @@ async function findConnectorOrThrow(params: {
 function isContentHashConflict(error: unknown): boolean {
   let current: unknown = error;
   while (typeof current === "object" && current !== null) {
-    const msg = (current as Record<string, unknown>)["message"];
-    if (typeof msg === "string" && msg.includes("kb_uploaded_files_content_hash_uidx")) {
+    const msg = (current as Record<string, unknown>).message;
+    if (
+      typeof msg === "string" &&
+      msg.includes("kb_uploaded_files_content_hash_uidx")
+    ) {
       return true;
     }
-    current = (current as Record<string, unknown>)["cause"];
+    current = (current as Record<string, unknown>).cause;
   }
   return false;
 }

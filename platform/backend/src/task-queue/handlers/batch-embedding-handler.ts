@@ -14,7 +14,10 @@ export async function handleBatchEmbedding(
   }
 
   try {
-    await embeddingService.processDocuments(documentIds, connectorRunId ?? undefined);
+    await embeddingService.processDocuments(
+      documentIds,
+      connectorRunId ?? undefined,
+    );
     metrics.rag.reportEmbeddingBatch({
       documentCount: documentIds.length,
       status: "success",

@@ -1,7 +1,4 @@
-import type {
-  ConnectorCredentials,
-  ConnectorSyncBatch,
-} from "@/types";
+import type { ConnectorCredentials, ConnectorSyncBatch } from "@/types";
 import { BaseConnector } from "../base-connector";
 
 export class FileUploadConnector extends BaseConnector {

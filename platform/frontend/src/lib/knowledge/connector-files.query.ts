@@ -4,7 +4,6 @@ import { type archestraApiTypes, archestraApiClient as client } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-
 export type UploadedFile =
   archestraApiTypes.GetConnectorFilesResponses["200"]["data"][number];
 
@@ -41,7 +40,9 @@ export function useConnectorFile(connectorId: string, fileId: string) {
     enabled: Boolean(connectorId) && Boolean(fileId),
     refetchInterval: (query) => {
       const file = query.state.data as UploadedFile | null | undefined;
-      return file && ACTIVE_EMBEDDING_STATUSES.has(file.embeddingStatus) ? 3000 : false;
+      return file && ACTIVE_EMBEDDING_STATUSES.has(file.embeddingStatus)
+        ? 3000
+        : false;
     },
   });
 }
@@ -131,7 +132,13 @@ export function useUpdateConnectorFileTitle(connectorId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ fileId, title }: { fileId: string; title: string }) => {
+    mutationFn: async ({
+      fileId,
+      title,
+    }: {
+      fileId: string;
+      title: string;
+    }) => {
       await client.patch({
         url: "/api/connectors/{id}/files/{fileId}",
         path: { id: connectorId, fileId },

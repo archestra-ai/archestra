@@ -1,7 +1,13 @@
 "use client";
 
 import { Check, Loader2, Pencil, Trash2, Upload, X } from "lucide-react";
-import { useActionState, useCallback, useRef, useState, useTransition } from "react";
+import {
+  useActionState,
+  useCallback,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +34,8 @@ import {
   useUploadConnectorFiles,
 } from "@/lib/knowledge/connector-files.query";
 
-const ACCEPTED_EXTENSIONS = ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
+const ACCEPTED_EXTENSIONS =
+  ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
 const MAX_FILE_SIZE_MB = 10;
 
 function EmbeddingStatusBadge({ status }: { status: string }) {
@@ -213,7 +220,7 @@ export function ConnectorFilesSection({
   const [, uploadAction, isUploading] = useActionState(
     async (_state: null, formData: FormData) => {
       const selectedFiles = formData.getAll("files") as File[];
-      if (selectedFiles.length > 0) handleDrop(selectedFiles)
+      if (selectedFiles.length > 0) handleDrop(selectedFiles);
       return null;
     },
     null,
@@ -262,34 +269,36 @@ export function ConnectorFilesSection({
       </form>
       {files.length ? (
         <div className="overflow-x-auto rounded-md border">
-        <Table className="min-w-[540px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="whitespace-nowrap">Title</TableHead>
-              <TableHead className="whitespace-nowrap">Original Name</TableHead>
-              <TableHead className="whitespace-nowrap">Size</TableHead>
-              <TableHead className="whitespace-nowrap">Status</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isPending ? (
+          <Table className="min-w-[540px]">
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-6">
-                  <LoadingSpinner />
-                </TableCell>
+                <TableHead className="whitespace-nowrap">Title</TableHead>
+                <TableHead className="whitespace-nowrap">
+                  Original Name
+                </TableHead>
+                <TableHead className="whitespace-nowrap">Size</TableHead>
+                <TableHead className="whitespace-nowrap">Status</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
-            ) : (
-              files.map((file) => (
-                <FileRow
-                  key={file.id}
-                  fileId={file.id}
-                  connectorId={connectorId}
-                />
-              ))
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {isPending ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-6">
+                    <LoadingSpinner />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                files.map((file) => (
+                  <FileRow
+                    key={file.id}
+                    fileId={file.id}
+                    connectorId={connectorId}
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       ) : null}
       <button
@@ -299,16 +308,18 @@ export function ConnectorFilesSection({
         onDrop={(e) => {
           e.preventDefault();
           const droppedFiles = Array.from(e.dataTransfer.files);
-          handleDrop(droppedFiles)
+          handleDrop(droppedFiles);
         }}
         onClick={() => fileInputRef.current?.click()}
         disabled={isActuallyUploading}
       >
         <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-        <p className="text-sm font-medium">Drop files here or click to upload</p>
+        <p className="text-sm font-medium">
+          Drop files here or click to upload
+        </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Supports .txt, .md, .csv, .json, .xml, .html, .pdf, .doc, .docx, .zip — max{" "}
-          {MAX_FILE_SIZE_MB} MB each
+          Supports .txt, .md, .csv, .json, .xml, .html, .pdf, .doc, .docx, .zip
+          — max {MAX_FILE_SIZE_MB} MB each
         </p>
       </button>
     </div>
@@ -316,5 +327,7 @@ export function ConnectorFilesSection({
 }
 
 function LoadingSpinner() {
-  return <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />;
+  return (
+    <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+  );
 }

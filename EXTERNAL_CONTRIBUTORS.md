@@ -154,3 +154,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @avtosubaru25
 - @RyanSStephens
 - @Boci1337
+- @bitsbyritik

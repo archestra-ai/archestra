@@ -26271,8 +26271,6 @@ export type GetInternalMcpCatalogResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        k8sNamespace: string | null;
-        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -26396,8 +26394,6 @@ export type CreateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
-        k8sNamespace?: string | null;
-        k8sClusterId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -26590,8 +26586,6 @@ export type CreateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        k8sNamespace: string | null;
-        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -26879,8 +26873,6 @@ export type GetInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        k8sNamespace: string | null;
-        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -27003,8 +26995,6 @@ export type UpdateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
-        k8sNamespace?: string | null;
-        k8sClusterId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -27199,8 +27189,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        k8sNamespace: string | null;
-        k8sClusterId: string | null;
         createdAt: string;
         updatedAt: string;
         labels: Array<{
@@ -28012,6 +28000,7 @@ export type ListK8sClustersErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28021,6 +28010,7 @@ export type ListK8sClustersErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28030,6 +28020,7 @@ export type ListK8sClustersErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28039,6 +28030,7 @@ export type ListK8sClustersErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28048,6 +28040,7 @@ export type ListK8sClustersErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28057,6 +28050,7 @@ export type ListK8sClustersErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28075,7 +28069,9 @@ export type ListK8sClustersResponses = {
             id: string;
             organizationId: string;
             name: string;
-            kubeconfig: string;
+            kubeconfig: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown>;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -28102,6 +28098,7 @@ export type CreateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28111,6 +28108,7 @@ export type CreateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28120,6 +28118,7 @@ export type CreateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28129,6 +28128,7 @@ export type CreateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28138,6 +28138,7 @@ export type CreateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28147,6 +28148,7 @@ export type CreateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28161,7 +28163,9 @@ export type CreateK8sClusterResponses = {
         id: string;
         organizationId: string;
         name: string;
-        kubeconfig: string;
+        kubeconfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -28186,6 +28190,7 @@ export type DeleteK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28195,6 +28200,7 @@ export type DeleteK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28204,6 +28210,7 @@ export type DeleteK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28213,6 +28220,7 @@ export type DeleteK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28222,6 +28230,7 @@ export type DeleteK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28231,6 +28240,7 @@ export type DeleteK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28251,7 +28261,9 @@ export type DeleteK8sClusterResponse = DeleteK8sClusterResponses[keyof DeleteK8s
 export type UpdateK8sClusterData = {
     body: {
         name?: string;
-        kubeconfig?: string;
+        kubeconfig?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
     };
     path: {
         id: string;
@@ -28268,6 +28280,7 @@ export type UpdateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28277,6 +28290,7 @@ export type UpdateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28286,6 +28300,7 @@ export type UpdateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28295,6 +28310,7 @@ export type UpdateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28304,6 +28320,7 @@ export type UpdateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28313,6 +28330,7 @@ export type UpdateK8sClusterErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };
@@ -28327,7 +28345,9 @@ export type UpdateK8sClusterResponses = {
         id: string;
         organizationId: string;
         name: string;
-        kubeconfig: string;
+        kubeconfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
         createdAt: string;
         updatedAt: string;
     };
@@ -28352,6 +28372,7 @@ export type ListK8sNamespacesErrors = {
         error: {
             message: string;
             type: 'api_validation_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28361,6 +28382,7 @@ export type ListK8sNamespacesErrors = {
         error: {
             message: string;
             type: 'api_authentication_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28370,6 +28392,7 @@ export type ListK8sNamespacesErrors = {
         error: {
             message: string;
             type: 'api_authorization_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28379,6 +28402,7 @@ export type ListK8sNamespacesErrors = {
         error: {
             message: string;
             type: 'api_not_found_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28388,6 +28412,7 @@ export type ListK8sNamespacesErrors = {
         error: {
             message: string;
             type: 'api_conflict_error';
+            internal_code?: string;
         };
     };
     /**
@@ -28397,6 +28422,7 @@ export type ListK8sNamespacesErrors = {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
         };
     };
 };

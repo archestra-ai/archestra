@@ -363,6 +363,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const installResponse = await installMcpServer(request, {
           name: "Test Namespace Server",
           catalogId: catalogItem.id,
+          scope: "team",
           teamId: defaultTeam.id,
           environmentValues: { ARCHESTRA_TEST: "namespace-test-value" },
           k8sNamespace: targetNamespace,

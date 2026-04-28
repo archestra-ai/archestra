@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import type {
@@ -528,6 +528,50 @@ describe("MemoryItemModel", () => {
       offset: 0,
     });
     expect(list.filter((item) => item.scopeType === "team")).toHaveLength(0);
+  });
+
+  test("remains query-compatible when legacy scope_id column type is uuid", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+
+    await db.execute(
+      sql.raw(`
+        ALTER TABLE "memory_item"
+        ALTER COLUMN "scope_id" TYPE uuid
+        USING NULLIF("scope_id", '')::uuid;
+      `),
+    );
+
+    const created = await createMemoryItem({
+      organizationId: organization.id,
+      scopeType: "organization",
+      scopeId: organization.id,
+      status: "candidate",
+      content: "Org candidate for legacy scope_id compatibility",
+      createdBy: null,
+    });
+
+    const list = await MemoryItemModel.listForUser({
+      userId: user.id,
+      organizationId: organization.id,
+      teamIds: [],
+      isOrgAdmin: true,
+      status: "candidate",
+      limit: 10,
+      offset: 0,
+    });
+    expect(list.map((item) => item.id)).toContain(created.id);
+
+    const pendingCount = await MemoryItemModel.countPendingReview({
+      organizationId: organization.id,
+      requesterUserId: user.id,
+      requesterRole: "admin",
+      teamIds: [],
+    });
+    expect(pendingCount).toBe(1);
   });
 });
 

@@ -5,7 +5,6 @@ import {
   desc,
   eq,
   ilike,
-  inArray,
   isNull,
   lt,
   ne,
@@ -459,7 +458,7 @@ class MemoryItemModel {
         and(
           eq(schema.memoryItemsTable.organizationId, params.organizationId),
           eq(schema.memoryItemsTable.scopeType, params.scopeType),
-          eq(schema.memoryItemsTable.scopeId, params.scopeId),
+          MemoryItemModel.scopeIdEquals(params.scopeId),
           eq(schema.memoryItemsTable.status, params.status),
         ),
       );
@@ -481,7 +480,7 @@ class MemoryItemModel {
         and(
           eq(schema.memoryItemsTable.organizationId, params.organizationId),
           eq(schema.memoryItemsTable.scopeType, params.scopeType),
-          eq(schema.memoryItemsTable.scopeId, params.scopeId),
+          MemoryItemModel.scopeIdEquals(params.scopeId),
           eq(schema.memoryItemsTable.status, "approved"),
         ),
       );
@@ -613,7 +612,7 @@ class MemoryItemModel {
     const scopePredicates: SQL[] = [
       and(
         eq(schema.memoryItemsTable.scopeType, "user"),
-        eq(schema.memoryItemsTable.scopeId, params.userId),
+        MemoryItemModel.scopeIdEquals(params.userId),
       ) as SQL,
     ];
 
@@ -626,7 +625,7 @@ class MemoryItemModel {
       scopePredicates.push(
         and(
           eq(schema.memoryItemsTable.scopeType, "team"),
-          inArray(schema.memoryItemsTable.scopeId, params.teamIds),
+          MemoryItemModel.scopeIdIn(params.teamIds),
         ) as SQL,
       );
     }
@@ -635,7 +634,7 @@ class MemoryItemModel {
       scopePredicates.push(
         and(
           eq(schema.memoryItemsTable.scopeType, "organization"),
-          eq(schema.memoryItemsTable.scopeId, params.organizationId),
+          MemoryItemModel.scopeIdEquals(params.organizationId),
         ) as SQL,
       );
     }
@@ -657,7 +656,7 @@ class MemoryItemModel {
     const scopePredicates: SQL[] = [
       and(
         eq(schema.memoryItemsTable.scopeType, "user"),
-        eq(schema.memoryItemsTable.scopeId, params.requesterUserId),
+        MemoryItemModel.scopeIdEquals(params.requesterUserId),
       ) as SQL,
     ];
 
@@ -673,7 +672,7 @@ class MemoryItemModel {
       scopePredicates.push(
         and(
           eq(schema.memoryItemsTable.scopeType, "team"),
-          inArray(schema.memoryItemsTable.scopeId, params.teamIds),
+          MemoryItemModel.scopeIdIn(params.teamIds),
         ) as SQL,
       );
     }
@@ -682,7 +681,7 @@ class MemoryItemModel {
       scopePredicates.push(
         and(
           eq(schema.memoryItemsTable.scopeType, "organization"),
-          eq(schema.memoryItemsTable.scopeId, params.organizationId),
+          MemoryItemModel.scopeIdEquals(params.organizationId),
         ) as SQL,
       );
     }
@@ -699,6 +698,24 @@ class MemoryItemModel {
     role: MemoryRequesterRole,
   ): boolean {
     return role === "admin";
+  }
+
+  private static scopeIdEquals(scopeId: string): SQL {
+    // Legacy compatibility: some environments may still have memory_item.scope_id typed as uuid.
+    // Casting the DB column to text prevents invalid uuid cast failures for text IDs.
+    return sql`${schema.memoryItemsTable.scopeId}::text = ${scopeId}`;
+  }
+
+  private static scopeIdIn(scopeIds: string[]): SQL {
+    if (scopeIds.length === 0) {
+      return sql`false`;
+    }
+
+    const scopePredicates = scopeIds.map((scopeId) =>
+      MemoryItemModel.scopeIdEquals(scopeId),
+    );
+    const scopePredicate = or(...scopePredicates);
+    return scopePredicate ?? sql`false`;
   }
 
   static async incrementRetrievalCount(id: string): Promise<void> {

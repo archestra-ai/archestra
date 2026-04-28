@@ -387,6 +387,9 @@ export async function isMcpServerAssignableToTarget(params: {
   const { mcpServer, target } = params;
 
   if (mcpServer.teamId) {
+    if (target.scope === "org") {
+      return true;
+    }
     if (target.scope === "team") {
       return target.teamIds.includes(mcpServer.teamId);
     }

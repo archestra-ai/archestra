@@ -6,7 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { ModelModel } from "@/models";
+import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -323,6 +323,192 @@ describe("model router proxy routes", () => {
       });
     });
   }
+
+  test("passes bearer provider keys through Gemini and Cohere translators", async ({
+    makeAgent,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "gemini", modelId: "gemini-2.5-pro" });
+    await upsertModel({ provider: "cohere", modelId: "command-a-03-2025" });
+    const agent = await makeAgent({
+      name: "Model Router Provider Key Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedGeminiApiKey: string | undefined;
+    let capturedCohereApiKey: string | undefined;
+    vi.mocked(geminiAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedGeminiApiKey = apiKey;
+        return createGeminiTestClient() as never;
+      },
+    );
+    vi.mocked(cohereAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedCohereApiKey = apiKey;
+        return createCohereTestClient() as never;
+      },
+    );
+
+    const geminiResponse = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-gemini-provider-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gemini:gemini-2.5-pro",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+    const cohereResponse = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-cohere-provider-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "cohere:command-a-03-2025",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(geminiResponse.statusCode).toBe(200);
+    expect(cohereResponse.statusCode).toBe(200);
+    expect(capturedGeminiApiKey).toBe("test-gemini-provider-key");
+    expect(capturedCohereApiKey).toBe("test-cohere-provider-key");
+  });
+
+  test("resolves virtual keys and scopes model router access to the key provider", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
+    await upsertModel({ provider: "groq", modelId: "llama-3.1-8b-instant" });
+
+    const organization = await makeOrganization();
+    const secret = await makeSecret({
+      secret: { apiKey: "sk-openai-parent-key" },
+    });
+    const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider: "openai",
+    });
+    const {
+      virtualKey: { id: virtualKeyId },
+      value,
+    } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "model-router-openai-vk",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Virtual Key Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedApiKey: string | undefined;
+    vi.mocked(openaiAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createOpenAiTestClient() as never;
+      },
+    );
+
+    const modelsResponse = await app.inject({
+      method: "GET",
+      url: `/v1/model-router/${agent.id}/models`,
+      headers: {
+        authorization: `Bearer ${value}`,
+      },
+    });
+    const chatResponse = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "openai:gpt-5.4",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(modelsResponse.statusCode).toBe(200);
+    expect(modelsResponse.json().data).toEqual([
+      expect.objectContaining({ id: "openai:gpt-5.4" }),
+    ]);
+    expect(chatResponse.statusCode).toBe(200);
+    expect(capturedApiKey).toBe("sk-openai-parent-key");
+    expect(
+      (await VirtualApiKeyModel.findById(virtualKeyId))?.lastUsedAt,
+    ).not.toBeNull();
+  });
+
+  test("allows keyless Gemini system keys through model router responses", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { LlmProviderApiKeyModel } = await import("@/models");
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "gemini", modelId: "gemini-2.5-pro" });
+
+    const organization = await makeOrganization();
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId: organization.id,
+      name: "Vertex AI",
+      provider: "gemini",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      chatApiKeyId: systemKey.id,
+      name: "model-router-gemini-system-vk",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Keyless Gemini Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedApiKey: string | undefined | null = null;
+    vi.mocked(geminiAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createGeminiTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gemini:gemini-2.5-pro",
+        input: "Hello",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "response",
+      model: "gemini:gemini-2.5-pro",
+    });
+    expect(capturedApiKey).toBeUndefined();
+  });
 
   test("routes provider-qualified model ids to their provider", async ({
     makeAgent,

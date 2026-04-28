@@ -1,5 +1,5 @@
 {
-  "id": "6d89fd4a-a5bf-4189-9fe5-b20fee1a1aa5",
+  "id": "5ebe015a-e90a-41cb-9ca9-0973c3e95a69",
   "prevId": "8a0dc127-f0c2-4865-a0bd-7a6ae7a5a47e",
   "version": "7",
   "dialect": "postgresql",
@@ -781,6 +781,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "tool_exposure_mode": {
+          "name": "tool_exposure_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'full'"
+        },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
           "type": "jsonb",
@@ -1496,122 +1503,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.chatops_thread_agent_override": {
-      "name": "chatops_thread_agent_override",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "binding_id": {
-          "name": "binding_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "chatops_thread_override_binding_thread_idx": {
-          "name": "chatops_thread_override_binding_thread_idx",
-          "columns": [
-            {
-              "expression": "binding_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "chatops_thread_override_agent_id_idx": {
-          "name": "chatops_thread_override_agent_id_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "chatops_thread_agent_override_binding_id_chatops_channel_binding_id_fk": {
-          "name": "chatops_thread_agent_override_binding_id_chatops_channel_binding_id_fk",
-          "tableFrom": "chatops_thread_agent_override",
-          "tableTo": "chatops_channel_binding",
-          "columnsFrom": [
-            "binding_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "chatops_thread_agent_override_agent_id_agents_id_fk": {
-          "name": "chatops_thread_agent_override_agent_id_agents_id_fk",
-          "tableFrom": "chatops_thread_agent_override",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

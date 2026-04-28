@@ -1,6 +1,6 @@
 import {
+  type AgentToolAssignmentMode,
   DEFAULT_LLM_PROXY_NAME,
-  DEFAULT_MCP_GATEWAY_NAME,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
   urlSlugify,
@@ -37,11 +37,13 @@ import type {
   SortingQuery,
   UpdateAgent,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
+import AgentToolModel from "./agent-tool";
 import MemberModel from "./member";
 import ToolModel from "./tool";
 
@@ -149,7 +151,7 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: InsertAgent,
+    }: InsertAgent & { isPersonalGateway?: boolean; slug?: string },
     authorId?: string,
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -164,7 +166,7 @@ class AgentModel {
 
     const slug =
       agent.agentType === "mcp_gateway"
-        ? await AgentModel.generateUniqueSlug(agent.name)
+        ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
         : undefined;
 
     const [createdAgent] = await AgentModel.insertWithSlugRetry({
@@ -182,6 +184,22 @@ class AgentModel {
     // Assign labels to the agent if provided
     if (labels && labels.length > 0) {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
+    }
+
+    // Assign tools for agents and MCP gateways when tool assignment mode is automatic
+    const hasLabels = labels && labels.length > 0;
+    const supportsAutomaticToolAssignment = isAutomaticToolAssignmentSupported(
+      createdAgent.agentType,
+    );
+    const isAutomaticToolAssignment =
+      createdAgent.toolAssignmentMode === "automatic";
+
+    if (
+      hasLabels &&
+      supportsAutomaticToolAssignment &&
+      isAutomaticToolAssignment
+    ) {
+      await AgentToolModel.syncAgentToolsFromLabels(createdAgent.id);
     }
 
     // Assign knowledge bases if provided
@@ -516,6 +534,44 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+  }
+
+  static async findByLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      agentType: AgentType;
+      toolAssignmentMode: AgentToolAssignmentMode;
+    }[]
+  > {
+    if (pairs.length === 0) return [];
+
+    const rows = await db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        toolAssignmentMode: schema.agentsTable.toolAssignmentMode,
+      })
+      .from(schema.agentLabelsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.agentLabelsTable.keyId, pair.keyId),
+              eq(schema.agentLabelsTable.valueId, pair.valueId),
+            ),
+          ),
+        ),
+      );
+
+    return rows;
   }
 
   /**
@@ -1125,16 +1181,6 @@ class AgentModel {
     return result;
   }
 
-  static async getMCPGatewayOrCreateDefault(
-    organizationId?: string,
-  ): Promise<Agent> {
-    return AgentModel.getOrCreateDefaultByType(
-      "mcp_gateway",
-      DEFAULT_MCP_GATEWAY_NAME,
-      organizationId,
-    );
-  }
-
   static async getLLMProxyOrCreateDefault(
     organizationId?: string,
   ): Promise<Agent> {
@@ -1194,7 +1240,7 @@ class AgentModel {
   }
 
   private static async getOrCreateDefaultByType(
-    agentType: "mcp_gateway" | "llm_proxy",
+    agentType: "llm_proxy",
     defaultName: string,
     organizationId?: string,
   ): Promise<Agent> {
@@ -1344,6 +1390,27 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
+    // Assign or unassign tools according to toolAssignmentMode changes for agents and MCP gateways
+    const supportsAutomaticToolAssignment = isAutomaticToolAssignmentSupported(
+      updatedAgent.agentType,
+    );
+    const labelsChanged = labels !== undefined;
+    const isCurrentlyAutomatic =
+      updatedAgent.toolAssignmentMode === "automatic";
+    const isPreviouslyAutomatic =
+      existingAgent.toolAssignmentMode === "automatic";
+    const isSwitchingToAutomatic =
+      isCurrentlyAutomatic && !isPreviouslyAutomatic;
+    const isSwitchingToManual = !isCurrentlyAutomatic && isPreviouslyAutomatic;
+
+    if (supportsAutomaticToolAssignment) {
+      if ((isCurrentlyAutomatic && labelsChanged) || isSwitchingToAutomatic) {
+        await AgentToolModel.syncAgentToolsFromLabels(id);
+      } else if (isSwitchingToManual) {
+        await AgentToolModel.deleteCatalogToolsForAgent(id);
+      }
+    }
+
     // Sync knowledge base assignments if knowledgeBaseIds is provided
     if (knowledgeBaseIds !== undefined) {
       await AgentKnowledgeBaseModel.syncForAgent(id, knowledgeBaseIds);
@@ -1367,14 +1434,7 @@ class AgentModel {
       currentConnectorIds,
       currentSuggestedPrompts,
     ] = await Promise.all([
-      db
-        .select({ tool: schema.toolsTable })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .where(eq(schema.agentToolsTable.agentId, updatedAgent?.id)),
+      AgentToolModel.getToolsForAgent(id),
       AgentTeamModel.getTeamDetailsForAgent(id),
       AgentLabelModel.getLabelsForAgent(id),
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
@@ -1386,7 +1446,7 @@ class AgentModel {
 
     return {
       ...updatedAgent,
-      tools: toolRows.map((row) => row.tool),
+      tools: toolRows,
       teams: currentTeams,
       labels: currentLabels,
       knowledgeBaseIds: currentKbIds,
@@ -1510,6 +1570,188 @@ class AgentModel {
   }
 
   /**
+   * Returns the user's personal MCP gateway for the given organization, or null
+   * if none exists.
+   */
+  static async getPersonalMcpGateway(
+    userId: string,
+    organizationId: string,
+  ): Promise<Agent | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.authorId, userId),
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    return (await AgentModel.findById(row.id, userId, true)) ?? null;
+  }
+
+  /**
+   * Ensures the user has a personal MCP gateway for the given organization.
+   * Idempotent: returns the existing one if present, otherwise creates one.
+   * The personal gateway auto-collects tools from MCP servers the user installs
+   * and cannot be deleted.
+   */
+  static async ensurePersonalMcpGateway(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Agent> {
+    const { userId, organizationId } = params;
+
+    const existing = await AgentModel.getPersonalMcpGateway(
+      userId,
+      organizationId,
+    );
+    if (existing) return existing;
+
+    const [userRow] = await db
+      .select({ name: schema.usersTable.name })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, userId))
+      .limit(1);
+    const userPart = (userRow && urlSlugify(userRow.name)) || userId;
+    const slug = `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`;
+
+    try {
+      const gateway = await AgentModel.create(
+        {
+          organizationId,
+          name: PERSONAL_MCP_GATEWAY_NAME,
+          slug,
+          agentType: "mcp_gateway",
+          scope: "personal",
+          description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
+          isPersonalGateway: true,
+        },
+        userId,
+      );
+
+      logger.info(
+        { userId, organizationId, agentId: gateway.id },
+        "Created personal MCP gateway",
+      );
+
+      return gateway;
+    } catch (error) {
+      // Lost a race against a concurrent caller — re-fetch the row that won.
+      // Drizzle wraps the pg error, so use the cause-walking helper rather than
+      // checking error.message directly (the index name lives on error.cause).
+      if (
+        !isUniqueConstraintError(error) ||
+        !errorMentions(error, "agents_personal_gateway_per_member_idx")
+      ) {
+        throw error;
+      }
+
+      const winner = await AgentModel.getPersonalMcpGateway(
+        userId,
+        organizationId,
+      );
+      if (!winner) throw error;
+      return winner;
+    }
+  }
+
+  /**
+   * Bulk-creates personal MCP gateways for every member that lacks one. Uses
+   * a single LEFT JOIN to find the missing (userId, organizationId) pairs and
+   * a single bulk INSERT. Intended for the startup backfill — for new members
+   * created at runtime, use {@link AgentModel.ensurePersonalMcpGateway}.
+   * Returns the number of rows actually inserted.
+   */
+  static async bulkBackfillPersonalMcpGateways(): Promise<number> {
+    const missing = await db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.usersTable.id, schema.membersTable.userId),
+      )
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.agentsTable.authorId, schema.membersTable.userId),
+          eq(
+            schema.agentsTable.organizationId,
+            schema.membersTable.organizationId,
+          ),
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      )
+      .where(isNull(schema.agentsTable.id));
+
+    if (missing.length === 0) return 0;
+
+    const rows = missing.map((m) => {
+      const userPart = urlSlugify(m.userName) || m.userId;
+      return {
+        organizationId: m.organizationId,
+        authorId: m.userId,
+        name: PERSONAL_MCP_GATEWAY_NAME,
+        description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
+        agentType: "mcp_gateway" as const,
+        scope: "personal" as const,
+        isPersonalGateway: true,
+        slug: `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`,
+      };
+    });
+
+    const inserted = await db
+      .insert(schema.agentsTable)
+      .values(rows)
+      .onConflictDoNothing({
+        target: [
+          schema.agentsTable.organizationId,
+          schema.agentsTable.authorId,
+        ],
+        where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true`,
+      })
+      .returning({ id: schema.agentsTable.id });
+
+    if (inserted.length < missing.length) {
+      logger.warn(
+        { missing: missing.length, inserted: inserted.length },
+        "bulkBackfillPersonalMcpGateways inserted fewer rows than expected",
+      );
+    }
+
+    return inserted.length;
+  }
+
+  /**
+   * Deletes every personal MCP gateway authored by the given user across all
+   * organizations. Called from the better-auth user.delete hook so the personal
+   * gateway is removed alongside its owner — the agents.author_id FK is
+   * ON DELETE SET NULL (to preserve authorship of non-personal agents), so
+   * without this the personal gateway row would orphan with author_id = NULL
+   * and become permanently undeletable through the API guard.
+   */
+  static async deletePersonalMcpGatewaysForUser(userId: string): Promise<void> {
+    await db
+      .delete(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.authorId, userId),
+          eq(schema.agentsTable.agentType, "mcp_gateway"),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      );
+  }
+
+  /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
    */
@@ -1568,4 +1810,18 @@ class AgentModel {
   }
 }
 
+const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
+const PERSONAL_MCP_GATEWAY_DESCRIPTION =
+  "All MCP servers you install are automatically connected to this gateway.";
+
+function errorMentions(error: unknown, needle: string): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message.includes(needle)) return true;
+  return errorMentions((error as { cause?: unknown }).cause, needle);
+}
+
 export default AgentModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}

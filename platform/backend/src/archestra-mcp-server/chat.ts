@@ -525,4 +525,3 @@ async function handleSwapToDefaultAgent(params: {
     return catchError(error, "swapping to default agent");
   }
 }
-

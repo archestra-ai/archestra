@@ -11,6 +11,7 @@ import type {
   AgentScope,
   CredentialResolutionMode,
   InternalMcpCatalog,
+  ResourceVisibilityScope,
   Tool,
 } from "@/types";
 
@@ -24,6 +25,7 @@ export type PrefetchedMcpServer = {
   ownerId: string | null;
   catalogId: string | null;
   teamId?: string | null;
+  scope: ResourceVisibilityScope;
 };
 
 export type AgentToolAssignmentPrefetchedData = {
@@ -215,8 +217,8 @@ export async function validateCredentialSource(params: {
   tool?: Tool;
   toolId?: string;
   preFetchedServer?:
-    | (Pick<PrefetchedMcpServer, "id" | "catalogId"> &
-        Partial<Pick<PrefetchedMcpServer, "ownerId">>)
+    | (Pick<PrefetchedMcpServer, "id" | "catalogId" | "scope"> &
+        Partial<Pick<PrefetchedMcpServer, "ownerId" | "teamId">>)
     | null;
 }) {
   const tool =
@@ -297,7 +299,7 @@ export async function validateAssignedMcpServer(params: {
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
-    "id" | "ownerId" | "catalogId" | "teamId"
+    "id" | "ownerId" | "catalogId" | "teamId" | "scope"
   > | null;
 }): Promise<AgentToolAssignmentError | null> {
   const { agentId, mcpServerId, tool, preFetchedServer } = params;
@@ -376,7 +378,7 @@ async function isOrgAdmin(
 }
 
 export async function isMcpServerAssignableToTarget(params: {
-  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId">;
+  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
   target: {
     organizationId: string;
     scope: AgentScope;
@@ -385,6 +387,10 @@ export async function isMcpServerAssignableToTarget(params: {
   };
 }): Promise<boolean> {
   const { mcpServer, target } = params;
+
+  if (mcpServer.scope === "org") {
+    return true;
+  }
 
   if (mcpServer.teamId) {
     if (target.scope === "team") {
@@ -421,7 +427,7 @@ export async function isMcpServerAssignableToTarget(params: {
 }
 
 export async function filterMcpServersAssignableToTarget<
-  TMcpServer extends Pick<PrefetchedMcpServer, "ownerId" | "teamId">,
+  TMcpServer extends Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">,
 >(params: {
   mcpServers: TMcpServer[];
   target: {
@@ -507,7 +513,7 @@ function getAssignmentValidationMessage(
 }
 
 function isMcpServerAssignableToPrefetchedTarget(params: {
-  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId">;
+  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
   target: {
     scope: AgentScope;
     authorId: string | null;
@@ -526,6 +532,10 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
     target,
     targetTeamMemberOwnerIdSet,
   } = params;
+
+  if (mcpServer.scope === "org") {
+    return true;
+  }
 
   if (mcpServer.teamId) {
     if (target.scope === "team") {

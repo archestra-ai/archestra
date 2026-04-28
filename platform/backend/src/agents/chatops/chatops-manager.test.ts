@@ -1653,10 +1653,13 @@ describe("ChatOpsManager attachment passthrough", () => {
       .spyOn(a2aExecutor, "executeA2AMessage")
       .mockImplementation(async (params) => {
         if (params.agentId === routerAgent.id) {
+          if (!params.chatOpsThreadId) {
+            throw new Error("Expected chatOpsThreadId");
+          }
           // Simulate swap_agent creating a thread override
           await ChatOpsThreadAgentOverrideModel.upsert(
             binding.id,
-            params.chatOpsThreadId!,
+            params.chatOpsThreadId,
             specialistAgent.id,
           );
           return {
@@ -1761,10 +1764,13 @@ describe("ChatOpsManager attachment passthrough", () => {
       .spyOn(a2aExecutor, "executeA2AMessage")
       .mockImplementation(async (params) => {
         if (params.agentId === routerAgent.id) {
+          if (!params.chatOpsThreadId) {
+            throw new Error("Expected chatOpsThreadId");
+          }
           // Simulate swap_agent creating a thread override
           await ChatOpsThreadAgentOverrideModel.upsert(
             binding.id,
-            params.chatOpsThreadId!,
+            params.chatOpsThreadId,
             specialistAgent.id,
           );
           return {

@@ -100,6 +100,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
               ),
+            excludeOtherPersonalAgents: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Hide personal agents owned by other users. Admin-only; no-op for non-admins.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -128,6 +137,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorIds,
           excludeAuthorIds,
           labels,
+          excludeOtherPersonalAgents,
           limit,
           offset,
           sortBy,
@@ -178,6 +188,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // authorIds and excludeAuthorIds are admin-only
             authorIds: isAdmin ? authorIds : undefined,
             excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+            excludeOtherPersonalAgents: isAdmin
+              ? excludeOtherPersonalAgents
+              : undefined,
             labels: parseLabelsParam(labels),
           },
           user.id,
@@ -281,9 +294,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return reply.send(
-        await AgentModel.getMCPGatewayOrCreateDefault(request.organizationId),
-      );
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      return reply.send(gateway);
     },
   );
 
@@ -713,6 +728,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           403,
           "Cannot delete a default agent. Set another agent as default first.",
         );
+      }
+
+      // Prevent deletion of a user's personal MCP gateway
+      if (agent.isPersonalGateway) {
+        throw new ApiError(403, "Personal MCP gateways cannot be deleted.");
       }
 
       const success = await AgentModel.delete(id);

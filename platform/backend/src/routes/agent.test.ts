@@ -95,6 +95,26 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts[0].summaryTitle).toBe("Quick start");
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
     });
+
+    test("should create an agent with tool modes", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Search Only Agent ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "agent",
+          scope: "personal",
+          teams: [],
+          toolExposureMode: "search_and_run_only",
+          toolAssignmentMode: "automatic",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const agent = response.json();
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+      expect(agent.toolAssignmentMode).toBe("automatic");
+    });
   });
 
   describe("GET /api/agents/:id", () => {
@@ -229,6 +249,42 @@ describe("agent routes", () => {
       expect(fetched.systemPrompt).toBeNull();
       expect(fetched.suggestedPrompts).toHaveLength(0);
     });
+
+    test("should update and persist toolExposureMode", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Agent Exposure Test ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          toolExposureMode: "search_and_run_only",
+          toolAssignmentMode: "automatic",
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json().toolExposureMode).toBe(
+        "search_and_run_only",
+      );
+      expect(updateResponse.json().toolAssignmentMode).toBe("automatic");
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}`,
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
+      expect(getResponse.json().toolAssignmentMode).toBe("automatic");
+    });
   });
 
   describe("DELETE /api/agents/:id", () => {
@@ -259,6 +315,73 @@ describe("agent routes", () => {
       });
 
       expect(getResponse.statusCode).toBe(404);
+    });
+
+    test("returns 403 when deleting a personal MCP gateway and the row remains", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId,
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${personalGateway.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(403);
+
+      const stillThere = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      expect(stillThere?.id).toBe(personalGateway.id);
+    });
+
+    test("ignores isPersonalGateway in PUT body so the deletion guard cannot be bypassed", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId,
+      });
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${personalGateway.id}`,
+        payload: { isPersonalGateway: false },
+      });
+      expect(updateResponse.statusCode).toBe(200);
+
+      const reread = await AgentModel.findById(
+        personalGateway.id,
+        user.id,
+        true,
+      );
+      expect(reread?.isPersonalGateway).toBe(true);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${personalGateway.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(403);
+    });
+
+    test("ignores isPersonalGateway in POST body so phantom flagged rows cannot be created", async () => {
+      const name = `Phantom ${crypto.randomUUID().slice(0, 8)}`;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name,
+          scope: "personal",
+          teams: [],
+          isPersonalGateway: true,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const created = response.json();
+      expect(created.isPersonalGateway).toBe(false);
     });
   });
 
@@ -315,6 +438,46 @@ describe("agent routes", () => {
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.data[0].scope).toBe("personal");
       expect(result.data[0].name).toContain("Zulu Personal");
+    });
+
+    test("excludeOtherPersonalAgents hides other users' personal agents for admin", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+
+      await makeAgent({
+        name: `Own Personal ${suffix}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Other Personal ${suffix}`,
+        organizationId,
+        scope: "personal",
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Org Agent ${suffix}`,
+        organizationId,
+        scope: "org",
+        authorId: otherUser.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&excludeOtherPersonalAgents=true`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const names = response.json().data.map((a: { name: string }) => a.name);
+      expect(names).toContain(`Own Personal ${suffix}`);
+      expect(names).toContain(`Org Agent ${suffix}`);
+      expect(names).not.toContain(`Other Personal ${suffix}`);
     });
   });
 
@@ -391,7 +554,7 @@ describe("agent routes", () => {
   });
 
   describe("GET /api/mcp-gateways/default", () => {
-    test("should get default MCP gateway", async () => {
+    test("returns the caller's personal MCP gateway", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/mcp-gateways/default",
@@ -399,11 +562,81 @@ describe("agent routes", () => {
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
-      expect(agent).toHaveProperty("id");
-      expect(agent).toHaveProperty("name");
-      expect(agent.isDefault).toBe(true);
+      expect(agent.agentType).toBe("mcp_gateway");
+      expect(agent.scope).toBe("personal");
+      expect(agent.isPersonalGateway).toBe(true);
+      expect(agent.authorId).toBe(user.id);
       expect(Array.isArray(agent.tools)).toBe(true);
       expect(Array.isArray(agent.teams)).toBe(true);
+    });
+
+    test("returns different gateway ids for different users in the same org", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId);
+
+      const otherApp = createFastifyInstance();
+      otherApp.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & {
+            user: User;
+            organizationId: string;
+          }
+        ).user = otherUser;
+        (
+          request as typeof request & {
+            user: User;
+            organizationId: string;
+          }
+        ).organizationId = organizationId;
+      });
+      const { default: agentRoutes } = await import("./agent");
+      await otherApp.register(agentRoutes);
+
+      try {
+        const responseA = await app.inject({
+          method: "GET",
+          url: "/api/mcp-gateways/default",
+        });
+        const responseB = await otherApp.inject({
+          method: "GET",
+          url: "/api/mcp-gateways/default",
+        });
+
+        expect(responseA.statusCode).toBe(200);
+        expect(responseB.statusCode).toBe(200);
+        const agentA = responseA.json();
+        const agentB = responseB.json();
+        expect(agentA.id).not.toBe(agentB.id);
+        expect(agentA.authorId).toBe(user.id);
+        expect(agentB.authorId).toBe(otherUser.id);
+      } finally {
+        await otherApp.close();
+      }
+    });
+
+    test("lazily creates a personal gateway on first GET when none exists", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const before = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      expect(before).toBeNull();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp-gateways/default",
+      });
+      expect(response.statusCode).toBe(200);
+
+      const after = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      expect(after).not.toBeNull();
+      expect(response.json().id).toBe(after?.id);
     });
   });
 

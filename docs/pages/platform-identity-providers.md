@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-04-20
+lastUpdated: 2026-04-28
 ---
 
 <!--
@@ -35,14 +35,14 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 1. Admin configures an Identity Provider in **Settings > Identity Providers**
 2. SSO buttons appear on the sign-in page for enabled providers
 3. Users click the SSO button and authenticate with their identity provider
-4. Archestra verifies the authenticated email belongs to the provider's allowed email domains
+4. Archestra applies provider configuration, role mapping, and team sync rules
 5. After successful authentication, users are automatically provisioned and logged in
 
 ![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.webp)
 
 ### Allowed Email Domains
 
-The **Allowed Email Domains** field is the Archestra-side sign-in boundary for an SSO provider. Users can sign in with that provider only when the email returned by the identity provider matches one of the configured domains.
+The **Allowed Email Domains** field is an optional Archestra-side sign-in boundary. When configured, users can sign in with that provider only when the email returned by the identity provider matches one of the configured domains.
 
 Use comma-separated domains for multi-domain SSO, for example:
 
@@ -51,6 +51,8 @@ company.com, subsidiary.com
 ```
 
 Subdomains are included. For example, `engineering.company.com` matches `company.com`.
+
+The current identity provider UI shows this field for Google providers. Other providers can rely on the IdP application's own user and group assignments, plus optional Archestra role mapping and team sync.
 
 ## Disabling Basic Authentication
 
@@ -102,21 +104,106 @@ http://localhost:3000/api/auth/sso/saml2/sp/acs/{ProviderId}
 
 ### Okta
 
-Okta is an enterprise identity management platform. To configure Okta SSO:
+Okta is an enterprise identity management platform. Archestra supports Okta OIDC SSO with self-service configuration.
 
-1. In Okta Admin Console, create a new **Web Application**
-2. Set the **Sign-in redirect URI** to your callback URL: `https://your-domain.com/api/auth/sso/callback/Okta`
-3. Copy the **Client ID** and **Client Secret**
-4. In Archestra, click **Enable** on the Okta card
-5. Enter your Okta domain (e.g., `your-org.okta.com`)
-6. Enter the Client ID and Client Secret
-7. Click **Create Provider**
+#### Prerequisites
 
-**Okta-specific requirements:**
+- An Okta admin account with permission to create app integrations
+- An Archestra admin account
+- Your Archestra external URL, for example `https://your-archestra-domain.com`
+- Your Okta org issuer, for example `https://your-org.okta.com`
 
-- Disable **DPoP** (Demonstrating Proof of Possession) in your Okta application settings. Archestra does not support DPoP.
-- The issuer URL is automatically set to `https://your-domain.okta.com`
-- If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+#### Supported Features
+
+- SP-initiated SSO
+- IdP-initiated SSO through Okta's OIDC app tile
+- Just-In-Time user provisioning
+- SP-initiated logout when Okta publishes an `end_session_endpoint`
+
+Archestra does not support Okta DPoP for SSO clients. Disable **Require Demonstrating Proof of Possession (DPoP) header in token requests** in the Okta app integration.
+
+#### Okta OIN App Installation
+
+When installing Archestra from the Okta Integration Network (OIN), enter your Archestra hostname without the protocol.
+
+For example, if your Archestra URL is:
+
+```
+https://your-archestra-domain.com
+```
+
+enter:
+
+```
+your-archestra-domain.com
+```
+
+#### Configuration Steps
+
+1. In the Okta Admin Console, go to **Applications > Applications**.
+2. Click **Create App Integration**.
+3. Select **OIDC - OpenID Connect** and **Web Application**.
+4. Set **Sign-in redirect URIs** to:
+
+   ```
+   https://your-archestra-domain.com/api/auth/sso/callback/Okta
+   ```
+
+5. Set **Sign-out redirect URIs** to:
+
+   ```
+   https://your-archestra-domain.com/auth/sign-in
+   ```
+
+6. Assign the users or groups that should access Archestra.
+7. Save the Okta app integration.
+8. On the app's **Sign On** tab, copy the **Client ID** and **Client Secret**. Keep the Client Secret private and do not commit it to version control.
+9. Find your Okta org issuer in the upper-right profile menu of the Okta Admin Console or from the Admin Console browser URL. It usually looks like:
+
+   ```
+   https://your-org.okta.com
+   ```
+
+10. In Archestra, go to **Settings > Identity Providers** and click **Enable** on the Okta card.
+11. Enter your Okta issuer URL, for example:
+
+```
+https://your-org.okta.com
+```
+
+12. Enter the Client ID and Client Secret.
+13. Keep the discovery endpoint empty unless you need a custom value. Archestra derives it from the issuer as:
+
+    ```
+    https://your-org.okta.com/.well-known/openid-configuration
+    ```
+
+14. Click **Create Provider**.
+
+If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+
+#### SP-Initiated SSO
+
+Users can start sign-in from the Archestra sign-in page by selecting **Sign in with Okta**. After Okta authenticates the user, Archestra provisions the user if needed and opens the app.
+
+To test, use a private browser window with a user who is assigned to the Okta app.
+
+#### IdP-Initiated SSO
+
+Okta app tile launches should use:
+
+```
+https://your-archestra-domain.com/auth/sso/Okta
+```
+
+This route starts the Okta SSO flow immediately and redirects the user back to Okta with the required authorization request.
+
+#### Troubleshoot
+
+- If setup fails with an issuer mismatch, verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.
+- If login fails after redirect, verify that the Okta **Sign-in redirect URI** exactly matches the Archestra callback URL, including `Okta` casing.
+- If sign-out returns an Okta error, verify that the Okta **Sign-out redirect URI** is set to `https://your-archestra-domain.com/auth/sign-in`, or disable **Enable RP-Initiated Logout** in Archestra for that provider.
+- If a user is denied after successful Okta authentication, verify that the user is assigned to the Okta app and matches any configured Archestra role mapping rules.
 
 ### Google
 
@@ -203,7 +290,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `azure`, `auth0`)
 - **Issuer**: The OIDC issuer URL
-- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
+- **Allowed Email Domains**: Optional email domains allowed to sign in through this provider when configured. Use comma-separated domains for multi-domain SSO.
 - **Client ID** and **Client Secret**: From your identity provider
 - **Discovery Endpoint**: The `.well-known/openid-configuration` URL (optional if issuer supports discovery)
 
@@ -225,7 +312,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `okta-saml`, `adfs`)
 - **Issuer**: Your organization's identifier
-- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
+- **Allowed Email Domains**: Optional email domains allowed to sign in through this provider when configured. Use comma-separated domains for multi-domain SSO.
 - **SAML Issuer / Entity ID**: The identity provider's entity ID (from IdP metadata)
 - **SSO Entry Point URL**: The IdP's Single Sign-On URL
 - **IdP Certificate**: The X.509 certificate from your IdP for signature verification

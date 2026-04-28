@@ -56,8 +56,19 @@ describe("memory source contract", () => {
       runId: "chat_extract:run-1",
       idempotencyKey: "idem-1",
       dedupKey: "dedup-1",
-      extractorVersion: "v1.0.0",
+      extractorVersion: "v1.2.0",
       policyFlags: [],
+      candidateProvenance: {
+        sourceRole: "mixed",
+        userConfirmed: true,
+        evidence: [
+          {
+            role: "user",
+            quote: "Yes, keep dark mode preference",
+            messageId: "message-1",
+          },
+        ],
+      },
     });
 
     expect(contract.sourceType).toBe("chat");
@@ -70,6 +81,13 @@ describe("memory source contract", () => {
       runId: "chat_extract:run-1",
       idempotencyKey: "idem-1",
       dedupKey: "dedup-1",
+    });
+    expect(contract.sourceMetadata.quality).toMatchObject({
+      extractorVersion: "v1.2.0",
+      candidateProvenance: {
+        sourceRole: "mixed",
+        userConfirmed: true,
+      },
     });
   });
 

@@ -71,6 +71,12 @@ describe("memory telemetry metrics", () => {
         reason: "idempotency_key",
       }),
     ).not.toThrow();
+    expect(() =>
+      metrics.reportMemoryExtractorDrop({
+        sourceType: "chat",
+        reason: "assistant_generated_unconfirmed",
+      }),
+    ).not.toThrow();
   });
 
   test("initializes and records metric values", async () => {
@@ -124,6 +130,10 @@ describe("memory telemetry metrics", () => {
       sourceType: "chat",
       reason: "content_hash_collision",
     });
+    metrics.reportMemoryExtractorDrop({
+      sourceType: "chat",
+      reason: "assistant_generated_unconfirmed",
+    });
 
     const candidatesMetric = client.register.getSingleMetric(
       "archestra_memory_candidates_total",
@@ -164,6 +174,9 @@ describe("memory telemetry metrics", () => {
     const dedupDropBySourceMetric = client.register.getSingleMetric(
       "archestra_memory_dedup_drop_total",
     );
+    const extractorDropMetric = client.register.getSingleMetric(
+      "archestra_memory_extractor_drop_total",
+    );
 
     expect(candidatesMetric).toBeDefined();
     expect(reviewedMetric).toBeDefined();
@@ -178,6 +191,7 @@ describe("memory telemetry metrics", () => {
     expect(reviewBySourceMetric).toBeDefined();
     expect(safetyBlockBySourceMetric).toBeDefined();
     expect(dedupDropBySourceMetric).toBeDefined();
+    expect(extractorDropMetric).toBeDefined();
 
     const candidatesValues = await candidatesMetric?.get();
     const reviewedValues = await reviewedMetric?.get();
@@ -191,6 +205,7 @@ describe("memory telemetry metrics", () => {
     const reviewBySourceValues = await reviewBySourceMetric?.get();
     const safetyBlockBySourceValues = await safetyBlockBySourceMetric?.get();
     const dedupDropBySourceValues = await dedupDropBySourceMetric?.get();
+    const extractorDropValues = await extractorDropMetric?.get();
 
     expect(candidatesValues?.values.some((value) => value.value === 1)).toBe(
       true,
@@ -227,6 +242,9 @@ describe("memory telemetry metrics", () => {
     ).toBe(true);
     expect(
       dedupDropBySourceValues?.values.some((value) => value.value === 1),
+    ).toBe(true);
+    expect(
+      extractorDropValues?.values.some((value) => value.value === 1),
     ).toBe(true);
   });
 });

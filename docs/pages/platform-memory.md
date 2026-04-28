@@ -3,7 +3,7 @@ title: Memory
 category: Agents
 order: 3
 description: Durable agent memory with review-first lifecycle, scoped ACL, sensitive-content screening, and optional prompt-time injection
-lastUpdated: 2026-04-24
+lastUpdated: 2026-04-29
 ---
 
 <!--
@@ -110,7 +110,8 @@ Disabling injection at any level is instant and cheap: the retrieval path return
 Async extraction runs after a conversation goes idle and is gated by organization setting `memoryExtractionEnabled`. In rollout 1 the extractor:
 
 - proposes only `user`-scope candidates;
-- uses prompt version `v1.0.0`, frozen for the rollout;
+- uses prompt version `v1.2.0`;
+- treats assistant messages as context only and rejects assistant-only or unconfirmed mixed-source candidates;
 - applies the same pre-write screen as manual create and MCP propose;
 - respects `memoryMaxCandidatesPerExtraction` and `memoryMaxContentLength`.
 
@@ -157,6 +158,7 @@ Memory emits a dedicated set of security counters. Full catalog, PromQL examples
 - `archestra_memory_review_policy_block_total{reason}` — approve-path blocks for high-risk flagged or quarantined candidates.
 - `archestra_memory_tombstone_hit_total{reason,match_type}` — replay suppression.
 - `archestra_memory_mcp_propose_block_total{reason}` — MCP `memory_propose` tool-boundary blocks.
+- `archestra_memory_extractor_drop_total{source_type,reason}` — deterministic extractor drops (for example, assistant-derived unconfirmed candidates).
 - `archestra_memory_candidate_scored_total{memory_type,scope_type,source_type,safety_score_bucket}` — scored candidates by type and safety band.
 - `archestra_memory_quarantined_total{reason,scope_type}` — items placed into quarantine by the pre-write scorer.
 - `archestra_memory_retrieved_total{memory_type,scope_type,safety_score_bucket}` — items retrieved for prompt injection.

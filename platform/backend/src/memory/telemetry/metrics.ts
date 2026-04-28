@@ -61,6 +61,8 @@ export type MemoryDedupDropReason =
   | "idempotency_key"
   | "content_hash_collision";
 
+export type MemoryExtractorDropReason = "assistant_generated_unconfirmed";
+
 let memoryCandidatesTotal: client.Counter<string>;
 let memoryReviewedTotal: client.Counter<string>;
 let memoryItemsTotal: client.Gauge<string>;
@@ -85,6 +87,7 @@ let memoryExtractorNoModelTotal: client.Counter<string>;
 let memoryExtractionStatusTotal: client.Counter<string>;
 let memoryMaintenanceDurationSeconds: client.Histogram<string>;
 let memoryMaintenanceRetriedTotal: client.Counter<string>;
+let memoryExtractorDropTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -247,6 +250,12 @@ export function initializeMemoryMetrics(): void {
     name: "archestra_memory_maintenance_retried_total",
     help: "Total conversations retried by memory maintenance",
     labelNames: ["organization_id"],
+  });
+
+  memoryExtractorDropTotal = new client.Counter({
+    name: "archestra_memory_extractor_drop_total",
+    help: "Total extractor candidate drops by deterministic reason",
+    labelNames: ["source_type", "reason"],
   });
 
   logger.info("Memory metrics initialized");
@@ -485,6 +494,20 @@ export function reportMemoryDedupDrop(params: {
   }
 
   memoryDedupDropBySourceTotal.inc({
+    source_type: params.sourceType,
+    reason: params.reason,
+  });
+}
+
+export function reportMemoryExtractorDrop(params: {
+  sourceType: MemorySourceType;
+  reason: MemoryExtractorDropReason;
+}): void {
+  if (!memoryExtractorDropTotal) {
+    return;
+  }
+
+  memoryExtractorDropTotal.inc({
     source_type: params.sourceType,
     reason: params.reason,
   });

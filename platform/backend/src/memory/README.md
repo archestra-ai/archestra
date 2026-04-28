@@ -119,6 +119,7 @@ Extractor prompt composition is deterministic and defense-in-depth:
 4. Conversation transcript.
 
 If `memoryExtractorPrompt` is empty or whitespace, it is treated as absent. Runtime candidate caps remain enforced in code (`slice` + hard cap) regardless of prompt content.
+Extractor provenance policy is enforced twice: prompt constraints require `sourceRole/userConfirmed/evidence`, and a deterministic post-parse gate drops assistant-only or unconfirmed mixed-source candidates before persistence.
 
 ## Extraction tracking and maintenance
 
@@ -160,6 +161,7 @@ Metrics live in [`telemetry/metrics.ts`](./telemetry/metrics.ts); spans in [`tel
 - `archestra_memory_review_policy_block_total{reason}`
 - `archestra_memory_tombstone_hit_total{reason,match_type}`
 - `archestra_memory_mcp_propose_block_total{reason}`
+- `archestra_memory_extractor_drop_total{source_type,reason}`
 - `archestra_memory_candidates_created_total{source_type}`
 - `archestra_memory_review_outcome_total{source_type,outcome}`
 - `archestra_memory_safety_block_total{source_type,reason}`

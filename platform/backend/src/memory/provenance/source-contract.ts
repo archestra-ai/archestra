@@ -10,6 +10,16 @@ import {
   MemorySourceTypeSchema,
 } from "@/types/memory-item";
 
+export type ChatCandidateProvenance = {
+  sourceRole: "user" | "assistant" | "mixed";
+  userConfirmed: boolean;
+  evidence: Array<{
+    role: "user" | "assistant";
+    quote: string;
+    messageId?: string;
+  }>;
+};
+
 export type MemorySourceContract = {
   sourceType: MemorySourceType;
   sourceId: string;
@@ -165,6 +175,7 @@ export function buildChatExtractionSourceContract(params: {
   dedupKey: string;
   extractorVersion: string;
   policyFlags: MemoryPolicyFlag[];
+  candidateProvenance?: ChatCandidateProvenance;
   future?: MemorySourceMetadataFuture | null;
 }): MemorySourceContract {
   return validateSourceContract({
@@ -188,6 +199,7 @@ export function buildChatExtractionSourceContract(params: {
       },
       quality: {
         extractorVersion: params.extractorVersion,
+        candidateProvenance: params.candidateProvenance,
       },
       safety: {
         policyFlags: normalizePolicyFlags(params.policyFlags),

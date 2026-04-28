@@ -35,7 +35,14 @@
     "origin": { "channel": "chat", "conversationId": "conversation-uuid", "messageIds": ["msg-1", "msg-2"] },
     "ingestion": { "runId": "chat_extract:run-uuid", "idempotencyKey": "sha256", "dedupKey": "sha256" },
     "actor": { "kind": "agent", "agentId": "agent-uuid" },
-    "quality": { "extractorVersion": "v1.0.0" },
+    "quality": {
+      "extractorVersion": "v1.2.0",
+      "candidateProvenance": {
+        "sourceRole": "mixed",
+        "userConfirmed": true,
+        "evidence": [{ "role": "user", "quote": "Yes, keep dark mode.", "messageId": "msg-1" }]
+      }
+    },
     "safety": { "policyFlags": [] },
     "future": { "projectId": null, "workspaceId": null, "sectionId": null }
   }

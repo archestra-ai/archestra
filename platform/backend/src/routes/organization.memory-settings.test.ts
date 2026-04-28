@@ -81,7 +81,7 @@ describe("PATCH /api/organization/memory-settings", () => {
       method: "PATCH",
       url: "/api/organization/memory-settings",
       payload: {
-        memoryInjectionTopK: 51,
+        memoryInjectionTopK: 1.5,
       },
     });
 

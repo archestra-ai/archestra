@@ -8,7 +8,7 @@ import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { handleApiError } from "./utils";
+import { getApiErrorMessage, handleApiError } from "./utils";
 
 export const appearanceKeys = {
   all: ["appearance"] as const,
@@ -544,7 +544,9 @@ export function useUpdateMemorySettings(
         await archestraApiSdk.updateMemorySettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
+        toast.error(onErrorMessage, {
+          description: formatMemorySettingsSaveError(error),
+        });
         return null;
       }
 
@@ -557,6 +559,51 @@ export function useUpdateMemorySettings(
     },
   });
 }
+
+function formatMemorySettingsSaveError(error: unknown): string {
+  const rawMessage = getApiErrorMessage(error);
+
+  if (rawMessage.includes("API key not found")) {
+    return "Selected extractor API key is not available in this organization.";
+  }
+
+  const validationMatch = rawMessage.match(/^body\/([A-Za-z0-9_]+)\s+(.+)$/);
+  if (!validationMatch) {
+    return rawMessage;
+  }
+
+  const [, fieldName, reason] = validationMatch;
+  const fieldLabel = MEMORY_SETTINGS_FIELD_LABELS[fieldName] ?? fieldName;
+  const readableReason = formatValidationReason(reason);
+  return `Invalid value for "${fieldLabel}". ${readableReason}`;
+}
+
+function formatValidationReason(reason: string): string {
+  if (reason.includes("expected int")) {
+    return "Please enter a whole number.";
+  }
+
+  if (reason.includes("Invalid uuid")) {
+    return "Please select a valid API key.";
+  }
+
+  return reason;
+}
+
+const MEMORY_SETTINGS_FIELD_LABELS: Record<string, string> = {
+  memoryExtractionEnabled: "Post-conversation extraction",
+  memoryInjectionEnabled: "Prompt-time memory injection",
+  memoryIdleDelaySeconds: "Idle delay before extraction (seconds)",
+  memoryExtractorMaxTokens: "Extractor max output tokens",
+  memoryExtractorModel: "Extractor model",
+  memoryExtractorChatApiKeyId: "Extractor API key",
+  memoryInjectionTokenBudget: "Token budget per request",
+  memoryInjectionTopK: "Top K retrieved items",
+  memoryTombstoneTtlDays: "Tombstone retention (days)",
+  memoryCandidateTtlDays: "Candidate retention (days)",
+  memoryMaxContentLength: "Max content length (characters)",
+  memoryMaxCandidatesPerExtraction: "Max candidates per extraction",
+};
 
 /**
  * Drop embedding configuration (deletes all KB documents, resets connector checkpoints)

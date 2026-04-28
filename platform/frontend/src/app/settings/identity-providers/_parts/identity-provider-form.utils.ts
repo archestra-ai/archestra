@@ -12,8 +12,7 @@ export function normalizeIdentityProviderFormValues(
   }
 
   const oidcConfig = normalizeOidcIssuerFields(data);
-  const enterpriseManagedCredentials =
-    oidcConfig.enterpriseManagedCredentials;
+  const enterpriseManagedCredentials = oidcConfig.enterpriseManagedCredentials;
   if (!enterpriseManagedCredentials) {
     return {
       ...data,

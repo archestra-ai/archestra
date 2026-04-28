@@ -37,10 +37,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Create a chat completion with OpenAI (uses default agent)",
         tags: ["LLM Proxy"],
-        body: OpenAi.API.ChatCompletionRequestSchema,
+        body: OpenAi.API.ChatCompletionOrResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          OpenAi.API.ChatCompletionOrResponsesResponseSchema,
         ),
       },
     },
@@ -65,10 +65,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: OpenAi.API.ChatCompletionRequestSchema,
+        body: OpenAi.API.ChatCompletionOrResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          OpenAi.API.ChatCompletionOrResponsesResponseSchema,
         ),
       },
     },

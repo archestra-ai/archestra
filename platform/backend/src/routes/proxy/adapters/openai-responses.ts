@@ -1,0 +1,826 @@
+import type {
+  ResponseFunctionCallArgumentsDeltaEvent,
+  ResponseFunctionCallArgumentsDoneEvent,
+  ResponseInputItem,
+  ResponseOutputItem,
+  ResponseStreamEvent,
+} from "openai/resources/responses/responses";
+import type {
+  ChunkProcessingResult,
+  CommonMcpToolDefinition,
+  CommonMessage,
+  CommonToolCall,
+  CommonToolResult,
+  LLMRequestAdapter,
+  LLMResponseAdapter,
+  LLMStreamAdapter,
+  OpenAi,
+  ToolCompressionStats,
+  UsageView,
+} from "@/types";
+import { createStreamAccumulatorState } from "@/types";
+
+// =============================================================================
+// TYPE ALIASES
+// =============================================================================
+
+type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
+type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
+type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
+type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
+
+type OpenAiResponsesRequest = {
+  model: string;
+  input?: string | ResponseInputItem[];
+  instructions?: string;
+  stream?: boolean | null;
+  tools?: Array<{
+    type: "function";
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+    strict?: boolean;
+  }>;
+  previous_response_id?: string;
+  store?: boolean;
+  [key: string]: unknown;
+};
+
+type OpenAiResponsesResponse = {
+  id: string;
+  object: string;
+  created_at: number;
+  model: string;
+  status: string;
+  output: ResponseOutputItem[];
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    input_tokens_details?: { cached_tokens: number };
+    output_tokens_details?: { reasoning_tokens: number };
+  };
+};
+
+// =============================================================================
+// REQUEST ADAPTER
+// =============================================================================
+
+export class OpenAIResponsesRequestAdapter
+  implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
+{
+  readonly provider = "openai" as const;
+  private request: OpenAiResponsesRequest;
+  private modifiedModel: string | null = null;
+  private toolResultUpdates: Record<string, string> = {};
+
+  constructor(request: OpenAiRequest) {
+    this.request = request as unknown as OpenAiResponsesRequest;
+  }
+
+  getModel(): string {
+    return this.modifiedModel ?? this.request.model;
+  }
+
+  isStreaming(): boolean {
+    return this.request.stream === true;
+  }
+
+  getMessages(): CommonMessage[] {
+    if (typeof this.request.input === "string") {
+      return [{ role: "user", content: this.request.input }];
+    }
+
+    if (!Array.isArray(this.request.input)) {
+      return [];
+    }
+
+    const toolNamesByCallId = getToolNamesByCallId(this.request.input);
+    return this.request.input.flatMap((item) =>
+      toCommonMessages(item, toolNamesByCallId),
+    );
+  }
+
+  getToolResults(): CommonToolResult[] {
+    if (!Array.isArray(this.request.input)) {
+      return [];
+    }
+
+    const toolNamesByCallId = getToolNamesByCallId(this.request.input);
+
+    return this.request.input.flatMap((item) => {
+      if (!isFunctionCallOutputItem(item)) {
+        return [];
+      }
+
+      return [
+        {
+          id: item.call_id,
+          name: toolNamesByCallId.get(item.call_id) ?? "unknown",
+          content: item.output,
+          isError: false,
+        },
+      ];
+    });
+  }
+
+  getTools(): CommonMcpToolDefinition[] {
+    if (!Array.isArray(this.request.tools)) {
+      return [];
+    }
+
+    return this.request.tools.flatMap((tool) => {
+      if (tool.type !== "function") {
+        return [];
+      }
+
+      return [
+        {
+          name: tool.name,
+          description: tool.description ?? undefined,
+          inputSchema: tool.parameters ?? {},
+        },
+      ];
+    });
+  }
+
+  hasTools(): boolean {
+    return (this.request.tools?.length ?? 0) > 0;
+  }
+
+  getProviderMessages(): OpenAiMessages {
+    // Responses API has no messages array; return empty array cast to the
+    // expected type so the rest of the pipeline has something to work with.
+    return [] as unknown as OpenAiMessages;
+  }
+
+  getOriginalRequest(): OpenAiRequest {
+    return this.request as unknown as OpenAiRequest;
+  }
+
+  setModel(model: string): void {
+    this.modifiedModel = model;
+  }
+
+  updateToolResult(toolCallId: string, newContent: string): void {
+    this.toolResultUpdates[toolCallId] = newContent;
+  }
+
+  applyToolResultUpdates(updates: Record<string, string>): void {
+    Object.assign(this.toolResultUpdates, updates);
+  }
+
+  async applyToonCompression(_model: string): Promise<ToolCompressionStats> {
+    // Responses API tool outputs are already structured as function_call_output
+    // items, so there is no JSON blob to compress with TOON before forwarding
+    // upstream.
+    return createEmptyToolCompressionStats();
+  }
+
+  convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
+    // OpenAI Responses API accepts tool results in their native
+    // function_call_output shape, so the proxy should pass them through
+    // unchanged.
+    return messages;
+  }
+
+  toProviderRequest(): OpenAiRequest {
+    if (!Array.isArray(this.request.input)) {
+      return {
+        ...this.request,
+        model: this.getModel(),
+      } as unknown as OpenAiRequest;
+    }
+
+    return {
+      ...this.request,
+      model: this.getModel(),
+      input: this.request.input.map((item) => {
+        if (!isFunctionCallOutputItem(item)) {
+          return item;
+        }
+
+        const updatedOutput = this.toolResultUpdates[item.call_id];
+        if (!updatedOutput) {
+          return item;
+        }
+
+        return {
+          ...item,
+          output: updatedOutput,
+        };
+      }),
+    } as unknown as OpenAiRequest;
+  }
+}
+
+// =============================================================================
+// RESPONSE ADAPTER
+// =============================================================================
+
+export class OpenAIResponsesResponseAdapter
+  implements LLMResponseAdapter<OpenAiResponse>
+{
+  readonly provider = "openai" as const;
+  private response: OpenAiResponsesResponse;
+
+  constructor(response: OpenAiResponse) {
+    this.response = response as unknown as OpenAiResponsesResponse;
+  }
+
+  getId(): string {
+    return this.response.id;
+  }
+
+  getModel(): string {
+    return this.response.model;
+  }
+
+  getText(): string {
+    return this.response.output
+      .flatMap((item) => {
+        if (!isResponseMessage(item)) {
+          return [];
+        }
+
+        return item.content.flatMap((contentPart) => {
+          if (contentPart.type === "output_text") {
+            return [contentPart.text];
+          }
+
+          if (contentPart.type === "refusal") {
+            return [contentPart.refusal];
+          }
+
+          return [];
+        });
+      })
+      .join("\n");
+  }
+
+  getToolCalls(): CommonToolCall[] {
+    return this.response.output.flatMap((item) => {
+      if (!isResponseFunctionCall(item)) {
+        return [];
+      }
+
+      return [
+        {
+          id: item.call_id,
+          name: item.name,
+          arguments: tryParseJsonObject(item.arguments),
+        },
+      ];
+    });
+  }
+
+  hasToolCalls(): boolean {
+    return this.getToolCalls().length > 0;
+  }
+
+  getUsage(): UsageView {
+    return {
+      inputTokens: this.response.usage?.input_tokens ?? 0,
+      outputTokens: this.response.usage?.output_tokens ?? 0,
+    };
+  }
+
+  getOriginalResponse(): OpenAiResponse {
+    return this.response as unknown as OpenAiResponse;
+  }
+
+  getFinishReasons(): string[] {
+    if (this.hasToolCalls()) {
+      return ["tool_calls"];
+    }
+
+    return [this.response.status ?? "completed"];
+  }
+
+  toRefusalResponse(
+    refusalMessage: string,
+    contentMessage: string,
+  ): OpenAiResponse {
+    return {
+      id: this.response.id,
+      object: "response",
+      created_at: Math.floor(Date.now() / 1000),
+      model: this.response.model,
+      status: "completed",
+      output: [
+        {
+          id: `msg_${Date.now()}`,
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            {
+              type: "refusal",
+              refusal: refusalMessage,
+            },
+            {
+              type: "output_text",
+              text: contentMessage,
+              annotations: [],
+            },
+          ],
+        },
+      ],
+      usage: this.response.usage,
+    } as unknown as OpenAiResponse;
+  }
+}
+
+// =============================================================================
+// STREAM ADAPTER
+// =============================================================================
+
+export class OpenAIResponsesStreamAdapter
+  implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
+{
+  readonly provider = "openai" as const;
+  readonly state = createStreamAccumulatorState();
+  private completedResponse: OpenAiResponsesResponse | null = null;
+  private toolCallsByItemId = new Map<
+    string,
+    { id: string; name: string; arguments: string }
+  >();
+
+  processChunk(chunk: OpenAiStreamChunk): ChunkProcessingResult {
+    if (this.state.timing.firstChunkTime === null) {
+      this.state.timing.firstChunkTime = Date.now();
+    }
+
+    const event = chunk as unknown as ResponseStreamEvent;
+
+    if ("response" in event) {
+      const response = (event as { response: OpenAiResponsesResponse })
+        .response;
+      this.state.responseId = response.id;
+      this.state.model = response.model;
+      if (response.usage) {
+        this.state.usage = {
+          inputTokens: response.usage.input_tokens ?? 0,
+          outputTokens: response.usage.output_tokens ?? 0,
+        };
+      }
+    }
+
+    if (event.type === "response.output_text.delta") {
+      this.state.text += event.delta;
+      return {
+        sseData: toSse(event),
+        isToolCallChunk: false,
+        isFinal: false,
+      };
+    }
+
+    if (isResponsesToolCallChunk(event)) {
+      this.captureToolCallChunk(event);
+      this.state.rawToolCallEvents.push(event);
+      return {
+        sseData: null,
+        isToolCallChunk: true,
+        isFinal: false,
+      };
+    }
+
+    if (event.type === "response.completed") {
+      this.completedResponse =
+        event.response as unknown as OpenAiResponsesResponse;
+      this.state.stopReason =
+        this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
+
+      return {
+        sseData: toSse(event),
+        isToolCallChunk: false,
+        isFinal: true,
+      };
+    }
+
+    if (
+      event.type === "response.failed" ||
+      event.type === "response.incomplete"
+    ) {
+      this.state.stopReason = "length";
+      return {
+        sseData: toSse(event),
+        isToolCallChunk: false,
+        isFinal: true,
+      };
+    }
+
+    return {
+      sseData: toSse(event),
+      isToolCallChunk: false,
+      isFinal: false,
+    };
+  }
+
+  getSSEHeaders(): Record<string, string> {
+    return {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    };
+  }
+
+  formatTextDeltaSSE(text: string): string {
+    const responseId = this.state.responseId || `resp_${Date.now()}`;
+    const itemId = `msg_${Date.now()}`;
+
+    return [
+      toSse({
+        type: "response.output_item.added",
+        output_index: 0,
+        sequence_number: Date.now(),
+        item: {
+          id: itemId,
+          type: "message",
+          role: "assistant",
+          status: "in_progress",
+          content: [],
+        },
+      }),
+      toSse({
+        type: "response.content_part.added",
+        item_id: itemId,
+        output_index: 0,
+        content_index: 0,
+        sequence_number: Date.now() + 1,
+        part: {
+          type: "output_text",
+          text: "",
+          annotations: [],
+        },
+      }),
+      toSse({
+        type: "response.output_text.delta",
+        item_id: itemId,
+        output_index: 0,
+        content_index: 0,
+        sequence_number: Date.now() + 2,
+        delta: text,
+        logprobs: [],
+      }),
+      toSse({
+        type: "response.output_text.done",
+        item_id: itemId,
+        output_index: 0,
+        content_index: 0,
+        sequence_number: Date.now() + 3,
+        text,
+        logprobs: [],
+      }),
+      toSse({
+        type: "response.content_part.done",
+        item_id: itemId,
+        output_index: 0,
+        content_index: 0,
+        sequence_number: Date.now() + 4,
+        part: {
+          type: "output_text",
+          text,
+          annotations: [],
+        },
+      }),
+      toSse({
+        type: "response.output_item.done",
+        output_index: 0,
+        sequence_number: Date.now() + 5,
+        item: {
+          id: itemId,
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            {
+              type: "output_text",
+              text,
+              annotations: [],
+            },
+          ],
+        },
+      }),
+      toSse({
+        type: "response.completed",
+        sequence_number: Date.now() + 6,
+        response: {
+          id: responseId,
+          object: "response",
+          created_at: Math.floor(Date.now() / 1000),
+          model: this.state.model,
+          status: "completed",
+          output: [
+            {
+              id: itemId,
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text,
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 0,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens: 0,
+            output_tokens_details: { reasoning_tokens: 0 },
+            total_tokens: 0,
+          },
+        },
+      }),
+    ].join("");
+  }
+
+  getRawToolCallEvents(): string[] {
+    return this.state.rawToolCallEvents.map((event) => toSse(event));
+  }
+
+  formatCompleteTextSSE(text: string): string[] {
+    return [this.formatTextDeltaSSE(text)];
+  }
+
+  formatEndSSE(): string {
+    return "data: [DONE]\n\n";
+  }
+
+  toProviderResponse(): OpenAiResponse {
+    if (this.completedResponse) {
+      return this.completedResponse as unknown as OpenAiResponse;
+    }
+
+    const outputItems: OpenAiResponsesResponse["output"] = [];
+
+    if (this.state.text) {
+      outputItems.push({
+        id: `msg_${Date.now()}`,
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          {
+            type: "output_text",
+            text: this.state.text,
+            annotations: [],
+          },
+        ],
+      } as OpenAiResponsesResponse["output"][number]);
+    }
+
+    outputItems.push(
+      ...this.state.toolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        call_id: toolCall.id,
+        type: "function_call" as const,
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+        status: "completed" as const,
+      })),
+    );
+
+    return {
+      id: this.state.responseId || `resp_${Date.now()}`,
+      object: "response",
+      created_at: Math.floor(Date.now() / 1000),
+      model: this.state.model,
+      status: "completed",
+      output: outputItems,
+      usage: this.state.usage
+        ? {
+            input_tokens: this.state.usage.inputTokens,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens: this.state.usage.outputTokens,
+            output_tokens_details: { reasoning_tokens: 0 },
+            total_tokens:
+              this.state.usage.inputTokens + this.state.usage.outputTokens,
+          }
+        : undefined,
+    } as unknown as OpenAiResponse;
+  }
+
+  private captureToolCallChunk(chunk: ResponseStreamEvent): void {
+    if (chunk.type === "response.output_item.added") {
+      const item = chunk.item;
+      if (!isResponseFunctionCall(item)) {
+        return;
+      }
+
+      this.toolCallsByItemId.set(item.id ?? item.call_id, {
+        id: item.call_id,
+        name: item.name,
+        arguments: item.arguments,
+      });
+      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      return;
+    }
+
+    if (chunk.type === "response.function_call_arguments.delta") {
+      const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
+        id: chunk.item_id,
+        name: "",
+        arguments: "",
+      };
+      toolCall.arguments += chunk.delta;
+      this.toolCallsByItemId.set(chunk.item_id, toolCall);
+      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      return;
+    }
+
+    if (chunk.type === "response.function_call_arguments.done") {
+      this.updateToolCallArguments(chunk);
+    }
+  }
+
+  private updateToolCallArguments(
+    chunk:
+      | ResponseFunctionCallArgumentsDoneEvent
+      | ResponseFunctionCallArgumentsDeltaEvent,
+  ): void {
+    const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
+      id: chunk.item_id,
+      name: "name" in chunk ? chunk.name : "",
+      arguments: "",
+    };
+
+    if ("name" in chunk) {
+      toolCall.name = chunk.name;
+      toolCall.arguments = chunk.arguments;
+    }
+
+    this.toolCallsByItemId.set(chunk.item_id, toolCall);
+    this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+  }
+}
+
+// =============================================================================
+// PRIVATE HELPERS
+// =============================================================================
+
+function createEmptyToolCompressionStats(): ToolCompressionStats {
+  return {
+    tokensBefore: 0,
+    tokensAfter: 0,
+    costSavings: 0,
+    wasEffective: false,
+    hadToolResults: false,
+  };
+}
+
+function toCommonMessages(
+  item: ResponseInputItem,
+  toolNamesByCallId: Map<string, string>,
+): CommonMessage[] {
+  if (item.type === "message") {
+    return [
+      {
+        role: normalizeResponseMessageRole(item.role),
+        content: extractResponseInputText(item.content),
+      },
+    ];
+  }
+
+  if (item.type === "function_call_output") {
+    const content =
+      typeof item.output === "string"
+        ? item.output
+        : JSON.stringify(item.output);
+    let toolResult: unknown;
+    try {
+      toolResult =
+        typeof item.output === "string" ? JSON.parse(item.output) : item.output;
+    } catch {
+      toolResult = item.output;
+    }
+    return [
+      {
+        role: "tool",
+        content,
+        toolCalls: [
+          {
+            id: item.call_id,
+            name: toolNamesByCallId.get(item.call_id) ?? "unknown",
+            content: toolResult,
+            isError: false,
+          },
+        ],
+      },
+    ];
+  }
+
+  return [];
+}
+
+function extractResponseInputText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .flatMap((part) => {
+      if (!part || typeof part !== "object" || !("type" in part)) {
+        return [];
+      }
+
+      if (part.type === "input_text" && "text" in part) {
+        return typeof part.text === "string" ? [part.text] : [];
+      }
+
+      if (part.type === "output_text" && "text" in part) {
+        return typeof part.text === "string" ? [part.text] : [];
+      }
+
+      return [];
+    })
+    .join("\n");
+}
+
+function isFunctionCallOutputItem(
+  item: unknown,
+): item is Extract<ResponseInputItem, { type: "function_call_output" }> {
+  return (
+    !!item &&
+    typeof item === "object" &&
+    "type" in item &&
+    item.type === "function_call_output"
+  );
+}
+
+function isResponseMessage(
+  item: ResponseOutputItem,
+): item is Extract<ResponseOutputItem, { type: "message" }> {
+  return item.type === "message";
+}
+
+function isResponseFunctionCall(
+  item: ResponseOutputItem | { type?: string },
+): item is Extract<ResponseOutputItem, { type: "function_call" }> {
+  return item.type === "function_call";
+}
+
+function isResponseInputFunctionCall(
+  item: ResponseInputItem,
+): item is Extract<ResponseInputItem, { type: "function_call" }> {
+  return item.type === "function_call";
+}
+
+function isResponsesToolCallChunk(
+  chunk: ResponseStreamEvent,
+): chunk is
+  | Extract<ResponseStreamEvent, { type: "response.output_item.added" }>
+  | Extract<ResponseStreamEvent, { type: "response.output_item.done" }>
+  | ResponseFunctionCallArgumentsDeltaEvent
+  | ResponseFunctionCallArgumentsDoneEvent {
+  return (
+    (chunk.type === "response.output_item.added" &&
+      isResponseFunctionCall(chunk.item)) ||
+    (chunk.type === "response.output_item.done" &&
+      isResponseFunctionCall(chunk.item)) ||
+    chunk.type === "response.function_call_arguments.delta" ||
+    chunk.type === "response.function_call_arguments.done"
+  );
+}
+
+function getToolNamesByCallId(input: ResponseInputItem[]): Map<string, string> {
+  return new Map(
+    input.flatMap((item) => {
+      if (!isResponseInputFunctionCall(item)) {
+        return [];
+      }
+
+      return [[item.call_id, item.name] as const];
+    }),
+  );
+}
+
+function tryParseJsonObject(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeResponseMessageRole(
+  role: "user" | "system" | "assistant" | "developer",
+): CommonMessage["role"] {
+  return role === "developer" ? "system" : role;
+}
+
+function toSse(event: unknown): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}

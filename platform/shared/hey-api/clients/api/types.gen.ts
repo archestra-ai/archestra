@@ -21969,9 +21969,42 @@ export type GetInteractionsResponses = {
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
-            request: XaiChatCompletionRequest;
-            processedRequest?: XaiChatCompletionRequest | null;
-            response: OpenAiChatCompletionResponse;
+            request: XaiChatCompletionRequest | {
+                model: string;
+                input: unknown;
+                instructions?: string;
+                previous_response_id?: string;
+                store?: boolean;
+                tools?: Array<unknown>;
+                stream?: boolean | null;
+                [key: string]: unknown;
+            };
+            processedRequest?: XaiChatCompletionRequest | {
+                model: string;
+                input: unknown;
+                instructions?: string;
+                previous_response_id?: string;
+                store?: boolean;
+                tools?: Array<unknown>;
+                stream?: boolean | null;
+                [key: string]: unknown;
+            } | null;
+            response: OpenAiChatCompletionResponse | {
+                id: string;
+                object: 'response';
+                created_at: number;
+                model: string;
+                status: string;
+                output: Array<unknown>;
+                usage?: {
+                    input_tokens: number;
+                    output_tokens: number;
+                    total_tokens: number;
+                    input_tokens_details?: unknown;
+                    output_tokens_details?: unknown;
+                };
+                [key: string]: unknown;
+            };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
                 conversations: Array<{
@@ -23734,9 +23767,42 @@ export type GetInteractionResponses = {
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
-        request: XaiChatCompletionRequest;
-        processedRequest?: XaiChatCompletionRequest | null;
-        response: OpenAiChatCompletionResponse;
+        request: XaiChatCompletionRequest | {
+            model: string;
+            input: unknown;
+            instructions?: string;
+            previous_response_id?: string;
+            store?: boolean;
+            tools?: Array<unknown>;
+            stream?: boolean | null;
+            [key: string]: unknown;
+        };
+        processedRequest?: XaiChatCompletionRequest | {
+            model: string;
+            input: unknown;
+            instructions?: string;
+            previous_response_id?: string;
+            store?: boolean;
+            tools?: Array<unknown>;
+            stream?: boolean | null;
+            [key: string]: unknown;
+        } | null;
+        response: OpenAiChatCompletionResponse | {
+            id: string;
+            object: 'response';
+            created_at: number;
+            model: string;
+            status: string;
+            output: Array<unknown>;
+            usage?: {
+                input_tokens: number;
+                output_tokens: number;
+                total_tokens: number;
+                input_tokens_details?: unknown;
+                output_tokens_details?: unknown;
+            };
+            [key: string]: unknown;
+        };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
             conversations: Array<{
@@ -34190,7 +34256,16 @@ export type OllamaChatCompletionsWithAgentResponses = {
 export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput | {
+        model: string;
+        input: unknown;
+        instructions?: string;
+        previous_response_id?: string;
+        store?: boolean;
+        tools?: Array<unknown>;
+        stream?: boolean | null;
+        [key: string]: unknown;
+    };
     headers: {
         /**
          * The user agent of the client
@@ -34269,13 +34344,37 @@ export type OpenAiChatCompletionsWithDefaultAgentResponses = {
     /**
      * Default Response
      */
-    200: OpenAiChatCompletionResponse;
+    200: OpenAiChatCompletionResponse | {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        status: string;
+        output: Array<unknown>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            input_tokens_details?: unknown;
+            output_tokens_details?: unknown;
+        };
+        [key: string]: unknown;
+    };
 };
 
 export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
 
 export type OpenAiChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: XaiChatCompletionRequestInput | {
+        model: string;
+        input: unknown;
+        instructions?: string;
+        previous_response_id?: string;
+        store?: boolean;
+        tools?: Array<unknown>;
+        stream?: boolean | null;
+        [key: string]: unknown;
+    };
     headers: {
         /**
          * The user agent of the client
@@ -34356,7 +34455,22 @@ export type OpenAiChatCompletionsWithAgentResponses = {
     /**
      * Default Response
      */
-    200: OpenAiChatCompletionResponse;
+    200: OpenAiChatCompletionResponse | {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        status: string;
+        output: Array<unknown>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            input_tokens_details?: unknown;
+            output_tokens_details?: unknown;
+        };
+        [key: string]: unknown;
+    };
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];

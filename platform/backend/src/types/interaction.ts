@@ -40,7 +40,7 @@ export const UserInfoSchema = z.object({
  * These are used for the database schema definition
  */
 export const InteractionRequestSchema = z.union([
-  OpenAi.API.ChatCompletionRequestSchema,
+  OpenAi.API.ChatCompletionOrResponsesRequestSchema,
   OpenAi.API.EmbeddingRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
   Anthropic.API.MessagesRequestSchema,
@@ -62,7 +62,7 @@ export const InteractionRequestSchema = z.union([
 ]);
 
 export const InteractionResponseSchema = z.union([
-  OpenAi.API.ChatCompletionResponseSchema,
+  OpenAi.API.ChatCompletionOrResponsesResponseSchema,
   OpenAi.API.EmbeddingResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
@@ -113,10 +113,10 @@ export const RequestTypeSchema = z.enum(["main", "subagent"]);
 export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
-    request: OpenAi.API.ChatCompletionRequestSchema,
+    request: OpenAi.API.ChatCompletionOrResponsesRequestSchema,
     processedRequest:
-      OpenAi.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: OpenAi.API.ChatCompletionResponseSchema,
+      OpenAi.API.ChatCompletionOrResponsesRequestSchema.nullable().optional(),
+    response: OpenAi.API.ChatCompletionOrResponsesResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

@@ -706,6 +706,7 @@ async function handleStreaming<
   // Once a blocking tool is encountered, buffer all subsequent tool call chunks
   // to prevent streaming data for tools that appear after a blocked tool.
   let bufferAllToolCalls = false;
+  let responseForInteraction: TResponse | null = null;
 
   logger.debug(
     { model: actualModel },
@@ -898,7 +899,7 @@ async function handleStreaming<
     }
 
     if (toolInvocationRefusal) {
-      const { contentMessage, reason, allToolCallNames } =
+      const { refusalMessage, contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
       // When not buffering, tool call chunks were already streamed — append
@@ -910,6 +911,10 @@ async function handleStreaming<
       for (const event of refusalEvents) {
         reply.raw.write(event);
       }
+
+      responseForInteraction = provider
+        .createResponseAdapter(streamAdapter.toProviderResponse())
+        .toRefusalResponse(refusalMessage, contentMessage);
 
       recordBlockedToolCallMetrics({
         allToolCallNames,
@@ -1012,7 +1017,8 @@ async function handleStreaming<
             providerType: provider.interactionType,
             request: originalRequest,
             processedRequest: request,
-            response: streamAdapter.toProviderResponse(),
+            response:
+              responseForInteraction ?? streamAdapter.toProviderResponse(),
             actualModel,
             baselineModel,
             usage,

@@ -5,6 +5,10 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
+import type {
+  ResponseCreateParamsNonStreaming,
+  ResponseCreateParamsStreaming,
+} from "openai/resources/responses/responses";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -40,6 +44,11 @@ import {
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import {
+  OpenAIResponsesRequestAdapter,
+  OpenAIResponsesResponseAdapter,
+  OpenAIResponsesStreamAdapter,
+} from "./openai-responses";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1113,6 +1122,18 @@ export async function convertToolResultsToToon(
 }
 
 // =============================================================================
+// RESPONSES API DETECTION
+// =============================================================================
+
+function isResponsesRequest(request: OpenAiRequest): boolean {
+  return "input" in request;
+}
+
+function isResponsesResponse(response: OpenAiResponse): boolean {
+  return "output" in (response as unknown as Record<string, unknown>);
+}
+
+// =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
 
@@ -1140,16 +1161,34 @@ export const openaiAdapterFactory: LLMProvider<
   createRequestAdapter(
     request: OpenAiRequest,
   ): LLMRequestAdapter<OpenAiRequest, OpenAiMessages> {
+    if (isResponsesRequest(request)) {
+      return new OpenAIResponsesRequestAdapter(
+        request,
+      ) as unknown as LLMRequestAdapter<OpenAiRequest, OpenAiMessages>;
+    }
     return new OpenAIRequestAdapter(request);
   },
 
   createResponseAdapter(
     response: OpenAiResponse,
   ): LLMResponseAdapter<OpenAiResponse> {
+    if (isResponsesResponse(response)) {
+      return new OpenAIResponsesResponseAdapter(
+        response,
+      ) as unknown as LLMResponseAdapter<OpenAiResponse>;
+    }
     return new OpenAIResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
+  createStreamAdapter(
+    request?: OpenAiRequest,
+  ): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
+    if (request && isResponsesRequest(request)) {
+      return new OpenAIResponsesStreamAdapter() as unknown as LLMStreamAdapter<
+        OpenAiStreamChunk,
+        OpenAiResponse
+      >;
+    }
     return new OpenAIStreamAdapter();
   },
 
@@ -1242,6 +1281,12 @@ export const openaiAdapterFactory: LLMProvider<
     request: OpenAiRequest,
   ): Promise<OpenAiResponse> {
     const openaiClient = client as OpenAIProvider;
+    if (isResponsesRequest(request)) {
+      return (await openaiClient.responses.create({
+        ...request,
+        stream: false,
+      } as unknown as ResponseCreateParamsNonStreaming)) as unknown as OpenAiResponse;
+    }
     const openaiRequest = {
       ...request,
       stream: false,
@@ -1256,6 +1301,12 @@ export const openaiAdapterFactory: LLMProvider<
     request: OpenAiRequest,
   ): Promise<AsyncIterable<OpenAiStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
+    if (isResponsesRequest(request)) {
+      return (await openaiClient.responses.create({
+        ...request,
+        stream: true,
+      } as unknown as ResponseCreateParamsStreaming)) as unknown as AsyncIterable<OpenAiStreamChunk>;
+    }
     const openaiRequest = {
       ...request,
       stream: true,

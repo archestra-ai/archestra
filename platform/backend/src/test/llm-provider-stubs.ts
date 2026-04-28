@@ -4,6 +4,7 @@ import type OpenAI from "openai";
 
 export interface OpenAiStubOptions {
   interruptAtChunk?: number;
+  responsesToolCall?: boolean;
 }
 
 export interface AnthropicStubOptions {
@@ -60,6 +61,15 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
             },
           } satisfies OpenAI.Chat.Completions.ChatCompletion;
         },
+      },
+    },
+    responses: {
+      create: async (params: { stream?: boolean | null }) => {
+        if (params.stream) {
+          return createOpenAiResponsesStream(options);
+        }
+
+        return createOpenAiResponsesResponse(options);
       },
     },
   };
@@ -195,6 +205,153 @@ function createOpenAiStream(options: OpenAiStubOptions) {
       },
     },
   ];
+
+  return {
+    [Symbol.asyncIterator]() {
+      let index = 0;
+
+      return {
+        async next() {
+          if (
+            options.interruptAtChunk !== undefined &&
+            index === options.interruptAtChunk
+          ) {
+            return { done: true, value: undefined };
+          }
+
+          if (index < chunks.length) {
+            return { done: false, value: chunks[index++] };
+          }
+
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+}
+
+function createOpenAiResponsesResponse(options: OpenAiStubOptions) {
+  const output = options.responsesToolCall
+    ? [
+        {
+          id: "fc_list_files",
+          type: "function_call",
+          call_id: "call_list_files",
+          name: "list_files",
+          arguments: '{"path":"."}',
+          status: "completed",
+        },
+      ]
+    : [
+        {
+          id: "msg-test-openai-responses",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            {
+              type: "output_text",
+              text: "Hello! How can I help you today?",
+              annotations: [],
+            },
+          ],
+        },
+      ];
+
+  return {
+    id: "resp-test-openai",
+    object: "response",
+    created_at: Math.floor(Date.now() / 1000),
+    model: "gpt-4.1",
+    status: "completed",
+    output,
+    usage: {
+      input_tokens: 12,
+      output_tokens: 10,
+      total_tokens: 22,
+      input_tokens_details: { cached_tokens: 0 },
+      output_tokens_details: { reasoning_tokens: 0 },
+    },
+  };
+}
+
+function createOpenAiResponsesStream(options: OpenAiStubOptions) {
+  const chunks = options.responsesToolCall
+    ? [
+        {
+          type: "response.created",
+          sequence_number: 0,
+          response: {
+            id: "resp-test-openai",
+            object: "response",
+            created_at: Math.floor(Date.now() / 1000),
+            model: "gpt-4.1",
+            status: "in_progress",
+            output: [],
+          },
+        },
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          sequence_number: 1,
+          item: {
+            id: "fc_list_files",
+            type: "function_call",
+            call_id: "call_list_files",
+            name: "list_files",
+            arguments: "",
+            status: "in_progress",
+          },
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          item_id: "fc_list_files",
+          output_index: 0,
+          sequence_number: 2,
+          delta: '{"path":"."}',
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_list_files",
+          output_index: 0,
+          sequence_number: 3,
+          name: "list_files",
+          arguments: '{"path":"."}',
+        },
+        {
+          type: "response.completed",
+          sequence_number: 4,
+          response: createOpenAiResponsesResponse(options),
+        },
+      ]
+    : [
+        {
+          type: "response.created",
+          sequence_number: 0,
+          response: {
+            id: "resp-test-openai",
+            object: "response",
+            created_at: Math.floor(Date.now() / 1000),
+            model: "gpt-4.1",
+            status: "in_progress",
+            output: [],
+          },
+        },
+        {
+          type: "response.output_text.delta",
+          item_id: "msg-test-openai-responses",
+          output_index: 0,
+          content_index: 0,
+          sequence_number: 1,
+          delta: "Hello from Responses",
+          logprobs: [],
+        },
+        {
+          type: "response.completed",
+          sequence_number: 2,
+          response: createOpenAiResponsesResponse(options),
+        },
+      ];
 
   return {
     [Symbol.asyncIterator]() {

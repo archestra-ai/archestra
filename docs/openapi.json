@@ -75695,18 +75695,146 @@
                                 ]
                               },
                               "request": {
-                                "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                "anyOf": [
+                                  {
+                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "input": {},
+                                      "instructions": {
+                                        "type": "string"
+                                      },
+                                      "previous_response_id": {
+                                        "type": "string"
+                                      },
+                                      "store": {
+                                        "type": "boolean"
+                                      },
+                                      "tools": {
+                                        "type": "array",
+                                        "items": {}
+                                      },
+                                      "stream": {
+                                        "nullable": true,
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "model",
+                                      "input"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                ]
                               },
                               "processedRequest": {
                                 "nullable": true,
-                                "allOf": [
+                                "anyOf": [
                                   {
                                     "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "input": {},
+                                      "instructions": {
+                                        "type": "string"
+                                      },
+                                      "previous_response_id": {
+                                        "type": "string"
+                                      },
+                                      "store": {
+                                        "type": "boolean"
+                                      },
+                                      "tools": {
+                                        "type": "array",
+                                        "items": {}
+                                      },
+                                      "stream": {
+                                        "nullable": true,
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "model",
+                                      "input"
+                                    ],
+                                    "additionalProperties": {}
                                   }
                                 ]
                               },
                               "response": {
-                                "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                                "anyOf": [
+                                  {
+                                    "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "object": {
+                                        "type": "string",
+                                        "enum": [
+                                          "response"
+                                        ]
+                                      },
+                                      "created_at": {
+                                        "type": "number"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string"
+                                      },
+                                      "output": {
+                                        "type": "array",
+                                        "items": {}
+                                      },
+                                      "usage": {
+                                        "type": "object",
+                                        "properties": {
+                                          "input_tokens": {
+                                            "type": "number"
+                                          },
+                                          "output_tokens": {
+                                            "type": "number"
+                                          },
+                                          "total_tokens": {
+                                            "type": "number"
+                                          },
+                                          "input_tokens_details": {},
+                                          "output_tokens_details": {}
+                                        },
+                                        "required": [
+                                          "input_tokens",
+                                          "output_tokens",
+                                          "total_tokens"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "object",
+                                      "created_at",
+                                      "model",
+                                      "status",
+                                      "output"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                ]
                               },
                               "dualLlmAnalyses": {
                                 "nullable": true,
@@ -84618,18 +84746,146 @@
                           ]
                         },
                         "request": {
-                          "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "model": {
+                                  "type": "string"
+                                },
+                                "input": {},
+                                "instructions": {
+                                  "type": "string"
+                                },
+                                "previous_response_id": {
+                                  "type": "string"
+                                },
+                                "store": {
+                                  "type": "boolean"
+                                },
+                                "tools": {
+                                  "type": "array",
+                                  "items": {}
+                                },
+                                "stream": {
+                                  "nullable": true,
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "model",
+                                "input"
+                              ],
+                              "additionalProperties": {}
+                            }
+                          ]
                         },
                         "processedRequest": {
                           "nullable": true,
-                          "allOf": [
+                          "anyOf": [
                             {
                               "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "model": {
+                                  "type": "string"
+                                },
+                                "input": {},
+                                "instructions": {
+                                  "type": "string"
+                                },
+                                "previous_response_id": {
+                                  "type": "string"
+                                },
+                                "store": {
+                                  "type": "boolean"
+                                },
+                                "tools": {
+                                  "type": "array",
+                                  "items": {}
+                                },
+                                "stream": {
+                                  "nullable": true,
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "model",
+                                "input"
+                              ],
+                              "additionalProperties": {}
                             }
                           ]
                         },
                         "response": {
-                          "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "object": {
+                                  "type": "string",
+                                  "enum": [
+                                    "response"
+                                  ]
+                                },
+                                "created_at": {
+                                  "type": "number"
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "output": {
+                                  "type": "array",
+                                  "items": {}
+                                },
+                                "usage": {
+                                  "type": "object",
+                                  "properties": {
+                                    "input_tokens": {
+                                      "type": "number"
+                                    },
+                                    "output_tokens": {
+                                      "type": "number"
+                                    },
+                                    "total_tokens": {
+                                      "type": "number"
+                                    },
+                                    "input_tokens_details": {},
+                                    "output_tokens_details": {}
+                                  },
+                                  "required": [
+                                    "input_tokens",
+                                    "output_tokens",
+                                    "total_tokens"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "object",
+                                "created_at",
+                                "model",
+                                "status",
+                                "output"
+                              ],
+                              "additionalProperties": {}
+                            }
+                          ]
                         },
                         "dualLlmAnalyses": {
                           "nullable": true,
@@ -127693,7 +127949,42 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string"
+                      },
+                      "input": {},
+                      "instructions": {
+                        "type": "string"
+                      },
+                      "previous_response_id": {
+                        "type": "string"
+                      },
+                      "store": {
+                        "type": "boolean"
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "stream": {
+                        "nullable": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "input"
+                    ],
+                    "additionalProperties": {}
+                  }
+                ]
               }
             }
           }
@@ -127724,7 +128015,69 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "object": {
+                          "type": "string",
+                          "enum": [
+                            "response"
+                          ]
+                        },
+                        "created_at": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "output": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "input_tokens": {
+                              "type": "number"
+                            },
+                            "output_tokens": {
+                              "type": "number"
+                            },
+                            "total_tokens": {
+                              "type": "number"
+                            },
+                            "input_tokens_details": {},
+                            "output_tokens_details": {}
+                          },
+                          "required": [
+                            "input_tokens",
+                            "output_tokens",
+                            "total_tokens"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "object",
+                        "created_at",
+                        "model",
+                        "status",
+                        "output"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  ]
                 }
               }
             }
@@ -127954,7 +128307,42 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string"
+                      },
+                      "input": {},
+                      "instructions": {
+                        "type": "string"
+                      },
+                      "previous_response_id": {
+                        "type": "string"
+                      },
+                      "store": {
+                        "type": "boolean"
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "stream": {
+                        "nullable": true,
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "input"
+                    ],
+                    "additionalProperties": {}
+                  }
+                ]
               }
             }
           }
@@ -127995,7 +128383,69 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "object": {
+                          "type": "string",
+                          "enum": [
+                            "response"
+                          ]
+                        },
+                        "created_at": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "output": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "input_tokens": {
+                              "type": "number"
+                            },
+                            "output_tokens": {
+                              "type": "number"
+                            },
+                            "total_tokens": {
+                              "type": "number"
+                            },
+                            "input_tokens_details": {},
+                            "output_tokens_details": {}
+                          },
+                          "required": [
+                            "input_tokens",
+                            "output_tokens",
+                            "total_tokens"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "object",
+                        "created_at",
+                        "model",
+                        "status",
+                        "output"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  ]
                 }
               }
             }

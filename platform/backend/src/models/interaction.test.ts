@@ -86,6 +86,51 @@ describe("InteractionModel", () => {
       const parsed = SelectInteractionSchema.safeParse(interaction);
       expect(parsed.success).toBe(true);
     });
+
+    test("can create and serialize an OpenAI Responses interaction", async () => {
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4.1",
+          input: "Hello Responses",
+        },
+        processedRequest: {
+          model: "gpt-4.1",
+          input: "Hello Responses",
+        },
+        response: {
+          id: "resp-test-openai",
+          object: "response",
+          created_at: Date.now(),
+          model: "gpt-4.1",
+          status: "completed",
+          output: [
+            {
+              id: "msg-test-openai-responses",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text: "Hi from Responses",
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+          },
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const parsed = SelectInteractionSchema.safeParse(interaction);
+      expect(parsed.success).toBe(true);
+    });
   });
 
   describe("create - null byte sanitization", () => {

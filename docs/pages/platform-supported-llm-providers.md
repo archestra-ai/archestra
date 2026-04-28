@@ -21,7 +21,7 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 ### Supported OpenAI APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
-- **Responses API** (`/responses`) - ⚠️ Not yet supported ([GitHub Issue #720](https://github.com/archestra-ai/archestra/issues/720))
+- **Responses API** - ✅ Fully supported (auto-detected, see notes below)
 
 ### OpenAI Connection Details
 
@@ -30,7 +30,8 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ### Important Notes
 
-- **Use Chat Completions API**: Ensure your application uses the `/chat/completions` endpoint (not `/responses`). Many frameworks default to this, but some like Vercel AI SDK require explicit configuration (add `.chat` to the provider instance).
+- **Single endpoint, two API shapes**: Archestra exposes one OpenAI route at `/v1/openai/{profile-id}/chat/completions`. Requests are auto-detected by body shape: a `messages` array routes to Chat Completions, while an `input` field routes to the Responses API. No client configuration change is required.
+- **Responses API via Chat UI**: The Archestra chat UI currently uses Chat Completions API. To use Responses API, call the proxy endpoint directly (e.g., via SDK, REST client, or curl) and send requests with an `input` field instead of `messages`.
 - **Streaming**: OpenAI streaming responses require your cloud provider's load balancer to support long-lived connections. See [Cloud Provider Configuration](/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings) for more details.
 
 ## Anthropic

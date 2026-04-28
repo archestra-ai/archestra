@@ -14,7 +14,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
-import { ModelModel } from "@/models";
+import { InteractionModel, ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createAnthropicTestClient,
@@ -87,7 +87,10 @@ import openAiProxyRoutes from "./routes/openai";
 describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: {
+    interruptAtChunk?: number;
+    responsesToolCall?: boolean;
+  };
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -559,7 +562,10 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: {
+    interruptAtChunk?: number;
+    responsesToolCall?: boolean;
+  };
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -706,6 +712,99 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       expect(mockRecordBlockedToolSpans).toHaveBeenCalledOnce();
       const callArg = mockRecordBlockedToolSpans.mock.calls[0][0];
       expect(callArg.agentType).toBeDefined();
+    });
+  });
+
+  describe("streaming (OpenAI Responses)", () => {
+    beforeEach(async () => {
+      await app.register(openAiProxyRoutes);
+
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4.1",
+        provider: "openai",
+        modelId: "gpt-4.1",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "2.00",
+        customPricePerMillionOutput: "8.00",
+        lastSyncedAt: new Date(),
+      });
+    });
+
+    test("records refusal response when policy blocks streamed tool calls", async () => {
+      openAiStubOptions.responsesToolCall = true;
+
+      const blockResult: PolicyBlockResult = {
+        refusalMessage: "Tool blocked by policy",
+        contentMessage: "Tool list_files was blocked",
+        reason: "Tool invocation blocked: always block",
+        blockedToolName: "list_files",
+        allToolCallNames: ["list_files"],
+      };
+      mockEvaluatePolicies.mockResolvedValue(blockResult);
+
+      const initialInteractions =
+        await InteractionModel.getAllInteractionsForProfile(testAgent.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4.1",
+          input: "List files with Responses streaming",
+          stream: true,
+          tools: [
+            {
+              type: "function",
+              name: "list_files",
+              description: "List files",
+              parameters: {
+                type: "object",
+                properties: { path: { type: "string" } },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("Tool list_files was blocked");
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockRecordBlockedToolSpans).toHaveBeenCalledOnce();
+
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(interactions.length).toBe(initialInteractions.length + 1);
+
+      const interaction = interactions[interactions.length - 1];
+      expect(interaction.response).toMatchObject({
+        object: "response",
+        status: "completed",
+        output: [
+          expect.objectContaining({
+            type: "message",
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: "output_text",
+                text: "Tool list_files was blocked",
+              }),
+            ]),
+          }),
+        ],
+      });
+      expect(
+        (
+          interaction.response as { output: Array<{ type: string }> }
+        ).output.some((item) => item.type === "function_call"),
+      ).toBe(false);
     });
   });
 

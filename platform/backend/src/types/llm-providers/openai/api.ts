@@ -79,6 +79,27 @@ export const ChatCompletionRequestSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487`,
   );
 
+// Loose schema for the OpenAI Responses API. The route accepts both
+// ChatCompletions and Responses request shapes via union; the adapter factory
+// dispatches based on whether `input` is present. Detailed validation happens
+// inside the adapter and at the OpenAI SDK call site.
+export const ResponsesRequestSchema = z
+  .object({
+    model: z.string(),
+    input: z.unknown(),
+    instructions: z.string().optional(),
+    previous_response_id: z.string().optional(),
+    store: z.boolean().optional(),
+    tools: z.array(z.unknown()).optional(),
+    stream: z.boolean().nullable().optional(),
+  })
+  .passthrough();
+
+export const ChatCompletionOrResponsesRequestSchema = z.union([
+  ChatCompletionRequestSchema,
+  ResponsesRequestSchema,
+]);
+
 export const ChatCompletionResponseSchema = z
   .object({
     id: z.string(),
@@ -93,6 +114,31 @@ export const ChatCompletionResponseSchema = z
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248`,
   );
+
+export const ResponsesResponseSchema = z
+  .object({
+    id: z.string(),
+    object: z.literal("response"),
+    created_at: z.number(),
+    model: z.string(),
+    status: z.string(),
+    output: z.array(z.unknown()),
+    usage: z
+      .object({
+        input_tokens: z.number(),
+        output_tokens: z.number(),
+        total_tokens: z.number(),
+        input_tokens_details: z.unknown().optional(),
+        output_tokens_details: z.unknown().optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+export const ChatCompletionOrResponsesResponseSchema = z.union([
+  ChatCompletionResponseSchema,
+  ResponsesResponseSchema,
+]);
 
 // ===== Embeddings API =====
 

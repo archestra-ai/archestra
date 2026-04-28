@@ -205,6 +205,97 @@ const openaiConfig = makeOpenAiCompatibleToolConfig({
   model: "gpt-4",
 });
 
+const openaiResponsesConfig: ToolInvocationTestConfig = {
+  providerName: "OpenAI Responses",
+  providerSlug: "openai-responses",
+
+  // Auto-detected at the OpenAI adapter layer based on request shape.
+  // Same endpoint as ChatCompletions; the proxy dispatches to the
+  // Responses adapter when `input` is present in the body.
+  endpoint: (agentId) => `/v1/openai/${agentId}/chat/completions`,
+
+  headers: (wiremockStub) => ({
+    Authorization: `Bearer ${wiremockStub}`,
+    "Content-Type": "application/json",
+  }),
+
+  buildRequest: (content, tools) => ({
+    model: "gpt-4.1",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: content }],
+      },
+    ],
+    tools: tools.map((t) => ({
+      type: "function",
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    })),
+  }),
+
+  trustedDataPolicyAttributePath: "$.content[0].text",
+
+  assertToolCallBlocked: (response) => {
+    expect(response.output).toBeDefined();
+
+    const functionCalls = response.output.filter(
+      (item: { type: string }) => item.type === "function_call",
+    );
+    expect(functionCalls.length).toBe(0);
+
+    const assistantMessage = response.output.find(
+      (item: { type: string }) => item.type === "message",
+    );
+    expect(assistantMessage).toBeDefined();
+
+    const combinedText = assistantMessage.content
+      .map(
+        (part: { text?: string; refusal?: string }) =>
+          part.text ?? part.refusal,
+      )
+      .filter(Boolean)
+      .join("\n");
+
+    expect(combinedText).toContain("read_file");
+    expect(combinedText).toContain("denied");
+  },
+
+  assertToolCallsPresent: (response, expectedTools) => {
+    expect(response.output).toBeDefined();
+
+    const functionCalls = response.output.filter(
+      (item: { type: string }) => item.type === "function_call",
+    );
+    expect(functionCalls.length).toBe(expectedTools.length);
+
+    for (const toolName of expectedTools) {
+      const found = functionCalls.find(
+        (item: { name: string }) => item.name === toolName,
+      );
+      expect(found).toBeDefined();
+    }
+  },
+
+  assertToolArgument: (response, toolName, argName, matcher) => {
+    const functionCalls = response.output.filter(
+      (item: { type: string }) => item.type === "function_call",
+    );
+    const toolCall = functionCalls.find(
+      (item: { name: string }) => item.name === toolName,
+    );
+    const args = JSON.parse(toolCall.arguments);
+    matcher(args[argName]);
+  },
+
+  findInteractionByContent: (interactions, content) =>
+    interactions.find((interaction) =>
+      interactionContainsContent(interaction, content),
+    ),
+};
+
 const azureResponsesConfig: ToolInvocationTestConfig = {
   providerName: "Azure Responses",
   providerSlug: "azure-responses",
@@ -779,6 +870,7 @@ const testConfigs = [
     (c): c is ToolInvocationTestConfig => c !== null,
   ),
   azureResponsesConfig,
+  openaiResponsesConfig,
 ];
 
 for (const config of testConfigs) {

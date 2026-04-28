@@ -385,6 +385,130 @@ describe("OpenAI streaming mode", () => {
   });
 });
 
+describe("OpenAI Responses API", () => {
+  let openAiStubOptions: { interruptAtChunk?: number };
+
+  beforeEach(async () => {
+    openAiStubOptions = {};
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(openAiStubOptions) as never,
+    );
+
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4.1",
+      provider: "openai",
+      modelId: "gpt-4.1",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.00",
+      customPricePerMillionOutput: "8.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("non-streaming mode records interaction", async ({ makeAgent }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+
+    const agent = await makeAgent({ name: "Test Responses Agent" });
+    const { InteractionModel } = await import("@/models");
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4.1",
+        input: "Hello from the Responses API",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({
+      object: "response",
+      model: "gpt-4.1",
+      status: "completed",
+    });
+
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialInteractions.length + 1);
+
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.type).toBe("openai:chatCompletions");
+    expect(interaction.model).toBe("gpt-4.1");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+    expect(interaction.response).toMatchObject({
+      object: "response",
+      status: "completed",
+    });
+  });
+
+  test("streaming mode records interaction", async ({ makeAgent }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+
+    const agent = await makeAgent({ name: "Test Streaming Responses Agent" });
+    const { InteractionModel } = await import("@/models");
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4.1",
+        input: "Hello from the streaming Responses API",
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('"type":"response.output_text.delta"');
+    expect(response.body).toContain("data: [DONE]");
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialInteractions.length + 1);
+
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.type).toBe("openai:chatCompletions");
+    expect(interaction.model).toBe("gpt-4.1");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+    expect(interaction.response).toMatchObject({
+      object: "response",
+      status: "completed",
+    });
+  });
+});
+
 describe("OpenAI proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;

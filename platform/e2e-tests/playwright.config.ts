@@ -42,6 +42,7 @@ const uiTestMatch = [
   "**/auth.spec.ts",
   "**/chat-auth-required.spec.ts",
   "**/chat-localstorage.spec.ts",
+  "**/chat-permissions.spec.ts",
   "**/chat.spec.ts",
   "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",

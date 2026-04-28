@@ -340,15 +340,15 @@ function SessionsTable({
         header: "Models",
         cell: ({ row }) => (
           <TooltipProvider>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1 min-w-0 max-w-full overflow-hidden">
               {row.original.models.map((model) => (
                 <Tooltip key={model}>
                   <TooltipTrigger asChild>
                     <Badge
                       variant="secondary"
-                      className="text-xs max-w-[180px] cursor-default"
+                      className="text-xs max-w-full cursor-default inline-block truncate"
                     >
-                      <span className="truncate">{model}</span>
+                      {model}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>

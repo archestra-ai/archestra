@@ -415,6 +415,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       id: "actions",
       header: "Actions",
       enableHiding: false,
+      size: 220,
       cell: ({ row }) => {
         const agent = row.original;
         const scope = agent.scope;

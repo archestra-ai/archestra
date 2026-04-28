@@ -62,6 +62,7 @@ interface McpServerSettingsDialogProps {
   // Connections
   onAddPersonalConnection?: () => void;
   onAddSharedConnection?: (teamId: string) => void;
+  onAddOrgConnection?: () => void;
   // Debug
   installs: {
     id: string;
@@ -122,6 +123,7 @@ export function McpServerSettingsDialog({
   showYaml,
   onAddPersonalConnection,
   onAddSharedConnection,
+  onAddOrgConnection,
   installs,
   deploymentStatuses,
   deploymentServerIds,
@@ -361,6 +363,7 @@ export function McpServerSettingsDialog({
                   catalogId={item.id}
                   onAddPersonalConnection={onAddPersonalConnection}
                   onAddSharedConnection={onAddSharedConnection}
+                  onAddOrgConnection={onAddOrgConnection}
                   deploymentStatuses={deploymentStatuses}
                   hideHeader
                   variant={variant}

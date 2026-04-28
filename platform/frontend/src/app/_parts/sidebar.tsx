@@ -49,7 +49,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useEnterpriseFeature } from "@/lib/config/config.query";
+
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
@@ -410,28 +410,25 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const appIconLogo = useAppIconLogo();
-  const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
-  // Connect page requires at least one of these (OR logic)
-  const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
+  // Connect page requires both MCP gateway and LLM proxy read permissions
   const { data: canReadLlmProxy } = useHasPermissions({
     llmProxy: ["read"],
   });
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
   });
-  const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
+  const showConnect = canReadMcpGateway && canReadLlmProxy;
 
-  // Filter nav groups based on enterprise features + connect permissions
+  // Filter nav groups based on connect permissions
   const filteredNavGroups = React.useMemo(() => {
     return contentNavGroups.map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (!knowledgeBaseEnabled && item.title === "Knowledge") return false;
         if (item.title === "Connect" && !showConnect) return false;
         return true;
       }),
     }));
-  }, [knowledgeBaseEnabled, showConnect]);
+  }, [showConnect]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {

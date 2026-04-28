@@ -558,12 +558,32 @@ async function ensureExistingUsersHavePersonalChatAgents(): Promise<void> {
   }
 }
 
+/**
+ * Ensures every member has a personal MCP gateway. Runs on startup to backfill
+ * members created before this feature. Single LEFT JOIN + bulk INSERT.
+ */
+async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
+  try {
+    const created = await AgentModel.bulkBackfillPersonalMcpGateways();
+    if (created > 0) {
+      logger.info(
+        { count: created },
+        "Created personal MCP gateways for existing members",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to backfill personal MCP gateways for existing members",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
   // Create default agents before seeding internal agents
-  await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
   await syncBuiltInAgents();
   await seedArchestraCatalogAndTools();
@@ -574,6 +594,8 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedChatApiKeysFromEnv();
   // Ensure all existing members have a personal default chat agent
   await ensureExistingUsersHavePersonalChatAgents();
+  // Ensure all existing members have a personal MCP gateway
+  await ensureExistingUsersHavePersonalMcpGateways();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }

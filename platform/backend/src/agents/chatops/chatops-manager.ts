@@ -9,6 +9,7 @@ import {
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
+  ChatOpsThreadAgentOverrideModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
@@ -615,11 +616,45 @@ export class ChatOpsManager {
       };
     }
 
+    // Check for a thread-level agent override (from a previous swap_agent call).
+    // This ensures swaps are scoped to the thread, not the channel binding.
+    const effectiveThreadId =
+      message.threadId ?? message.channelId ?? message.messageId;
+    const threadOverride = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      effectiveThreadId,
+    );
+
+    let resolvedAgent = agent;
+    if (threadOverride) {
+      const overrideAgent = await AgentModel.findById(threadOverride.agentId);
+      if (!overrideAgent) {
+        logger.warn(
+          {
+            agentId: threadOverride.agentId,
+            bindingId: binding.id,
+            threadId: effectiveThreadId,
+          },
+          "[ChatOps] Thread override agent not found, falling back to channel default",
+        );
+      } else if (overrideAgent.agentType !== "agent") {
+        logger.warn(
+          {
+            agentId: threadOverride.agentId,
+            agentType: overrideAgent.agentType,
+          },
+          "[ChatOps] Thread override agent has unsupported type, falling back to channel default",
+        );
+      } else {
+        resolvedAgent = overrideAgent;
+      }
+    }
+
     // Resolve inline agent mention
     const { agentToUse, cleanedMessageText } =
       await this.resolveInlineAgentMention({
         messageText: message.text,
-        defaultAgent: agent,
+        defaultAgent: resolvedAgent,
       });
 
     // Security: Validate user has access to the agent
@@ -1205,7 +1240,7 @@ export class ChatOpsManager {
 
   private async executeAndReply(params: {
     agent: { id: string; name: string };
-    binding: { organizationId: string };
+    binding: { id: string; organizationId: string; agentId: string | null };
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
@@ -1244,7 +1279,7 @@ export class ChatOpsManager {
       // appear as children of a single unified trace. The provider ID (e.g.
       // "ms-teams", "slack") is recorded as archestra.trigger.source so traces
       // can be filtered by invocation channel.
-      const result = await startActiveChatSpan({
+      const execution = await startActiveChatSpan({
         agentName: agent.name,
         agentId: agent.id,
         routeCategory: RouteCategory.CHATOPS,
@@ -1265,31 +1300,103 @@ export class ChatOpsManager {
             message.threadId,
           );
 
-          return executeA2AMessage({
+          const source =
+            provider.providerId === "slack"
+              ? "chatops:slack"
+              : "chatops:ms-teams";
+
+          const attachments =
+            message.attachments && message.attachments.length > 0
+              ? message.attachments
+              : undefined;
+
+          const effectiveThreadId =
+            message.threadId ?? message.channelId ?? message.messageId;
+
+          const initialResult = await executeA2AMessage({
             agentId: agent.id,
             organizationId: binding.organizationId,
             message: fullMessage,
             userId,
             sessionId,
-            source:
-              provider.providerId === "slack"
-                ? "chatops:slack"
-                : "chatops:ms-teams",
-            attachments:
-              message.attachments && message.attachments.length > 0
-                ? message.attachments
-                : undefined,
+            source,
+            attachments,
+            chatOpsBindingId: binding.id,
+            chatOpsThreadId: effectiveThreadId,
           });
+
+          const initialResponse = stripThinkingBlocks(initialResult.text || "");
+
+          // If swap_agent/swap_to_default_agent created a thread-level override
+          // during execution, hand off to the new agent in the same chatops turn
+          // only when the routing agent did not already produce a visible reply.
+          const postExecOverride =
+            await ChatOpsThreadAgentOverrideModel.findByThread(
+              binding.id,
+              effectiveThreadId,
+            );
+
+          if (postExecOverride && postExecOverride.agentId !== agent.id) {
+            const swappedAgent = await AgentModel.findById(
+              postExecOverride.agentId,
+            );
+            if (swappedAgent && swappedAgent.agentType === "agent") {
+              if (initialResponse) {
+                return {
+                  result: initialResult,
+                  responseAgent: {
+                    id: swappedAgent.id,
+                    name: swappedAgent.name,
+                  },
+                };
+              }
+
+              logger.info(
+                {
+                  bindingId: binding.id,
+                  threadId: effectiveThreadId,
+                  previousAgentId: agent.id,
+                  swappedAgentId: swappedAgent.id,
+                },
+                "[ChatOps] Thread agent override detected, handing off to swapped agent",
+              );
+
+              const handoffResult = await executeA2AMessage({
+                agentId: swappedAgent.id,
+                organizationId: binding.organizationId,
+                message: fullMessage,
+                userId,
+                sessionId,
+                source,
+                attachments,
+                chatOpsBindingId: binding.id,
+                chatOpsThreadId: effectiveThreadId,
+              });
+
+              return {
+                result: handoffResult,
+                responseAgent: {
+                  id: swappedAgent.id,
+                  name: swappedAgent.name,
+                },
+              };
+            }
+          }
+
+          return {
+            result: initialResult,
+            responseAgent: agent,
+          };
         },
       });
 
-      const agentResponse = stripThinkingBlocks(result.text || "");
+      const agentResponse = stripThinkingBlocks(execution.result.text || "");
 
       if (sendReply && agentResponse) {
         await provider.sendReply({
           originalMessage: message,
           text: agentResponse,
-          footer: `🤖 ${agent.name}`,
+          footer: `🤖 ${execution.responseAgent.name}`,
           conversationReference: message.metadata?.conversationReference,
         });
       } else if (
@@ -1309,7 +1416,7 @@ export class ChatOpsManager {
       return {
         success: true,
         agentResponse,
-        interactionId: result.messageId,
+        interactionId: execution.result.messageId,
       };
     } catch (error) {
       logger.error(

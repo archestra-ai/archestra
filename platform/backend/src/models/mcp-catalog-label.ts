@@ -1,6 +1,7 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { uniqBy } from "lodash-es";
 import db, { schema } from "@/database";
-import type { AgentLabelWithDetails } from "@/types";
+import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
 class McpCatalogLabelModel {
@@ -9,7 +10,7 @@ class McpCatalogLabelModel {
    */
   static async getLabelsForCatalogItem(
     catalogId: string,
-  ): Promise<AgentLabelWithDetails[]> {
+  ): Promise<AgentLabelGetResponse[]> {
     const rows = await db
       .select({
         keyId: schema.mcpCatalogLabelsTable.keyId,
@@ -87,6 +88,30 @@ class McpCatalogLabelModel {
     return labelsMap;
   }
 
+  static async getCatalogIdsByLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<string[]> {
+    if (pairs.length === 0) {
+      return [];
+    }
+
+    const rows = await db
+      .selectDistinct({ catalogId: schema.mcpCatalogLabelsTable.catalogId })
+      .from(schema.mcpCatalogLabelsTable)
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.mcpCatalogLabelsTable.keyId, pair.keyId),
+              eq(schema.mcpCatalogLabelsTable.valueId, pair.valueId),
+            ),
+          ),
+        ),
+      );
+
+    return rows.map((r) => r.catalogId);
+  }
+
   /**
    * Sync labels for a catalog item (replaces all existing labels).
    * Reuses AgentLabelModel.getOrCreateKey/Value for shared label_keys/label_values tables.
@@ -97,30 +122,59 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    await db.transaction(async (tx) => {
+    const affectedPairs = await db.transaction(async (tx) => {
+      const previousLabels = await tx
+        .select({
+          keyId: schema.mcpCatalogLabelsTable.keyId,
+          valueId: schema.mcpCatalogLabelsTable.valueId,
+        })
+        .from(schema.mcpCatalogLabelsTable)
+        .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
+
+      const insertedLabels: {
+        catalogId: string;
+        keyId: string;
+        valueId: string;
+      }[] = [];
+
+      // Delete all existing labels for this catalog item
       await tx
         .delete(schema.mcpCatalogLabelsTable)
         .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
 
+      // Upsert and assign new labels for this catalog item
       if (labels.length > 0) {
-        const labelInserts: {
-          catalogId: string;
-          keyId: string;
-          valueId: string;
-        }[] = [];
-
         for (const label of labels) {
-          const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
-          const valueId = await AgentLabelModel.getOrCreateValue(
-            label.value,
-            tx,
-          );
-          labelInserts.push({ catalogId, keyId, valueId });
+          const { key, value } = label;
+          const keyId = await AgentLabelModel.getOrCreateKey(key, tx);
+          const valueId = await AgentLabelModel.getOrCreateValue(value, tx);
+          insertedLabels.push({ catalogId, keyId, valueId });
         }
 
-        await tx.insert(schema.mcpCatalogLabelsTable).values(labelInserts);
+        await tx.insert(schema.mcpCatalogLabelsTable).values(insertedLabels);
       }
+
+      // Return union of affected labels
+      return uniqBy(
+        [...previousLabels, ...insertedLabels],
+        (l) => `${l.keyId}-${l.valueId}`,
+      );
     });
+
+    // Re-assign matched tools for agents and MCP gateways using automatic tool assignment.
+    if (affectedPairs.length > 0) {
+      const AgentModel = (await import("./agent")).default;
+      const AgentToolModel = (await import("./agent-tool")).default;
+
+      const matchedAgents = await AgentModel.findByLabels(affectedPairs);
+      const affectedAgents = matchedAgents
+        .filter((agent) => isAutomaticToolAssignmentSupported(agent.agentType))
+        .filter((agent) => agent.toolAssignmentMode === "automatic");
+
+      for (const agent of affectedAgents) {
+        await AgentToolModel.syncAgentToolsFromLabels(agent.id);
+      }
+    }
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});
@@ -190,3 +244,7 @@ class McpCatalogLabelModel {
 }
 
 export default McpCatalogLabelModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}

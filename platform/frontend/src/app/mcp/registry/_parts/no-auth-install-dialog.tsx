@@ -5,13 +5,18 @@ import { Building2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
+import {
+  type McpServerInstallScope,
+  SelectMcpServerCredentialTypeAndTeams,
+} from "./select-mcp-server-credential-type-and-teams";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
 export interface NoAuthInstallResult {
-  /** Team ID to assign the MCP server to (null for personal) */
+  /** Installation scope (personal, team, org) */
+  scope: McpServerInstallScope;
+  /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
 }
 
@@ -25,6 +30,8 @@ interface NoAuthInstallDialogProps {
   preselectedTeamId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
+  /** When true, only organization-wide installation is allowed */
+  orgOnly?: boolean;
 }
 
 export function NoAuthInstallDialog({
@@ -35,16 +42,23 @@ export function NoAuthInstallDialog({
   isInstalling,
   preselectedTeamId,
   personalOnly = false,
+  orgOnly = false,
 }: NoAuthInstallDialogProps) {
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [scope, setScope] = useState<McpServerInstallScope>(
+    orgOnly ? "org" : preselectedTeamId ? "team" : "personal",
+  );
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
+    preselectedTeamId ?? null,
+  );
   const [canInstall, setCanInstall] = useState(true);
 
   const handleInstall = useCallback(async () => {
-    await onInstall({ teamId: selectedTeamId });
-  }, [onInstall, selectedTeamId]);
+    await onInstall({ scope, teamId: selectedTeamId });
+  }, [onInstall, scope, selectedTeamId]);
 
   const handleClose = useCallback(() => {
     setSelectedTeamId(null);
+    setScope("personal");
     onClose();
   }, [onClose]);
 
@@ -86,10 +100,12 @@ export function NoAuthInstallDialog({
     >
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
+        onScopeChange={setScope}
         catalogId={catalogItem.id}
         onCanInstallChange={setCanInstall}
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
+        orgOnly={orgOnly}
       />
     </StandardFormDialog>
   );

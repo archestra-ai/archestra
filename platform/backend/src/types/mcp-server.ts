@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
+import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export const LocalMcpServerInstallationStatusSchema = z.enum([
   "idle",
@@ -28,6 +29,7 @@ export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
   serverType: InternalMcpCatalogServerTypeSchema,
+  scope: ResourceVisibilityScopeSchema,
   ownerEmail: z.string().nullable().optional(),
   catalogName: z.string().nullable().optional(),
   users: z.array(z.string()).optional(),
@@ -55,6 +57,7 @@ export const SelectMcpServerSchema = createSelectSchema(
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
   .extend({
     serverType: InternalMcpCatalogServerTypeSchema,
+    scope: ResourceVisibilityScopeSchema.optional(),
     userId: z.string().optional(), // For personal auth
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
     userConfigValues: z.record(z.string(), z.string()).optional(),
@@ -69,6 +72,7 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation
+    scope: true, // scope is install-time only; to change scope, uninstall + reinstall
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),

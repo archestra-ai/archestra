@@ -1,4 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
+import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -1190,6 +1191,22 @@ export const anthropicAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // Anthropic returns 400 invalid_request_error when the prompt exceeds
+    // the model's context window, with a message like "prompt is too long:
+    // X tokens > Y maximum". There is no structured code — message sniffing
+    // is the only signal.
+    const message: unknown =
+      get(error, "error.error.message") ?? get(error, "error.message");
+    if (
+      typeof message === "string" &&
+      message.toLowerCase().includes("prompt is too long")
+    ) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

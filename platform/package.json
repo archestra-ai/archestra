@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.2.22",
+  "version": "1.2.24",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -36,8 +36,7 @@
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
-    "turbo": "^2.8.13",
-    "typescript": "^5.9.2"
+    "turbo": "^2.8.13"
   },
   "pnpm": {
     "overrides": {
@@ -47,7 +46,7 @@
       "vite": "7.3.2",
       "@hono/node-server": "1.19.11",
       "body-parser": "2.2.1",
-      "dompurify": "3.3.3",
+      "dompurify": "3.4.0",
       "glob": "11.1.0",
       "esbuild": "0.27.0",
       "mdast-util-to-hast": "13.2.1",
@@ -66,7 +65,7 @@
       "minimatch": ">=10.2.3",
       "rollup": ">=4.59.0",
       "undici": "7.24.5",
-      "@xmldom/xmldom": ">=0.8.12",
+      "@xmldom/xmldom": ">=0.9.10",
       "path-to-regexp": ">=8.4.0",
       "picomatch@>=4": ">=4.0.4",
       "picomatch@<4": ">=2.3.2",

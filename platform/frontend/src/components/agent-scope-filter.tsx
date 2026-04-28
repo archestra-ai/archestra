@@ -26,18 +26,15 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-type ScopeValue =
-  | "personal"
-  | "my_personal"
-  | "others_personal"
-  | "team"
-  | "org"
-  | "built_in";
+type ScopeValue = "personal" | "team" | "org" | "built_in";
+type OwnerValue = "mine" | "others";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
+  ownerLabelPlural = "agents",
 }: {
   showBuiltIn?: boolean;
+  ownerLabelPlural?: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -46,25 +43,10 @@ export function AgentScopeFilter({
   const scope = (searchParams.get("scope") as ScopeValue | null) ?? undefined;
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
-
   const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-
-  // Derive the UI scope from URL params
-  const uiScope: ScopeValue | undefined = useMemo(() => {
-    if (scope !== "personal") return scope;
-    if (excludeAuthorIdsParam) return "others_personal";
-    if (!authorIdsParam) return "my_personal";
-    if (currentUserId) {
-      const ids = authorIdsParam.split(",");
-      if (ids.length === 1 && ids[0] === currentUserId) {
-        return "my_personal";
-      }
-    }
-    return "others_personal";
-  }, [scope, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
 
   const selectedTeamIds = useMemo(
     () => (teamIdsParam ? teamIdsParam.split(",") : []),
@@ -79,9 +61,22 @@ export function AgentScopeFilter({
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
-  const { data: members } = useOrganizationMembers(
-    !!isAdmin && uiScope === "others_personal",
-  );
+
+  const ownerFilter: OwnerValue = useMemo(() => {
+    if (scope !== "personal" || !isAdmin) return "mine";
+    if (excludeAuthorIdsParam) return "others";
+    if (!authorIdsParam) return "mine";
+    if (currentUserId) {
+      const ids = authorIdsParam.split(",");
+      if (ids.length === 1 && ids[0] === currentUserId) return "mine";
+    }
+    return "others";
+  }, [scope, isAdmin, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
+
+  const showOwnerSelect = scope === "personal" && !!isAdmin;
+  const showMembersMultiSelect = showOwnerSelect && ownerFilter === "others";
+
+  const { data: members } = useOrganizationMembers(showMembersMultiSelect);
 
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -101,19 +96,12 @@ export function AgentScopeFilter({
 
   const handleScopeChange = useCallback(
     (value: string) => {
-      if (value === "my_personal") {
+      if (value === "personal") {
         updateUrlParams({
           scope: "personal",
           teamIds: null,
           authorIds: currentUserId ?? null,
           excludeAuthorIds: null,
-        });
-      } else if (value === "others_personal") {
-        updateUrlParams({
-          scope: "personal",
-          teamIds: null,
-          authorIds: null,
-          excludeAuthorIds: currentUserId ?? null,
         });
       } else {
         updateUrlParams({
@@ -121,6 +109,23 @@ export function AgentScopeFilter({
           teamIds: null,
           authorIds: null,
           excludeAuthorIds: null,
+        });
+      }
+    },
+    [updateUrlParams, currentUserId],
+  );
+
+  const handleOwnerChange = useCallback(
+    (value: string) => {
+      if (value === "mine") {
+        updateUrlParams({
+          authorIds: currentUserId ?? null,
+          excludeAuthorIds: null,
+        });
+      } else {
+        updateUrlParams({
+          authorIds: null,
+          excludeAuthorIds: currentUserId ?? null,
         });
       }
     },
@@ -140,9 +145,10 @@ export function AgentScopeFilter({
     (values: string[]) => {
       updateUrlParams({
         authorIds: values.length > 0 ? values.join(",") : null,
+        excludeAuthorIds: values.length > 0 ? null : (currentUserId ?? null),
       });
     },
-    [updateUrlParams],
+    [updateUrlParams, currentUserId],
   );
 
   const teamItems = useMemo(
@@ -163,16 +169,13 @@ export function AgentScopeFilter({
 
   return (
     <div className="flex items-center gap-2">
-      <Select value={uiScope ?? "all"} onValueChange={handleScopeChange}>
+      <Select value={scope ?? "all"} onValueChange={handleScopeChange}>
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
           <SelectItem value="all">All types</SelectItem>
-          <SelectItem value="my_personal">My Personal</SelectItem>
-          {isAdmin && (
-            <SelectItem value="others_personal">Others' Personal</SelectItem>
-          )}
+          <SelectItem value="personal">Personal</SelectItem>
           <SelectItem value="team" disabled={!canReadTeams}>
             Team
           </SelectItem>
@@ -185,6 +188,17 @@ export function AgentScopeFilter({
           )}
         </SelectContent>
       </Select>
+      {showOwnerSelect && (
+        <Select value={ownerFilter} onValueChange={handleOwnerChange}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" side="bottom" align="start">
+            <SelectItem value="mine">My {ownerLabelPlural}</SelectItem>
+            <SelectItem value="others">Other users</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
       {scope === "team" && canReadTeams && teamItems.length > 0 && (
         <MultiSelect
           value={selectedTeamIds}
@@ -203,7 +217,7 @@ export function AgentScopeFilter({
           className="inline"
         />
       )}
-      {uiScope === "others_personal" && isAdmin && (
+      {showMembersMultiSelect && (
         <MultiSelect
           value={selectedAuthorIds}
           onValueChange={handleAuthorIdsChange}
@@ -229,7 +243,6 @@ export function ActiveFilterBadges() {
 
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
   const labelsParam = searchParams.get("labels");
   const scopeParam = searchParams.get("scope");
   const { data: session } = useSession();
@@ -238,20 +251,19 @@ export function ActiveFilterBadges() {
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
   const { data: isAdmin } = useHasPermissions({ member: ["read"] });
 
-  // Determine if this is "others' personal" — mirrors uiScope derivation in AgentScopeFilter
-  const isOthersPersonal = useMemo(() => {
+  // Users badge only shows when the author filter names specific other users,
+  // not when it's just the implicit "mine" selection.
+  const showsSpecificOtherUsers = useMemo(() => {
     if (scopeParam !== "personal") return false;
-    if (excludeAuthorIdsParam) return true;
     if (!authorIdsParam) return false;
-    if (currentUserId) {
-      const ids = authorIdsParam.split(",");
-      if (ids.length === 1 && ids[0] === currentUserId) return false;
-    }
+    if (!currentUserId) return authorIdsParam.length > 0;
+    const ids = authorIdsParam.split(",");
+    if (ids.length === 1 && ids[0] === currentUserId) return false;
     return true;
-  }, [scopeParam, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
+  }, [scopeParam, authorIdsParam, currentUserId]);
 
   const { data: members } = useOrganizationMembers(
-    !!isAdmin && isOthersPersonal,
+    !!isAdmin && showsSpecificOtherUsers,
   );
 
   const selectedTeams = useMemo(() => {
@@ -294,13 +306,17 @@ export function ActiveFilterBadges() {
       const params = new URLSearchParams(searchParams.toString());
       if (ids.length > 0) {
         params.set("authorIds", ids.join(","));
+        params.delete("excludeAuthorIds");
       } else {
         params.delete("authorIds");
+        if (currentUserId) {
+          params.set("excludeAuthorIds", currentUserId);
+        }
       }
       params.set("page", "1");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [authorIdsParam, searchParams, router, pathname],
+    [authorIdsParam, searchParams, router, pathname, currentUserId],
   );
 
   const handleRemoveLabel = useCallback(
@@ -326,7 +342,7 @@ export function ActiveFilterBadges() {
 
   const hasTeams = selectedTeams.length > 0;
   const hasUnavailableTeamsFilter = !!teamIdsParam && !canReadTeams;
-  const hasUsers = isOthersPersonal && selectedUsers.length > 0;
+  const hasUsers = showsSpecificOtherUsers && selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
 
   if (!hasTeams && !hasUsers && !hasLabels && !hasUnavailableTeamsFilter)

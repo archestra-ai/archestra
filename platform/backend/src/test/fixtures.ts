@@ -57,7 +57,7 @@ import type {
 } from "@/types";
 
 type MakeUserOverrides = Partial<
-  Pick<InsertUser, "email" | "name" | "emailVerified">
+  Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
 >;
 
 /**
@@ -453,7 +453,7 @@ async function makeMember(
  */
 async function makeMcpServer(
   overrides: Partial<
-    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId">
+    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId" | "scope">
   > = {},
 ) {
   // Create a catalog if catalogId is not provided

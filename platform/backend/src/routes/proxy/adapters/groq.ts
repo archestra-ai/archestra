@@ -5,6 +5,7 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
+import { ArchestraInternalErrorCode } from "@shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -267,6 +268,13 @@ export const groqAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    if (get(error, "error.code") === "context_length_exceeded") {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

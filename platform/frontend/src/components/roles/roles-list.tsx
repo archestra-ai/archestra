@@ -10,7 +10,7 @@ import {
   roleDescriptions,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye } from "lucide-react";
+import { Download, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
@@ -27,6 +27,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DialogStickyFooter } from "@/components/ui/dialog";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useRolesPaginated } from "@/lib/role.query";
+import { downloadRoleAsJson } from "./role-export";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
@@ -103,6 +104,11 @@ export function RolesList() {
             icon: <Eye className="h-4 w-4" />,
             label: "View permissions",
             onClick: () => setViewPermissionsRole(role),
+          },
+          {
+            icon: <Download className="h-4 w-4" />,
+            label: "Export role",
+            onClick: () => downloadRoleAsJson(role),
           },
         ];
         return <TableRowActions actions={actions} />;

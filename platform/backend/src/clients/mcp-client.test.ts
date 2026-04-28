@@ -1273,6 +1273,177 @@ describe("McpClient", () => {
           },
         });
       });
+
+      test("resolves org-scoped server for user when no personal or team server exists", async ({
+        makeUser,
+        makeOrganization,
+        makeMember,
+      }) => {
+        const org = await makeOrganization();
+        const admin = await makeUser({ email: "org-admin@example.com" });
+        const caller = await makeUser({ email: "org-member@example.com" });
+        await makeMember(caller.id, org.id);
+
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "linear-org",
+          serverType: "remote",
+          serverUrl: "https://mcp.linear.app/sse",
+        });
+
+        const orgSecret = await secretManager().createSecret(
+          { access_token: "linear-org-token" },
+          "linear-org-secret",
+        );
+
+        await McpServerModel.create({
+          name: "linear-org",
+          catalogId: dynCatalog.id,
+          secretId: orgSecret.id,
+          serverType: "remote",
+          ownerId: admin.id,
+          scope: "org",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "linear-org__list_projects",
+          description: "List Linear projects",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          "dynamic",
+        );
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_org_scope",
+            name: "linear-org__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "user-token",
+            teamId: null,
+            isOrganizationToken: false,
+            isUserToken: true,
+            userId: caller.id,
+            organizationId: org.id,
+          },
+        );
+
+        expect(result).toMatchObject({ isError: false });
+        expect(result?._meta?.archestraError).toBeUndefined();
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        expect(transportCalls.length).toBeGreaterThan(0);
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe("Bearer linear-org-token");
+      });
+
+      test("prefers personal server over org-scoped server when both exist", async ({
+        makeUser,
+        makeOrganization,
+        makeMember,
+      }) => {
+        const org = await makeOrganization();
+        const caller = await makeUser({
+          email: "prefers-personal@example.com",
+        });
+        const admin = await makeUser({ email: "org-admin-2@example.com" });
+        await makeMember(caller.id, org.id);
+
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "linear-priority",
+          serverType: "remote",
+          serverUrl: "https://mcp.linear.app/sse",
+        });
+
+        const personalSecret = await secretManager().createSecret(
+          { access_token: "linear-personal-token" },
+          "linear-personal-secret",
+        );
+        const orgSecret = await secretManager().createSecret(
+          { access_token: "linear-org-token" },
+          "linear-org-secret-2",
+        );
+
+        await McpServerModel.create({
+          name: "linear-priority-personal",
+          catalogId: dynCatalog.id,
+          secretId: personalSecret.id,
+          serverType: "remote",
+          ownerId: caller.id,
+          scope: "personal",
+        });
+        await McpServerModel.create({
+          name: "linear-priority-org",
+          catalogId: dynCatalog.id,
+          secretId: orgSecret.id,
+          serverType: "remote",
+          ownerId: admin.id,
+          scope: "org",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "linear-priority__list_projects",
+          description: "List projects",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+        await AgentToolModel.createOrUpdateCredentials(
+          agentId,
+          tool.id,
+          null,
+          "dynamic",
+        );
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCall(
+          {
+            id: "call_priority",
+            name: "linear-priority__list_projects",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "user-token",
+            teamId: null,
+            isOrganizationToken: false,
+            isUserToken: true,
+            userId: caller.id,
+            organizationId: org.id,
+          },
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+          .calls;
+        const lastCall = transportCalls[transportCalls.length - 1];
+        const headers = lastCall[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer linear-personal-token",
+        );
+      });
     });
 
     describe("Enterprise-managed credentials", () => {

@@ -5,7 +5,6 @@
     "moduleResolution": "Bundler",
     "resolvePackageJsonExports": true,
     "esModuleInterop": true,
-    "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,

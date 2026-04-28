@@ -267,6 +267,26 @@ export const auth = betterAuth({
   },
 
   databaseHooks: {
+    user: {
+      delete: {
+        before: async (user: { id: string }) => {
+          // The agents.author_id FK uses ON DELETE SET NULL so non-personal agents
+          // keep their authorship history. Personal MCP gateways must NOT survive
+          // the user — the deletion guard in routes/agent.ts blocks DELETE while
+          // is_personal_gateway = true, so an orphaned row would be undeletable.
+          // Swallow errors so a transient cleanup failure doesn't block the
+          // user-deletion flow; an admin can still clean up manually if needed.
+          try {
+            await AgentModel.deletePersonalMcpGatewaysForUser(user.id);
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to delete personal MCP gateways",
+            );
+          }
+        },
+      },
+    },
     session: {
       create: {
         before: async (session) => {
@@ -862,6 +882,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           logger.error(
             { err: error },
             "Failed to ensure personal chat agent on sign-in",
+          );
+        }
+        try {
+          await AgentModel.ensurePersonalMcpGateway({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal MCP gateway on sign-in",
           );
         }
       }

@@ -10,7 +10,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentScope, AgentType, BuiltInAgentConfig } from "@/types/agent";
+import type {
+  AgentScope,
+  AgentType,
+  BuiltInAgentConfig,
+  ToolAssignmentMode,
+  ToolExposureMode,
+} from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import usersTable from "./user";
@@ -46,6 +52,7 @@ const agentsTable = pgTable(
     name: text("name").notNull(),
     slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
+    isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
@@ -95,6 +102,18 @@ const agentsTable = pgTable(
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),
 
+    /** Whether tools/list exposes the full tool menu or only meta-discovery tools */
+    toolExposureMode: text("tool_exposure_mode")
+      .$type<ToolExposureMode>()
+      .notNull()
+      .default("full"),
+
+    /** Whether tools are assigned manually by an admin or automatically derived from catalog labels for MCP gateways */
+    toolAssignmentMode: text("tool_assignment_mode")
+      .$type<ToolAssignmentMode>()
+      .notNull()
+      .default("manual"),
+
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(
       "built_in_agent_config",
@@ -120,6 +139,11 @@ const agentsTable = pgTable(
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    uniqueIndex("agents_personal_gateway_per_member_idx")
+      .on(table.organizationId, table.authorId)
+      .where(
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+      ),
   ],
 );
 

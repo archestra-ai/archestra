@@ -10,6 +10,7 @@
  *
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
  */
+import { ArchestraInternalErrorCode } from "@shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -525,6 +526,13 @@ export const perplexityAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    if (get(error, "error.code") === "context_length_exceeded") {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

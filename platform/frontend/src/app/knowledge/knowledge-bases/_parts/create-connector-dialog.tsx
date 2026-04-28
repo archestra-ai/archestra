@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  CONNECTOR_TYPE_LABELS,
-  DocsPage,
-  getConnectorNamePlaceholder,
-} from "@shared";
+import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -38,95 +33,23 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
-import { AsanaConfigFields } from "./asana-config-fields";
-import { ConfluenceConfigFields } from "./confluence-config-fields";
+import {
+  CONNECTOR_OPTIONS,
+  ConnectorAdvancedConfigFields,
+  type ConnectorType,
+  connectorNeedsEmail,
+  getConnectorCredentialConfig,
+  getConnectorDocsUrl,
+  getConnectorTypeLabel,
+  getConnectorUrlConfig,
+  getDefaultConnectorConfig,
+} from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
-import { DropboxConfigFields } from "./dropbox-config-fields";
-import { GoogleDriveConfigFields } from "./gdrive-config-fields";
-import { GithubConfigFields } from "./github-config-fields";
-import { GitlabConfigFields } from "./gitlab-config-fields";
-import { JiraConfigFields } from "./jira-config-fields";
-import { LinearConfigFields } from "./linear-config-fields";
-import { NotionConfigFields } from "./notion-config-fields";
-import { OutlineConfigFields } from "./outline-config-fields";
 import { SchedulePicker } from "./schedule-picker";
-import { ServiceNowConfigFields } from "./servicenow-config-fields";
-import { SharePointConfigFields } from "./sharepoint-config-fields";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
-type ConnectorType =
-  archestraApiTypes.CreateConnectorData["body"]["connectorType"];
-
-const CONNECTOR_OPTIONS: {
-  type: ConnectorType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    type: "jira",
-    label: CONNECTOR_TYPE_LABELS.jira,
-    description: "Sync issues and projects from Jira",
-  },
-  {
-    type: "confluence",
-    label: CONNECTOR_TYPE_LABELS.confluence,
-    description: "Sync pages and spaces from Confluence",
-  },
-  {
-    type: "github",
-    label: CONNECTOR_TYPE_LABELS.github,
-    description: "Sync issues and pull requests from GitHub",
-  },
-  {
-    type: "gitlab",
-    label: CONNECTOR_TYPE_LABELS.gitlab,
-    description: "Sync issues and merge requests from GitLab",
-  },
-  {
-    type: "linear",
-    label: CONNECTOR_TYPE_LABELS.linear,
-    description: "Sync issues, projects, and cycles from Linear",
-  },
-  {
-    type: "servicenow",
-    label: "ServiceNow",
-    description: "Sync incidents from ServiceNow",
-  },
-  {
-    type: "notion",
-    label: CONNECTOR_TYPE_LABELS.notion,
-    description: "Sync pages and databases from Notion",
-  },
-  {
-    type: "sharepoint",
-    label: CONNECTOR_TYPE_LABELS.sharepoint,
-    description: "Sync documents and pages from SharePoint",
-  },
-  {
-    type: "gdrive",
-    label: CONNECTOR_TYPE_LABELS.gdrive,
-    description: "Sync files and documents from Google Drive",
-  },
-  {
-    type: "dropbox",
-    label: "Dropbox",
-    description: "Sync files and folders from Dropbox",
-  },
-  {
-    type: "asana",
-    label: CONNECTOR_TYPE_LABELS.asana,
-    description: "Sync tasks and comments from Asana",
-  },
-  {
-    type: "outline",
-    label: CONNECTOR_TYPE_LABELS.outline,
-    description: "Sync documents from Outline",
-  },
-];
-
-interface CreateConnectorFormValues {
+type CreateConnectorFormValues = {
   name: string;
   description: string;
   connectorType: ConnectorType;
@@ -134,7 +57,7 @@ interface CreateConnectorFormValues {
   email: string;
   apiToken: string;
   schedule: string;
-}
+};
 
 type ConnectorVisibility = NonNullable<
   archestraApiTypes.CreateConnectorData["body"]["visibility"]
@@ -174,27 +97,7 @@ export function CreateConnectorDialog({
   const handleSelectType = (type: ConnectorType) => {
     setSelectedType(type);
     form.setValue("connectorType", type);
-    const defaultConfigs: Record<ConnectorType, Record<string, unknown>> = {
-      jira: { type, isCloud: true },
-      confluence: { type, isCloud: true },
-      github: { type, githubUrl: "https://api.github.com" },
-      gitlab: { type, gitlabUrl: "https://gitlab.com" },
-      linear: {
-        type,
-        linearApiUrl: "https://api.linear.app",
-        includeComments: true,
-        includeProjects: false,
-        includeCycles: false,
-      },
-      servicenow: { type, syncDataForLastMonths: 6 },
-      notion: { type },
-      sharepoint: { type, includePages: true, recursive: true },
-      gdrive: { type, recursive: true },
-      dropbox: { type, rootPath: "" },
-      asana: { type },
-      outline: { type, outlineUrl: "https://app.getoutline.com" },
-    };
-    form.setValue("config", defaultConfigs[type]);
+    form.setValue("config", getDefaultConnectorConfig(type));
     setStep("configure");
   };
 
@@ -246,72 +149,23 @@ export function CreateConnectorDialog({
     onOpenChange(isOpen);
   };
 
-  const urlConfig = getUrlConfig(connectorType);
+  const urlConfig = getConnectorUrlConfig(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
-  const needsEmail = connectorType === "jira" || connectorType === "confluence";
+  const needsEmail = connectorNeedsEmail(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
     : null;
-
-  const jiraConfluenceApiTokenLabel = emailRequired
-    ? "API Token"
-    : "API Token / Personal Access Token";
-  const jiraConfluenceApiTokenPlaceholder = emailRequired
-    ? "Your API token"
-    : "Your API token or personal access token";
-  const jiraConfluenceApiTokenRequiredMessage = emailRequired
-    ? "API token is required"
-    : "API token or personal access token is required";
-
-  const apiTokenLabels: Record<ConnectorType, string> = {
-    servicenow: "Password",
-    notion: "Integration Token",
-    sharepoint: "Client Secret",
-    gdrive: "Service Account Key / OAuth Token",
-    dropbox: "Access Token",
-    outline: "API Key",
-    jira: jiraConfluenceApiTokenLabel,
-    confluence: jiraConfluenceApiTokenLabel,
-    github: "Personal Access Token",
-    gitlab: "Personal Access Token",
-    linear: "Personal Access Token",
-    asana: "Personal Access Token",
-  };
-
-  const apiTokenPlaceholders: Record<ConnectorType, string> = {
-    servicenow: "Your ServiceNow password",
-    notion: "secret_...",
-    sharepoint: "Your Azure AD client secret",
-    gdrive: "Paste service account JSON key or OAuth access token",
-    dropbox: "Your Dropbox access token",
-    outline: "Your Outline API key (starts with ol_api_)",
-    jira: jiraConfluenceApiTokenPlaceholder,
-    confluence: jiraConfluenceApiTokenPlaceholder,
-    github: "Your personal access token",
-    gitlab: "Your personal access token",
-    linear: "Your personal access token",
-    asana: "Your personal access token",
-  };
-
-  const apiTokenRequiredMessages: Record<ConnectorType, string> = {
-    servicenow: "Password is required",
-    notion: "Integration token is required",
-    sharepoint: "Client secret is required",
-    gdrive: "Service account key or OAuth token is required",
-    dropbox: "Access token is required",
-    outline: "API key is required",
-    jira: jiraConfluenceApiTokenRequiredMessage,
-    confluence: jiraConfluenceApiTokenRequiredMessage,
-    github: "Personal access token is required",
-    gitlab: "Personal access token is required",
-    linear: "Personal access token is required",
-    asana: "Personal access token is required",
-  };
-
-  const apiTokenLabel = apiTokenLabels[connectorType];
-  const apiTokenPlaceholder = apiTokenPlaceholders[connectorType];
-  const apiTokenRequiredMessage = apiTokenRequiredMessages[connectorType];
+  const {
+    apiTokenHelpText,
+    apiTokenLabel,
+    apiTokenPlaceholder,
+    apiTokenRequiredMessage,
+  } = getConnectorCredentialConfig({
+    type: connectorType,
+    emailRequired,
+    mode: "create",
+  });
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -379,18 +233,12 @@ export function CreateConnectorDialog({
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                   Configure{" "}
-                  {
-                    CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
-                      ?.label
-                  }{" "}
+                  {selectedType ? getConnectorTypeLabel(selectedType) : ""}{" "}
                   Connector
                 </DialogTitle>
                 <DialogDescription>
                   Enter the connection details for your{" "}
-                  {
-                    CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
-                      ?.label
-                  }{" "}
+                  {selectedType ? getConnectorTypeLabel(selectedType) : ""}{" "}
                   instance.{" "}
                   <ExternalDocsLink
                     href={connectorDocsUrl}
@@ -675,40 +523,7 @@ export function CreateConnectorDialog({
                           {...field}
                         />
                       </FormControl>
-                      {connectorType === "notion" && (
-                        <p className="text-[0.8rem] text-muted-foreground">
-                          Your Notion integration token (starts with{" "}
-                          <code>secret_</code>). Create one at
-                          notion.so/my-integrations.
-                        </p>
-                      )}
-                      {connectorType === "sharepoint" && (
-                        <p className="text-[0.8rem] text-muted-foreground">
-                          The Azure AD app registration requires the{" "}
-                          <code>Sites.Read.All</code> permission on Microsoft
-                          Graph.
-                        </p>
-                      )}
-                      {connectorType === "dropbox" && (
-                        <p className="text-[0.8rem] text-muted-foreground">
-                          Your Dropbox access token. Generate one in your
-                          Dropbox App Console.
-                        </p>
-                      )}
-                      {connectorType === "outline" && (
-                        <p className="text-[0.8rem] text-muted-foreground">
-                          Your Outline API key. Create one under{" "}
-                          <strong>Settings &rarr; API &amp; Apps</strong>. Keys
-                          start with <code>ol_api_</code>.
-                        </p>
-                      )}
-                      {connectorType === "gdrive" && (
-                        <p className="text-[0.8rem] text-muted-foreground">
-                          Paste a service account JSON key (entire file content)
-                          or an OAuth2 access token with{" "}
-                          <code>drive.readonly</code> scope.
-                        </p>
-                      )}
+                      {apiTokenHelpText}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -721,42 +536,11 @@ export function CreateConnectorDialog({
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-4 space-y-4">
                     <SchedulePicker form={form} name="schedule" />
-                    {connectorType === "jira" && (
-                      <JiraConfigFields form={form} hideUrl hideIsCloud />
-                    )}
-                    {connectorType === "confluence" && (
-                      <ConfluenceConfigFields form={form} hideUrl hideIsCloud />
-                    )}
-                    {connectorType === "github" && (
-                      <GithubConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "gitlab" && (
-                      <GitlabConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "linear" && (
-                      <LinearConfigFields form={form} />
-                    )}
-                    {connectorType === "servicenow" && (
-                      <ServiceNowConfigFields form={form} hideUrl />
-                    )}
-                    {connectorType === "notion" && (
-                      <NotionConfigFields form={form} />
-                    )}
-                    {connectorType === "sharepoint" && (
-                      <SharePointConfigFields form={form} />
-                    )}
-                    {connectorType === "gdrive" && (
-                      <GoogleDriveConfigFields form={form} />
-                    )}
-                    {connectorType === "dropbox" && (
-                      <DropboxConfigFields control={form.control} />
-                    )}
-                    {connectorType === "asana" && (
-                      <AsanaConfigFields form={form} hideWorkspaceGid />
-                    )}
-                    {connectorType === "outline" && (
-                      <OutlineConfigFields form={form} />
-                    )}
+                    <ConnectorAdvancedConfigFields
+                      connectorType={connectorType}
+                      form={form}
+                      mode="create"
+                    />
                   </CollapsibleContent>
                 </Collapsible>
               </DialogBody>
@@ -777,84 +561,4 @@ export function CreateConnectorDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function getUrlConfig(type: ConnectorType): {
-  fieldName: string;
-  label: string;
-  placeholder: string;
-  description: string;
-} | null {
-  switch (type) {
-    case "jira":
-      return {
-        fieldName: "config.jiraBaseUrl",
-        label: "URL",
-        placeholder: "https://your-domain.atlassian.net",
-        description: "Your Jira instance URL.",
-      };
-    case "confluence":
-      return {
-        fieldName: "config.confluenceUrl",
-        label: "URL",
-        placeholder: "https://your-domain.atlassian.net/wiki",
-        description: "Your Confluence instance URL.",
-      };
-    case "github":
-      return {
-        fieldName: "config.githubUrl",
-        label: "GitHub API URL",
-        placeholder: "https://api.github.com",
-        description:
-          "Use https://api.github.com for GitHub.com, or your GitHub Enterprise API URL.",
-      };
-    case "gitlab":
-      return {
-        fieldName: "config.gitlabUrl",
-        label: "GitLab URL",
-        placeholder: "https://gitlab.com",
-        description: "Use https://gitlab.com or your self-hosted GitLab URL.",
-      };
-    case "servicenow":
-      return {
-        fieldName: "config.instanceUrl",
-        label: "Instance URL",
-        placeholder: "https://your-instance.service-now.com",
-        description: "Your ServiceNow instance URL.",
-      };
-    case "linear":
-      return {
-        fieldName: "config.linearApiUrl",
-        label: "Linear API URL",
-        placeholder: "https://api.linear.app",
-        description: "Linear GraphQL API base URL.",
-      };
-    case "notion":
-      return null;
-    case "gdrive":
-      return null;
-    case "asana":
-      return null;
-    case "sharepoint":
-      return {
-        fieldName: "config.siteUrl",
-        label: "Site URL",
-        placeholder: "https://your-tenant.sharepoint.com/sites/your-site",
-        description: "Your SharePoint site URL.",
-      };
-    case "outline":
-      return {
-        fieldName: "config.outlineUrl",
-        label: "Instance URL",
-        placeholder: "https://app.getoutline.com",
-        description:
-          "Your Outline instance URL. Use https://app.getoutline.com for the cloud version, or your self-hosted URL.",
-      };
-    default:
-      return null;
-  }
-}
-
-function getConnectorDocsUrl(type: ConnectorType): string | null {
-  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
 }

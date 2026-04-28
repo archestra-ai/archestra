@@ -855,7 +855,10 @@ async function hydrateOidcConfigForRegistration<
     return data;
   }
 
-  const hydratedOidcConfig = await discoverOidcConfig(data.oidcConfig);
+  const hydratedOidcConfig = await discoverOidcConfig({
+    ...data.oidcConfig,
+    issuer: data.issuer,
+  });
 
   logger.info(
     {

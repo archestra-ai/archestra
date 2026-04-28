@@ -25,6 +25,53 @@ function makeOidcFormValues(
 }
 
 describe("normalizeIdentityProviderFormValues", () => {
+  it("syncs the nested OIDC issuer with the visible issuer field", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        issuer: "https://integrator-8514409.okta.com",
+        providerId: "Okta",
+        oidcConfig: {
+          issuer: "https://your-domain.okta.com",
+          pkce: true,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          discoveryEndpoint:
+            "https://your-domain.okta.com/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "email", name: "name" },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.issuer).toBe(
+      "https://integrator-8514409.okta.com",
+    );
+    expect(normalized.oidcConfig?.discoveryEndpoint).toBe(
+      "https://integrator-8514409.okta.com/.well-known/openid-configuration",
+    );
+  });
+
+  it("keeps a custom discovery endpoint while syncing the nested OIDC issuer", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        issuer: "https://login.example.com",
+        oidcConfig: {
+          issuer: "https://old-login.example.com",
+          pkce: true,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          discoveryEndpoint:
+            "https://discovery.example.com/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "email", name: "name" },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.issuer).toBe("https://login.example.com");
+    expect(normalized.oidcConfig?.discoveryEndpoint).toBe(
+      "https://discovery.example.com/.well-known/openid-configuration",
+    );
+  });
+
   it("fills inferred Keycloak enterprise-managed defaults when the section is used", () => {
     const normalized = normalizeIdentityProviderFormValues(
       makeOidcFormValues({

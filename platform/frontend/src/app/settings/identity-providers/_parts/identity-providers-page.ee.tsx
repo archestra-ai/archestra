@@ -81,9 +81,8 @@ const IDP_CONFIGS: IdpConfig[] = [
     hideProviderId: true,
     providerType: "oidc",
     defaultOidcConfig: {
-      issuer: "https://your-domain.okta.com",
-      discoveryEndpoint:
-        "https://your-domain.okta.com/.well-known/openid-configuration",
+      issuer: "",
+      discoveryEndpoint: "",
       scopes: ["openid", "email", "profile"],
       mapping: {
         id: "sub",

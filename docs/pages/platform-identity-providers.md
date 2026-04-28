@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-04-20
+lastUpdated: 2026-04-28
 ---
 
 <!--
@@ -102,21 +102,71 @@ http://localhost:3000/api/auth/sso/saml2/sp/acs/{ProviderId}
 
 ### Okta
 
-Okta is an enterprise identity management platform. To configure Okta SSO:
+Okta is an enterprise identity management platform. Archestra supports Okta OIDC SSO with self-service configuration.
 
-1. In Okta Admin Console, create a new **Web Application**
-2. Set the **Sign-in redirect URI** to your callback URL: `https://your-domain.com/api/auth/sso/callback/Okta`
-3. Copy the **Client ID** and **Client Secret**
-4. In Archestra, click **Enable** on the Okta card
-5. Enter your Okta domain (e.g., `your-org.okta.com`)
-6. Enter the Client ID and Client Secret
-7. Click **Create Provider**
+#### Prerequisites
 
-**Okta-specific requirements:**
+- An Okta admin account with permission to create app integrations
+- An Archestra admin account
+- Your Archestra external URL, for example `https://your-archestra-domain.com`
+- Your Okta org issuer, for example `https://your-org.okta.com`
 
-- Disable **DPoP** (Demonstrating Proof of Possession) in your Okta application settings. Archestra does not support DPoP.
-- The issuer URL is automatically set to `https://your-domain.okta.com`
-- If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+#### Supported Features
+
+- SP-initiated SSO
+- IdP-initiated SSO through Okta's OIDC app tile
+- Just-In-Time user provisioning
+- SP-initiated logout when Okta publishes an `end_session_endpoint`
+
+Archestra does not support Okta DPoP for SSO clients. Disable **Require Demonstrating Proof of Possession (DPoP) header in token requests** in the Okta app integration.
+
+#### Configuration Steps
+
+1. In the Okta Admin Console, go to **Applications > Applications**.
+2. Click **Create App Integration**.
+3. Select **OIDC - OpenID Connect** and **Web Application**.
+4. Set **Sign-in redirect URIs** to:
+
+   ```
+   https://your-archestra-domain.com/api/auth/sso/callback/Okta
+   ```
+
+5. Set **Sign-out redirect URIs** to:
+
+   ```
+   https://your-archestra-domain.com/auth/sign-in
+   ```
+
+6. Assign the users or groups that should access Archestra.
+7. Save the Okta app integration, then copy the **Client ID** and **Client Secret**.
+8. In Archestra, go to **Settings > Identity Providers** and click **Enable** on the Okta card.
+9. Enter your Okta issuer URL, for example:
+
+   ```
+   https://your-org.okta.com
+   ```
+
+10. Enter your allowed email domains, Client ID, and Client Secret.
+11. Keep the discovery endpoint empty unless you need a custom value. Archestra derives it from the issuer as:
+
+    ```
+    https://your-org.okta.com/.well-known/openid-configuration
+    ```
+
+12. Click **Create Provider**.
+
+If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+
+#### SP-Initiated SSO
+
+Users can start sign-in from the Archestra sign-in page by selecting **Sign in with Okta**. After Okta authenticates the user, Archestra checks the returned email against **Allowed Email Domains**, provisions the user if needed, and opens the app.
+
+#### Troubleshoot
+
+- If setup fails with an issuer mismatch, verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.
+- If login fails after redirect, verify that the Okta **Sign-in redirect URI** exactly matches the Archestra callback URL, including `Okta` casing.
+- If sign-out returns an Okta error, verify that the Okta **Sign-out redirect URI** is set to `https://your-archestra-domain.com/auth/sign-in`, or disable **Enable RP-Initiated Logout** in Archestra for that provider.
+- If a user is denied after successful Okta authentication, verify that their email domain matches **Allowed Email Domains**.
 
 ### Google
 

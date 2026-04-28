@@ -11,10 +11,14 @@ export function normalizeIdentityProviderFormValues(
     return data;
   }
 
+  const oidcConfig = normalizeOidcIssuerFields(data);
   const enterpriseManagedCredentials =
-    data.oidcConfig.enterpriseManagedCredentials;
+    oidcConfig.enterpriseManagedCredentials;
   if (!enterpriseManagedCredentials) {
-    return data;
+    return {
+      ...data,
+      oidcConfig,
+    };
   }
 
   const inferredExchangeType = inferEnterpriseExchangeType({
@@ -33,13 +37,16 @@ export function normalizeIdentityProviderFormValues(
   });
 
   if (!hasConfiguredEnterpriseManagedFields) {
-    return data;
+    return {
+      ...data,
+      oidcConfig,
+    };
   }
 
   return {
     ...data,
     oidcConfig: {
-      ...data.oidcConfig,
+      ...oidcConfig,
       enterpriseManagedCredentials: {
         exchangeStrategy: enterpriseManagedCredentials.exchangeStrategy
           ? enterpriseManagedCredentials.exchangeStrategy
@@ -53,6 +60,32 @@ export function normalizeIdentityProviderFormValues(
           getDefaultSubjectTokenType(inferredExchangeType),
       },
     },
+  };
+}
+
+export function normalizeOidcIssuerFields(
+  data: IdentityProviderFormValues,
+): NonNullable<IdentityProviderFormValues["oidcConfig"]> {
+  const oidcConfig = data.oidcConfig;
+  if (!oidcConfig) {
+    throw new Error("OIDC configuration is required");
+  }
+
+  const issuer = data.issuer.trim();
+  const previousIssuer = oidcConfig.issuer?.trim() ?? "";
+  const discoveryEndpoint = oidcConfig.discoveryEndpoint?.trim() ?? "";
+  const defaultPreviousDiscoveryEndpoint = previousIssuer
+    ? getDefaultDiscoveryEndpoint(previousIssuer)
+    : "";
+
+  return {
+    ...oidcConfig,
+    issuer,
+    discoveryEndpoint:
+      !discoveryEndpoint ||
+      discoveryEndpoint === defaultPreviousDiscoveryEndpoint
+        ? getDefaultDiscoveryEndpoint(issuer)
+        : discoveryEndpoint,
   };
 }
 
@@ -92,6 +125,10 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function getDefaultDiscoveryEndpoint(issuer: string): string {
+  return `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
 }
 
 export function getDefaultTokenEndpointAuthentication(

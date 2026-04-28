@@ -3,7 +3,7 @@ import {
   addNomicTaskPrefix,
   RouteId,
 } from "@shared";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, count, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -31,6 +31,7 @@ import {
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  MemoryExtractionStatusSchema,
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
@@ -38,6 +39,7 @@ import {
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateMcpSettingsSchema,
+  UpdateMemorySettingsSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -190,6 +192,89 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/memory-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateMemorySettings,
+        description: "Update durable memory settings",
+        tags: ["Organization"],
+        body: UpdateMemorySettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      if (body.memoryExtractorChatApiKeyId) {
+        const apiKey = await LlmProviderApiKeyModel.findById(
+          body.memoryExtractorChatApiKeyId,
+        );
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(404, "API key not found");
+        }
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, body);
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.get(
+    "/api/organization/memory-extraction-stats",
+    {
+      schema: {
+        operationId: RouteId.GetMemoryExtractionStats,
+        description:
+          "Get memory extraction status distribution for org conversations",
+        tags: ["Organization"],
+        response: constructResponseSchema(
+          z.object({
+            pending: z.number().int().nonnegative(),
+            completed: z.number().int().nonnegative(),
+            failed: z.number().int().nonnegative(),
+            skipped: z.number().int().nonnegative(),
+            null: z.number().int().nonnegative(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const rows = await db
+        .select({
+          status: schema.conversationsTable.memoryExtractionStatus,
+          total: count(),
+        })
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.organizationId, organizationId))
+        .groupBy(schema.conversationsTable.memoryExtractionStatus);
+
+      const stats = {
+        pending: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+        null: 0,
+      };
+
+      for (const row of rows) {
+        if (row.status === null) {
+          stats.null = Number(row.total);
+          continue;
+        }
+
+        const parsed = MemoryExtractionStatusSchema.safeParse(row.status);
+        if (parsed.success) {
+          stats[parsed.data] = Number(row.total);
+        }
+      }
+
+      return reply.send(stats);
     },
   );
 

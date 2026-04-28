@@ -9,6 +9,13 @@ import { schema } from "@/database";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ConversationShareVisibilitySchema } from "./conversation-share";
 
+export const MemoryExtractionStatusSchema = z.enum([
+  "pending",
+  "completed",
+  "failed",
+  "skipped",
+]);
+
 const ConversationShareSummarySchema = z
   .object({
     id: z.string().uuid(),
@@ -20,11 +27,13 @@ const ConversationShareSummarySchema = z
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
+  memoryExtractionStatus: MemoryExtractionStatusSchema.nullable(),
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
+  memoryExtractionStatus: MemoryExtractionStatusSchema.nullable().optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(
@@ -86,6 +95,9 @@ export const UpdateConversationSchema = createUpdateSchema(
 
 export type Conversation = z.infer<typeof SelectConversationSchema>;
 export type InsertConversation = z.infer<typeof InsertConversationSchema>;
+export type MemoryExtractionStatus = z.infer<
+  typeof MemoryExtractionStatusSchema
+>;
 /** API request body type (pinnedAt as ISO string) */
 export type UpdateConversationInput = z.infer<typeof UpdateConversationSchema>;
 /** Model-level type (pinnedAt coerced to Date) */

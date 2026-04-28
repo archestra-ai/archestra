@@ -122,6 +122,29 @@ class MemoryTombstoneModel {
     };
   }
 
+  static async deleteExpired(params: {
+    organizationId: string;
+    ttlDays: number;
+  }): Promise<number> {
+    const cutoff = new Date(Date.now() - params.ttlDays * MS_IN_DAY);
+
+    const deleted = await db
+      .delete(schema.memoryTombstonesTable)
+      .where(
+        and(
+          eq(
+            schema.memoryTombstonesTable.organizationId,
+            params.organizationId,
+          ),
+          isNotNull(schema.memoryTombstonesTable.expiresAt),
+          lt(schema.memoryTombstonesTable.expiresAt, cutoff),
+        ),
+      )
+      .returning({ id: schema.memoryTombstonesTable.id });
+
+    return deleted.length;
+  }
+
   static async pruneExpired(): Promise<number> {
     const deleted = await db
       .delete(schema.memoryTombstonesTable)

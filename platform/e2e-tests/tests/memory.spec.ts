@@ -6,11 +6,9 @@ function makeMarker(prefix: string): string {
 }
 
 test.describe("Memory API lifecycle", () => {
-  test("api lifecycle supports create approve reject archive unarchive delete", { tag: ["@memory"] }, async ({
-    request,
-    makeApiRequest,
-    getActiveOrganizationId,
-  }) => {
+  test("api lifecycle supports create approve reject archive unarchive delete", {
+    tag: ["@memory"],
+  }, async ({ request, makeApiRequest, getActiveOrganizationId }) => {
     const organizationId = await getActiveOrganizationId(request);
 
     const createdAResponse = await makeApiRequest({
@@ -104,7 +102,9 @@ test.describe("Memory API lifecycle", () => {
     expect(deletedB).toEqual({ success: true });
   });
 
-  test("api enforces scope isolation and RBAC for non-admin users", { tag: ["@memory"] }, async ({
+  test("api enforces scope isolation and RBAC for non-admin users", {
+    tag: ["@memory"],
+  }, async ({
     request,
     memberRequest,
     makeApiRequest,
@@ -152,12 +152,9 @@ test.describe("Memory API lifecycle", () => {
 });
 
 test.describe("Memory UI workflows", () => {
-  test("settings memory enforces stage-13 final action matrix", { tag: ["@memory"] }, async ({
-    page,
-    request,
-    makeApiRequest,
-    getActiveOrganizationId,
-  }) => {
+  test("settings memory enforces stage-13 final action matrix", {
+    tag: ["@memory"],
+  }, async ({ page, request, makeApiRequest, getActiveOrganizationId }) => {
     test.setTimeout(120_000);
 
     const organizationId = await getActiveOrganizationId(request);

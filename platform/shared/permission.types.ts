@@ -33,6 +33,7 @@ export const resources = [
   "mcpServerInstallation",
   "knowledgeSource",
   "memory",
+  "memorySettings",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "chat",
@@ -88,6 +89,7 @@ export const resourceLabels: Record<Resource, string> = {
   mcpServerInstallation: "MCP Server Installations",
   knowledgeSource: "Knowledge Sources",
   memory: "Memory",
+  memorySettings: "Memory Settings",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   team: "Teams",
@@ -146,6 +148,8 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
   memory:
     "Durable memory items with scope-aware read, review, and lifecycle controls",
+  memorySettings:
+    "Organization-level durable memory settings (extraction, injection, retention, limits)",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Controls if the simple view of the app is enabled",
@@ -186,7 +190,12 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeSource", "memory", "knowledgeSettings"],
+  Knowledge: [
+    "knowledgeSource",
+    "memory",
+    "memorySettings",
+    "knowledgeSettings",
+  ],
   Other: [
     "chat",
     "log",

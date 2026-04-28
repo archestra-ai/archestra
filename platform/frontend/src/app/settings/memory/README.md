@@ -6,9 +6,11 @@ Implements the `/settings/memory` experience for reviewing durable memory candid
 
 ```
 settings/memory/
-├── page.tsx                        # Route entry, wraps MemoryList in ErrorBoundary
+├── page.tsx                        # Route entry, tabs: Records | Settings
 └── _parts/
     ├── memory-list.tsx             # Table, status tabs, scope filter, search, banners
+    ├── memory-settings.tsx         # Org-level extraction/injection/retention settings
+    ├── memory-settings-utils.ts    # Initial form state + payload diff helpers
     ├── memory-create-dialog.tsx    # Manual candidate proposal form
     ├── memory-approve-dialog.tsx   # Approval with optional content edit
     ├── memory-reject-dialog.tsx    # Rejection with required reason
@@ -16,7 +18,7 @@ settings/memory/
     └── memory-utils.ts             # Labels, scope-role authorization helpers
 ```
 
-`MemoryList` owns status tab state (`pending`, `approved`, `archived`, `all`) and drives the dialogs and drawer. All rendering uses components from `frontend/src/components/ui` and app-name interpolation via `useAppName()`; there are no raw HTML form elements.
+`page.tsx` owns top-level tabs: **Records** (`MemoryList`) and **Settings** (`MemorySettings`). `MemoryList` owns memory-status tab state (`pending`, `approved`, `archived`, `all`) and drives the dialogs and drawer. All rendering uses components from `frontend/src/components/ui` and app-name interpolation via `useAppName()`; there are no raw HTML form elements.
 
 ## Data layer
 
@@ -35,6 +37,7 @@ All queries and mutations are centralized in [`frontend/src/lib/memory.query.ts`
 | `useRejectMemoryMutation` | `rejectMemory` | Decline with a taxonomy reason. |
 | `useArchiveMemoryMutation` | `archiveMemory` / `unarchiveMemory` | Reversible hide. |
 | `useDeleteMemoryMutation` | `deleteMemory` | Permanent delete; may emit a tombstone server-side. |
+| `useUpdateMemorySettings` | `updateMemorySettings` | Update org-level memory runtime settings. |
 
 All error handling and toasts are defined inside the mutation `onSuccess` / `onError` callbacks in `memory.query.ts`. Components never `try/catch` these calls and never surface toasts themselves. HTTP errors are routed through `handleApiError` and cause the mutation to resolve with sensible defaults rather than throwing.
 
@@ -62,6 +65,12 @@ The default tab is **Pending**, which shows candidates that have passed the pre-
 
 The Memory tab is registered in [`settings-tabs.ts`](../settings-tabs.ts) and rendered by the shared settings layout ([`settings/layout.tsx`](../layout.tsx)). Visibility of the tab depends on the caller having at least `memory:read` in their effective role.
 
+Within the page:
+
+- **Records** tab uses memory routes (`/api/memory/*`) and existing `memory:*` permissions.
+- **Settings** tab updates `/api/organization/memory-settings` and uses `WithPermissions` with `memorySettings:update`.
+- Save flow uses a single `SettingsSaveBar` backed by `useUpdateMemorySettings`.
+
 ## Frontend ↔ backend contract map
 
 | UI surface | Backend route | Policy gate |
@@ -76,6 +85,7 @@ The Memory tab is registered in [`settings-tabs.ts`](../settings-tabs.ts) and re
 | Reject | `POST /api/memory/:id/reject` | `memory:approve`, reason required |
 | Archive / Unarchive | `POST /api/memory/:id/archive` / `.../unarchive` | `memory:update` |
 | Delete | `DELETE /api/memory/:id` | `memory:delete`, may emit tombstone |
+| Memory settings save | `PATCH /api/organization/memory-settings` | `memorySettings:update` |
 
 ## Testing
 

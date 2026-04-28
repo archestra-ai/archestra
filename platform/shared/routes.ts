@@ -330,6 +330,8 @@ export const RouteId = {
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
+  UpdateMemorySettings: "updateMemorySettings",
+  GetMemoryExtractionStats: "getMemoryExtractionStats",
   DropEmbeddingConfig: "dropEmbeddingConfig",
   TestEmbeddingConnection: "testEmbeddingConnection",
 

@@ -42,6 +42,7 @@ import logger from "@/logging";
 import { memoryInjectionBuilder } from "@/memory/injection/injection-builder";
 import { assessExternalToolCapabilities } from "@/memory/policy/external-tools-capability";
 import {
+  reportMemoryExtractionStatus,
   reportMemoryInjectionBlock,
   reportMemoryScopeViolationBlocked,
 } from "@/memory/telemetry/metrics";
@@ -214,12 +215,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalAgentId = agentId;
 
       // Fetch enabled tool IDs and custom selection status in parallel
-      const [enabledToolIds, hasCustomSelection, slimChatErrorUi] =
-        await Promise.all([
-          ConversationEnabledToolModel.findByConversation(conversationId),
-          ConversationEnabledToolModel.hasCustomSelection(conversationId),
-          OrganizationModel.getSlimChatErrorUi(organizationId),
-        ]);
+      const [
+        enabledToolIds,
+        hasCustomSelection,
+        slimChatErrorUi,
+        organization,
+      ] = await Promise.all([
+        ConversationEnabledToolModel.findByConversation(conversationId),
+        ConversationEnabledToolModel.hasCustomSelection(conversationId),
+        OrganizationModel.getSlimChatErrorUi(organizationId),
+        OrganizationModel.getById(organizationId),
+      ]);
 
       // Fetch MCP tools with enabled tool filtering
       // Pass undefined if no custom selection (use all tools)
@@ -269,14 +275,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         callback: async () => {
           // Build system prompt from agent's systemPrompt field.
           // Memory injection is explicitly disabled for untrusted context.
-          const considerContextUntrusted = config.memory.injectionEnabled
+          const memoryInjectionFeatureEnabled =
+            organization?.memoryInjectionEnabled ?? false;
+          const considerContextUntrusted = memoryInjectionFeatureEnabled
             ? ((await AgentModel.findById(agentId))?.considerContextUntrusted ??
               true)
             : false;
           const externalToolCapabilityAssessment =
             assessExternalToolCapabilities(Object.entries(mcpTools));
           const memoryInjectionBlockReason = getMemoryInjectionBlockReason({
-            featureFlagEnabled: config.memory.injectionEnabled,
+            featureFlagEnabled: memoryInjectionFeatureEnabled,
             considerContextUntrusted,
             hasExternalToolCapability:
               externalToolCapabilityAssessment.hasExternalCommunicationCapability,
@@ -873,6 +881,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             organizationId,
                             agentId,
                           },
+                        });
+                        await ConversationModel.setMemoryExtractionStatus({
+                          id: conversationId,
+                          status: "pending",
+                        });
+                        reportMemoryExtractionStatus({
+                          status: "pending",
+                          organizationId,
                         });
                       } catch (error) {
                         logger.warn(

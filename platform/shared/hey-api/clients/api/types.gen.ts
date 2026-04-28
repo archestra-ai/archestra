@@ -18182,6 +18182,9 @@ export type GetChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -18318,6 +18321,9 @@ export type CreateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -18535,6 +18541,9 @@ export type GetChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -18675,6 +18684,9 @@ export type UpdateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -19169,6 +19181,9 @@ export type GetSharedConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -19304,6 +19319,9 @@ export type ForkSharedConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -19441,6 +19459,9 @@ export type GenerateChatConversationTitleResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -19577,6 +19598,9 @@ export type UpdateChatMessageResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -34510,8 +34534,10 @@ export type ListMemoryData = {
         limit?: number;
         offset?: number;
         scopeType?: 'user' | 'team' | 'organization';
-        status?: 'candidate' | 'approved' | 'rejected' | 'archived';
-        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        status?: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
+        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        sourceType?: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId?: string;
         search?: string;
     };
     url: '/api/memory';
@@ -34586,8 +34612,8 @@ export type ListMemoryResponses = {
             organizationId: string;
             scopeType: 'user' | 'team' | 'organization';
             scopeId: string;
-            kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-            status: 'candidate' | 'approved' | 'rejected' | 'archived';
+            kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+            status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
             content: string;
             createdBy: string | null;
             reviewedBy: string | null;
@@ -34595,7 +34621,53 @@ export type ListMemoryResponses = {
             rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
             rejectionComment: string | null;
             extractorVersion: string | null;
-            policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+            policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+            sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+            sourceId: string | null;
+            sourceMetadata: {
+                origin: {
+                    conversationId?: string;
+                    messageIds?: Array<string>;
+                    messageRange?: {
+                        from?: string;
+                        to?: string;
+                    };
+                    channel?: string;
+                    toolName?: string;
+                    [key: string]: unknown;
+                };
+                ingestion: {
+                    runId: string;
+                    idempotencyKey?: string;
+                    dedupKey?: string;
+                    ingestedAt?: string;
+                    [key: string]: unknown;
+                };
+                actor: {
+                    kind: 'user' | 'agent' | 'system';
+                    userId?: string;
+                    agentId?: string;
+                    [key: string]: unknown;
+                };
+                quality: {
+                    extractorVersion?: string;
+                    confidenceBand?: 'low' | 'medium' | 'high';
+                    [key: string]: unknown;
+                };
+                safety: {
+                    policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                    sourceDeleted?: boolean;
+                    sourceDeletedAt?: string;
+                    [key: string]: unknown;
+                };
+                future: {
+                    projectId?: string | null;
+                    workspaceId?: string | null;
+                    sectionId?: string | null;
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | null;
             sourceConversationId: string | null;
             sourceMessageIds: Array<string> | null;
             supersedesMemoryId: string | null;
@@ -34603,6 +34675,30 @@ export type ListMemoryResponses = {
             language: string | null;
             lastVerifiedAt: string | null;
             expiresAt: string | null;
+            scores: {
+                safetyScore: number;
+                confidenceScore: number;
+                salienceScore: number;
+                sensitivityRisk: number;
+                injectionRisk: number;
+                provenanceTrustScore: number;
+                stabilityScore?: number;
+                exfiltrationRisk?: number;
+                toolActionRisk?: number;
+                scopeRisk?: number;
+            } | null;
+            classifications: {
+                piiCategories: Array<string>;
+                secretDetected: boolean;
+                instructionLike: boolean;
+                userExplicitlyRequestedMemory: boolean;
+                derivedFromExternalContext: boolean;
+                containsExternalClaim?: boolean;
+                containsPolicyLikeInstruction?: boolean;
+            } | null;
+            scorerVersion: string | null;
+            lastRetrievedAt: string | null;
+            retrievalCount: number;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -34623,12 +34719,18 @@ export type CreateMemoryData = {
     body: {
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
         content: string;
-        policyFlags?: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags?: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
         confidenceBand?: 'low' | 'medium' | 'high';
         expiresAt?: unknown;
         language?: string;
+        sourceId?: string;
+        sourceFuture?: {
+            projectId?: string | null;
+            workspaceId?: string | null;
+            sectionId?: string | null;
+        };
     };
     path?: never;
     query?: never;
@@ -34703,8 +34805,8 @@ export type CreateMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -34712,7 +34814,53 @@ export type CreateMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -34720,6 +34868,30 @@ export type CreateMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -34886,8 +35058,8 @@ export type ListPendingMemoryResponses = {
             organizationId: string;
             scopeType: 'user' | 'team' | 'organization';
             scopeId: string;
-            kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-            status: 'candidate' | 'approved' | 'rejected' | 'archived';
+            kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+            status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
             content: string;
             createdBy: string | null;
             reviewedBy: string | null;
@@ -34895,7 +35067,53 @@ export type ListPendingMemoryResponses = {
             rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
             rejectionComment: string | null;
             extractorVersion: string | null;
-            policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+            policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+            sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+            sourceId: string | null;
+            sourceMetadata: {
+                origin: {
+                    conversationId?: string;
+                    messageIds?: Array<string>;
+                    messageRange?: {
+                        from?: string;
+                        to?: string;
+                    };
+                    channel?: string;
+                    toolName?: string;
+                    [key: string]: unknown;
+                };
+                ingestion: {
+                    runId: string;
+                    idempotencyKey?: string;
+                    dedupKey?: string;
+                    ingestedAt?: string;
+                    [key: string]: unknown;
+                };
+                actor: {
+                    kind: 'user' | 'agent' | 'system';
+                    userId?: string;
+                    agentId?: string;
+                    [key: string]: unknown;
+                };
+                quality: {
+                    extractorVersion?: string;
+                    confidenceBand?: 'low' | 'medium' | 'high';
+                    [key: string]: unknown;
+                };
+                safety: {
+                    policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                    sourceDeleted?: boolean;
+                    sourceDeletedAt?: string;
+                    [key: string]: unknown;
+                };
+                future: {
+                    projectId?: string | null;
+                    workspaceId?: string | null;
+                    sectionId?: string | null;
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | null;
             sourceConversationId: string | null;
             sourceMessageIds: Array<string> | null;
             supersedesMemoryId: string | null;
@@ -34903,6 +35121,30 @@ export type ListPendingMemoryResponses = {
             language: string | null;
             lastVerifiedAt: string | null;
             expiresAt: string | null;
+            scores: {
+                safetyScore: number;
+                confidenceScore: number;
+                salienceScore: number;
+                sensitivityRisk: number;
+                injectionRisk: number;
+                provenanceTrustScore: number;
+                stabilityScore?: number;
+                exfiltrationRisk?: number;
+                toolActionRisk?: number;
+                scopeRisk?: number;
+            } | null;
+            classifications: {
+                piiCategories: Array<string>;
+                secretDetected: boolean;
+                instructionLike: boolean;
+                userExplicitlyRequestedMemory: boolean;
+                derivedFromExternalContext: boolean;
+                containsExternalClaim?: boolean;
+                containsPolicyLikeInstruction?: boolean;
+            } | null;
+            scorerVersion: string | null;
+            lastRetrievedAt: string | null;
+            retrievalCount: number;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -35075,8 +35317,8 @@ export type GetMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35084,7 +35326,53 @@ export type GetMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35092,6 +35380,30 @@ export type GetMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -35102,7 +35414,7 @@ export type GetMemoryResponse = GetMemoryResponses[keyof GetMemoryResponses];
 export type UpdateMemoryData = {
     body: {
         content?: string;
-        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
         expiresAt?: unknown;
     };
     path: {
@@ -35180,8 +35492,8 @@ export type UpdateMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35189,7 +35501,53 @@ export type UpdateMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35197,6 +35555,30 @@ export type UpdateMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -35207,7 +35589,7 @@ export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryRespo
 export type SupersedeMemoryData = {
     body: {
         content: string;
-        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
+        kind?: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
     };
     path: {
         id: string;
@@ -35284,8 +35666,8 @@ export type SupersedeMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35293,7 +35675,53 @@ export type SupersedeMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35301,6 +35729,30 @@ export type SupersedeMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -35385,8 +35837,8 @@ export type ApproveMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35394,7 +35846,53 @@ export type ApproveMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35402,6 +35900,30 @@ export type ApproveMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -35489,8 +36011,8 @@ export type RejectMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35498,7 +36020,53 @@ export type RejectMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35506,6 +36074,30 @@ export type RejectMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -35590,8 +36182,8 @@ export type ArchiveMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35599,7 +36191,53 @@ export type ArchiveMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35607,6 +36245,30 @@ export type ArchiveMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -35691,8 +36353,8 @@ export type UnarchiveMemoryResponses = {
         organizationId: string;
         scopeType: 'user' | 'team' | 'organization';
         scopeId: string;
-        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact';
-        status: 'candidate' | 'approved' | 'rejected' | 'archived';
+        kind: 'preference' | 'profile_fact' | 'instruction' | 'team_convention' | 'org_fact' | 'episodic_summary' | 'tool_usage_preference' | 'temporary_context';
+        status: 'candidate' | 'approved' | 'rejected' | 'archived' | 'quarantined';
         content: string;
         createdBy: string | null;
         reviewedBy: string | null;
@@ -35700,7 +36362,53 @@ export type UnarchiveMemoryResponses = {
         rejectionReason: 'inaccurate' | 'sensitive' | 'manipulative' | 'wrong_scope' | 'temporary' | 'duplicate' | 'vague' | 'not_useful' | 'conflicts_with_existing' | 'policy_violation';
         rejectionComment: string | null;
         extractorVersion: string | null;
-        policyFlags: Array<'instruction_like' | 'external_context' | 'source_deleted'>;
+        policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+        sourceType: 'chat' | 'manual' | 'mcp_tool' | 'api' | 'import' | 'system';
+        sourceId: string | null;
+        sourceMetadata: {
+            origin: {
+                conversationId?: string;
+                messageIds?: Array<string>;
+                messageRange?: {
+                    from?: string;
+                    to?: string;
+                };
+                channel?: string;
+                toolName?: string;
+                [key: string]: unknown;
+            };
+            ingestion: {
+                runId: string;
+                idempotencyKey?: string;
+                dedupKey?: string;
+                ingestedAt?: string;
+                [key: string]: unknown;
+            };
+            actor: {
+                kind: 'user' | 'agent' | 'system';
+                userId?: string;
+                agentId?: string;
+                [key: string]: unknown;
+            };
+            quality: {
+                extractorVersion?: string;
+                confidenceBand?: 'low' | 'medium' | 'high';
+                [key: string]: unknown;
+            };
+            safety: {
+                policyFlags: Array<'instruction_like' | 'instruction_like_high' | 'instruction_like_medium' | 'external_context' | 'source_deleted'>;
+                sourceDeleted?: boolean;
+                sourceDeletedAt?: string;
+                [key: string]: unknown;
+            };
+            future: {
+                projectId?: string | null;
+                workspaceId?: string | null;
+                sectionId?: string | null;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | null;
         sourceConversationId: string | null;
         sourceMessageIds: Array<string> | null;
         supersedesMemoryId: string | null;
@@ -35708,6 +36416,30 @@ export type UnarchiveMemoryResponses = {
         language: string | null;
         lastVerifiedAt: string | null;
         expiresAt: string | null;
+        scores: {
+            safetyScore: number;
+            confidenceScore: number;
+            salienceScore: number;
+            sensitivityRisk: number;
+            injectionRisk: number;
+            provenanceTrustScore: number;
+            stabilityScore?: number;
+            exfiltrationRisk?: number;
+            toolActionRisk?: number;
+            scopeRisk?: number;
+        } | null;
+        classifications: {
+            piiCategories: Array<string>;
+            secretDetected: boolean;
+            instructionLike: boolean;
+            userExplicitlyRequestedMemory: boolean;
+            derivedFromExternalContext: boolean;
+            containsExternalClaim?: boolean;
+            containsPolicyLikeInstruction?: boolean;
+        } | null;
+        scorerVersion: string | null;
+        lastRetrievedAt: string | null;
+        retrievalCount: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -37840,6 +38572,18 @@ export type GetOrganizationResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38104,6 +38848,18 @@ export type UpdateAppearanceSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38240,6 +38996,18 @@ export type UpdateSecuritySettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38377,6 +39145,18 @@ export type UpdateLlmSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38515,6 +39295,18 @@ export type UpdateAgentSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38554,6 +39346,231 @@ export type UpdateAgentSettingsResponses = {
 };
 
 export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof UpdateAgentSettingsResponses];
+
+export type UpdateMemorySettingsData = {
+    body: {
+        memoryExtractionEnabled?: boolean;
+        memoryInjectionEnabled?: boolean;
+        memoryIdleDelaySeconds?: number;
+        memoryExtractorMaxTokens?: number;
+        memoryExtractorModel?: string | null;
+        memoryExtractorChatApiKeyId?: string | null;
+        memoryInjectionTokenBudget?: number;
+        memoryInjectionTopK?: number;
+        memoryTombstoneTtlDays?: number;
+        memoryCandidateTtlDays?: number;
+        memoryMaxContentLength?: number;
+        memoryMaxCandidatesPerExtraction?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/memory-settings';
+};
+
+export type UpdateMemorySettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateMemorySettingsError = UpdateMemorySettingsErrors[keyof UpdateMemorySettingsErrors];
+
+export type UpdateMemorySettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        onboardingComplete: boolean;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        globalToolPolicy: 'permissive' | 'restrictive';
+        allowChatFileUploads: boolean;
+        embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
+        embeddingDimensions: number | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        defaultLlmApiKeyId: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
+        showTwoFactor: boolean;
+        mcpOauthAccessTokenLifetimeSeconds: number;
+        connectionDefaultMcpGatewayId: string | null;
+        connectionDefaultLlmProxyId: string | null;
+        connectionShownClientIds: Array<string> | null;
+        connectionShownProviders: Array<string> | null;
+    };
+};
+
+export type UpdateMemorySettingsResponse = UpdateMemorySettingsResponses[keyof UpdateMemorySettingsResponses];
+
+export type GetMemoryExtractionStatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/memory-extraction-stats';
+};
+
+export type GetMemoryExtractionStatsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetMemoryExtractionStatsError = GetMemoryExtractionStatsErrors[keyof GetMemoryExtractionStatsErrors];
+
+export type GetMemoryExtractionStatsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        pending: number;
+        completed: number;
+        failed: number;
+        skipped: number;
+        null: number;
+    };
+};
+
+export type GetMemoryExtractionStatsResponse = GetMemoryExtractionStatsResponses[keyof GetMemoryExtractionStatsResponses];
 
 export type UpdateConnectionSettingsData = {
     body: {
@@ -38654,6 +39671,18 @@ export type UpdateConnectionSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38789,6 +39818,18 @@ export type UpdateMcpSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -38927,6 +39968,18 @@ export type UpdateKnowledgeSettingsResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -39060,6 +40113,18 @@ export type DropEmbeddingConfigResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -39282,6 +40347,18 @@ export type CompleteOnboardingResponses = {
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
         embeddingModel: string | null;
+        memoryExtractionEnabled: boolean;
+        memoryInjectionEnabled: boolean;
+        memoryIdleDelaySeconds: number;
+        memoryExtractorMaxTokens: number;
+        memoryExtractorModel: string | null;
+        memoryExtractorChatApiKeyId: string | null;
+        memoryInjectionTokenBudget: number;
+        memoryInjectionTopK: number;
+        memoryTombstoneTtlDays: number;
+        memoryCandidateTtlDays: number;
+        memoryMaxContentLength: number;
+        memoryMaxCandidatesPerExtraction: number;
         embeddingDimensions: number | null;
         embeddingChatApiKeyId: string | null;
         rerankerChatApiKeyId: string | null;
@@ -41077,6 +42154,9 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         hasCustomToolSelection: boolean;
+        memoryExtractionStatus: 'pending' | 'completed' | 'failed' | 'skipped';
+        memoryExtractedAt: string | null;
+        memoryExtractionAttemptedAt: string | null;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;

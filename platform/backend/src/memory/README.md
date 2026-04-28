@@ -88,22 +88,44 @@ Entry points:
 
 ## Configuration surface
 
-All memory config is parsed in [`config.ts`](../config.ts) under `config.memory`. Runtime flags:
+Memory settings are stored per organization in `organizations` and updated through `PATCH /api/organization/memory-settings`.
 
-| Key | Env var | Default | Effect |
-|---|---|---|---|
-| `extractionEnabled` | `ARCHESTRA_MEMORY_EXTRACTION_ENABLED` | `false` | Gates async extractor execution. |
-| `injectionEnabled` | `ARCHESTRA_MEMORY_INJECTION_ENABLED` | `false` | Gates prompt-time injection. Returns `null` fast when off. |
-| `idleDelaySeconds` | `ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS` | `300` | Conversation-idle window before extraction is eligible. |
-| `extractorMaxTokens` | `ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS` | `800` | LLM output cap. |
-| `extractorModelOverride` / `extractorApiKeyIdOverride` | — | — | Explicit routing for extraction. |
-| `extractorFallbackModel` / `extractorFallbackApiKeyId` | — | — | Secondary model if the primary is unavailable. |
-| `injectionTokenBudget` | `ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET` | `600` | Per-request budget. |
-| `injectionTopK` | `ARCHESTRA_MEMORY_INJECTION_TOP_K` | `10` | Max items per injection. |
-| `candidateTtlDays` | `ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS` | `30` | Candidate cleanup age. |
-| `tombstoneTtlDays` | `ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS` | `90` | Tombstone retention. |
-| `maxContentLength` | `ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH` | `500` | Hard ceiling per item. |
-| `maxCandidatesPerExtraction` | `ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION` | `5` | Upper bound per run. |
+`config.memory.defaults` in [`config.ts`](../config.ts) now contains bootstrap defaults only. Runtime behavior reads organization columns:
+
+| Organization column (camelCase) | Default | Effect |
+|---|---|---|
+| `memoryExtractionEnabled` | `false` | Gates async extractor execution. |
+| `memoryInjectionEnabled` | `false` | Gates prompt-time injection. Returns `null` fast when off. |
+| `memoryIdleDelaySeconds` | `300` | Conversation-idle window before extraction is eligible. |
+| `memoryExtractorMaxTokens` | `800` | LLM output cap. |
+| `memoryExtractorModel` / `memoryExtractorChatApiKeyId` | `null` | Explicit extractor routing. |
+| `memoryInjectionTokenBudget` | `600` | Per-request budget. |
+| `memoryInjectionTopK` | `10` | Max items per injection. |
+| `memoryCandidateTtlDays` | `30` | Candidate cleanup age. |
+| `memoryTombstoneTtlDays` | `90` | Tombstone retention. |
+| `memoryMaxContentLength` | `500` | Hard ceiling per item. |
+| `memoryMaxCandidatesPerExtraction` | `5` | Upper bound per run. |
+
+Fallback extractor model resolution was removed. Extraction now resolves model config from:
+1. Organization override (`memoryExtractorModel`, `memoryExtractorChatApiKeyId`).
+2. Organization default LLM model/provider key.
+3. `null` (skip extraction with telemetry), if neither resolves.
+
+## Extraction tracking and maintenance
+
+Conversation-level extraction lifecycle is tracked in `conversations`:
+
+- `memoryExtractionStatus`: `pending | completed | failed | skipped`
+- `memoryExtractionAttemptedAt`
+- `memoryExtractedAt`
+
+`GET /api/organization/memory-extraction-stats` exposes aggregate counts by status, including `null` (not yet processed).
+
+Periodic task `memory_maintenance` (hourly) now owns:
+
+- per-org candidate cleanup (`memoryCandidateTtlDays`)
+- per-org tombstone cleanup (`memoryTombstoneTtlDays`)
+- retry queueing for failed extractions in orgs with extraction enabled
 
 ## Security posture
 
@@ -136,6 +158,10 @@ Metrics live in [`telemetry/metrics.ts`](./telemetry/metrics.ts); spans in [`tel
 - `archestra_memory_candidate_scored_total{memory_type,scope_type,source_type,safety_score_bucket}`
 - `archestra_memory_quarantined_total{reason,scope_type}`
 - `archestra_memory_retrieved_total{memory_type,scope_type,safety_score_bucket}`
+- `archestra_memory_extractor_no_model_total{organization_id}`
+- `archestra_memory_extraction_status_total{status,organization_id}`
+- `archestra_memory_maintenance_duration_seconds`
+- `archestra_memory_maintenance_retried_total{organization_id}`
 
 ## Frontend surface
 

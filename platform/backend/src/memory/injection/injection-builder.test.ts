@@ -1,25 +1,34 @@
 import { context, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import config from "@/config";
 import type { MemoryItem } from "@/types/memory-item";
 import { build } from "./injection-builder";
 
 const mockListForInjection = vi.hoisted(() => vi.fn());
+const mockGetOrganizationById = vi.hoisted(() => vi.fn());
 
 vi.mock("@/memory/retrieval/retrieval-service", () => ({
   listForInjection: mockListForInjection,
 }));
 
+vi.mock("@/models", () => ({
+  OrganizationModel: {
+    getById: mockGetOrganizationById,
+  },
+}));
+
 describe("memory injection builder", () => {
-  const originalTokenBudget = config.memory.injectionTokenBudget;
-  const originalTopK = config.memory.injectionTopK;
   const setAttribute = vi.fn();
 
   beforeEach(() => {
-    config.memory.injectionTokenBudget = 600;
-    config.memory.injectionTopK = 10;
     mockListForInjection.mockReset();
+    mockGetOrganizationById.mockReset();
     setAttribute.mockReset();
+
+    mockGetOrganizationById.mockResolvedValue({
+      id: "org-1",
+      memoryInjectionTopK: 10,
+      memoryInjectionTokenBudget: 600,
+    });
 
     vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
     vi.spyOn(trace, "getSpan").mockReturnValue({
@@ -28,8 +37,6 @@ describe("memory injection builder", () => {
   });
 
   afterEach(() => {
-    config.memory.injectionTokenBudget = originalTokenBudget;
-    config.memory.injectionTopK = originalTopK;
     vi.restoreAllMocks();
   });
 
@@ -53,7 +60,11 @@ describe("memory injection builder", () => {
   });
 
   test("returns formatted durable memory block when enabled", async () => {
-    config.memory.injectionTopK = 1;
+    mockGetOrganizationById.mockResolvedValue({
+      id: "org-1",
+      memoryInjectionTopK: 1,
+      memoryInjectionTokenBudget: 600,
+    });
     mockListForInjection.mockResolvedValue([
       makeItem("1", "  Loves   concise answers "),
       makeItem("2", "Uses keyboard shortcuts"),
@@ -108,10 +119,6 @@ describe("memory injection builder", () => {
     );
   });
 });
-
-// ============================================================================
-// Internal helpers
-// ============================================================================
 
 function makeItem(id: string, content: string): MemoryItem {
   const now = new Date();

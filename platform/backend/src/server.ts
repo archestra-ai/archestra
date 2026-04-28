@@ -116,23 +116,13 @@ function logMemoryStartupDiagnostics(processType: "web" | "worker"): void {
   logger.info(
     {
       processType,
-      extractionEnabled: config.memory.extractionEnabled,
-      injectionEnabled: config.memory.injectionEnabled,
-      extractionIdleDelaySeconds: config.memory.idleDelaySeconds,
+      extractionEnabledDefault: config.memory.defaults.extractionEnabled,
+      injectionEnabledDefault: config.memory.defaults.injectionEnabled,
+      extractionIdleDelaySecondsDefault:
+        config.memory.defaults.idleDelaySeconds,
     },
-    "[memory] startup configuration",
+    "[memory] startup defaults",
   );
-
-  if (config.memory.extractionEnabled && !config.memory.injectionEnabled) {
-    logger.warn(
-      {
-        processType,
-        extractionEnabled: true,
-        injectionEnabled: false,
-      },
-      "[memory] extraction enabled while injection is disabled; candidates will require manual review/use",
-    );
-  }
 }
 
 /**

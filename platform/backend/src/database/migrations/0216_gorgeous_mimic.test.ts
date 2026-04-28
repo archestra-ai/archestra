@@ -49,7 +49,8 @@ describe("0216 migration: memory scoring columns", () => {
     await createScratchMemoryItemTable();
     await runMigrationOnScratchTable();
 
-    const columns = await db.execute(sql.raw(`
+    const columns = await db.execute(
+      sql.raw(`
       SELECT column_name, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -62,7 +63,8 @@ describe("0216 migration: memory scoring columns", () => {
           'retrieval_count'
         )
       ORDER BY column_name ASC;
-    `));
+    `),
+    );
 
     expect(columns.rows).toHaveLength(5);
     expect(columns.rows).toEqual([
@@ -94,4 +96,3 @@ describe("0216 migration: memory scoring columns", () => {
     ]);
   });
 });
-

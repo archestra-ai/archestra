@@ -52,6 +52,8 @@ export function getMemoryScopeLabel(scopeType: MemoryScopeType): string {
       return "Team";
     case "organization":
       return "Organization";
+    default:
+      return "Unknown";
   }
 }
 
@@ -65,6 +67,10 @@ export function getMemoryStatusLabel(status: MemoryStatus): string {
       return "Rejected";
     case "archived":
       return "Archived";
+    case "quarantined":
+      return "Quarantined";
+    default:
+      return "Unknown";
   }
 }
 
@@ -80,6 +86,14 @@ export function getMemoryKindLabel(kind: MemoryKind): string {
       return "Team Convention";
     case "org_fact":
       return "Org Fact";
+    case "episodic_summary":
+      return "Episodic Summary";
+    case "tool_usage_preference":
+      return "Tool Usage Preference";
+    case "temporary_context":
+      return "Temporary Context";
+    default:
+      return "Unknown";
   }
 }
 
@@ -87,10 +101,16 @@ export function getMemoryPolicyFlagLabel(flag: MemoryPolicyFlag): string {
   switch (flag) {
     case "instruction_like":
       return "Instruction-like";
+    case "instruction_like_high":
+      return "Instruction-like (High)";
+    case "instruction_like_medium":
+      return "Instruction-like (Medium)";
     case "external_context":
       return "External Context";
     case "source_deleted":
       return "Source evidence removed";
+    default:
+      return flag;
   }
 }
 

@@ -529,6 +529,36 @@ export function useUpdateKnowledgeSettings(
 }
 
 /**
+ * Update durable memory settings (extraction, injection, retention, limits)
+ */
+export function useUpdateMemorySettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateMemorySettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateMemorySettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Drop embedding configuration (deletes all KB documents, resets connector checkpoints)
  */
 export function useDropEmbeddingConfig() {

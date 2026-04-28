@@ -11,14 +11,16 @@ vi.mock("./extractor", () => ({
 }));
 
 const mockFindConversation = vi.hoisted(() => vi.fn());
-const mockArchiveStaleCandidates = vi.hoisted(() => vi.fn());
+const mockSetMemoryExtractionStatus = vi.hoisted(() => vi.fn());
 const mockHasPendingByTypeAndPayload = vi.hoisted(() => vi.fn());
+const mockGetOrganizationById = vi.hoisted(() => vi.fn());
 vi.mock("@/models", () => ({
   ConversationModel: {
     findById: mockFindConversation,
+    setMemoryExtractionStatus: mockSetMemoryExtractionStatus,
   },
-  MemoryItemModel: {
-    archiveStaleCandidates: mockArchiveStaleCandidates,
+  OrganizationModel: {
+    getById: mockGetOrganizationById,
   },
   TaskModel: {
     hasPendingByTypeAndPayload: mockHasPendingByTypeAndPayload,
@@ -34,16 +36,6 @@ vi.mock("@/logging", () => ({
   },
 }));
 
-vi.mock("@/config", () => ({
-  default: {
-    memory: {
-      extractionEnabled: true,
-      candidateTtlDays: 30,
-    },
-  },
-}));
-
-import config from "@/config";
 import { handleExtractMemoryCandidates } from "./extractor-task-handler";
 
 const payload = {
@@ -56,14 +48,16 @@ const payload = {
 describe("handleExtractMemoryCandidates", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    config.memory.extractionEnabled = true;
+    mockGetOrganizationById.mockResolvedValue({
+      id: payload.organizationId,
+      memoryExtractionEnabled: true,
+    });
     mockHasPendingByTypeAndPayload.mockResolvedValue(false);
     mockFindConversation.mockResolvedValue({
       id: payload.conversationId,
       messages: [],
     });
     mockHasExternalContextBoundary.mockReturnValue(false);
-    mockArchiveStaleCandidates.mockResolvedValue(0);
     mockExtract.mockResolvedValue({
       status: "completed",
       insertedCount: 1,
@@ -71,8 +65,11 @@ describe("handleExtractMemoryCandidates", () => {
     });
   });
 
-  test("skips when extraction feature flag is disabled", async () => {
-    config.memory.extractionEnabled = false;
+  test("skips when extraction is disabled for organization", async () => {
+    mockGetOrganizationById.mockResolvedValue({
+      id: payload.organizationId,
+      memoryExtractionEnabled: false,
+    });
 
     await handleExtractMemoryCandidates(payload);
 
@@ -98,15 +95,18 @@ describe("handleExtractMemoryCandidates", () => {
     await handleExtractMemoryCandidates(payload);
 
     expect(mockExtract).not.toHaveBeenCalled();
+    expect(mockSetMemoryExtractionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "skipped" }),
+    );
   });
 
-  test("archives stale candidates and runs extractor", async () => {
+  test("runs extractor and marks completed", async () => {
     await handleExtractMemoryCandidates(payload);
 
-    expect(mockArchiveStaleCandidates).toHaveBeenCalledWith({
-      ttlDays: 30,
-    });
     expect(mockExtract).toHaveBeenCalledWith(payload);
+    expect(mockSetMemoryExtractionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "completed" }),
+    );
   });
 
   test("rethrows unexpected extractor errors for task retry", async () => {
@@ -114,6 +114,9 @@ describe("handleExtractMemoryCandidates", () => {
 
     await expect(handleExtractMemoryCandidates(payload)).rejects.toThrow(
       "extract failed",
+    );
+    expect(mockSetMemoryExtractionStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed" }),
     );
   });
 });

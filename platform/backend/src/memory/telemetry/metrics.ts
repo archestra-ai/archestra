@@ -81,6 +81,10 @@ let memoryDedupDropBySourceTotal: client.Counter<string>;
 let memoryCandidateScoredTotal: client.Counter<string>;
 let memoryQuarantinedTotal: client.Counter<string>;
 let memoryRetrievedTotal: client.Counter<string>;
+let memoryExtractorNoModelTotal: client.Counter<string>;
+let memoryExtractionStatusTotal: client.Counter<string>;
+let memoryMaintenanceDurationSeconds: client.Histogram<string>;
+let memoryMaintenanceRetriedTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -219,6 +223,30 @@ export function initializeMemoryMetrics(): void {
     name: "archestra_memory_retrieved_total",
     help: "Total memory items retrieved for injection",
     labelNames: ["memory_type", "scope_type", "safety_score_bucket"],
+  });
+
+  memoryExtractorNoModelTotal = new client.Counter({
+    name: "archestra_memory_extractor_no_model_total",
+    help: "Total extraction attempts skipped because no extractor model could be resolved",
+    labelNames: ["organization_id"],
+  });
+
+  memoryExtractionStatusTotal = new client.Counter({
+    name: "archestra_memory_extraction_status_total",
+    help: "Total conversation memory extraction status updates",
+    labelNames: ["status", "organization_id"],
+  });
+
+  memoryMaintenanceDurationSeconds = new client.Histogram({
+    name: "archestra_memory_maintenance_duration_seconds",
+    help: "Duration of memory maintenance periodic task runs",
+    buckets: [0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120],
+  });
+
+  memoryMaintenanceRetriedTotal = new client.Counter({
+    name: "archestra_memory_maintenance_retried_total",
+    help: "Total conversations retried by memory maintenance",
+    labelNames: ["organization_id"],
   });
 
   logger.info("Memory metrics initialized");
@@ -508,6 +536,58 @@ export function reportMemoryRetrieved(params: {
     scope_type: params.scopeType,
     safety_score_bucket: params.safetyScoreBucket,
   });
+}
+
+export function reportMemoryExtractorNoModel(params: {
+  organizationId: string;
+}): void {
+  if (!memoryExtractorNoModelTotal) {
+    return;
+  }
+
+  memoryExtractorNoModelTotal.inc({
+    organization_id: params.organizationId,
+  });
+}
+
+export function reportMemoryExtractionStatus(params: {
+  status: "pending" | "completed" | "failed" | "skipped";
+  organizationId: string;
+}): void {
+  if (!memoryExtractionStatusTotal) {
+    return;
+  }
+
+  memoryExtractionStatusTotal.inc({
+    status: params.status,
+    organization_id: params.organizationId,
+  });
+}
+
+export function reportMemoryMaintenanceDuration(params: {
+  durationSeconds: number;
+}): void {
+  if (!memoryMaintenanceDurationSeconds) {
+    return;
+  }
+
+  memoryMaintenanceDurationSeconds.observe(Math.max(0, params.durationSeconds));
+}
+
+export function reportMemoryMaintenanceRetried(params: {
+  organizationId: string;
+  total: number;
+}): void {
+  if (!memoryMaintenanceRetriedTotal || params.total <= 0) {
+    return;
+  }
+
+  memoryMaintenanceRetriedTotal.inc(
+    {
+      organization_id: params.organizationId,
+    },
+    params.total,
+  );
 }
 
 // =============================================================================

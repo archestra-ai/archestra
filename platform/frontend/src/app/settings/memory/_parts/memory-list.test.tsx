@@ -121,16 +121,24 @@ function createMemoryItem(status: MemoryListItem["status"]): MemoryListItem {
     rejectionComment: null,
     extractorVersion: null,
     policyFlags: [],
+    sourceType: "manual",
+    sourceId: null,
+    sourceMetadata: null,
     sourceConversationId: null,
     sourceMessageIds: null,
     supersedesMemoryId: null,
     confidenceBand: "medium",
     language: "en",
+    scores: null,
+    classifications: null,
+    scorerVersion: null,
+    lastRetrievedAt: null,
+    retrievalCount: 0,
     lastVerifiedAt: null,
     expiresAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     updatedAt: new Date("2026-01-02T00:00:00.000Z").toISOString(),
-  };
+  } as MemoryListItem;
 }
 
 describe("MemoryList", () => {

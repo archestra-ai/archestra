@@ -624,6 +624,9 @@ For complete documentation, examples, and resource reference, visit the [Archest
 
 The following environment variables can be used to configure Archestra Platform.
 
+> [!NOTE]
+> Durable Memory runtime settings (extraction, injection, retention, limits) are configured per organization in **Settings → Memory → Settings**. The env files no longer carry dedicated `ARCHESTRA_MEMORY_*` variables for these runtime values.
+
 ### Application & API Configuration
 
 - **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.

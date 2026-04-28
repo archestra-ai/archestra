@@ -1,11 +1,11 @@
 import { z } from "zod";
-import config from "@/config";
 import logger from "@/logging";
 import {
+  reportMemoryExtractionStatus,
   reportMemoryPolicyBlocked,
   reportMemoryScreenDecision,
 } from "@/memory/telemetry/metrics";
-import { ConversationModel, MemoryItemModel, TaskModel } from "@/models";
+import { ConversationModel, OrganizationModel, TaskModel } from "@/models";
 import type { ChatMessage } from "@/types";
 import { hasExternalContextBoundary, memoryExtractor } from "./extractor";
 
@@ -21,7 +21,15 @@ export async function handleExtractMemoryCandidates(
 ): Promise<void> {
   const parsedPayload = ExtractMemoryPayloadSchema.parse(payload);
 
-  if (!config.memory.extractionEnabled) {
+  const organization = await OrganizationModel.getById(
+    parsedPayload.organizationId,
+  );
+  if (!organization?.memoryExtractionEnabled) {
+    await setExtractionStatus({
+      conversationId: parsedPayload.conversationId,
+      organizationId: parsedPayload.organizationId,
+      status: "skipped",
+    });
     logger.info(
       {
         conversationId: parsedPayload.conversationId,
@@ -61,6 +69,13 @@ export async function handleExtractMemoryCandidates(
     return;
   }
 
+  await setExtractionStatus({
+    conversationId: parsedPayload.conversationId,
+    organizationId: parsedPayload.organizationId,
+    status: "pending",
+    attemptedAt: new Date(),
+  });
+
   if (hasExternalContextBoundary(conversation.messages as ChatMessage[])) {
     reportMemoryPolicyBlocked("external_context");
     reportMemoryScreenDecision({
@@ -73,21 +88,30 @@ export async function handleExtractMemoryCandidates(
       },
       "[memory] extract: skipped (external context boundary)",
     );
+    await setExtractionStatus({
+      conversationId: parsedPayload.conversationId,
+      organizationId: parsedPayload.organizationId,
+      status: "skipped",
+    });
     return;
-  }
-
-  const archivedCount = await MemoryItemModel.archiveStaleCandidates({
-    ttlDays: config.memory.candidateTtlDays,
-  });
-  if (archivedCount > 0) {
-    logger.info(
-      { archivedCount, conversationId: parsedPayload.conversationId },
-      "[memory] extract: archived stale candidates before run",
-    );
   }
 
   try {
     const result = await memoryExtractor.extract(parsedPayload);
+    if (result.status === "completed") {
+      await setExtractionStatus({
+        conversationId: parsedPayload.conversationId,
+        organizationId: parsedPayload.organizationId,
+        status: "completed",
+        extractedAt: new Date(),
+      });
+    } else {
+      await setExtractionStatus({
+        conversationId: parsedPayload.conversationId,
+        organizationId: parsedPayload.organizationId,
+        status: "skipped",
+      });
+    }
     logger.info(
       {
         conversationId: parsedPayload.conversationId,
@@ -103,6 +127,30 @@ export async function handleExtractMemoryCandidates(
       },
       "[memory] extract: failed",
     );
+    await setExtractionStatus({
+      conversationId: parsedPayload.conversationId,
+      organizationId: parsedPayload.organizationId,
+      status: "failed",
+    });
     throw error;
   }
+}
+
+async function setExtractionStatus(params: {
+  conversationId: string;
+  organizationId: string;
+  status: "pending" | "completed" | "failed" | "skipped";
+  attemptedAt?: Date;
+  extractedAt?: Date;
+}): Promise<void> {
+  await ConversationModel.setMemoryExtractionStatus({
+    id: params.conversationId,
+    status: params.status,
+    attemptedAt: params.attemptedAt,
+    extractedAt: params.extractedAt,
+  });
+  reportMemoryExtractionStatus({
+    status: params.status,
+    organizationId: params.organizationId,
+  });
 }

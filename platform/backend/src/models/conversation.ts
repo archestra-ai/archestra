@@ -12,6 +12,7 @@ import db, { schema } from "@/database";
 import type {
   Conversation,
   InsertConversation,
+  MemoryExtractionStatus,
   UpdateConversation,
 } from "@/types";
 import ConversationChatErrorModel from "./conversation-chat-error";
@@ -388,6 +389,62 @@ class ConversationModel {
     })) as Conversation;
 
     return updatedWithAgent;
+  }
+
+  static async setMemoryExtractionStatus(params: {
+    id: string;
+    status: MemoryExtractionStatus;
+    attemptedAt?: Date;
+    extractedAt?: Date;
+  }): Promise<void> {
+    await db
+      .update(schema.conversationsTable)
+      .set({
+        memoryExtractionStatus: params.status,
+        ...(params.attemptedAt !== undefined
+          ? { memoryExtractionAttemptedAt: params.attemptedAt }
+          : {}),
+        ...(params.extractedAt !== undefined
+          ? { memoryExtractedAt: params.extractedAt }
+          : {}),
+      })
+      .where(eq(schema.conversationsTable.id, params.id));
+  }
+
+  static async listFailedMemoryExtractionByOrg(params: {
+    organizationId: string;
+    limit: number;
+  }): Promise<
+    Array<{
+      id: string;
+      userId: string;
+      organizationId: string;
+      agentId: string;
+    }>
+  > {
+    const rows = await db.execute<{
+      id: string;
+      userId: string;
+      organizationId: string;
+      agentId: string;
+    }>(sql`
+      SELECT c.id, c.user_id as "userId", c.organization_id as "organizationId", c.agent_id as "agentId"
+      FROM conversations c
+      WHERE c.organization_id = ${params.organizationId}
+        AND c.memory_extraction_status = 'failed'
+        AND c.agent_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM tasks t
+          WHERE t.task_type = 'memory_extract_candidates'
+            AND t.status IN ('pending', 'processing')
+            AND t.payload->>'conversationId' = c.id::text
+        )
+      ORDER BY c.updated_at DESC
+      LIMIT ${params.limit}
+    `);
+
+    return rows.rows;
   }
 
   static async delete(

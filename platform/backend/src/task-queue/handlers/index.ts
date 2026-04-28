@@ -4,6 +4,7 @@ import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 import { handleConnectorSync } from "./connector-sync-handler";
+import { handleMemoryMaintenance } from "./memory-maintenance-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
@@ -24,5 +25,9 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "memory_extract_candidates",
     handleExtractMemoryCandidates,
+  );
+  taskQueueService.registerHandler(
+    "memory_maintenance",
+    handleMemoryMaintenance,
   );
 }

@@ -13,6 +13,7 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  { taskType: "memory_maintenance", intervalSeconds: 3600, payload: {} },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

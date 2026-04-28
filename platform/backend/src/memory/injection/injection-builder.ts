@@ -1,5 +1,4 @@
 import { context, type Span, trace } from "@opentelemetry/api";
-import config from "@/config";
 import logger from "@/logging";
 import { listForInjection } from "@/memory/retrieval/retrieval-service";
 import { reportMemoryInjectionTokens } from "@/memory/telemetry/metrics";
@@ -7,6 +6,7 @@ import {
   setMemorySpanAttributes,
   withMemorySpan,
 } from "@/memory/telemetry/spans";
+import { OrganizationModel } from "@/models";
 import type { MemoryItem } from "@/types/memory-item";
 import { applyBudget } from "./injection-budget";
 
@@ -57,7 +57,21 @@ export async function build(
       }
 
       try {
-        const topK = config.memory.injectionTopK;
+        const organization = await OrganizationModel.getById(
+          params.organizationId,
+        );
+        if (!organization) {
+          logger.warn(
+            {
+              userId: params.userId,
+              organizationId: params.organizationId,
+            },
+            "[memory] injection: organization not found, continuing without memory context",
+          );
+          return null;
+        }
+
+        const topK = organization.memoryInjectionTopK;
         const memoryCandidates = await withMemorySpan(
           "retrieve",
           async () => {
@@ -76,7 +90,7 @@ export async function build(
 
         const budgetResult = applyBudget({
           items: memoryCandidates,
-          maxTokens: config.memory.injectionTokenBudget,
+          maxTokens: organization.memoryInjectionTokenBudget,
           topK,
         });
 

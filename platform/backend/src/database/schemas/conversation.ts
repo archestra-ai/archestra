@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { MemoryExtractionStatus } from "@/types";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 
@@ -33,6 +34,13 @@ const conversationsTable = pgTable("conversations", {
   hasCustomToolSelection: boolean("has_custom_tool_selection")
     .notNull()
     .default(false),
+  memoryExtractionStatus: text(
+    "memory_extraction_status",
+  ).$type<MemoryExtractionStatus>(),
+  memoryExtractedAt: timestamp("memory_extracted_at", { mode: "date" }),
+  memoryExtractionAttemptedAt: timestamp("memory_extraction_attempted_at", {
+    mode: "date",
+  }),
   todoList:
     jsonb("todo_list").$type<
       Array<{

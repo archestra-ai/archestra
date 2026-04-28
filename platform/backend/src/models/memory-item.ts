@@ -396,6 +396,7 @@ class MemoryItemModel {
   }
 
   static async archiveStaleCandidates(params: {
+    organizationId: string;
     ttlDays: number;
   }): Promise<number> {
     const cutoff = new Date(Date.now() - params.ttlDays * MS_IN_DAY);
@@ -407,6 +408,7 @@ class MemoryItemModel {
       })
       .where(
         and(
+          eq(schema.memoryItemsTable.organizationId, params.organizationId),
           eq(schema.memoryItemsTable.status, "candidate"),
           lt(schema.memoryItemsTable.createdAt, cutoff),
         ),

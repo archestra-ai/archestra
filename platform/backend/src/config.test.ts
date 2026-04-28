@@ -19,7 +19,6 @@ import {
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
-  parseMemoryExtractionEnabled,
   parseProcessType,
   parseSampleRate,
   parseTrustProxy,
@@ -992,16 +991,6 @@ describe("parseProcessType", () => {
   });
 });
 
-describe("parseMemoryExtractionEnabled", () => {
-  test("returns true only for exact 'true'", () => {
-    expect(parseMemoryExtractionEnabled("true")).toBe(true);
-    expect(parseMemoryExtractionEnabled("false")).toBe(false);
-    expect(parseMemoryExtractionEnabled(undefined)).toBe(false);
-    expect(parseMemoryExtractionEnabled("TRUE")).toBe(false);
-    expect(parseMemoryExtractionEnabled(" true ")).toBe(false);
-  });
-});
-
 describe("parseSampleRate", () => {
   test("should return default when undefined", () => {
     expect(parseSampleRate(undefined, 0.2)).toBe(0.2);
@@ -1121,86 +1110,15 @@ describe("parseTrustProxy", () => {
   });
 });
 
-describe("memory config parsing", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    vi.resetModules();
-    process.env = {
-      ...originalEnv,
-      ARCHESTRA_DATABASE_URL:
-        originalEnv.ARCHESTRA_DATABASE_URL ??
-        "postgresql://test:test@localhost:5432/test",
-    };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  test("parses memory flags, limits and optional overrides from environment", async () => {
-    process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED = "false";
-    process.env.ARCHESTRA_MEMORY_INJECTION_ENABLED = "true";
-    process.env.ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS = "120";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS = "2048";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MODEL_OVERRIDE = "gpt-4o-mini";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_API_KEY_ID_OVERRIDE = "key-override";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_MODEL = "claude-haiku-4-5";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_API_KEY_ID = "key-fallback";
-    process.env.ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET = "750";
-    process.env.ARCHESTRA_MEMORY_INJECTION_TOP_K = "8";
-    process.env.ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS = "90";
-    process.env.ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS = "14";
-    process.env.ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH = "640";
-    process.env.ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION = "4";
-
+describe("memory defaults", () => {
+  test("exposes immutable memory defaults from config", async () => {
     const { default: dynamicConfig } = await import("./config");
 
-    expect(dynamicConfig.memory).toEqual({
+    expect(dynamicConfig.memory.defaults).toEqual({
       extractionEnabled: false,
-      injectionEnabled: true,
-      idleDelaySeconds: 120,
-      extractorMaxTokens: 2048,
-      extractorModelOverride: "gpt-4o-mini",
-      extractorApiKeyIdOverride: "key-override",
-      extractorFallbackModel: "claude-haiku-4-5",
-      extractorFallbackApiKeyId: "key-fallback",
-      injectionTokenBudget: 750,
-      injectionTopK: 8,
-      tombstoneTtlDays: 90,
-      candidateTtlDays: 14,
-      maxContentLength: 640,
-      maxCandidatesPerExtraction: 4,
-    });
-  });
-
-  test("uses defaults for invalid positive ints and trims empty optional overrides", async () => {
-    process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED = "true";
-    process.env.ARCHESTRA_MEMORY_INJECTION_ENABLED = "false";
-    process.env.ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS = "-1";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS = "0";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_MODEL_OVERRIDE = "   ";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_API_KEY_ID_OVERRIDE = "";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_MODEL = " ";
-    process.env.ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_API_KEY_ID = " ";
-    process.env.ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET = "NaN";
-    process.env.ARCHESTRA_MEMORY_INJECTION_TOP_K = "0";
-    process.env.ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS = "-5";
-    process.env.ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS = "abc";
-    process.env.ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH = "0";
-    process.env.ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION = "-2";
-
-    const { default: dynamicConfig } = await import("./config");
-
-    expect(dynamicConfig.memory).toEqual({
-      extractionEnabled: true,
       injectionEnabled: false,
       idleDelaySeconds: 300,
       extractorMaxTokens: 800,
-      extractorModelOverride: undefined,
-      extractorApiKeyIdOverride: undefined,
-      extractorFallbackModel: undefined,
-      extractorFallbackApiKeyId: undefined,
       injectionTokenBudget: 600,
       injectionTopK: 10,
       tombstoneTtlDays: 90,
@@ -1208,17 +1126,5 @@ describe("memory config parsing", () => {
       maxContentLength: 500,
       maxCandidatesPerExtraction: 5,
     });
-  });
-
-  test("uses secure extraction default when env is unset or invalid", async () => {
-    delete process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED;
-
-    let loaded = await import("./config");
-    expect(loaded.default.memory.extractionEnabled).toBe(false);
-
-    vi.resetModules();
-    process.env.ARCHESTRA_MEMORY_EXTRACTION_ENABLED = "invalid";
-    loaded = await import("./config");
-    expect(loaded.default.memory.extractionEnabled).toBe(false);
   });
 });

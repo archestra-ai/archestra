@@ -108,6 +108,10 @@ class OrganizationModel {
     return organization || null;
   }
 
+  static async listAll(): Promise<Organization[]> {
+    return await db.select().from(schema.organizationsTable);
+  }
+
   /**
    * Get the slim chat error UI setting with a short-lived cache.
    */

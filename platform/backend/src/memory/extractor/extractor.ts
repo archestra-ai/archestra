@@ -4,7 +4,7 @@ import {
   createDirectLLMModel,
   detectProviderFromModel,
 } from "@/clients/llm-client";
-import config, { getProviderEnvApiKey } from "@/config";
+import { getProviderEnvApiKey } from "@/config";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import logger from "@/logging";
 import { screenCandidateBeforePersist } from "@/memory/policy/screen-candidate-before-persist";
@@ -21,6 +21,7 @@ import {
   reportMemoryDedupDrop,
   reportMemoryExtractionDuration,
   reportMemoryExtractionUnavailable,
+  reportMemoryExtractorNoModel,
 } from "@/memory/telemetry/metrics";
 import {
   setMemorySpanAttributes,
@@ -111,10 +112,23 @@ class MemoryExtractor {
             );
           }
 
+          const organization = await OrganizationModel.getById(
+            params.organizationId,
+          );
           const modelConfig = await this.resolveModelConfig({
             organizationId: params.organizationId,
           });
           if (!modelConfig) {
+            logger.info(
+              {
+                organizationId: params.organizationId,
+                conversationId: params.conversationId,
+              },
+              `[memory] extract: no model resolved for org ${params.organizationId}, skipping`,
+            );
+            reportMemoryExtractorNoModel({
+              organizationId: params.organizationId,
+            });
             reportMemoryExtractionUnavailable("missing_model");
             return finish(
               { status: "skipped", reason: "model_unavailable" },
@@ -170,7 +184,7 @@ class MemoryExtractor {
             prompt: buildExtractionPrompt({
               transcript,
               maxCandidates: Math.min(
-                config.memory.maxCandidatesPerExtraction,
+                organization?.memoryMaxCandidatesPerExtraction ?? 5,
                 5,
               ),
             }),
@@ -190,7 +204,7 @@ class MemoryExtractor {
           const extractionRunId = createSourceRunId("chat_extract");
           const candidates = parsedOutput.candidates.slice(
             0,
-            Math.min(config.memory.maxCandidatesPerExtraction, 5),
+            Math.min(organization?.memoryMaxCandidatesPerExtraction ?? 5, 5),
           );
 
           let insertedCount = 0;
@@ -355,36 +369,30 @@ class MemoryExtractor {
   private async resolveModelConfig(params: {
     organizationId: string;
   }): Promise<ResolvedExtractorModel | null> {
-    const override = await this.resolveModelSource({
-      source: "override",
-      organizationId: params.organizationId,
-      modelName: config.memory.extractorModelOverride,
-      provider: undefined,
-      chatApiKeyId: config.memory.extractorApiKeyIdOverride,
-    });
-    if (override) {
-      return override;
+    const organization = await OrganizationModel.getById(params.organizationId);
+    if (!organization) {
+      return null;
     }
 
-    const organization = await OrganizationModel.getById(params.organizationId);
+    const organizationOverride = await this.resolveModelSource({
+      source: "organization_override",
+      organizationId: params.organizationId,
+      modelName: organization.memoryExtractorModel ?? undefined,
+      provider: undefined,
+      chatApiKeyId: organization.memoryExtractorChatApiKeyId ?? undefined,
+    });
+    if (organizationOverride) {
+      return organizationOverride;
+    }
+
     const organizationDefault = await this.resolveModelSource({
       source: "organization_default",
       organizationId: params.organizationId,
-      modelName: organization?.defaultLlmModel ?? undefined,
-      provider: organization?.defaultLlmProvider ?? undefined,
-      chatApiKeyId: organization?.defaultLlmApiKeyId ?? undefined,
+      modelName: organization.defaultLlmModel ?? undefined,
+      provider: organization.defaultLlmProvider ?? undefined,
+      chatApiKeyId: organization.defaultLlmApiKeyId ?? undefined,
     });
-    if (organizationDefault) {
-      return organizationDefault;
-    }
-
-    return await this.resolveModelSource({
-      source: "fallback",
-      organizationId: params.organizationId,
-      modelName: config.memory.extractorFallbackModel,
-      provider: undefined,
-      chatApiKeyId: config.memory.extractorFallbackApiKeyId,
-    });
+    return organizationDefault;
   }
 
   private async resolveModelSource(params: {
@@ -461,7 +469,7 @@ const MAX_TRANSCRIPT_CHARS = 20_000;
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type ExtractorModelSource = "override" | "organization_default" | "fallback";
+type ExtractorModelSource = "organization_override" | "organization_default";
 
 type ResolvedExtractorModel = {
   source: ExtractorModelSource;

@@ -11,7 +11,7 @@ Check ../docs_writer_prompt.md before changing this file.
 -->
 
 > [!NOTE]
-> Preview feature (rollout 1). Automatic extraction and prompt-time injection are **disabled by default** and activate only for `user` scope when explicitly enabled via environment variables.
+> Preview feature (rollout 1). Automatic extraction and prompt-time injection are **disabled by default** and activate only for `user` scope when explicitly enabled in **Settings → Memory → Settings**.
 
 Archestra Memory is a durable, review-first store for long-lived context that agents can reuse across conversations. It is independent from chat history and from the knowledge base. Every automated pathway writes only `candidate` records; nothing becomes active memory without human approval.
 
@@ -19,7 +19,7 @@ Archestra Memory is a durable, review-first store for long-lived context that ag
 
 ## Who this is for
 
-- **Operators**: control rollout with feature flags, monitor security signals, and decide when prompt-time injection is safe.
+- **Operators**: control rollout with organization-level settings, monitor security signals, and decide when prompt-time injection is safe.
 - **Reviewers** (admins, team leads, memory reviewers): triage candidates, approve what is useful, reject what is not, and archive stale memories.
 - **End users** (`user` scope): accumulate personal preferences that the agent can apply automatically once approved.
 
@@ -96,10 +96,10 @@ See also: [Access Control](/docs/platform-access-control).
 
 When injection is enabled, approved `user`-scope memories are added to the chat prompt for the owning user. Injection is **skipped** when any of the following apply:
 
-- `ARCHESTRA_MEMORY_INJECTION_ENABLED` is `false` (default).
+- Organization setting `memoryInjectionEnabled` is `false` (default).
 - The agent is configured with untrusted-context posture.
 - The active tool set exposes **external communication capability** (`external_tools_with_trusted_context` guard).
-- The per-request token budget or top-K would be exceeded by a given item.
+- Organization-level `memoryInjectionTokenBudget` or `memoryInjectionTopK` would be exceeded by a given item.
 
 The external-tool guard is **metadata-first**: tool definitions with explicit capability metadata are authoritative. Tools without metadata fall back to a legacy name-based heuristic, and the fallback is logged so the inventory can be migrated toward explicit metadata.
 
@@ -107,14 +107,38 @@ Disabling injection at any level is instant and cheap: the retrieval path return
 
 ## Extraction behavior
 
-Async extraction runs after a conversation goes idle and is gated by `ARCHESTRA_MEMORY_EXTRACTION_ENABLED`. In rollout 1 the extractor:
+Async extraction runs after a conversation goes idle and is gated by organization setting `memoryExtractionEnabled`. In rollout 1 the extractor:
 
 - proposes only `user`-scope candidates;
 - uses prompt version `v1.0.0`, frozen for the rollout;
 - applies the same pre-write screen as manual create and MCP propose;
-- respects `ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION` and `ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH`.
+- respects `memoryMaxCandidatesPerExtraction` and `memoryMaxContentLength`.
 
 Conversations are **skipped** when extraction is disabled, when the owning user is not in `user` scope eligibility, or when a recent extraction already covered the same conversation window.
+
+Extractor model resolution order:
+
+1. Organization override (`memoryExtractorModel`, optional `memoryExtractorChatApiKeyId`).
+2. Organization default LLM model/provider key.
+3. No model resolved → extraction is skipped and telemetry is emitted.
+
+## Extraction tracking and maintenance
+
+Every conversation now records extraction lifecycle:
+
+- `pending`: extraction task was queued or started.
+- `completed`: extraction finished successfully.
+- `failed`: extraction handler threw and task retry flow was triggered.
+- `skipped`: extraction intentionally skipped (disabled, no model, external-context path, or other early-exit guards).
+- `null`: conversation has not been processed by extraction tracking yet.
+
+The backend exposes aggregate diagnostics via `GET /api/organization/memory-extraction-stats`.
+
+Cleanup and retries are owned by periodic task `memory_maintenance` (hourly):
+
+- Archives stale candidates per org using `memoryCandidateTtlDays`.
+- Deletes expired tombstones per org using `memoryTombstoneTtlDays`.
+- Re-enqueues failed extractions in orgs where `memoryExtractionEnabled=true`.
 
 ## Deletion, archive, tombstones, `source_deleted`
 
@@ -149,25 +173,22 @@ A nonzero block rate is not automatically a fault in rollout 1; many blocks are 
 - Auto-consolidation UI.
 - Scheduled expiry for approved memory beyond the candidate TTL cleanup.
 
-## Environment variables
+## Configuration settings
 
-Configured in the backend process (see [Deployment](/docs/platform-deployment)).
+Configured per organization in **Settings → Memory → Settings**.
 
-| Variable | Default | Purpose |
+| Setting | Default | Purpose |
 |---|---|---|
-| `ARCHESTRA_MEMORY_EXTRACTION_ENABLED` | `false` | Enables async post-conversation extraction. |
-| `ARCHESTRA_MEMORY_INJECTION_ENABLED` | `false` | Enables prompt-time injection of approved `user`-scope memory. |
-| `ARCHESTRA_MEMORY_IDLE_DELAY_SECONDS` | `300` | Idle window before a conversation is eligible for extraction. |
-| `ARCHESTRA_MEMORY_EXTRACTOR_MAX_TOKENS` | `800` | Upper bound on extractor model output. |
-| `ARCHESTRA_MEMORY_EXTRACTOR_MODEL_OVERRIDE` | — | Optional explicit model id for extraction. |
-| `ARCHESTRA_MEMORY_EXTRACTOR_API_KEY_ID_OVERRIDE` | — | Optional explicit API key id for extraction. |
-| `ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_MODEL` | — | Secondary model if the primary is unavailable. |
-| `ARCHESTRA_MEMORY_EXTRACTOR_FALLBACK_API_KEY_ID` | — | Secondary API key for the fallback model. |
-| `ARCHESTRA_MEMORY_INJECTION_TOKEN_BUDGET` | `600` | Per-request token budget for injected memory. |
-| `ARCHESTRA_MEMORY_INJECTION_TOP_K` | `10` | Maximum number of memory items per injection. |
-| `ARCHESTRA_MEMORY_CANDIDATE_TTL_DAYS` | `30` | Age at which stale candidates are cleaned up. |
-| `ARCHESTRA_MEMORY_TOMBSTONE_TTL_DAYS` | `90` | Tombstone retention window. |
-| `ARCHESTRA_MEMORY_MAX_CONTENT_LENGTH` | `500` | Maximum characters per memory item. |
-| `ARCHESTRA_MEMORY_MAX_CANDIDATES_PER_EXTRACTION` | `5` | Upper bound on candidates per extraction run. |
+| `memoryExtractionEnabled` | `false` | Enables async post-conversation extraction. |
+| `memoryInjectionEnabled` | `false` | Enables prompt-time injection of approved `user`-scope memory. |
+| `memoryIdleDelaySeconds` | `300` | Idle window before a conversation is eligible for extraction. |
+| `memoryExtractorMaxTokens` | `800` | Upper bound on extractor model output. |
+| `memoryExtractorModel` / `memoryExtractorChatApiKeyId` | — | Optional explicit model + API key routing for extraction. |
+| `memoryInjectionTokenBudget` | `600` | Per-request token budget for injected memory. |
+| `memoryInjectionTopK` | `10` | Maximum number of memory items per injection. |
+| `memoryCandidateTtlDays` | `30` | Age at which stale candidates are cleaned up. |
+| `memoryTombstoneTtlDays` | `90` | Tombstone retention window. |
+| `memoryMaxContentLength` | `500` | Maximum characters per memory item. |
+| `memoryMaxCandidatesPerExtraction` | `5` | Upper bound on candidates per extraction run. |
 
 Security-policy internals and rollback procedures are documented in the backend memory security runbook for operators.

@@ -283,6 +283,36 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   rerankerModel: z.string().nullable().optional(),
 });
 
+export const UpdateMemorySettingsSchema = z.object({
+  memoryExtractionEnabled: z.boolean().optional(),
+  memoryInjectionEnabled: z.boolean().optional(),
+  memoryIdleDelaySeconds: z.coerce.number().int().min(30).max(3600).optional(),
+  memoryExtractorMaxTokens: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(4000)
+    .optional(),
+  memoryExtractorModel: z.string().nullable().optional(),
+  memoryExtractorChatApiKeyId: z.string().uuid().nullable().optional(),
+  memoryInjectionTokenBudget: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(4000)
+    .optional(),
+  memoryInjectionTopK: z.coerce.number().int().min(1).max(50).optional(),
+  memoryTombstoneTtlDays: z.coerce.number().int().min(7).max(365).optional(),
+  memoryCandidateTtlDays: z.coerce.number().int().min(1).max(180).optional(),
+  memoryMaxContentLength: z.coerce.number().int().min(100).max(2000).optional(),
+  memoryMaxCandidatesPerExtraction: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .optional(),
+});
+
 export const UpdateMcpSettingsSchema = z.object({
   mcpOauthAccessTokenLifetimeSeconds:
     McpOauthAccessTokenLifetimeSecondsSchema.optional(),

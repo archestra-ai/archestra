@@ -57,6 +57,7 @@ describe("MemoryItemModel candidate TTL", () => {
       );
 
     const archivedCount = await MemoryItemModel.archiveStaleCandidates({
+      organizationId: organization.id,
       ttlDays: 30,
     });
     expect(archivedCount).toBe(1);

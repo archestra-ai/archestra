@@ -48,7 +48,7 @@ When this guard triggers:
 
 ### Prompt-time injection guard
 Prompt-time durable memory injection is enabled only when all of the following are true:
-- `ARCHESTRA_MEMORY_INJECTION_ENABLED=true`
+- organization setting `memoryInjectionEnabled=true`
 - the agent is not operating in untrusted-context posture
 - the active tool set does not expose external communication capability
 
@@ -106,15 +106,15 @@ Thresholds must be re-baselined after the first production week because rollout-
 3. Treat the failure as a governance/security gate, not as an authorization regression.
 
 ### Memory injection is unexpectedly absent
-1. Check `ARCHESTRA_MEMORY_INJECTION_ENABLED`.
+1. Check organization setting `memoryInjectionEnabled` in **Settings → Memory → Settings**.
 2. Check whether the agent is configured as untrusted context.
 3. Inspect active tool capability assessment.
 4. If fallback classification was used, review the tool inventory and add explicit metadata at the source rather than weakening the gate.
 
 ## Rollback Guidance
 Safe containment steps:
-1. Set `ARCHESTRA_MEMORY_INJECTION_ENABLED=false` to disable prompt-time use of durable memory.
-2. Set `ARCHESTRA_MEMORY_EXTRACTION_ENABLED=false` to stop new automated candidate creation.
+1. Set organization setting `memoryInjectionEnabled=false` to disable prompt-time use of durable memory.
+2. Set organization setting `memoryExtractionEnabled=false` to stop new automated candidate creation.
 3. Preserve metrics, logs, and candidate/tombstone state for analysis.
 
 Unsafe rollback patterns:

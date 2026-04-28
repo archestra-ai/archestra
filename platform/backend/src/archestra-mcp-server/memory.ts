@@ -12,7 +12,7 @@ import {
   reportMemoryCandidates,
   reportMemoryDedupDrop,
 } from "@/memory/telemetry/metrics";
-import { MemoryItemModel } from "@/models";
+import { MemoryItemModel, OrganizationModel } from "@/models";
 import {
   MemoryKindSchema,
   MemoryPolicyFlagSchema,
@@ -91,7 +91,7 @@ const PROPOSE_MEMORY_CANDIDATE_ARGS_SCHEMA = z
       .string()
       .trim()
       .min(1)
-      .max(500)
+      .max(2000)
       .describe("Proposed durable memory content."),
   })
   .strict();
@@ -166,6 +166,14 @@ async function handleProposeMemoryCandidate(params: {
 
   if (!context.userId || !context.organizationId) {
     return errorResult("User context not available");
+  }
+
+  const organization = await OrganizationModel.getById(context.organizationId);
+  const maxContentLength = organization?.memoryMaxContentLength ?? 500;
+  if (args.content.length > maxContentLength) {
+    return errorResult(
+      `Memory content too long: max ${maxContentLength} characters for this organization.`,
+    );
   }
 
   const policyScreen = await screenCandidateBeforePersist({

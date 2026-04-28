@@ -65,6 +65,65 @@ const organizationsTable = pgTable("organization", {
   /** Embedding model for knowledge base RAG — set explicitly when user configures embedding */
   embeddingModel: text("embedding_model"),
 
+  /** Durable memory: asynchronous extraction from completed conversations. */
+  memoryExtractionEnabled: boolean("memory_extraction_enabled")
+    .notNull()
+    .default(false),
+
+  /** Durable memory: prompt-time injection into chat requests. */
+  memoryInjectionEnabled: boolean("memory_injection_enabled")
+    .notNull()
+    .default(false),
+
+  /** Delay after last message before extraction becomes eligible. */
+  memoryIdleDelaySeconds: integer("memory_idle_delay_seconds")
+    .notNull()
+    .default(300),
+
+  /** Max output tokens allowed for the extractor call. */
+  memoryExtractorMaxTokens: integer("memory_extractor_max_tokens")
+    .notNull()
+    .default(800),
+
+  /** Optional org-specific extractor model override. */
+  memoryExtractorModel: text("memory_extractor_model"),
+
+  /**
+   * Optional org-specific extractor chat API key.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only.
+   */
+  memoryExtractorChatApiKeyId: uuid("memory_extractor_chat_api_key_id"),
+
+  /** Injection budget in approximate tokens per request. */
+  memoryInjectionTokenBudget: integer("memory_injection_token_budget")
+    .notNull()
+    .default(600),
+
+  /** Max approved memory items to include in prompt injection. */
+  memoryInjectionTopK: integer("memory_injection_top_k").notNull().default(10),
+
+  /** Retention period for tombstones (days). */
+  memoryTombstoneTtlDays: integer("memory_tombstone_ttl_days")
+    .notNull()
+    .default(90),
+
+  /** Retention period for unreviewed candidates (days). */
+  memoryCandidateTtlDays: integer("memory_candidate_ttl_days")
+    .notNull()
+    .default(30),
+
+  /** Max memory content length accepted by write surfaces. */
+  memoryMaxContentLength: integer("memory_max_content_length")
+    .notNull()
+    .default(500),
+
+  /** Safety cap on extractor candidate count per run. */
+  memoryMaxCandidatesPerExtraction: integer(
+    "memory_max_candidates_per_extraction",
+  )
+    .notNull()
+    .default(5),
+
   /**
    * @deprecated temporary transition field while embedding dimensions move to `models.embeddingDimensions`.
    *

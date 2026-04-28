@@ -2,19 +2,11 @@ import { vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
 
 const {
-  memoryConfigOverride,
   mockDetectProviderFromModel,
   mockGetOrganizationById,
   mockGetProviderEnvApiKey,
   mockResolveApiKeyFromChatApiKey,
 } = vi.hoisted(() => ({
-  memoryConfigOverride: {
-    extractorModelOverride: "gpt-4o-mini" as string | undefined,
-    extractorApiKeyIdOverride: "override-key-id" as string | undefined,
-    extractorFallbackModel: "claude-haiku-4-5",
-    extractorFallbackApiKeyId: undefined as string | undefined,
-    maxCandidatesPerExtraction: 5,
-  },
   mockDetectProviderFromModel: vi.fn(() => "openai"),
   mockGetOrganizationById: vi.fn(),
   mockGetProviderEnvApiKey: vi.fn((provider: string) => `env-${provider}`),
@@ -44,17 +36,6 @@ vi.mock("@/config", async (importOriginal) => {
   return {
     ...actual,
     getProviderEnvApiKey: mockGetProviderEnvApiKey,
-    default: new Proxy(actual.default, {
-      get(target, prop, receiver) {
-        if (prop === "memory") {
-          return {
-            ...target.memory,
-            ...memoryConfigOverride,
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    }),
   };
 });
 
@@ -63,11 +44,14 @@ describe("memory extractor model resolution order", () => {
     vi.clearAllMocks();
   });
 
-  test("prefers explicit override over organization defaults and fallback", async () => {
-    memoryConfigOverride.extractorModelOverride = "gpt-4o-mini";
-    memoryConfigOverride.extractorApiKeyIdOverride = "override-key-id";
-    memoryConfigOverride.extractorFallbackModel = "claude-haiku-4-5";
-    memoryConfigOverride.extractorFallbackApiKeyId = undefined;
+  test("prefers org override over org default", async () => {
+    mockGetOrganizationById.mockResolvedValue({
+      memoryExtractorModel: "gpt-4o-mini",
+      memoryExtractorChatApiKeyId: "override-key-id",
+      defaultLlmModel: "claude-3-5-haiku-20241022",
+      defaultLlmProvider: "anthropic",
+      defaultLlmApiKeyId: "org-default-key-id",
+    });
 
     mockResolveApiKeyFromChatApiKey.mockResolvedValue({
       provider: "openai",
@@ -80,22 +64,18 @@ describe("memory extractor model resolution order", () => {
     const resolved = await resolveModelConfig({ organizationId: "org-1" });
 
     expect(resolved).toEqual({
-      source: "override",
+      source: "organization_override",
       modelName: "gpt-4o-mini",
       provider: "openai",
       apiKey: "override-api-key",
       baseUrl: "https://override.example.com",
     });
-    expect(mockGetOrganizationById).not.toHaveBeenCalled();
   });
 
-  test("uses organization default when override is not configured", async () => {
-    memoryConfigOverride.extractorModelOverride = undefined;
-    memoryConfigOverride.extractorApiKeyIdOverride = undefined;
-    memoryConfigOverride.extractorFallbackModel = "claude-haiku-4-5";
-    memoryConfigOverride.extractorFallbackApiKeyId = undefined;
-
+  test("uses org default when override is not configured", async () => {
     mockGetOrganizationById.mockResolvedValue({
+      memoryExtractorModel: null,
+      memoryExtractorChatApiKeyId: null,
       defaultLlmModel: "claude-3-5-haiku-20241022",
       defaultLlmProvider: "anthropic",
       defaultLlmApiKeyId: "org-default-key-id",
@@ -119,31 +99,20 @@ describe("memory extractor model resolution order", () => {
     });
   });
 
-  test("falls back when neither override nor organization default resolves", async () => {
-    memoryConfigOverride.extractorModelOverride = undefined;
-    memoryConfigOverride.extractorApiKeyIdOverride = undefined;
-    memoryConfigOverride.extractorFallbackModel = "gpt-4o-mini";
-    memoryConfigOverride.extractorFallbackApiKeyId = undefined;
-
+  test("returns null when neither override nor org default resolves", async () => {
     mockGetOrganizationById.mockResolvedValue({
+      memoryExtractorModel: null,
+      memoryExtractorChatApiKeyId: null,
       defaultLlmModel: null,
       defaultLlmProvider: null,
       defaultLlmApiKeyId: null,
     });
-    mockDetectProviderFromModel.mockReturnValue("openai");
 
     const { memoryExtractor } = await import("./extractor");
     const resolveModelConfig = getResolveModelConfig(memoryExtractor);
     const resolved = await resolveModelConfig({ organizationId: "org-1" });
 
-    expect(resolved).toEqual({
-      source: "fallback",
-      modelName: "gpt-4o-mini",
-      provider: "openai",
-      apiKey: "env-openai",
-      baseUrl: null,
-    });
-    expect(mockGetProviderEnvApiKey).toHaveBeenCalledWith("openai");
+    expect(resolved).toBeNull();
   });
 });
 

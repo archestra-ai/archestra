@@ -1590,6 +1590,13 @@
       "when": 1777313736093,
       "tag": "0226_gorgeous_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1777387846353,
+      "tag": "0227_flashy_elektra",
+      "breakpoints": true
     }
   ]
 }

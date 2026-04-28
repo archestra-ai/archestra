@@ -65,6 +65,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
+  memorySettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
@@ -118,6 +119,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   agentSettings: [],
   llmSettings: ["read", "update"],
+  memorySettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read"],
   invitation: ["read"],
@@ -171,6 +173,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   apiKey: ["read", "create", "delete"],
   agentSettings: [],
   llmSettings: [],
+  memorySettings: [],
   knowledgeSettings: [],
   member: [],
   invitation: [],
@@ -294,6 +297,10 @@ export const permissionDescriptions: Record<string, string> = {
   "optimizationRule:delete": "Remove optimization rules",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
+  "memorySettings:read":
+    "View memory settings (extraction, injection, retention, limits)",
+  "memorySettings:update":
+    "Modify memory settings (extraction, injection, retention, limits)",
   "agentSettings:read":
     "View agent settings (default model, default agent, security engine, file uploads)",
   "agentSettings:update":
@@ -828,6 +835,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
+  },
+  [RouteId.UpdateMemorySettings]: {
+    memorySettings: ["update"],
+  },
+  [RouteId.GetMemoryExtractionStats]: {
+    memorySettings: ["read"],
   },
   [RouteId.DropEmbeddingConfig]: {
     knowledgeSettings: ["update"],

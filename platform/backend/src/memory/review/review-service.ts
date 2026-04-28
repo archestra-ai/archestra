@@ -1,4 +1,3 @@
-import config from "@/config";
 import logger from "@/logging";
 import { canApproveMemory } from "@/memory/policy/can-approve";
 import { canDeleteMemory } from "@/memory/policy/can-delete";
@@ -20,6 +19,7 @@ import {
 } from "@/memory/telemetry/spans";
 import MemoryItemModel from "@/models/memory-item";
 import MemoryTombstoneModel from "@/models/memory-tombstone";
+import OrganizationModel from "@/models/organization";
 import type {
   InsertMemoryItem,
   MemoryItem,
@@ -256,11 +256,14 @@ export async function reject(
     }
 
     if (shouldCreateRejectionTombstone(params.rejectionReason)) {
+      const organization = await OrganizationModel.getById(
+        params.organizationId,
+      );
       // Manipulative content gets a non-expiring tombstone to prevent replay.
       const tombstoneTtlDays =
         params.rejectionReason === "manipulative"
           ? null
-          : config.memory.tombstoneTtlDays;
+          : (organization?.memoryTombstoneTtlDays ?? 90);
       await MemoryTombstoneModel.record({
         organizationId: accessContext.item.organizationId,
         scopeType: accessContext.item.scopeType,

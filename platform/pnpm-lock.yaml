@@ -50,6 +50,9 @@ patchedDependencies:
   ai@6.0.90:
     hash: 8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2
     path: patches/ai@6.0.90.patch
+  mammoth@1.12.0:
+    hash: 05c1964b9b052ede2c310e8547c9a6084ac69a73a95b509c8cfd835bdbf5326b
+    path: patches/mammoth@1.12.0.patch
 
 importers:
 
@@ -361,7 +364,7 @@ importers:
         version: 4.18.1
       mammoth:
         specifier: ^1.12.0
-        version: 1.12.0
+        version: 1.12.0(patch_hash=05c1964b9b052ede2c310e8547c9a6084ac69a73a95b509c8cfd835bdbf5326b)
       node-vault:
         specifier: ^0.11.0
         version: 0.11.0
@@ -18013,7 +18016,7 @@ snapshots:
       pify: 4.0.1
       semver: 5.7.2
 
-  mammoth@1.12.0:
+  mammoth@1.12.0(patch_hash=05c1964b9b052ede2c310e8547c9a6084ac69a73a95b509c8cfd835bdbf5326b):
     dependencies:
       '@xmldom/xmldom': 0.9.10
       argparse: 1.0.10

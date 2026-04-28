@@ -25,7 +25,7 @@ export interface K8sRuntimeStatusSummary {
   mcpServers: Record<string, K8sDeploymentStatusSummary>;
 }
 
-export const AvailableToolAnalysisSchema = z.object({
+const AvailableToolAnalysisSchema = z.object({
   status: z.enum(["completed", "awaiting_ollama_model", "error"]),
   error: z.string().nullable(),
   is_read: z.boolean().nullable(),

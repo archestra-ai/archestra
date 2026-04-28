@@ -247,23 +247,6 @@ const meta = calculatePaginationMeta(100, { limit: 20, offset: 40 });
 // { currentPage: 3, limit: 20, total: 100, totalPages: 5, hasNext: true, hasPrev: true }
 ```
 
-#### `applyPagination<T>(queryBuilder, params)`
-
-Applies limit and offset to a Drizzle query builder.
-
-**Parameters:**
-- `queryBuilder: PgSelect` - Drizzle query builder
-- `params: PaginationQuery` - Pagination parameters
-
-**Returns:** Modified query builder
-
-**Example:**
-```typescript
-const query = db.select().from(table);
-const paginatedQuery = applyPagination(query, { limit: 20, offset: 0 });
-const results = await paginatedQuery;
-```
-
 ## Implementation Guide
 
 ### Adding Pagination with Filters

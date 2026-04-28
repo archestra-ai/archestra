@@ -69,10 +69,13 @@ export const ConversationEmptyState = ({
   </div>
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = ComponentProps<typeof Button> & {
+  label?: string;
+};
 
 export const ConversationScrollButton = ({
   className,
+  label,
   ...props
 }: ConversationScrollButtonProps) => {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
@@ -86,15 +89,17 @@ export const ConversationScrollButton = ({
       <Button
         className={cn(
           "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full",
+          label && "h-9 gap-1.5 px-4",
           className,
         )}
         onClick={handleScrollToBottom}
-        size="icon"
+        size={label ? "default" : "icon"}
         type="button"
         variant="outline"
         {...props}
       >
         <ArrowDownIcon className="size-4" />
+        {label && <span className="text-sm">{label}</span>}
       </Button>
     )
   );

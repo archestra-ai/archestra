@@ -15,6 +15,7 @@ import IdentityProviderModel, {
 import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
 
+/** @public — consumed via dynamic import in src/auth/better-auth.ts */
 export const ssoConfig = {
   organizationProvisioning: {
     disabled: false,
@@ -70,6 +71,7 @@ export const ssoConfig = {
  *
  * @param userId - The user's ID
  * @param userEmail - The user's email
+ * @public — consumed via dynamic import in src/auth/better-auth.ts
  */
 export async function syncSsoRole(
   userId: string,
@@ -245,6 +247,7 @@ export async function syncSsoRole(
  *
  * @param userId - The user's ID
  * @param userEmail - The user's email
+ * @public — consumed via dynamic import in src/auth/better-auth.ts
  */
 export async function syncSsoTeams(
   userId: string,

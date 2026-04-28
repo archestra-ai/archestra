@@ -35,6 +35,7 @@ export interface A2AAttachment {
   name?: string;
 }
 
+/** @public — exported for testability */
 export interface A2AExecuteParams {
   /**
    * Agent ID to execute. Must be an internal agent (agentType='agent').
@@ -74,6 +75,7 @@ export interface A2AExecuteParams {
   scheduleTriggerRunId?: string;
 }
 
+/** @public — exported for testability */
 export interface A2AExecuteResult {
   messageId: string;
   text: string;
@@ -338,6 +340,7 @@ export async function executeA2AMessage(
  *
  * Only image attachments are currently supported as inline content parts.
  * Non-image attachments are noted so the LLM can inform the user.
+ * @public — exported for testability
  */
 export function buildUserContent(
   message: string,

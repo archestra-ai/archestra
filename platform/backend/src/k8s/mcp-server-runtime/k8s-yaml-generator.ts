@@ -12,7 +12,7 @@ const placeholder = (type: string, key: string) => `\${${type}.${key}}`;
 /**
  * Context for generating deployment YAML template.
  */
-export interface DeploymentYamlContext {
+interface DeploymentYamlContext {
   serverId: string;
   serverName: string;
   namespace: string;
@@ -32,7 +32,7 @@ export interface DeploymentYamlContext {
 /**
  * Validation result for deployment YAML.
  */
-export interface YamlValidationResult {
+interface YamlValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];

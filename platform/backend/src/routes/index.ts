@@ -38,6 +38,7 @@ export { default as deepseekProxyRoutes } from "./proxy/routes/deepseek";
 export { default as geminiProxyRoutes } from "./proxy/routes/gemini";
 export { default as groqProxyRoutes } from "./proxy/routes/groq";
 export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";
+export { default as modelRouterProxyRoutes } from "./proxy/routes/model-router";
 export { default as mistralProxyRoutes } from "./proxy/routes/mistral";
 export { default as ollamaProxyRoutes } from "./proxy/routes/ollama";
 export { default as openAiProxyRoutes } from "./proxy/routes/openai";

@@ -16,6 +16,28 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 Archestra Platform acts as a security proxy between your AI applications and LLM providers. It currently supports the following LLM providers.
 
+## OpenAI-Compatible Model Router
+
+The model router exposes one OpenAI Chat Completions interface for models across configured providers.
+
+### Supported Model Router APIs
+
+- **Chat Completions API** (`/chat/completions`) - ✅ Supported for OpenAI-compatible providers, Anthropic Messages models, and Bedrock Converse-compatible models
+- **Models API** (`/models`) - ✅ Returns provider-qualified model IDs
+
+### Model Router Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/model-router/{llm-proxy-id}`
+- **Authentication**: Pass a provider API key or an Archestra virtual API key in the `Authorization` header as `Bearer <key>`
+
+### Model Resolution
+
+Use provider-qualified model IDs from `/models` for deterministic routing, for example `openai:gpt-5.4`, `anthropic:claude-opus-4-6-20250918`, `groq:llama-3.1-8b-instant`, or `bedrock:amazon.nova-pro-v1:0`.
+
+The prefix before `:` is the provider. The value after `:` is the provider's native model ID, so provider model IDs can still contain slashes or colons.
+
+Each LLM Proxy exposes all available text chat models by default. To constrain a proxy, edit it and turn off **Expose all available models** in the Model Router section, then choose the allowed models. The `/models` response and `/chat/completions` route both enforce that list.
+
 ## OpenAI
 
 ### Supported OpenAI APIs

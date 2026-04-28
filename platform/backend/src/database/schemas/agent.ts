@@ -93,6 +93,13 @@ const agentsTable = pgTable(
     /** Model ID for LLM calls */
     llmModel: text("llm_model"),
 
+    /**
+     * Optional allowlist for the OpenAI-compatible model router.
+     * Null means expose every text chat model available in the organization.
+     * Values use the wire model ID format: "<provider>:<model_id>".
+     */
+    modelRouterAllowedModelIds: text("model_router_allowed_model_ids").array(),
+
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(
       () => identityProvidersTable.id,

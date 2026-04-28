@@ -129,6 +129,7 @@ const selectExtendedFields = {
   toolExposureMode: ToolExposureModeSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
+  modelRouterAllowedModelIds: z.array(z.string()).nullable(),
 };
 
 const insertExtendedFields = {
@@ -139,6 +140,7 @@ const insertExtendedFields = {
   toolExposureMode: ToolExposureModeSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
+  modelRouterAllowedModelIds: z.array(z.string()).nullable().optional(),
 };
 
 /**

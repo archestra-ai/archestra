@@ -10738,6 +10738,7 @@ export type GetAgentsResponses = {
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
             llmModel: string | null;
+            modelRouterAllowedModelIds: Array<string> | null;
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
@@ -10833,6 +10834,7 @@ export type CreateAgentData = {
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
+        modelRouterAllowedModelIds?: Array<string> | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
@@ -10953,6 +10955,7 @@ export type CreateAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11135,6 +11138,7 @@ export type GetAllAgentsResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11300,6 +11304,7 @@ export type GetDefaultMcpGatewayResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11465,6 +11470,7 @@ export type GetDefaultLlmProxyResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11717,6 +11723,7 @@ export type GetAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11803,6 +11810,7 @@ export type UpdateAgentData = {
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
+        modelRouterAllowedModelIds?: Array<string> | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
@@ -11925,6 +11933,7 @@ export type UpdateAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
+        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -34856,6 +34865,370 @@ export type MistralChatCompletionsWithAgentResponses = {
 };
 
 export type MistralChatCompletionsWithAgentResponse = MistralChatCompletionsWithAgentResponses[keyof MistralChatCompletionsWithAgentResponses];
+
+export type ModelRouterListModelsWithDefaultAgentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/models';
+};
+
+export type ModelRouterListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterListModelsWithDefaultAgentError = ModelRouterListModelsWithDefaultAgentErrors[keyof ModelRouterListModelsWithDefaultAgentErrors];
+
+export type ModelRouterListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type ModelRouterListModelsWithDefaultAgentResponse = ModelRouterListModelsWithDefaultAgentResponses[keyof ModelRouterListModelsWithDefaultAgentResponses];
+
+export type ModelRouterListModelsWithAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/models';
+};
+
+export type ModelRouterListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterListModelsWithAgentError = ModelRouterListModelsWithAgentErrors[keyof ModelRouterListModelsWithAgentErrors];
+
+export type ModelRouterListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type ModelRouterListModelsWithAgentResponse = ModelRouterListModelsWithAgentResponses[keyof ModelRouterListModelsWithAgentResponses];
+
+export type ModelRouterChatCompletionsWithDefaultAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/chat/completions';
+};
+
+export type ModelRouterChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterChatCompletionsWithDefaultAgentError = ModelRouterChatCompletionsWithDefaultAgentErrors[keyof ModelRouterChatCompletionsWithDefaultAgentErrors];
+
+export type ModelRouterChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type ModelRouterChatCompletionsWithDefaultAgentResponse = ModelRouterChatCompletionsWithDefaultAgentResponses[keyof ModelRouterChatCompletionsWithDefaultAgentResponses];
+
+export type ModelRouterChatCompletionsWithAgentData = {
+    body: XaiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/chat/completions';
+};
+
+export type ModelRouterChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterChatCompletionsWithAgentError = ModelRouterChatCompletionsWithAgentErrors[keyof ModelRouterChatCompletionsWithAgentErrors];
+
+export type ModelRouterChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type ModelRouterChatCompletionsWithAgentResponse = ModelRouterChatCompletionsWithAgentResponses[keyof ModelRouterChatCompletionsWithAgentResponses];
 
 export type InitiateOAuthData = {
     body: {

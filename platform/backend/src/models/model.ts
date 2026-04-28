@@ -142,6 +142,29 @@ class ModelModel {
   }
 
   /**
+   * Find text chat models by exact model ID across providers.
+   * Used by the OpenAI-compatible model router to resolve a client-supplied
+   * model name to the provider that owns it.
+   */
+  static async findTextChatModelsByModelId(params: {
+    modelId: string;
+    provider?: SupportedProvider;
+  }): Promise<Model[]> {
+    const conditions = [eq(schema.modelsTable.modelId, params.modelId)];
+
+    if (params.provider) {
+      conditions.push(eq(schema.modelsTable.provider, params.provider));
+    }
+
+    const results = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(and(...conditions));
+
+    return results.filter((model) => ModelModel.supportsTextChat(model));
+  }
+
+  /**
    * Create new model
    */
   static async create(data: CreateModel): Promise<Model> {

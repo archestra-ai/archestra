@@ -1597,6 +1597,13 @@
       "when": 1777387846353,
       "tag": "0227_flashy_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "7",
+      "when": 1777402350491,
+      "tag": "0228_familiar_veda",
+      "breakpoints": true
     }
   ]
 }

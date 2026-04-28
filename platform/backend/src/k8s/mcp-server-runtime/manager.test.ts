@@ -100,6 +100,43 @@ vi.mock("@/secrets-manager", () => ({
   })),
 }));
 
+// `defaultBundle` is a shape-correct fallback K8sClientsBundle returned by
+// `mockResolveForServer` so legacy `startServer` tests that don't stub the
+// registry don't explode on `bundle.clients.coreApi`. Routing-aware tests call
+// `mockResolveForServer.mockResolvedValue(...)` to override per-test.
+const { mockResolveForServer, mockInvalidate, mockInvalidateAll } = vi.hoisted(
+  () => {
+    const defaultBundle = {
+      clients: {
+        kubeConfig: { __id: "kc-default" },
+        coreApi: { __id: "coreApi-default" },
+        appsApi: { __id: "appsApi-default" },
+        batchApi: { __id: "batchApi-default" },
+        attach: { __id: "attach-default" },
+        exec: { __id: "exec-default" },
+        log: { __id: "log-default" },
+        namespace: "test-namespace",
+      },
+      namespace: "test-namespace",
+      clusterId: "cluster-default",
+    };
+    return {
+      mockResolveForServer: vi.fn().mockResolvedValue(defaultBundle),
+      mockInvalidate: vi.fn(),
+      mockInvalidateAll: vi.fn(),
+    };
+  },
+);
+
+vi.mock("./cluster-registry", () => ({
+  clusterRegistry: {
+    resolveForServer: mockResolveForServer,
+    invalidate: mockInvalidate,
+    invalidateAll: mockInvalidateAll,
+  },
+  ClusterRegistry: vi.fn(),
+}));
+
 vi.mock("./k8s-deployment", () => {
   return {
     default: class MockK8sDeployment {
@@ -1189,5 +1226,204 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
     const manager = new McpServerRuntimeManager();
     // k8sApi is undefined — should return without error
     await callBackfill(manager, [{ id: "srv-1", teamId: "team-x" }]);
+  });
+});
+
+describe("McpServerRuntimeManager — ClusterRegistry routing", () => {
+  function createMcpServer(overrides: Partial<McpServer> = {}): McpServer {
+    return {
+      id: "srv-1",
+      name: "test-server",
+      catalogId: "catalog-1",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      oauthRefreshError: null,
+      oauthRefreshFailedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local",
+      ...overrides,
+    } as McpServer;
+  }
+
+  function makeBundle(
+    overrides: { clusterId?: string; namespace?: string } = {},
+  ) {
+    const tag = overrides.clusterId ?? "cluster-default";
+    return {
+      clients: {
+        kubeConfig: { __id: `kc-${tag}` },
+        coreApi: { __id: `coreApi-${tag}` },
+        appsApi: { __id: `appsApi-${tag}` },
+        batchApi: { __id: `batchApi-${tag}` },
+        attach: { __id: `attach-${tag}` },
+        exec: { __id: `exec-${tag}` },
+        log: { __id: `log-${tag}` },
+        namespace: overrides.namespace ?? "ns-from-bundle",
+      },
+      namespace: overrides.namespace ?? "ns-from-bundle",
+      clusterId: overrides.clusterId ?? "cluster-default",
+    };
+  }
+
+  async function setupManager() {
+    // Clean instance + a no-op catalog mock that returns a local server
+    // (so startServer goes through the deployment path).
+    mockCreateK8sSecret.mockClear();
+    mockStartOrCreateDeployment.mockClear();
+    mockCreateDockerRegistrySecrets.mockClear();
+    mockK8sDeploymentInstances.length = 0;
+    // Use mockClear (not mockReset) so the hoisted defaultBundle implementation
+    // survives — tests in this block override via mockResolvedValue when they
+    // need a specific bundle.
+    mockResolveForServer.mockClear();
+    mockInvalidate.mockClear();
+    mockInvalidateAll.mockClear();
+
+    const InternalMcpCatalogModel = (
+      await import("@/models/internal-mcp-catalog")
+    ).default;
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+      id: "catalog-1",
+      serverType: "local",
+      localConfig: { environment: [] },
+      localConfigSecretId: null,
+    } as unknown as Awaited<
+      ReturnType<typeof InternalMcpCatalogModel.findById>
+    >);
+
+    // KubeConfig stubs so manager constructor succeeds (env-var path still
+    // exists for backwards-compat at construction time).
+    const mockLoadFromDefault = vi
+      .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+      .mockImplementation(() => {});
+    const mockMakeApiClient = vi
+      .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+      .mockReturnValue({} as k8s.CoreV1Api);
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    return {
+      manager,
+      cleanup: () => {
+        mockLoadFromDefault.mockRestore();
+        mockMakeApiClient.mockRestore();
+      },
+    };
+  }
+
+  test("personal MCP routes through clusterRegistry.resolveForServer", async () => {
+    const personalBundle = makeBundle({
+      clusterId: "cluster-personal",
+      namespace: "personal-ns",
+    });
+
+    const { manager, cleanup } = await setupManager();
+    mockResolveForServer.mockResolvedValue(personalBundle);
+
+    const personalServer = createMcpServer({
+      ownerId: "user-1",
+      teamId: null,
+    });
+
+    await manager.startServer(personalServer);
+
+    // Registry is invoked exactly once with the very mcpServer we installed
+    expect(mockResolveForServer).toHaveBeenCalledTimes(1);
+    expect(mockResolveForServer).toHaveBeenCalledWith(personalServer);
+
+    // K8sDeployment was constructed with bundle clients + namespace
+    expect(mockK8sDeploymentInstances).toHaveLength(1);
+    const opts = mockK8sDeploymentInstances[0].options;
+    expect(opts.namespace).toBe("personal-ns");
+    expect(opts.k8sApi).toBe(personalBundle.clients.coreApi);
+    expect(opts.k8sAppsApi).toBe(personalBundle.clients.appsApi);
+    expect(opts.k8sAttach).toBe(personalBundle.clients.attach);
+    expect(opts.k8sLog).toBe(personalBundle.clients.log);
+    expect(opts.k8sExec).toBe(personalBundle.clients.exec);
+
+    cleanup();
+  });
+
+  test("team MCP routes through clusterRegistry.resolveForServer", async () => {
+    const teamBundle = makeBundle({
+      clusterId: "cluster-default",
+      namespace: "default-ns",
+    });
+
+    const { manager, cleanup } = await setupManager();
+    mockResolveForServer.mockResolvedValue(teamBundle);
+
+    const teamServer = createMcpServer({
+      ownerId: null,
+      teamId: "team-a",
+    });
+
+    await manager.startServer(teamServer);
+
+    expect(mockResolveForServer).toHaveBeenCalledTimes(1);
+    expect(mockResolveForServer).toHaveBeenCalledWith(teamServer);
+
+    // Manager just delegates; it does not pre-pick personal vs default.
+    // (registry resolves to the default cluster for team servers internally.)
+    expect(mockK8sDeploymentInstances).toHaveLength(1);
+    expect(mockK8sDeploymentInstances[0].options.namespace).toBe("default-ns");
+
+    cleanup();
+  });
+
+  test("explicit clusterId pin is forwarded to registry verbatim", async () => {
+    const pinnedBundle = makeBundle({
+      clusterId: "cluster-pinned",
+      namespace: "pinned-ns",
+    });
+
+    const { manager, cleanup } = await setupManager();
+    mockResolveForServer.mockResolvedValue(pinnedBundle);
+
+    const pinnedServer = createMcpServer({
+      ownerId: "user-1",
+      teamId: null,
+      clusterId: "cluster-pinned",
+    } as Partial<McpServer>);
+
+    await manager.startServer(pinnedServer);
+
+    // Manager passes the mcpServer through; registry is the one that reads
+    // mcpServer.clusterId. We assert the same reference was forwarded.
+    expect(mockResolveForServer).toHaveBeenCalledWith(pinnedServer);
+    expect(
+      (
+        mockResolveForServer.mock.calls[0][0] as McpServer & {
+          clusterId?: string;
+        }
+      ).clusterId,
+    ).toBe("cluster-pinned");
+
+    expect(mockK8sDeploymentInstances[0].options.namespace).toBe("pinned-ns");
+
+    cleanup();
+  });
+
+  test("invalidateCluster delegates to clusterRegistry.invalidate", async () => {
+    const { manager, cleanup } = await setupManager();
+
+    const managerWithInvalidate = manager as unknown as {
+      invalidateCluster: (clusterId: string) => void;
+    };
+
+    expect(typeof managerWithInvalidate.invalidateCluster).toBe("function");
+
+    managerWithInvalidate.invalidateCluster("cluster-xyz");
+
+    expect(mockInvalidate).toHaveBeenCalledTimes(1);
+    expect(mockInvalidate).toHaveBeenCalledWith("cluster-xyz");
+
+    cleanup();
   });
 });

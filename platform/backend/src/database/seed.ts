@@ -16,6 +16,7 @@ import {
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import config, { getProviderEnvApiKey } from "@/config";
 import db, { schema } from "@/database";
+import { seedDefaultCluster } from "@/database/seed-default-cluster";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -592,6 +593,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();
+  await seedDefaultCluster();
   // Ensure all existing members have a personal default chat agent
   await ensureExistingUsersHavePersonalChatAgents();
   // Ensure all existing members have a personal MCP gateway

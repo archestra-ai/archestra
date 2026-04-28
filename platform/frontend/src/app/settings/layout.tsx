@@ -38,6 +38,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Configure organization-wide MCP authentication and token behavior.",
   },
+  "/settings/clusters": {
+    title: "Clusters",
+    description:
+      "Manage Kubernetes clusters where MCP servers run, including a separate cluster or namespace for personal MCP servers.",
+  },
   "/settings/connection": {
     title: "Connection",
     description:

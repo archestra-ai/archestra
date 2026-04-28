@@ -424,6 +424,14 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Cluster Routes
+  GetClusters: "getClusters",
+  GetCluster: "getCluster",
+  CreateCluster: "createCluster",
+  UpdateCluster: "updateCluster",
+  DeleteCluster: "deleteCluster",
+  TestCluster: "testCluster",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

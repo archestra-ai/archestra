@@ -20925,6 +20925,576 @@ export type RefreshChatOpsChannelDiscoveryResponses = {
 
 export type RefreshChatOpsChannelDiscoveryResponse = RefreshChatOpsChannelDiscoveryResponses[keyof RefreshChatOpsChannelDiscoveryResponses];
 
+export type GetClustersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/clusters';
+};
+
+export type GetClustersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetClustersError = GetClustersErrors[keyof GetClustersErrors];
+
+export type GetClustersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        namespace: string | null;
+        kubeconfigSecretId: string | null;
+        loadFromCluster: boolean;
+        isDefault: boolean;
+        isPersonalDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetClustersResponse = GetClustersResponses[keyof GetClustersResponses];
+
+export type CreateClusterData = {
+    body: {
+        name: string;
+        namespace?: string | null;
+        kubeconfigYaml?: string | null;
+        loadFromCluster?: boolean;
+        isPersonalDefault?: boolean;
+        isDefault?: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/clusters';
+};
+
+export type CreateClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateClusterError = CreateClusterErrors[keyof CreateClusterErrors];
+
+export type CreateClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        namespace: string | null;
+        kubeconfigSecretId: string | null;
+        loadFromCluster: boolean;
+        isDefault: boolean;
+        isPersonalDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+    /**
+     * Default Response
+     */
+    201: {
+        id: string;
+        name: string;
+        namespace: string | null;
+        kubeconfigSecretId: string | null;
+        loadFromCluster: boolean;
+        isDefault: boolean;
+        isPersonalDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateClusterResponse = CreateClusterResponses[keyof CreateClusterResponses];
+
+export type DeleteClusterData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/clusters/{id}';
+};
+
+export type DeleteClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteClusterError = DeleteClusterErrors[keyof DeleteClusterErrors];
+
+export type DeleteClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: null;
+    /**
+     * Default Response
+     */
+    204: null;
+};
+
+export type DeleteClusterResponse = DeleteClusterResponses[keyof DeleteClusterResponses];
+
+export type GetClusterData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/clusters/{id}';
+};
+
+export type GetClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetClusterError = GetClusterErrors[keyof GetClusterErrors];
+
+export type GetClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        namespace: string | null;
+        kubeconfigSecretId: string | null;
+        loadFromCluster: boolean;
+        isDefault: boolean;
+        isPersonalDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetClusterResponse = GetClusterResponses[keyof GetClusterResponses];
+
+export type UpdateClusterData = {
+    body: {
+        name?: string;
+        namespace?: string | null;
+        kubeconfigYaml?: string | null;
+        loadFromCluster?: boolean;
+        isPersonalDefault?: boolean;
+        isDefault?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/clusters/{id}';
+};
+
+export type UpdateClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateClusterError = UpdateClusterErrors[keyof UpdateClusterErrors];
+
+export type UpdateClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        namespace: string | null;
+        kubeconfigSecretId: string | null;
+        loadFromCluster: boolean;
+        isDefault: boolean;
+        isPersonalDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateClusterResponse = UpdateClusterResponses[keyof UpdateClusterResponses];
+
+export type TestClusterData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/clusters/{id}/test';
+};
+
+export type TestClusterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TestClusterError = TestClusterErrors[keyof TestClusterErrors];
+
+export type TestClusterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: boolean;
+        namespacesVisible?: number;
+        error?: string;
+    };
+};
+
+export type TestClusterResponse = TestClusterResponses[keyof TestClusterResponses];
+
 export type CohereChatWithDefaultAgentData = {
     body: CohereChatRequestInput;
     headers?: {
@@ -33281,6 +33851,7 @@ export type GetMcpServersResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        clusterId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -33315,6 +33886,7 @@ export type InstallMcpServerData = {
         secretId?: string;
         ownerId?: string | null;
         teamId?: string | null;
+        clusterId?: string | null;
         scope?: 'personal' | 'team' | 'org';
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -33415,6 +33987,7 @@ export type InstallMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        clusterId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -33613,6 +34186,7 @@ export type GetMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        clusterId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -33736,6 +34310,7 @@ export type ReauthenticateMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        clusterId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -34131,6 +34706,7 @@ export type ReinstallMcpServerResponses = {
         secretId: string | null;
         ownerId: string | null;
         teamId: string | null;
+        clusterId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';

@@ -12,6 +12,7 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
+import { type ClusterRegistry, clusterRegistry } from "./cluster-registry";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -25,51 +26,59 @@ import type {
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
+ *
+ * Per-server K8s clients (used by `startServer` and `getOrLoadDeployment`) are
+ * resolved through ClusterRegistry, so personal/team/built-in servers can land
+ * on different Kubernetes targets configured by an admin.
+ *
+ * For runtime-wide operations (connection probe, regcred listing/backfill) the
+ * manager keeps a default-cluster client bundle eagerly loaded from env config
+ * — this preserves the original "is K8s configured?" semantics and lets those
+ * operations execute without paying per-call resolve cost.
  */
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
-  private k8sAttach?: k8s.Attach;
-  private k8sLog?: k8s.Log;
-  private k8sExec?: k8s.Exec;
   private namespace: string = "default";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
+  private registry: ClusterRegistry;
 
   // Callbacks for initialization events
   onRuntimeStartupSuccess: () => void = () => {};
   onRuntimeStartupError: (error: Error) => void = () => {};
 
-  constructor() {
+  constructor(registry: ClusterRegistry = clusterRegistry) {
+    this.registry = registry;
     try {
       const { kubeConfig, namespace } = loadKubeConfig();
       const clients = createK8sClients(kubeConfig, namespace);
 
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
-      this.k8sAttach = clients.attach;
-      this.k8sExec = clients.exec;
-      this.k8sLog = clients.log;
       this.namespace = clients.namespace;
     } catch (error) {
-      logger.error({ err: error }, "Failed to load Kubernetes config");
+      logger.error({ err: error }, "Failed to load default Kubernetes config");
       this.status = "error";
-      this.k8sApi = undefined;
-      this.k8sAppsApi = undefined;
-      this.k8sAttach = undefined;
-      this.k8sLog = undefined;
       this.namespace = "";
-      return; // graceful fallback: constructor completes with runtime disabled
     }
   }
 
   /**
-   * Check if the orchestrator K8s runtime is enabled
-   * Returns true if the K8s config loaded successfully (constructor didn't fail)
-   * and the runtime hasn't been stopped
+   * Check if the orchestrator K8s runtime is enabled.
+   * False when the default cluster's kubeconfig failed to load on construction
+   * or after `shutdown()` has been called.
    */
   get isEnabled(): boolean {
     return this.status !== "error" && this.status !== "stopped";
+  }
+
+  /**
+   * Invalidate cached K8s clients for a cluster. Used by cluster CRUD routes
+   * when an admin updates kubeconfig/namespace or deletes the cluster.
+   */
+  invalidateCluster(clusterId: string): void {
+    this.registry.invalidate(clusterId);
   }
 
   /**
@@ -84,7 +93,7 @@ export class McpServerRuntimeManager {
       this.status = "initializing";
       logger.info("Initializing Kubernetes MCP Server Runtime...");
 
-      // Verify K8s connectivity
+      // Verify K8s connectivity against the default cluster
       await this.verifyK8sConnection();
 
       // Fetch the platform pod's nodeSelector and tolerations to inherit for MCP server deployments
@@ -158,7 +167,7 @@ export class McpServerRuntimeManager {
   }
 
   /**
-   * Verify that we can connect to Kubernetes
+   * Verify that we can connect to Kubernetes (default cluster).
    */
   private async verifyK8sConnection(): Promise<void> {
     if (!this.k8sApi) {
@@ -187,12 +196,10 @@ export class McpServerRuntimeManager {
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) {
-      throw new Error("Kubernetes API client not initialized");
-    }
-
     const { id, name } = mcpServer;
     logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
+
+    const bundle = await this.registry.resolveForServer(mcpServer);
 
     try {
       // Fetch catalog item (needed for conditional env var logic)
@@ -201,10 +208,6 @@ export class McpServerRuntimeManager {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
-      }
-
-      if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
-        throw new Error("Kubernetes clients not initialized");
       }
 
       // If environmentValues not provided but server has a secretId,
@@ -273,15 +276,15 @@ export class McpServerRuntimeManager {
 
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        k8sApi: bundle.clients.coreApi,
+        k8sAppsApi: bundle.clients.appsApi,
+        k8sAttach: bundle.clients.attach,
+        k8sLog: bundle.clients.log,
+        namespace: bundle.namespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
-        k8sExec: this.k8sExec,
+        k8sExec: bundle.clients.exec,
       });
 
       // Register the deployment BEFORE starting it
@@ -380,20 +383,6 @@ export class McpServerRuntimeManager {
       return existing;
     }
 
-    // Not in memory - try to load from database
-    if (
-      !this.k8sApi ||
-      !this.k8sAppsApi ||
-      !this.k8sAttach ||
-      !this.k8sLog ||
-      !this.k8sExec
-    ) {
-      logger.warn(
-        `Cannot load deployment for ${mcpServerId}: K8s clients not initialized`,
-      );
-      return undefined;
-    }
-
     try {
       const mcpServer = await McpServerModel.findById(mcpServerId);
       if (!mcpServer) {
@@ -417,18 +406,20 @@ export class McpServerRuntimeManager {
         return undefined;
       }
 
+      const bundle = await this.registry.resolveForServer(mcpServer);
+
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        k8sApi: bundle.clients.coreApi,
+        k8sAppsApi: bundle.clients.appsApi,
+        k8sAttach: bundle.clients.attach,
+        k8sLog: bundle.clients.log,
+        namespace: bundle.namespace,
         catalogItem,
-        k8sExec: this.k8sExec,
+        k8sExec: bundle.clients.exec,
       });
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
@@ -569,12 +560,13 @@ export class McpServerRuntimeManager {
 
     const containerName = k8sDeployment.containerName;
     const sanitizedId = sanitizeLabelValue(mcpServerId);
+    const namespace = k8sDeployment.deploymentNamespace;
     return {
       logs: await k8sDeployment.getRecentLogs(lines),
       containerName,
       // Construct the kubectl command for the user to manually get the logs if they'd like
-      command: `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines}`,
-      namespace: this.namespace,
+      command: `kubectl logs -n ${namespace} -l mcp-server-id=${sanitizedId} --tail=${lines}`,
+      namespace,
     };
   }
 
@@ -606,7 +598,8 @@ export class McpServerRuntimeManager {
    */
   getMcpServerLogsCommand(mcpServerId: string, lines: number = 100): string {
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
+    const namespace = this.cachedNamespaceForServer(mcpServerId);
+    return `kubectl logs -n ${namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
   }
 
   /**
@@ -614,7 +607,8 @@ export class McpServerRuntimeManager {
    */
   getMcpServerDescribeCommand(mcpServerId: string): string {
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl describe pods -n ${this.namespace} -l mcp-server-id=${sanitizedId}`;
+    const namespace = this.cachedNamespaceForServer(mcpServerId);
+    return `kubectl describe pods -n ${namespace} -l mcp-server-id=${sanitizedId}`;
   }
 
   /**
@@ -666,7 +660,22 @@ export class McpServerRuntimeManager {
    */
   getExecCommand(mcpServerId: string): string {
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl exec -it -n ${this.namespace} $(kubectl get pods -n ${this.namespace} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
+    const namespace = this.cachedNamespaceForServer(mcpServerId);
+    return `kubectl exec -it -n ${namespace} $(kubectl get pods -n ${namespace} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
+  }
+
+  /**
+   * Synchronously resolve the K8s namespace for an MCP server: prefer the
+   * cluster the deployment was actually started on (per-server, lives in the
+   * deployment map), fall back to the default cluster's namespace. Used only
+   * for rendering kubectl-command hints — never for issuing K8s API calls.
+   */
+  private cachedNamespaceForServer(mcpServerId: string): string {
+    const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (existing) {
+      return existing.deploymentNamespace;
+    }
+    return this.namespace || "default";
   }
 
   /**

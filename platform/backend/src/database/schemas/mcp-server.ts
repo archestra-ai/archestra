@@ -12,6 +12,7 @@ import type {
   LocalMcpServerInstallationStatus,
   ResourceVisibilityScope,
 } from "@/types";
+import clustersTable from "./cluster";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 import { team } from "./team";
@@ -45,6 +46,9 @@ const mcpServerTable = pgTable(
       onDelete: "set null",
     }),
     teamId: text("team_id").references(() => team.id, {
+      onDelete: "set null",
+    }),
+    clusterId: uuid("cluster_id").references(() => clustersTable.id, {
       onDelete: "set null",
     }),
     scope: text("scope")

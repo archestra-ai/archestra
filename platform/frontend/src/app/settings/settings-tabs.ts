@@ -18,6 +18,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/mcp"]
       ? [{ label: "MCP", href: "/settings/mcp" }]
       : []),
+    ...(permissionMap?.["/settings/clusters"]
+      ? [{ label: "Clusters", href: "/settings/clusters" }]
+      : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),

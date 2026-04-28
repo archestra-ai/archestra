@@ -4823,3 +4823,138 @@ describe("K8sDeployment.ensureHttpServerConfigured cluster domain", () => {
     }
   });
 });
+
+// Guards against a regression where K8sDeployment reaches for a hardcoded
+// singleton or env-var kubeconfig instead of the per-cluster clients/namespace
+// it received in its constructor — that would defeat multi-cluster routing.
+describe("K8sDeployment — uses bundle-supplied clients", () => {
+  type Bundle = {
+    k8sApi: k8s.CoreV1Api;
+    k8sAppsApi: k8s.AppsV1Api;
+    k8sAttach: Attach;
+    k8sLog: Log;
+    k8sExec: Exec;
+    namespace: string;
+  };
+
+  function makeBundle(
+    tag: string,
+    namespace: string,
+  ): {
+    bundle: Bundle;
+    spies: {
+      createNamespacedSecret: ReturnType<typeof vi.fn>;
+      deleteNamespacedSecret: ReturnType<typeof vi.fn>;
+      deleteNamespacedService: ReturnType<typeof vi.fn>;
+      deleteNamespacedDeployment: ReturnType<typeof vi.fn>;
+    };
+  } {
+    const createNamespacedSecret = vi.fn().mockResolvedValue({});
+    const deleteNamespacedSecret = vi.fn().mockResolvedValue({});
+    const deleteNamespacedService = vi.fn().mockResolvedValue({});
+    const deleteNamespacedDeployment = vi.fn().mockResolvedValue({});
+
+    const k8sApi = {
+      __tag: tag,
+      createNamespacedSecret,
+      deleteNamespacedSecret,
+      deleteNamespacedService,
+    } as unknown as k8s.CoreV1Api;
+    const k8sAppsApi = {
+      __tag: tag,
+      deleteNamespacedDeployment,
+    } as unknown as k8s.AppsV1Api;
+
+    return {
+      bundle: {
+        k8sApi,
+        k8sAppsApi,
+        k8sAttach: { __tag: tag } as unknown as Attach,
+        k8sLog: { __tag: tag } as unknown as Log,
+        k8sExec: { __tag: tag } as unknown as Exec,
+        namespace,
+      },
+      spies: {
+        createNamespacedSecret,
+        deleteNamespacedSecret,
+        deleteNamespacedService,
+        deleteNamespacedDeployment,
+      },
+    };
+  }
+
+  function buildDeploymentFromBundle(bundle: Bundle): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: bundle.k8sApi,
+      k8sAppsApi: bundle.k8sAppsApi,
+      k8sAttach: bundle.k8sAttach,
+      k8sLog: bundle.k8sLog,
+      k8sExec: bundle.k8sExec,
+      namespace: bundle.namespace,
+      catalogItem: null,
+    });
+  }
+
+  test("createK8sSecret routes the call through the constructor-supplied k8sApi", async () => {
+    const { bundle, spies } = makeBundle("personal", "personal-ns");
+    const deployment = buildDeploymentFromBundle(bundle);
+
+    await deployment.createK8sSecret({ FOO: "bar" });
+
+    expect(spies.createNamespacedSecret).toHaveBeenCalledTimes(1);
+    expect(spies.createNamespacedSecret).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "personal-ns" }),
+    );
+  });
+
+  test("two K8sDeployments with different bundles do not share client state", async () => {
+    const a = makeBundle("personal", "personal-ns");
+    const b = makeBundle("default", "default-ns");
+
+    const dA = buildDeploymentFromBundle(a.bundle);
+    const dB = buildDeploymentFromBundle(b.bundle);
+
+    await dA.createK8sSecret({ A_KEY: "a" });
+    await dB.deleteK8sService();
+
+    // dA wrote ONLY to bundle A's coreApi
+    expect(a.spies.createNamespacedSecret).toHaveBeenCalledTimes(1);
+    expect(a.spies.createNamespacedSecret).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "personal-ns" }),
+    );
+    expect(b.spies.createNamespacedSecret).not.toHaveBeenCalled();
+
+    // dB called ONLY bundle B's deleteNamespacedService
+    expect(b.spies.deleteNamespacedService).toHaveBeenCalledTimes(1);
+    expect(b.spies.deleteNamespacedService).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "default-ns" }),
+    );
+    expect(a.spies.deleteNamespacedService).not.toHaveBeenCalled();
+  });
+
+  test("stopDeployment routes through bundle-supplied appsApi and namespace", async () => {
+    const { bundle, spies } = makeBundle("team-eu", "team-eu-ns");
+    const deployment = buildDeploymentFromBundle(bundle);
+
+    await deployment.stopDeployment();
+
+    expect(spies.deleteNamespacedDeployment).toHaveBeenCalledTimes(1);
+    expect(spies.deleteNamespacedDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "team-eu-ns" }),
+    );
+  });
+});

@@ -918,6 +918,30 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
+These environment variables describe the **default** Kubernetes target. Additional clusters (and per-personal-server isolation) are managed at runtime through the **Clusters** admin UI (`Settings → Clusters`), which stores extra kubeconfigs encrypted in the database. See [Multi-cluster routing](#multi-cluster-routing-for-mcp-servers) below.
+
+### Multi-cluster routing for MCP servers
+
+By default every MCP server pod is created in the `ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE` of the cluster Archestra was deployed against. To prevent personal MCP servers from sharing a namespace — or even a cluster — with production workloads, an admin can register additional clusters and pick one as the personal default.
+
+**Cluster CRUD (admin-only)** is exposed at `Settings → Clusters` and via the `/api/clusters/*` REST endpoints (`mcpServerInstallation: ["admin"]` permission). Each cluster row stores:
+
+- `name` — display name
+- `namespace` — Kubernetes namespace MCP pods land in
+- `kubeconfigYaml` — kubeconfig used to talk to the cluster, encrypted at rest in the platform secret store
+- `loadFromCluster` — when `true`, ignore kubeconfig and use the platform pod's in-cluster service account
+- `isPersonalDefault` — pin this cluster as the destination for personal MCP servers
+
+The `default` cluster row is seeded automatically from the env vars above and cannot be deleted. The `isDefault` flag is owned by the seed and cannot be edited.
+
+**Routing rules** (applied at `startServer` time and on every lazy load):
+
+1. If the MCP server has an explicit `cluster_id`, use that cluster.
+2. Otherwise, if the server is **personal** (`ownerId IS NOT NULL AND teamId IS NULL`), use the cluster marked `isPersonalDefault` (when one exists).
+3. Otherwise, fall back to the seeded default cluster (env-var configured).
+
+K8s clients are built lazily per cluster and cached in memory; the cache is invalidated whenever a cluster row is updated or deleted. If no personal-default cluster is configured, personal MCP servers fall back to the default cluster — existing installations keep working without action.
+
 ### Observability & Metrics
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces.

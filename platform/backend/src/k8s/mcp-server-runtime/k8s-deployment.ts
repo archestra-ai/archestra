@@ -255,6 +255,15 @@ export default class K8sDeployment {
   }
 
   /**
+   * Public read-only accessor for the deployment's namespace.
+   * Used by the runtime manager to render kubectl-command hints
+   * scoped to the same cluster the deployment was created in.
+   */
+  get deploymentNamespace(): string {
+    return this.defaultNamespace;
+  }
+
+  /**
    * Constructs a valid Kubernetes deployment name for an MCP server.
    *
    * Creates a deployment name in the format "mcp-<slugified-name>".

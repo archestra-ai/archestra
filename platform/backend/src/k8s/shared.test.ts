@@ -351,4 +351,416 @@ describe("shared K8s utilities", () => {
       expect(result.key.length).toBeLessThanOrEqual(63);
     });
   });
+
+  describe("buildKubeConfig", () => {
+    function setupKcMock() {
+      vi.doMock("@kubernetes/client-node", () => {
+        class MockKubeConfig {
+          clusters = [{ name: "test", server: "https://test" }];
+          contexts = [{ name: "test" }];
+          users = [{ name: "test" }];
+          loadFromCluster = vi.fn();
+          loadFromFile = vi.fn();
+          loadFromDefault = vi.fn();
+          loadFromString = vi.fn((content: string) => {
+            if (content === "__INVALID_YAML__") {
+              throw new Error("malformed YAML");
+            }
+          });
+          makeApiClient() {
+            return {};
+          }
+        }
+        return {
+          KubeConfig: MockKubeConfig,
+          CoreV1Api: vi.fn(),
+          AppsV1Api: vi.fn(),
+          BatchV1Api: vi.fn(),
+          Attach: vi.fn(),
+          Log: vi.fn(),
+          Exec: vi.fn(),
+        };
+      });
+    }
+
+    test("calls kc.loadFromCluster() when loadFromCluster=true", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { kubeConfig } = buildKubeConfig({ loadFromCluster: true });
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromString: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromCluster).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromString).not.toHaveBeenCalled();
+      expect(kc.loadFromFile).not.toHaveBeenCalled();
+      expect(kc.loadFromDefault).not.toHaveBeenCalled();
+    });
+
+    test("calls kc.loadFromString(yaml) when kubeconfigYaml is non-empty", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const yaml = "apiVersion: v1\nkind: Config";
+      const { kubeConfig } = buildKubeConfig({ kubeconfigYaml: yaml });
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromString: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromString).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromString).toHaveBeenCalledWith(yaml);
+      expect(kc.loadFromCluster).not.toHaveBeenCalled();
+      expect(kc.loadFromFile).not.toHaveBeenCalled();
+      expect(kc.loadFromDefault).not.toHaveBeenCalled();
+    });
+
+    test("throws a descriptive error when kubeconfigYaml is invalid", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      expect(() =>
+        buildKubeConfig({ kubeconfigYaml: "__INVALID_YAML__" }),
+      ).toThrow(/kubeconfig/i);
+    });
+
+    test("treats empty kubeconfigYaml as not provided and falls through to default", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { kubeConfig } = buildKubeConfig({ kubeconfigYaml: "" });
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromString: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromString).not.toHaveBeenCalled();
+      expect(kc.loadFromDefault).toHaveBeenCalledTimes(1);
+    });
+
+    test("calls kc.loadFromFile(path) when kubeconfigPath is non-empty", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const fs = await import("node:fs");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "shared-test-kubeconfig-"),
+      );
+      const tmpFile = path.join(tmpDir, "kubeconfig.yaml");
+      fs.writeFileSync(
+        tmpFile,
+        [
+          "apiVersion: v1",
+          "kind: Config",
+          "clusters:",
+          "  - name: test",
+          "    cluster:",
+          "      server: https://test",
+          "contexts:",
+          "  - name: test",
+          "    context:",
+          "      cluster: test",
+          "      user: test",
+          "users:",
+          "  - name: test",
+          "    user: {}",
+          "",
+        ].join("\n"),
+      );
+      try {
+        const { buildKubeConfig } = await import("./shared");
+        const { kubeConfig } = buildKubeConfig({ kubeconfigPath: tmpFile });
+        const kc = kubeConfig as unknown as {
+          loadFromCluster: ReturnType<typeof vi.fn>;
+          loadFromString: ReturnType<typeof vi.fn>;
+          loadFromFile: ReturnType<typeof vi.fn>;
+          loadFromDefault: ReturnType<typeof vi.fn>;
+        };
+        expect(kc.loadFromFile).toHaveBeenCalledTimes(1);
+        expect(kc.loadFromFile).toHaveBeenCalledWith(tmpFile);
+        expect(kc.loadFromCluster).not.toHaveBeenCalled();
+        expect(kc.loadFromDefault).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    test("throws when kubeconfigPath does not exist (validateKubeconfig)", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      expect(() =>
+        buildKubeConfig({ kubeconfigPath: "/nonexistent/kubeconfig" }),
+      ).toThrow(/Kubeconfig file not found/);
+    });
+
+    test("calls kc.loadFromDefault() when no source is provided", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { kubeConfig } = buildKubeConfig({});
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromString: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromDefault).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromCluster).not.toHaveBeenCalled();
+      expect(kc.loadFromString).not.toHaveBeenCalled();
+      expect(kc.loadFromFile).not.toHaveBeenCalled();
+    });
+
+    test("loadFromCluster=true wins over kubeconfigYaml and kubeconfigPath", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { kubeConfig } = buildKubeConfig({
+        loadFromCluster: true,
+        kubeconfigYaml: "apiVersion: v1",
+        kubeconfigPath: "/some/path",
+      });
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromString: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromCluster).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromString).not.toHaveBeenCalled();
+      expect(kc.loadFromFile).not.toHaveBeenCalled();
+      expect(kc.loadFromDefault).not.toHaveBeenCalled();
+    });
+
+    test("kubeconfigYaml wins over kubeconfigPath", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const yaml = "apiVersion: v1\nkind: Config";
+      const { kubeConfig } = buildKubeConfig({
+        kubeconfigYaml: yaml,
+        kubeconfigPath: "/some/path",
+      });
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromString: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromString).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromString).toHaveBeenCalledWith(yaml);
+      expect(kc.loadFromFile).not.toHaveBeenCalled();
+      expect(kc.loadFromCluster).not.toHaveBeenCalled();
+      expect(kc.loadFromDefault).not.toHaveBeenCalled();
+    });
+
+    test("returns the explicit namespace when provided", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { namespace } = buildKubeConfig({
+        loadFromCluster: true,
+        namespace: "personal",
+      });
+      expect(namespace).toBe("personal");
+    });
+
+    test("falls back namespace to 'default' when input.namespace is empty", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { namespace } = buildKubeConfig({
+        loadFromCluster: true,
+        namespace: "",
+      });
+      expect(namespace).toBe("default");
+    });
+
+    test("falls back namespace to 'default' when input.namespace is undefined", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const { buildKubeConfig } = await import("./shared");
+      const { namespace } = buildKubeConfig({});
+      expect(namespace).toBe("default");
+    });
+  });
+
+  describe("loadKubeConfig (env-var wrapper around buildKubeConfig)", () => {
+    function setupKcMock() {
+      vi.doMock("@kubernetes/client-node", () => {
+        class MockKubeConfig {
+          clusters = [{ name: "test", server: "https://test" }];
+          contexts = [{ name: "test" }];
+          users = [{ name: "test" }];
+          loadFromCluster = vi.fn();
+          loadFromFile = vi.fn();
+          loadFromDefault = vi.fn();
+          loadFromString = vi.fn();
+          makeApiClient() {
+            return {};
+          }
+        }
+        return {
+          KubeConfig: MockKubeConfig,
+          CoreV1Api: vi.fn(),
+          AppsV1Api: vi.fn(),
+          BatchV1Api: vi.fn(),
+          Attach: vi.fn(),
+          Log: vi.fn(),
+          Exec: vi.fn(),
+        };
+      });
+    }
+
+    test("uses loadFromCluster when ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is true", async () => {
+      vi.resetModules();
+      setupKcMock();
+      vi.doMock("@/config", async (importOriginal) => {
+        const actual = await importOriginal<typeof originalConfigModule>();
+        return {
+          default: {
+            ...actual.default,
+            orchestrator: {
+              kubernetes: {
+                namespace: "",
+                kubeconfig: undefined,
+                loadKubeconfigFromCurrentCluster: true,
+              },
+            },
+          },
+        };
+      });
+      const { loadKubeConfig } = await import("./shared");
+      const { kubeConfig, namespace } = loadKubeConfig();
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromCluster).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromDefault).not.toHaveBeenCalled();
+      expect(namespace).toBe("default");
+    });
+
+    test("uses loadFromDefault when no env vars are set", async () => {
+      vi.resetModules();
+      setupKcMock();
+      vi.doMock("@/config", async (importOriginal) => {
+        const actual = await importOriginal<typeof originalConfigModule>();
+        return {
+          default: {
+            ...actual.default,
+            orchestrator: {
+              kubernetes: {
+                namespace: "",
+                kubeconfig: undefined,
+                loadKubeconfigFromCurrentCluster: false,
+              },
+            },
+          },
+        };
+      });
+      const { loadKubeConfig } = await import("./shared");
+      const { kubeConfig, namespace } = loadKubeConfig();
+      const kc = kubeConfig as unknown as {
+        loadFromCluster: ReturnType<typeof vi.fn>;
+        loadFromFile: ReturnType<typeof vi.fn>;
+        loadFromDefault: ReturnType<typeof vi.fn>;
+      };
+      expect(kc.loadFromDefault).toHaveBeenCalledTimes(1);
+      expect(kc.loadFromCluster).not.toHaveBeenCalled();
+      expect(kc.loadFromFile).not.toHaveBeenCalled();
+      expect(namespace).toBe("default");
+    });
+
+    test("returns configured namespace when ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE is set", async () => {
+      vi.resetModules();
+      setupKcMock();
+      vi.doMock("@/config", async (importOriginal) => {
+        const actual = await importOriginal<typeof originalConfigModule>();
+        return {
+          default: {
+            ...actual.default,
+            orchestrator: {
+              kubernetes: {
+                namespace: "custom-namespace",
+                kubeconfig: undefined,
+                loadKubeconfigFromCurrentCluster: false,
+              },
+            },
+          },
+        };
+      });
+      const { loadKubeConfig } = await import("./shared");
+      const { namespace } = loadKubeConfig();
+      expect(namespace).toBe("custom-namespace");
+    });
+
+    test("uses loadFromFile with kubeconfig path from env when set", async () => {
+      vi.resetModules();
+      setupKcMock();
+      const fs = await import("node:fs");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "shared-test-loadkc-"),
+      );
+      const tmpFile = path.join(tmpDir, "kubeconfig.yaml");
+      fs.writeFileSync(
+        tmpFile,
+        [
+          "apiVersion: v1",
+          "kind: Config",
+          "clusters:",
+          "  - name: test",
+          "    cluster:",
+          "      server: https://test",
+          "contexts:",
+          "  - name: test",
+          "    context:",
+          "      cluster: test",
+          "      user: test",
+          "users:",
+          "  - name: test",
+          "    user: {}",
+          "",
+        ].join("\n"),
+      );
+      vi.doMock("@/config", async (importOriginal) => {
+        const actual = await importOriginal<typeof originalConfigModule>();
+        return {
+          default: {
+            ...actual.default,
+            orchestrator: {
+              kubernetes: {
+                namespace: "",
+                kubeconfig: tmpFile,
+                loadKubeconfigFromCurrentCluster: false,
+              },
+            },
+          },
+        };
+      });
+      try {
+        const { loadKubeConfig } = await import("./shared");
+        const { kubeConfig } = loadKubeConfig();
+        const kc = kubeConfig as unknown as {
+          loadFromFile: ReturnType<typeof vi.fn>;
+          loadFromDefault: ReturnType<typeof vi.fn>;
+          loadFromCluster: ReturnType<typeof vi.fn>;
+        };
+        expect(kc.loadFromFile).toHaveBeenCalledTimes(1);
+        expect(kc.loadFromFile).toHaveBeenCalledWith(tmpFile);
+        expect(kc.loadFromDefault).not.toHaveBeenCalled();
+        expect(kc.loadFromCluster).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
 });

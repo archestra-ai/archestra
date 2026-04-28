@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 import {
   decryptSecretValue,
@@ -21,8 +21,12 @@ class SecretModel {
   /**
    * Create a new secret entry
    */
-  static async create(input: InsertSecret): Promise<SelectSecret> {
-    const [secret] = await db
+  static async create(
+    input: InsertSecret,
+    opts?: { tx?: Transaction },
+  ): Promise<SelectSecret> {
+    const client = opts?.tx ?? db;
+    const [secret] = await client
       .insert(schema.secretsTable)
       .values({ ...input, secret: encryptSecretValue(input.secret) })
       .returning();
@@ -72,12 +76,14 @@ class SecretModel {
   static async update(
     id: string,
     input: UpdateSecret,
+    opts?: { tx?: Transaction },
   ): Promise<SelectSecret | null> {
+    const client = opts?.tx ?? db;
     const values = input.secret
       ? { ...input, secret: encryptSecretValue(input.secret) }
       : input;
 
-    const [updatedSecret] = await db
+    const [updatedSecret] = await client
       .update(schema.secretsTable)
       .set(values)
       .where(eq(schema.secretsTable.id, id))
@@ -89,8 +95,12 @@ class SecretModel {
   /**
    * Delete a secret by ID
    */
-  static async delete(id: string): Promise<boolean> {
-    const result = await db
+  static async delete(
+    id: string,
+    opts?: { tx?: Transaction },
+  ): Promise<boolean> {
+    const client = opts?.tx ?? db;
+    const result = await client
       .delete(schema.secretsTable)
       .where(eq(schema.secretsTable.id, id));
 

@@ -21,19 +21,11 @@ export interface K8sClients {
 }
 
 /**
- * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ * Validates kubeconfig YAML/JSON content and throws descriptive errors for
+ * various failure scenarios. Used by both file-path validation and the
+ * Cluster CRUD layer (which receives YAML as a string from admins).
  */
-export function validateKubeconfig(path?: string) {
-  if (!path) {
-    return;
-  }
-
-  if (!fs.existsSync(path)) {
-    throw new Error(`❌ Kubeconfig file not found at ${path}`);
-  }
-
-  const content = fs.readFileSync(path, "utf8");
-
+export function validateKubeconfigContent(content: string) {
   const kc = new k8s.KubeConfig();
   try {
     kc.loadFromString(content);
@@ -63,8 +55,79 @@ export function validateKubeconfig(path?: string) {
   if (!kc.users || kc.users.length === 0) {
     throw new Error("❌ Invalid kubeconfig: users section missing");
   }
+}
 
+/**
+ * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ */
+export function validateKubeconfig(path?: string) {
+  if (!path) {
+    return;
+  }
+
+  if (!fs.existsSync(path)) {
+    throw new Error(`❌ Kubeconfig file not found at ${path}`);
+  }
+
+  validateKubeconfigContent(fs.readFileSync(path, "utf8"));
   logger.info("✓ Custom kubeconfig validated successfully.");
+}
+
+export interface BuildKubeConfigInput {
+  kubeconfigYaml?: string;
+  kubeconfigPath?: string;
+  loadFromCluster?: boolean;
+  namespace?: string;
+}
+
+/**
+ * Builds a KubeConfig from explicit inputs (YAML, file path, or in-cluster).
+ * Priority: loadFromCluster > kubeconfigYaml > kubeconfigPath > default.
+ */
+export function buildKubeConfig(input: BuildKubeConfigInput): {
+  kubeConfig: k8s.KubeConfig;
+  namespace: string;
+} {
+  const kc = new k8s.KubeConfig();
+
+  const yaml =
+    input.kubeconfigYaml && input.kubeconfigYaml.trim().length > 0
+      ? input.kubeconfigYaml
+      : undefined;
+  const path =
+    input.kubeconfigPath && input.kubeconfigPath.trim().length > 0
+      ? input.kubeconfigPath.trim()
+      : undefined;
+
+  if (input.loadFromCluster === true) {
+    kc.loadFromCluster();
+    logger.info("Loaded kubeconfig from current cluster");
+  } else if (yaml) {
+    try {
+      validateKubeconfigContent(yaml);
+      kc.loadFromString(yaml);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to parse kubeconfig YAML: ${message}`);
+    }
+    logger.info("Loaded kubeconfig from YAML string");
+  } else if (path) {
+    validateKubeconfig(path);
+    kc.loadFromFile(path);
+    logger.info(`Loaded kubeconfig from ${path}`);
+  } else {
+    kc.loadFromDefault();
+    logger.info("No kubeconfig provided — using default kubeconfig");
+  }
+
+  const trimmedNamespace = input.namespace?.trim();
+  return {
+    kubeConfig: kc,
+    namespace:
+      trimmedNamespace && trimmedNamespace.length > 0
+        ? trimmedNamespace
+        : "default",
+  };
 }
 
 /**
@@ -76,27 +139,11 @@ export function loadKubeConfig(): {
   kubeConfig: k8s.KubeConfig;
   namespace: string;
 } {
-  const kc = new k8s.KubeConfig();
-
-  const kubeconfigPath =
-    kubeconfig && kubeconfig.trim().length > 0 ? kubeconfig.trim() : undefined;
-
-  if (loadKubeconfigFromCurrentCluster) {
-    kc.loadFromCluster();
-    logger.info("Loaded kubeconfig from current cluster");
-  } else if (kubeconfigPath) {
-    validateKubeconfig(kubeconfigPath);
-    kc.loadFromFile(kubeconfigPath);
-    logger.info(`Loaded kubeconfig from ${kubeconfigPath}`);
-  } else {
-    kc.loadFromDefault();
-    logger.info("No kubeconfig provided — using default kubeconfig");
-  }
-
-  return {
-    kubeConfig: kc,
-    namespace: namespace || "default",
-  };
+  return buildKubeConfig({
+    kubeconfigPath: kubeconfig,
+    loadFromCluster: loadKubeconfigFromCurrentCluster,
+    namespace,
+  });
 }
 
 /**

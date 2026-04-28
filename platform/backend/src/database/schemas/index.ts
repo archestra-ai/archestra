@@ -11,6 +11,7 @@ export { default as browserTabStatesTable } from "./browser-tab-state";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
+export { default as clustersTable } from "./cluster";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";

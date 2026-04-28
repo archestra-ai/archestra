@@ -1012,6 +1012,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+
+  // Cluster Routes - admin-only K8s cluster management
+  [RouteId.GetClusters]: { mcpServerInstallation: ["admin"] },
+  [RouteId.GetCluster]: { mcpServerInstallation: ["admin"] },
+  [RouteId.CreateCluster]: { mcpServerInstallation: ["admin"] },
+  [RouteId.UpdateCluster]: { mcpServerInstallation: ["admin"] },
+  [RouteId.DeleteCluster]: { mcpServerInstallation: ["admin"] },
+  [RouteId.TestCluster]: { mcpServerInstallation: ["admin"] },
 };
 
 /**
@@ -1071,6 +1079,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/mcp": { organizationSettings: ["read"] },
+  "/settings/clusters": { mcpServerInstallation: ["admin"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

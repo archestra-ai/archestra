@@ -1,48 +1,20 @@
 import { describe, expect, test } from "vitest";
-import {
-  DARK_ONLY_THEMES,
-  LIGHT_ONLY_THEMES,
-  SUPPORTED_THEMES,
-} from "./theme-config";
-import { getThemeById, getThemeMetadata, getThemeRequiredMode } from "./theme-utils";
-
-describe("getThemeRequiredMode", () => {
-  test.each(DARK_ONLY_THEMES)("returns 'dark' for %s", (id) => {
-    expect(getThemeRequiredMode(id)).toBe("dark");
-  });
-
-  test.each(LIGHT_ONLY_THEMES)("returns 'light' for %s", (id) => {
-    expect(getThemeRequiredMode(id)).toBe("light");
-  });
-
-  test("returns null for themes that support both modes", () => {
-    const restricted = new Set<string>([...DARK_ONLY_THEMES, ...LIGHT_ONLY_THEMES]);
-    for (const id of SUPPORTED_THEMES) {
-      if (!restricted.has(id)) {
-        expect(getThemeRequiredMode(id)).toBeNull();
-      }
-    }
-  });
-});
+import { SUPPORTED_THEMES } from "./theme-config";
+import { getThemeById, getThemeMetadata } from "./theme-utils";
 
 describe("getThemeMetadata", () => {
-  test("maps getThemeRequiredMode 'dark' result to mode: dark-only", () => {
+  test("returns an entry for every supported theme", () => {
     const metadata = getThemeMetadata();
-    expect(metadata.find((t) => t.id === DARK_ONLY_THEMES[0])?.mode).toBe("dark-only");
+    expect(metadata).toHaveLength(SUPPORTED_THEMES.length);
+    for (const id of SUPPORTED_THEMES) {
+      expect(metadata.find((t) => t.id === id)).toBeDefined();
+    }
   });
 
-  test("maps getThemeRequiredMode 'light' result to mode: light-only", () => {
-    const metadata = getThemeMetadata();
-    expect(metadata.find((t) => t.id === LIGHT_ONLY_THEMES[0])?.mode).toBe("light-only");
-  });
-
-  test("omits mode for themes that support both modes", () => {
-    const restricted = new Set<string>([...DARK_ONLY_THEMES, ...LIGHT_ONLY_THEMES]);
+  test("no theme has a mode restriction (all themes support both modes)", () => {
     const metadata = getThemeMetadata();
     for (const entry of metadata) {
-      if (!restricted.has(entry.id)) {
-        expect(entry.mode).toBeUndefined();
-      }
+      expect((entry as unknown as Record<string, unknown>).mode).toBeUndefined();
     }
   });
 });

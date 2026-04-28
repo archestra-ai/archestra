@@ -4,7 +4,6 @@ import type { OrganizationTheme } from "@shared";
 import { Check } from "lucide-react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
-import { LightDarkButtons } from "@/components/settings/light-dark-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { type ThemeMetadata, themes } from "@/themes";
@@ -18,10 +17,6 @@ export function ThemeSelector({
   selectedTheme,
   onThemeSelect,
 }: ThemeSelectorProps) {
-  const selectedThemeMetadata = themes.find((t) => t.id === selectedTheme);
-  const isLightOnly = selectedThemeMetadata?.mode === "light-only";
-  const isDarkOnly = selectedThemeMetadata?.mode === "dark-only";
-
   function handleThemeSelect(themeMetadata: ThemeMetadata) {
     onThemeSelect(themeMetadata.id);
   }
@@ -31,13 +26,6 @@ export function ThemeSelector({
       <SettingsCardHeader
         title="Color Theme"
         description="Choose a color theme for your organization. Changes are previewed in real-time."
-        action={
-          <LightDarkButtons
-            isLightOnly={isLightOnly}
-            isDarkOnly={isDarkOnly}
-            size="sm"
-          />
-        }
       />
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">

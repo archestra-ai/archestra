@@ -64,7 +64,7 @@ function AccountSettingsContent() {
         <TwoFactorCard classNames={{ base: "w-full" }} />
       )}
       <SessionsCard classNames={{ base: "w-full" }} />
-      <LightDarkToggle currentThemeId={currentUITheme} />
+      <LightDarkToggle />
     </SettingsSectionStack>
   );
 }

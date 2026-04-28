@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.27](https://github.com/archestra-ai/archestra/compare/platform-v1.2.26...platform-v1.2.27) (2026-04-28)
+
+
+### Bug Fixes
+
+* allow team-scoped mcp in org-scoped agents ([#4184](https://github.com/archestra-ai/archestra/issues/4184)) ([9ccc6a8](https://github.com/archestra-ai/archestra/commit/9ccc6a8e592bcf556896be2ffbf86150b5166311))
+
 ## [1.2.26](https://github.com/archestra-ai/archestra/compare/platform-v1.2.25...platform-v1.2.26) (2026-04-27)
 
 

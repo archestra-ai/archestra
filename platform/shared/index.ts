@@ -3,6 +3,7 @@ export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
 export * from "./chat";
 export * from "./chat-error";
+export * from "./chat-scenarios";
 export * from "./consts";
 export * from "./docs";
 export * from "./e2e-test-ids";

@@ -16,6 +16,7 @@ import {
   generateMockTools,
   type MockAgentWithTeams,
 } from "./mocks";
+import { seedChatPreviewConversations } from "./seed-chat-preview-conversations";
 
 // Set to true to create tools and interactions
 // Don't delete this const for development convenience
@@ -291,6 +292,14 @@ async function seedMockData() {
   }
   logger.info(
     `✅ Assigned labels to ${allMockEntities.length} entities (${labelDefs.map((d) => d.key).join(", ")})`,
+  );
+
+  const chatPreviewResult = await seedChatPreviewConversations({
+    userId: defaultAdmin.id,
+    organizationId: org.id,
+  });
+  logger.info(
+    `✅ Created ${chatPreviewResult.conversationCount} chat preview conversations`,
   );
 
   // Note: Archestra tools are no longer auto-assigned to agents.

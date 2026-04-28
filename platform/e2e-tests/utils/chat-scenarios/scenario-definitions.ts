@@ -19,6 +19,7 @@ const systemThinkingId = "00000000-0000-4000-8000-000000000013";
 const todoApprovalId = "00000000-0000-4000-8000-000000000014";
 const megaScenarioId = "00000000-0000-4000-8000-000000000015";
 const megaStreamingScenarioId = "00000000-0000-4000-8000-000000000016";
+const sdkMessagePartsId = "00000000-0000-4000-8000-000000000017";
 
 export const timelineErrorsScenario: MockChatScenario = {
   id: "timeline-errors",
@@ -211,6 +212,75 @@ export const fileVariantsScenario: MockChatScenario = {
   },
 };
 
+export const sdkMessagePartsScenario: MockChatScenario = {
+  id: "sdk-message-parts",
+  mode: "seeded",
+  route: {
+    initialPath: `/chat/${sdkMessagePartsId}`,
+    conversationId: sdkMessagePartsId,
+  },
+  seededConversation: {
+    messages: [
+      assistantMessage(
+        "assistant-sdk-parts",
+        [
+          { type: "step-start" },
+          {
+            type: "reasoning",
+            text: "Checking SDK reasoning before composing the answer.",
+            state: "done",
+          },
+          {
+            type: "text",
+            text: "The SDK message parts rendered correctly.",
+          },
+          {
+            type: "source-url",
+            sourceId: "sdk-source-1",
+            url: "https://example.com/sdk-source",
+            title: "SDK Source",
+          },
+          {
+            type: "source-url",
+            sourceId: "sdk-source-1",
+            url: "https://example.com/sdk-source-duplicate",
+            title: "SDK Source Duplicate",
+          },
+          {
+            type: "source-document",
+            sourceId: "sdk-doc-1",
+            mediaType: "application/pdf",
+            title: "SDK Source Document",
+            filename: "sdk-source-document.pdf",
+          },
+          {
+            type: "data-heartbeat",
+            data: { timestamp: 1 },
+          },
+          {
+            type: "data-token-usage",
+            data: { inputTokens: 7, outputTokens: 11, totalTokens: 18 },
+          },
+        ] as UIMessage["parts"],
+        baseTimestamp,
+      ),
+    ],
+  },
+  assertions: {
+    visibleText: [
+      "Checking SDK reasoning before composing the answer.",
+      "The SDK message parts rendered correctly.",
+      "Used 2 sources",
+    ],
+    hiddenText: [
+      "SDK Source Duplicate",
+      "data-heartbeat",
+      "data-token-usage",
+      "step-start",
+    ],
+  },
+};
+
 export const dynamicToolScenario: MockChatScenario = {
   id: "dynamic-tool",
   mode: "seeded",
@@ -265,7 +335,9 @@ export const preexistingUnsafeScenario: MockChatScenario = {
     messages: [
       assistantMessage(
         "assistant-preexisting-unsafe",
-        [{ type: "text", text: "Continuing the workflow." }] as UIMessage["parts"],
+        [
+          { type: "text", text: "Continuing the workflow." },
+        ] as UIMessage["parts"],
         baseTimestamp,
       ),
     ],
@@ -420,7 +492,8 @@ export const authStatesScenario: MockChatScenario = {
               _meta: {
                 archestraError: {
                   type: "auth_expired",
-                  message: 'Expired or invalid authentication for "id-jag test".',
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
                   catalogId: "cat_abc",
                   catalogName: "id-jag test",
                   serverId: "srv_xyz",
@@ -807,7 +880,8 @@ export const megaConversationScenario: MockChatScenario = {
               _meta: {
                 archestraError: {
                   type: "auth_expired",
-                  message: 'Expired or invalid authentication for "id-jag test".',
+                  message:
+                    'Expired or invalid authentication for "id-jag test".',
                   catalogId: "cat_abc",
                   catalogName: "id-jag test",
                   serverId: "srv_xyz",
@@ -1284,6 +1358,7 @@ export const mockChatScenarios: MockChatScenario[] = [
   reasoningAndTextScenario,
   compactToolsScenario,
   fileVariantsScenario,
+  sdkMessagePartsScenario,
   dynamicToolScenario,
   preexistingUnsafeScenario,
   policyDeniedScenario,

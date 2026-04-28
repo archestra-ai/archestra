@@ -15,7 +15,7 @@ import type {
   Tool,
 } from "@/types";
 
-export type AgentToolAssignmentError = {
+type AgentToolAssignmentError = {
   code: "not_found" | "validation_error";
   error: { message: string; type: string };
 };
@@ -28,14 +28,14 @@ export type PrefetchedMcpServer = {
   scope: ResourceVisibilityScope;
 };
 
-export type AgentToolAssignmentPrefetchedData = {
+type AgentToolAssignmentPrefetchedData = {
   existingAgentIds: Set<string>;
   toolsMap: Map<string, Tool>;
   catalogItemsMap: Map<string, InternalMcpCatalog>;
   mcpServersBasicMap: Map<string, PrefetchedMcpServer>;
 };
 
-export interface AgentToolAssignmentRequest {
+interface AgentToolAssignmentRequest {
   /** Agent receiving the tool assignment. */
   agentId: string;
   /** Exact tool ID to assign. */
@@ -211,89 +211,7 @@ function normalizeCredentialResolutionMode(params: {
   return (params.resolveAtCallTime ?? false) ? "dynamic" : "static";
 }
 
-export async function validateCredentialSource(params: {
-  agentId: string;
-  mcpServerId: string;
-  tool?: Tool;
-  toolId?: string;
-  preFetchedServer?:
-    | (Pick<PrefetchedMcpServer, "id" | "catalogId" | "scope"> &
-        Partial<Pick<PrefetchedMcpServer, "ownerId" | "teamId">>)
-    | null;
-}) {
-  const tool =
-    params.tool ??
-    (params.toolId ? await ToolModel.findById(params.toolId) : null);
-  if (!tool) {
-    return {
-      code: "not_found" as const,
-      error: {
-        message: `Tool with ID ${params.toolId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  const result = await validateAssignedMcpServer({
-    agentId: params.agentId,
-    mcpServerId: params.mcpServerId,
-    tool,
-    preFetchedServer: params.preFetchedServer
-      ? {
-          ...params.preFetchedServer,
-          ownerId: params.preFetchedServer.ownerId ?? null,
-        }
-      : params.preFetchedServer,
-  });
-
-  return result;
-}
-
-export async function validateExecutionSource(params: {
-  agentId?: string;
-  mcpServerId: string;
-  tool?: Tool;
-  toolId?: string;
-  preFetchedTool?: Tool;
-  preFetchedServer?:
-    | (Pick<PrefetchedMcpServer, "id" | "catalogId"> &
-        Partial<Pick<PrefetchedMcpServer, "ownerId">>)
-    | null;
-}) {
-  const tool =
-    params.tool ??
-    params.preFetchedTool ??
-    (params.toolId ? await ToolModel.findById(params.toolId) : null);
-  if (!tool) {
-    return {
-      code: "not_found" as const,
-      error: {
-        message: `Tool with ID ${params.toolId} not found`,
-        type: "not_found",
-      },
-    };
-  }
-
-  const catalogId =
-    params.preFetchedServer?.catalogId ??
-    (await McpServerModel.findById(params.mcpServerId))?.catalogId ??
-    null;
-
-  if (tool.catalogId && catalogId !== tool.catalogId) {
-    return {
-      code: "validation_error" as const,
-      error: {
-        message:
-          "Execution source MCP server must come from the same catalog item as the tool",
-        type: "validation_error",
-      },
-    };
-  }
-
-  return null;
-}
-
-export async function validateAssignedMcpServer(params: {
+async function validateAssignedMcpServer(params: {
   agentId: string;
   mcpServerId: string;
   tool: Tool;
@@ -377,6 +295,7 @@ async function isOrgAdmin(
   return membership?.role === "admin";
 }
 
+/** @public — exported for testability */
 export async function isMcpServerAssignableToTarget(params: {
   mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
   target: {

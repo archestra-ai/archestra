@@ -122,13 +122,12 @@ export default new Proxy({} as ReturnType<typeof getDb>, {
   },
 });
 
-export { withDbRetry } from "./retry";
 export { schema };
 
 /**
  * Set the database instance directly (for testing purposes only).
  * This bypasses the normal initialization flow.
- * @internal
+ * @public — consumed via dynamic import in src/test/setup.ts
  */
 export function __setTestDb(
   testDb: ReturnType<typeof drizzle<typeof schema>>,

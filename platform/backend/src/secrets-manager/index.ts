@@ -15,6 +15,7 @@ import {
   SecretsManagerConfigurationError,
 } from "./vault-config";
 
+/** @public — re-exported for testability */
 export { SecretsManagerConfigurationError, getVaultConfigFromEnv };
 
 class SecretManager {
@@ -68,6 +69,7 @@ class SecretManager {
  * - "Vault": Uses VaultSecretManager (see getVaultConfigFromEnv for required env vars)
  * - "BYOS_VAULT": Uses BYOSVaultSecretManager for external team vault folder support
  * - "DB" or not set: Uses DbSecretsManager (default)
+ * @public — exported for testability
  */
 export async function createSecretManager(
   managerType?: SecretsManagerType,
@@ -144,6 +146,7 @@ export async function createSecretManager(
 /**
  * Get the secrets manager type from environment variables
  * @returns SecretsManagerType based on ARCHESTRA_SECRETS_MANAGER env var, defaults to DB
+ * @public — exported for testability
  */
 export function getSecretsManagerTypeBasedOnEnvVars(): SecretsManagerType {
   const envValue = config.secretsManager.type;

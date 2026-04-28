@@ -386,9 +386,9 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolShortNames = registry.toolShortNames;
-export const toolArgsSchemas = registry.toolArgsSchemas;
-export const toolOutputSchemas = registry.toolOutputSchemas;
+const _toolShortNames = registry.toolShortNames;
+const _toolArgsSchemas = registry.toolArgsSchemas;
+const _toolOutputSchemas = registry.toolOutputSchemas;
 export const toolEntries = registry.toolEntries;
 
 // === Exports ===

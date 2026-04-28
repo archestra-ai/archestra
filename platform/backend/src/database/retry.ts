@@ -61,6 +61,7 @@ const MAX_CAUSE_DEPTH = 5;
  *
  * Checks the error itself and, for DrizzleQueryError wrappers, recursively
  * checks the underlying cause (bounded to {@link MAX_CAUSE_DEPTH} levels).
+ * @public — exported for testability
  */
 export function isTransientDbError(error: unknown, depth = 0): boolean {
   if (!(error instanceof Error)) return false;
@@ -111,6 +112,7 @@ function sleep(ms: number): Promise<void> {
  *   db.select().from(usersTable).where(eq(usersTable.id, userId))
  * );
  * ```
+ * @public — exported for testability
  */
 export async function withDbRetry<T>(
   fn: () => Promise<T>,

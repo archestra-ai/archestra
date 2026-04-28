@@ -21,6 +21,7 @@ export function isReadonlyVaultEnabled(): boolean {
 /**
  * Parse the vault reference string in "path:key" format.
  * @returns Object with path and key, or null if ref is invalid
+ * @public — exported for testability
  */
 export function parseDatabaseUrlVaultRef(
   ref: string,

@@ -123,7 +123,7 @@ export async function isSsoConfigured(): Promise<boolean> {
   return !!idp;
 }
 
-export interface WelcomeMessage {
+interface WelcomeMessage {
   text: string;
   actionUrl: string;
   actionLabel: string;

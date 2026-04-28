@@ -25,6 +25,7 @@ import type {
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
+ * @public — exported for testability
  */
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;

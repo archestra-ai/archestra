@@ -25,6 +25,28 @@ function makeOidcFormValues(
 }
 
 describe("normalizeIdentityProviderFormValues", () => {
+  it("clears allowed email domains for non-Google OIDC providers", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "Okta",
+        domain: "example.com",
+      }),
+    );
+
+    expect(normalized.domain).toBe("");
+  });
+
+  it("keeps allowed email domains for Google providers", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "Google",
+        domain: "example.com",
+      }),
+    );
+
+    expect(normalized.domain).toBe("example.com");
+  });
+
   it("syncs the nested OIDC issuer with the visible issuer field", () => {
     const normalized = normalizeIdentityProviderFormValues(
       makeOidcFormValues({

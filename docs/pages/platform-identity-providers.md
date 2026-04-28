@@ -42,7 +42,7 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 
 ### Allowed Email Domains
 
-The **Allowed Email Domains** field is the Archestra-side sign-in boundary for an SSO provider. Users can sign in with that provider only when the email returned by the identity provider matches one of the configured domains.
+The **Allowed Email Domains** field is an optional Archestra-side sign-in boundary. When configured, users can sign in with that provider only when the email returned by the identity provider matches one of the configured domains.
 
 Use comma-separated domains for multi-domain SSO, for example:
 
@@ -51,6 +51,8 @@ company.com, subsidiary.com
 ```
 
 Subdomains are included. For example, `engineering.company.com` matches `company.com`.
+
+The current identity provider UI shows this field for Google providers. Other providers can rely on the IdP application's own user and group assignments, plus optional Archestra role mapping and team sync.
 
 ## Disabling Basic Authentication
 
@@ -120,17 +122,21 @@ Okta is an enterprise identity management platform. Archestra supports Okta OIDC
 
 Archestra does not support Okta DPoP for SSO clients. Disable **Require Demonstrating Proof of Possession (DPoP) header in token requests** in the Okta app integration.
 
-#### Okta OIN Fields
+#### Okta OIN App Installation
 
-If you are configuring an Okta Integration Network (OIN) app with integration variables, use:
+When installing Archestra from the Okta Integration Network (OIN), enter your Archestra hostname without the protocol.
 
-| Okta field | Value |
-| --- | --- |
-| Redirect URI | `https://{{app.baseurl}}/api/auth/sso/callback/Okta` |
-| Initiate login URI | `https://{{app.baseurl}}/auth/sign-in` |
-| Post-logout URI | `https://{{app.baseurl}}/auth/sign-in` |
+For example, if your Archestra URL is:
 
-For a manually configured Okta app, replace `{{app.baseurl}}` with your Archestra external domain.
+```
+https://your-archestra-domain.com
+```
+
+enter:
+
+```
+your-archestra-domain.com
+```
 
 #### Configuration Steps
 
@@ -182,12 +188,22 @@ Users can start sign-in from the Archestra sign-in page by selecting **Sign in w
 
 To test, use a private browser window with a user who is assigned to the Okta app and whose email domain is allowed in Archestra.
 
+#### IdP-Initiated SSO
+
+Okta app tile launches should use:
+
+```
+https://your-archestra-domain.com/auth/sso/Okta
+```
+
+This route starts the Okta SSO flow immediately and redirects the user back to Okta with the required authorization request.
+
 #### Troubleshoot
 
 - If setup fails with an issuer mismatch, verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.
 - If login fails after redirect, verify that the Okta **Sign-in redirect URI** exactly matches the Archestra callback URL, including `Okta` casing.
 - If sign-out returns an Okta error, verify that the Okta **Sign-out redirect URI** is set to `https://your-archestra-domain.com/auth/sign-in`, or disable **Enable RP-Initiated Logout** in Archestra for that provider.
-- If a user is denied after successful Okta authentication, verify that their email domain matches **Allowed Email Domains**.
+- If a user is denied after successful Okta authentication, verify that the user is assigned to the Okta app and matches any configured Archestra role mapping rules.
 
 ### Google
 
@@ -274,7 +290,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `azure`, `auth0`)
 - **Issuer**: The OIDC issuer URL
-- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
+- **Allowed Email Domains**: Optional email domains allowed to sign in through this provider when configured. Use comma-separated domains for multi-domain SSO.
 - **Client ID** and **Client Secret**: From your identity provider
 - **Discovery Endpoint**: The `.well-known/openid-configuration` URL (optional if issuer supports discovery)
 
@@ -296,7 +312,7 @@ Required information:
 
 - **Provider ID**: A unique identifier (e.g., `okta-saml`, `adfs`)
 - **Issuer**: Your organization's identifier
-- **Allowed Email Domains**: Email domains allowed to sign in through this provider. Use comma-separated domains for multi-domain SSO.
+- **Allowed Email Domains**: Optional email domains allowed to sign in through this provider when configured. Use comma-separated domains for multi-domain SSO.
 - **SAML Issuer / Entity ID**: The identity provider's entity ID (from IdP metadata)
 - **SSO Entry Point URL**: The IdP's Single Sign-On URL
 - **IdP Certificate**: The X.509 certificate from your IdP for signature verification

@@ -63,25 +63,6 @@ export function SamlConfigForm({ form, hideProviderId }: SamlConfigFormProps) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="domain"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Allowed Email Domains</FormLabel>
-              <FormControl>
-                <Input placeholder="company.com, subsidiary.com" {...field} />
-              </FormControl>
-              <FormDescription>
-                Users can sign in with this provider only when their returned
-                email matches one of these domains. Separate multiple domains
-                with commas.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <Separator />
 
         <div>

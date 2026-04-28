@@ -1,4 +1,5 @@
 import {
+  IDENTITY_PROVIDER_ID,
   type IdentityProviderFormValues,
   isEntraHostname,
   isOktaHostname,
@@ -8,21 +9,22 @@ export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
 ): IdentityProviderFormValues {
   if (data.providerType !== "oidc" || !data.oidcConfig) {
-    return data;
+    return normalizeAllowedEmailDomains(data);
   }
 
-  const oidcConfig = normalizeOidcIssuerFields(data);
+  const normalizedData = normalizeAllowedEmailDomains(data);
+  const oidcConfig = normalizeOidcIssuerFields(normalizedData);
   const enterpriseManagedCredentials = oidcConfig.enterpriseManagedCredentials;
   if (!enterpriseManagedCredentials) {
     return {
-      ...data,
+      ...normalizedData,
       oidcConfig,
     };
   }
 
   const inferredExchangeType = inferEnterpriseExchangeType({
-    issuer: data.issuer,
-    providerId: data.providerId,
+    issuer: normalizedData.issuer,
+    providerId: normalizedData.providerId,
   });
 
   const hasConfiguredEnterpriseManagedFields = Object.values(
@@ -37,13 +39,13 @@ export function normalizeIdentityProviderFormValues(
 
   if (!hasConfiguredEnterpriseManagedFields) {
     return {
-      ...data,
+      ...normalizedData,
       oidcConfig,
     };
   }
 
   return {
-    ...data,
+    ...normalizedData,
     oidcConfig: {
       ...oidcConfig,
       enterpriseManagedCredentials: {
@@ -59,6 +61,19 @@ export function normalizeIdentityProviderFormValues(
           getDefaultSubjectTokenType(inferredExchangeType),
       },
     },
+  };
+}
+
+export function normalizeAllowedEmailDomains(
+  data: IdentityProviderFormValues,
+): IdentityProviderFormValues {
+  if (data.providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
+    return data;
+  }
+
+  return {
+    ...data,
+    domain: "",
   };
 }
 

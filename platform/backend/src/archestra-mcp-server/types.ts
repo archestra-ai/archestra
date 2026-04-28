@@ -9,6 +9,10 @@ export interface ArchestraContext {
     name: string;
   };
   conversationId?: string;
+  /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
+  chatOpsBindingId?: string;
+  /** ChatOps thread identifier for thread-scoped agent overrides */
+  chatOpsThreadId?: string;
   userId?: string;
   /** The ID of the current internal agent (for agent delegation tool lookup) */
   agentId?: string;

@@ -2,7 +2,10 @@
 
 import { AlertCircle, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
-import { SelectMcpServerCredentialTypeAndTeams } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
+import {
+  type McpServerInstallScope,
+  SelectMcpServerCredentialTypeAndTeams,
+} from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +13,9 @@ import { Button } from "@/components/ui/button";
 import { useFeature } from "@/lib/config/config.query";
 
 export interface OAuthInstallResult {
-  /** Team ID to assign the MCP server to (null for personal) */
+  /** Installation scope (personal, team, org) */
+  scope: McpServerInstallScope;
+  /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
 }
 
@@ -26,6 +31,8 @@ interface OAuthConfirmationDialogProps {
   preselectedTeamId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
+  /** When true, only organization-wide installation is allowed */
+  orgOnly?: boolean;
 }
 
 export function OAuthConfirmationDialog({
@@ -37,18 +44,25 @@ export function OAuthConfirmationDialog({
   catalogId,
   preselectedTeamId,
   personalOnly = false,
+  orgOnly = false,
 }: OAuthConfirmationDialogProps) {
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [scope, setScope] = useState<McpServerInstallScope>(
+    orgOnly ? "org" : preselectedTeamId ? "team" : "personal",
+  );
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
+    preselectedTeamId ?? null,
+  );
   const [canInstall, setCanInstall] = useState(true);
   const byosEnabled = useFeature("byosEnabled");
 
   const handleConfirm = () => {
-    onConfirm({ teamId: selectedTeamId });
+    onConfirm({ scope, teamId: selectedTeamId });
     onOpenChange(false);
   };
 
   const handleCancel = () => {
     setSelectedTeamId(null);
+    setScope("personal");
     onCancel();
     onOpenChange(false);
   };
@@ -107,10 +121,12 @@ export function OAuthConfirmationDialog({
 
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
+        onScopeChange={setScope}
         catalogId={catalogId}
         onCanInstallChange={setCanInstall}
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
+        orgOnly={orgOnly}
       />
     </StandardFormDialog>
   );

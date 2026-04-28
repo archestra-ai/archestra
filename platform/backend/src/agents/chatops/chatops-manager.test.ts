@@ -3,6 +3,7 @@ import {
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
+  ChatOpsThreadAgentOverrideModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type {
@@ -1612,6 +1613,294 @@ describe("ChatOpsManager attachment passthrough", () => {
         attachments: [historyImageAttachment],
       }),
     );
+  });
+
+  test("hands off to swapped chatops agent in the same turn", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "swap-handoff@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const routerAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Router Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(routerAgent.id, [team.id]);
+
+    const specialistAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Specialist Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(specialistAgent.id, [team.id]);
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: routerAgent.id,
+    });
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async (params) => {
+        if (params.agentId === routerAgent.id) {
+          if (!params.chatOpsThreadId) {
+            throw new Error("Expected chatOpsThreadId");
+          }
+          // Simulate swap_agent creating a thread override
+          await ChatOpsThreadAgentOverrideModel.upsert(
+            binding.id,
+            params.chatOpsThreadId,
+            specialistAgent.id,
+          );
+          return {
+            text: "",
+            messageId: "router-msg",
+            finishReason: "stop",
+          };
+        }
+
+        if (params.agentId === specialistAgent.id) {
+          return {
+            text: "Specialist response",
+            messageId: "specialist-msg",
+            finishReason: "stop",
+          };
+        }
+
+        throw new Error(`Unexpected agentId: ${params.agentId}`);
+      });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "swap-handoff@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const message = createMockMessage({
+      text: "Please route this to the right expert",
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.agentResponse).toBe("Specialist response");
+
+    expect(executorSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        agentId: routerAgent.id,
+        chatOpsBindingId: binding.id,
+      }),
+    );
+    expect(executorSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        agentId: specialistAgent.id,
+        chatOpsBindingId: binding.id,
+      }),
+    );
+
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Specialist response",
+        footer: `🤖 ${specialistAgent.name}`,
+      }),
+    );
+  });
+
+  test("does not replay swap request into new agent when router replies", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "swap-reply@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const routerAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Router Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(routerAgent.id, [team.id]);
+
+    const specialistAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "French Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(specialistAgent.id, [team.id]);
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: routerAgent.id,
+    });
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async (params) => {
+        if (params.agentId === routerAgent.id) {
+          if (!params.chatOpsThreadId) {
+            throw new Error("Expected chatOpsThreadId");
+          }
+          // Simulate swap_agent creating a thread override
+          await ChatOpsThreadAgentOverrideModel.upsert(
+            binding.id,
+            params.chatOpsThreadId,
+            specialistAgent.id,
+          );
+          return {
+            text: "Switched to French Agent. Bonjour!",
+            messageId: "router-msg",
+            finishReason: "stop",
+          };
+        }
+
+        throw new Error(`Unexpected handoff to agentId: ${params.agentId}`);
+      });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "swap-reply@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage({ text: "switch me to french agent" }),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.agentResponse).toBe("Switched to French Agent. Bonjour!");
+    expect(executorSpy).toHaveBeenCalledTimes(1);
+
+    // Channel binding should NOT be mutated (swap is thread-scoped)
+    const updatedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(updatedBinding?.agentId).toBe(routerAgent.id);
+
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Switched to French Agent. Bonjour!",
+        footer: `🤖 ${specialistAgent.name}`,
+      }),
+    );
+  });
+
+  test("thread override persists across turns — second message uses swapped agent", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "persist-turn@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const routerAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Router Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(routerAgent.id, [team.id]);
+
+    const specialistAgent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Specialist Agent",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(specialistAgent.id, [team.id]);
+
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: routerAgent.id,
+    });
+
+    // Pre-create a thread override (simulates a swap_agent call in a prior turn)
+    await ChatOpsThreadAgentOverrideModel.upsert(
+      binding.id,
+      "test-channel-id", // effectiveThreadId for a top-level MS Teams message
+      specialistAgent.id,
+    );
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Specialist second-turn response",
+        messageId: "msg-turn2",
+        finishReason: "stop",
+      });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "persist-turn@example.com",
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    // Second message in the same thread — no swap, just a follow-up
+    const message = createMockMessage({
+      text: "follow up question",
+    });
+
+    const result = await manager.processMessage({
+      message,
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+
+    // The A2A call should use the specialist agent (from the thread override),
+    // not the router agent (channel binding default)
+    expect(executorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: specialistAgent.id,
+        chatOpsBindingId: binding.id,
+      }),
+    );
+
+    // Channel binding should still point to the router
+    const unchangedBinding = await ChatOpsChannelBindingModel.findById(
+      binding.id,
+    );
+    expect(unchangedBinding?.agentId).toBe(routerAgent.id);
   });
 });
 

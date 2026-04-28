@@ -16,6 +16,7 @@
 const OAUTH_STATE = "oauth_state";
 const OAUTH_CATALOG_ID = "oauth_catalog_id";
 const OAUTH_TEAM_ID = "oauth_team_id";
+const OAUTH_SCOPE = "oauth_scope";
 const OAUTH_IS_FIRST_INSTALLATION = "oauth_is_first_installation";
 const OAUTH_MCP_SERVER_ID = "oauth_mcp_server_id";
 const OAUTH_INSTALLATION_COMPLETE_CATALOG_ID =
@@ -49,6 +50,25 @@ export function setOAuthTeamId(teamId: string | null) {
   } else {
     sessionStorage.removeItem(OAUTH_TEAM_ID);
   }
+}
+
+export type OAuthScope = "personal" | "team" | "org";
+
+/** Store the install scope selected before the OAuth redirect. */
+export function setOAuthScope(scope: OAuthScope | null) {
+  if (scope) {
+    sessionStorage.setItem(OAUTH_SCOPE, scope);
+  } else {
+    sessionStorage.removeItem(OAUTH_SCOPE);
+  }
+}
+
+export function getOAuthScope(): OAuthScope | null {
+  const value = sessionStorage.getItem(OAUTH_SCOPE);
+  if (value === "personal" || value === "team" || value === "org") {
+    return value;
+  }
+  return null;
 }
 
 /** Mark whether this is the first installation (for auto-opening assignments dialog). */
@@ -279,6 +299,7 @@ export function clearInstallContext() {
   sessionStorage.removeItem(OAUTH_STATE);
   sessionStorage.removeItem(OAUTH_CATALOG_ID);
   sessionStorage.removeItem(OAUTH_TEAM_ID);
+  sessionStorage.removeItem(OAUTH_SCOPE);
   sessionStorage.removeItem(OAUTH_IS_FIRST_INSTALLATION);
   sessionStorage.removeItem(OAUTH_SERVER_TYPE);
   sessionStorage.removeItem(OAUTH_ENVIRONMENT_VALUES);

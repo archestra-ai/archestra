@@ -71,9 +71,11 @@ vi.mock("@/lib/auth/oauth-session", () => ({
   setOAuthMcpServerId: setOAuthMcpServerIdMock,
   setOAuthPendingAfterEnvVars: vi.fn(),
   setOAuthReturnUrl: setOAuthReturnUrlMock,
+  setOAuthScope: vi.fn(),
   setOAuthServerType: vi.fn(),
   setOAuthState: setOAuthStateMock,
   setOAuthTeamId: setOAuthTeamIdMock,
+  setOAuthUserConfigValues: vi.fn(),
 }));
 
 describe("useMcpInstallOrchestrator", () => {

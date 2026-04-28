@@ -1,4 +1,5 @@
 import {
+  type AgentToolAssignmentMode,
   DEFAULT_LLM_PROXY_NAME,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -42,6 +43,7 @@ import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
+import AgentToolModel from "./agent-tool";
 import MemberModel from "./member";
 import ToolModel from "./tool";
 
@@ -182,6 +184,22 @@ class AgentModel {
     // Assign labels to the agent if provided
     if (labels && labels.length > 0) {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
+    }
+
+    // Assign tools for agents and MCP gateways when tool assignment mode is automatic
+    const hasLabels = labels && labels.length > 0;
+    const supportsAutomaticToolAssignment = isAutomaticToolAssignmentSupported(
+      createdAgent.agentType,
+    );
+    const isAutomaticToolAssignment =
+      createdAgent.toolAssignmentMode === "automatic";
+
+    if (
+      hasLabels &&
+      supportsAutomaticToolAssignment &&
+      isAutomaticToolAssignment
+    ) {
+      await AgentToolModel.syncAgentToolsFromLabels(createdAgent.id);
     }
 
     // Assign knowledge bases if provided
@@ -516,6 +534,44 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+  }
+
+  static async findByLabels(
+    pairs: { keyId: string; valueId: string }[],
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      agentType: AgentType;
+      toolAssignmentMode: AgentToolAssignmentMode;
+    }[]
+  > {
+    if (pairs.length === 0) return [];
+
+    const rows = await db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        toolAssignmentMode: schema.agentsTable.toolAssignmentMode,
+      })
+      .from(schema.agentLabelsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        or(
+          ...pairs.map((pair) =>
+            and(
+              eq(schema.agentLabelsTable.keyId, pair.keyId),
+              eq(schema.agentLabelsTable.valueId, pair.valueId),
+            ),
+          ),
+        ),
+      );
+
+    return rows;
   }
 
   /**
@@ -1334,6 +1390,27 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
+    // Assign or unassign tools according to toolAssignmentMode changes for agents and MCP gateways
+    const supportsAutomaticToolAssignment = isAutomaticToolAssignmentSupported(
+      updatedAgent.agentType,
+    );
+    const labelsChanged = labels !== undefined;
+    const isCurrentlyAutomatic =
+      updatedAgent.toolAssignmentMode === "automatic";
+    const isPreviouslyAutomatic =
+      existingAgent.toolAssignmentMode === "automatic";
+    const isSwitchingToAutomatic =
+      isCurrentlyAutomatic && !isPreviouslyAutomatic;
+    const isSwitchingToManual = !isCurrentlyAutomatic && isPreviouslyAutomatic;
+
+    if (supportsAutomaticToolAssignment) {
+      if ((isCurrentlyAutomatic && labelsChanged) || isSwitchingToAutomatic) {
+        await AgentToolModel.syncAgentToolsFromLabels(id);
+      } else if (isSwitchingToManual) {
+        await AgentToolModel.deleteCatalogToolsForAgent(id);
+      }
+    }
+
     // Sync knowledge base assignments if knowledgeBaseIds is provided
     if (knowledgeBaseIds !== undefined) {
       await AgentKnowledgeBaseModel.syncForAgent(id, knowledgeBaseIds);
@@ -1357,14 +1434,7 @@ class AgentModel {
       currentConnectorIds,
       currentSuggestedPrompts,
     ] = await Promise.all([
-      db
-        .select({ tool: schema.toolsTable })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .where(eq(schema.agentToolsTable.agentId, updatedAgent?.id)),
+      AgentToolModel.getToolsForAgent(id),
       AgentTeamModel.getTeamDetailsForAgent(id),
       AgentLabelModel.getLabelsForAgent(id),
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
@@ -1376,7 +1446,7 @@ class AgentModel {
 
     return {
       ...updatedAgent,
-      tools: toolRows.map((row) => row.tool),
+      tools: toolRows,
       teams: currentTeams,
       labels: currentLabels,
       knowledgeBaseIds: currentKbIds,
@@ -1751,3 +1821,7 @@ function errorMentions(error: unknown, needle: string): boolean {
 }
 
 export default AgentModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}

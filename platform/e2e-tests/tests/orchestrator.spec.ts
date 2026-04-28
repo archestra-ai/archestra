@@ -533,5 +533,20 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       );
       expect(testTool).toBeDefined();
     });
+
+    test("should store custom cluster and namespace in the database", async ({
+      request,
+      makeApiRequest,
+    }) => {
+      const serverResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/mcp_server/${serverId}`,
+      });
+      expect(serverResponse.status()).toBe(200);
+      const server = await serverResponse.json();
+      expect(server.k8sClusterId).toBe(clusterId);
+      expect(server.k8sNamespace).toBe(MCP_SERVER_NAMESPACE);
+    });
   });
 });

@@ -85,6 +85,8 @@ export interface LocalServerInstallResult {
   serviceAccount?: string;
   /** Custom Kubernetes cluster ID (null = default platform cluster) */
   k8sClusterId?: string | null;
+  /** Custom Kubernetes namespace */
+  k8sNamespace?: string;
 }
 
 interface LocalServerInstallDialogProps {
@@ -341,6 +343,7 @@ export function LocalServerInstallDialog({
           hasPromptedSensitiveUserConfig),
       serviceAccount: serviceAccount || undefined,
       k8sClusterId: k8sClusterId ?? undefined,
+      k8sNamespace: k8sNamespace || undefined,
     });
 
     // Reset form

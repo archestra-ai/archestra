@@ -286,7 +286,7 @@ export class McpServerRuntimeManager {
         );
         if (cluster) {
           const kc = loadKubeConfigFromString(cluster.kubeconfig);
-          const targetNamespace = this.namespace;
+          const targetNamespace = mcpServer.k8sNamespace ?? this.namespace;
           clusterClients = createK8sClients(kc, targetNamespace);
         }
       }
@@ -522,7 +522,7 @@ export class McpServerRuntimeManager {
         );
         if (cluster) {
           const kc = loadKubeConfigFromString(cluster.kubeconfig);
-          lazyClusterClients = createK8sClients(kc, this.namespace);
+          lazyClusterClients = createK8sClients(kc, mcpServer.k8sNamespace ?? this.namespace);
         }
       }
 

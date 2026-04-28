@@ -843,6 +843,124 @@ describe("McpServerRuntimeManager", () => {
   });
 });
 
+describe("McpServerRuntimeManager.startServer - namespace routing", () => {
+  // These tests verify that k8sNamespace on the server is used when initialising
+  // K8s clients for a custom cluster, reproducing the bug where `this.namespace`
+  // (platform default) was always used instead.
+
+  function createMcpServer(overrides: Partial<McpServer> = {}): McpServer {
+    return {
+      id: "server-ns-test",
+      name: "ns-test-server",
+      catalogId: "catalog-1",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      oauthRefreshError: null,
+      oauthRefreshFailedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local",
+      teamId: null,
+      ...overrides,
+    } as McpServer;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  test("deploys to k8sNamespace when specified (default cluster)", async () => {
+    const InternalMcpCatalogModel = (
+      await import("@/models/internal-mcp-catalog")
+    ).default;
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+      id: "catalog-1",
+      serverType: "local",
+      localConfig: { environment: [] },
+      localConfigSecretId: null,
+    } as unknown as Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>);
+
+    const mockLoadFromDefault = vi
+      .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+      .mockImplementation(() => {});
+    const mockMakeApiClient = vi
+      .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+      .mockReturnValue({} as k8s.CoreV1Api);
+
+    mockK8sDeploymentInstances.length = 0;
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    const managerAny = manager as unknown as {
+      k8sAttach: unknown;
+      k8sLog: unknown;
+      k8sExec: unknown;
+    };
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+
+    const mcpServer = createMcpServer({ k8sNamespace: "custom-ns" });
+    await manager.startServer(mcpServer);
+
+    // K8sDeployment should have been constructed with the custom namespace
+    expect(mockK8sDeploymentInstances.length).toBeGreaterThan(0);
+    const deploymentOptions = mockK8sDeploymentInstances[0].options;
+    expect(deploymentOptions.namespace).toBe("custom-ns");
+
+    mockLoadFromDefault.mockRestore();
+    mockMakeApiClient.mockRestore();
+  });
+
+  test("falls back to platform namespace when k8sNamespace is not set", async () => {
+    const InternalMcpCatalogModel = (
+      await import("@/models/internal-mcp-catalog")
+    ).default;
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+      id: "catalog-1",
+      serverType: "local",
+      localConfig: { environment: [] },
+      localConfigSecretId: null,
+    } as unknown as Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>);
+
+    const mockLoadFromDefault = vi
+      .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+      .mockImplementation(() => {});
+    const mockMakeApiClient = vi
+      .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+      .mockReturnValue({} as k8s.CoreV1Api);
+
+    mockK8sDeploymentInstances.length = 0;
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    const managerAny = manager as unknown as {
+      k8sAttach: unknown;
+      k8sLog: unknown;
+      k8sExec: unknown;
+      namespace: string;
+    };
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+
+    const mcpServer = createMcpServer({ k8sNamespace: null });
+    await manager.startServer(mcpServer);
+
+    expect(mockK8sDeploymentInstances.length).toBeGreaterThan(0);
+    const deploymentOptions = mockK8sDeploymentInstances[0].options;
+    // Should use the platform default namespace ("test-namespace" from mocked config)
+    expect(deploymentOptions.namespace).toBe("test-namespace");
+
+    mockLoadFromDefault.mockRestore();
+    mockMakeApiClient.mockRestore();
+  });
+});
+
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
   test("returns empty array when k8sApi is not initialized", async () => {
     const { McpServerRuntimeManager } = await import("./manager");

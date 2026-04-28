@@ -741,6 +741,7 @@ export function InternalMCPCatalog({
           : undefined,
       serviceAccount: installResult.serviceAccount,
       k8sClusterId: installResult.k8sClusterId ?? undefined,
+      k8sNamespace: installResult.k8sNamespace,
       dontShowToast: true,
     });
 

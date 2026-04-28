@@ -38277,6 +38277,208 @@ export type DeleteRoleResponses = {
 
 export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
 
+export type GetRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type GetRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
+
+export type GetRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        role: string;
+        name: string;
+        description: string | null;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
+
+export type UpdateRoleData = {
+    body: {
+        name?: string;
+        description?: string;
+        permission?: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
+        };
+    };
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'editor' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        role: string;
+        name: string;
+        description: string | null;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'approve' | 'cancel' | 'enable' | 'query'>;
+        };
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
+
 export type GetOrganizationData = {
     body?: never;
     path?: never;
@@ -38375,7 +38577,6 @@ export type GetOrganizationResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -38652,7 +38853,6 @@ export type UpdateAppearanceSettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -38801,7 +39001,6 @@ export type UpdateSecuritySettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -38951,7 +39150,6 @@ export type UpdateLlmSettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -39102,7 +39300,6 @@ export type UpdateAgentSettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -39157,7 +39354,6 @@ export type UpdateMemorySettingsData = {
         memoryIdleDelaySeconds?: number;
         memoryExtractorMaxTokens?: number;
         memoryExtractorModel?: string | null;
-        memoryExtractorPrompt?: string | null;
         memoryExtractorChatApiKeyId?: string | null;
         memoryInjectionTokenBudget?: number;
         memoryInjectionTopK?: number;
@@ -39256,7 +39452,6 @@ export type UpdateMemorySettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -39481,7 +39676,6 @@ export type UpdateConnectionSettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -39629,7 +39823,6 @@ export type UpdateMcpSettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -39780,7 +39973,6 @@ export type UpdateKnowledgeSettingsResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -39926,7 +40118,6 @@ export type DropEmbeddingConfigResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;
@@ -40161,7 +40352,6 @@ export type CompleteOnboardingResponses = {
         memoryIdleDelaySeconds: number;
         memoryExtractorMaxTokens: number;
         memoryExtractorModel: string | null;
-        memoryExtractorPrompt: string | null;
         memoryExtractorChatApiKeyId: string | null;
         memoryInjectionTokenBudget: number;
         memoryInjectionTopK: number;

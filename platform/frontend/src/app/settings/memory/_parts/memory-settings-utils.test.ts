@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSavePayload,
+  detectChanges,
   resolveInitialState,
   type MemorySettingsState,
 } from "./memory-settings-utils";
@@ -14,7 +15,7 @@ describe("memory-settings-utils", () => {
     expect(state.memoryExtractorPrompt).toBe("Use concise extraction wording.");
   });
 
-  it("sends only changed prompt in buildSavePayload", () => {
+  it("does not include prompt changes in buildSavePayload", () => {
     const saved = resolveInitialState({
       memoryExtractionEnabled: true,
       memoryInjectionEnabled: true,
@@ -36,12 +37,10 @@ describe("memory-settings-utils", () => {
       memoryExtractorPrompt: "Prioritize durable preferences.",
     };
 
-    expect(buildSavePayload(current, saved)).toEqual({
-      memoryExtractorPrompt: "Prioritize durable preferences.",
-    });
+    expect(buildSavePayload(current, saved)).toEqual({});
   });
 
-  it("sends null when prompt is cleared", () => {
+  it("does not treat prompt-only changes as dirty state", () => {
     const saved: MemorySettingsState = {
       ...resolveInitialState({}),
       memoryExtractorPrompt: "Keep long-lived facts only.",
@@ -52,8 +51,7 @@ describe("memory-settings-utils", () => {
       memoryExtractorPrompt: "   ",
     };
 
-    expect(buildSavePayload(current, saved)).toEqual({
-      memoryExtractorPrompt: null,
-    });
+    expect(buildSavePayload(current, saved)).toEqual({});
+    expect(detectChanges(current, saved)).toBe(false);
   });
 });

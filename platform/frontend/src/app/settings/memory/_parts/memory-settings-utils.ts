@@ -64,7 +64,7 @@ export function detectChanges(
   current: MemorySettingsState,
   saved: MemorySettingsState,
 ): boolean {
-  return JSON.stringify(current) !== JSON.stringify(saved);
+  return Object.keys(buildSavePayload(current, saved)).length > 0;
 }
 
 export function buildSavePayload(
@@ -91,12 +91,6 @@ export function buildSavePayload(
   }
   if (current.memoryExtractorModel !== saved.memoryExtractorModel) {
     payload.memoryExtractorModel = current.memoryExtractorModel || null;
-  }
-
-  const normalizedCurrentPrompt = normalizePrompt(current.memoryExtractorPrompt);
-  const normalizedSavedPrompt = normalizePrompt(saved.memoryExtractorPrompt);
-  if (normalizedCurrentPrompt !== normalizedSavedPrompt) {
-    payload.memoryExtractorPrompt = normalizedCurrentPrompt;
   }
 
   if (
@@ -132,9 +126,4 @@ export function buildSavePayload(
   }
 
   return payload;
-}
-
-function normalizePrompt(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }

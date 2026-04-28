@@ -596,6 +596,7 @@ const MEMORY_SETTINGS_FIELD_LABELS: Record<string, string> = {
   memoryIdleDelaySeconds: "Idle delay before extraction (seconds)",
   memoryExtractorMaxTokens: "Extractor max output tokens",
   memoryExtractorModel: "Extractor model",
+  memoryExtractorPrompt: "Extractor instructions",
   memoryExtractorChatApiKeyId: "Extractor API key",
   memoryInjectionTokenBudget: "Token budget per request",
   memoryInjectionTopK: "Top K retrieved items",

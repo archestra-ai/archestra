@@ -17,6 +17,7 @@ const PNG_MAGIC_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const GIF87A_MAGIC_BYTES = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61];
 const GIF89A_MAGIC_BYTES = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
 const MAX_CHAT_LINK_URL_LENGTH = 2000;
+const MAX_MEMORY_EXTRACTOR_PROMPT_LENGTH = 8000;
 
 /**
  * Validates a Base64-encoded PNG data URI.
@@ -289,6 +290,11 @@ export const UpdateMemorySettingsSchema = z.object({
   memoryIdleDelaySeconds: z.coerce.number().int().optional(),
   memoryExtractorMaxTokens: z.coerce.number().int().optional(),
   memoryExtractorModel: z.string().nullable().optional(),
+  memoryExtractorPrompt: z
+    .string()
+    .max(MAX_MEMORY_EXTRACTOR_PROMPT_LENGTH)
+    .nullable()
+    .optional(),
   memoryExtractorChatApiKeyId: z.string().uuid().nullable().optional(),
   memoryInjectionTokenBudget: z.coerce.number().int().optional(),
   memoryInjectionTopK: z.coerce.number().int().optional(),

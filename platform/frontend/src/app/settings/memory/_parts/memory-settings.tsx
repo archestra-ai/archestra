@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -262,6 +263,43 @@ export function MemorySettings() {
                     )
                   }
                   disabled={isSaving || !hasPermission}
+                />
+              </div>
+            )}
+          </WithPermissions>
+        }
+      />
+
+      <SettingsBlock
+        title="Extractor instructions"
+        description="Optional additional instructions appended after immutable system prompt and dynamic limits."
+        control={
+          <WithPermissions
+            permissions={{ memorySettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="w-full max-w-2xl space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  The base extraction prompt is always enforced and cannot be
+                  edited. System constraints (including max candidates) always
+                  take priority over this field.
+                </p>
+                <Textarea
+                  value={state.memoryExtractorPrompt}
+                  onChange={(event) =>
+                    setState((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            memoryExtractorPrompt: event.target.value,
+                          }
+                        : prev,
+                    )
+                  }
+                  placeholder="Optional custom extraction instructions..."
+                  disabled={isSaving || !hasPermission}
+                  rows={8}
                 />
               </div>
             )}

@@ -99,6 +99,7 @@ Memory settings are stored per organization in `organizations` and updated throu
 | `memoryIdleDelaySeconds` | `300` | Conversation-idle window before extraction is eligible. |
 | `memoryExtractorMaxTokens` | `800` | LLM output cap. |
 | `memoryExtractorModel` / `memoryExtractorChatApiKeyId` | `null` | Explicit extractor routing. |
+| `memoryExtractorPrompt` | `null` | Optional org-level supplemental extractor instructions. |
 | `memoryInjectionTokenBudget` | `600` | Per-request budget. |
 | `memoryInjectionTopK` | `10` | Max items per injection. |
 | `memoryCandidateTtlDays` | `30` | Candidate cleanup age. |
@@ -110,6 +111,14 @@ Fallback extractor model resolution was removed. Extraction now resolves model c
 1. Organization override (`memoryExtractorModel`, `memoryExtractorChatApiKeyId`).
 2. Organization default LLM model/provider key.
 3. `null` (skip extraction with telemetry), if neither resolves.
+
+Extractor prompt composition is deterministic and defense-in-depth:
+1. Immutable base extraction prompt (not editable in settings).
+2. System and dynamic constraints (including `maxCandidates`).
+3. Optional `memoryExtractorPrompt` from organization settings.
+4. Conversation transcript.
+
+If `memoryExtractorPrompt` is empty or whitespace, it is treated as absent. Runtime candidate caps remain enforced in code (`slice` + hard cap) regardless of prompt content.
 
 ## Extraction tracking and maintenance
 

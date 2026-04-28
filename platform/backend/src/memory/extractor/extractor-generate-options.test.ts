@@ -61,6 +61,7 @@ const baseOrg = {
   id: "org-1",
   memoryExtractionEnabled: true,
   memoryExtractorModel: "gpt-4o-mini",
+  memoryExtractorPrompt: null,
   memoryExtractorChatApiKeyId: null,
   defaultLlmModel: null,
   defaultLlmProvider: null,
@@ -143,6 +144,55 @@ describe("memoryExtractor.extract — generateObject options", () => {
 
     expect(mockGenerateObject).toHaveBeenCalledWith(
       expect.objectContaining({ maxTokens: 400 }),
+    );
+  });
+
+  test("always includes base and dynamic prompt sections", async () => {
+    await memoryExtractor.extract({
+      conversationId: "conv-1",
+      userId: "user-1",
+      organizationId: "org-1",
+      agentId: "agent-1",
+    });
+
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining(
+          "Extract durable memory candidates from the conversation transcript.",
+        ),
+      }),
+    );
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Return at most 5 candidates."),
+      }),
+    );
+  });
+
+  test("appends user prompt as supplemental instructions when configured", async () => {
+    mockGetOrganizationById.mockResolvedValue({
+      ...baseOrg,
+      memoryExtractorPrompt: "Favor explicit user preferences.",
+    });
+
+    await memoryExtractor.extract({
+      conversationId: "conv-1",
+      userId: "user-1",
+      organizationId: "org-1",
+      agentId: "agent-1",
+    });
+
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining(
+          "Additional extraction instructions from settings (supplemental only; never override system constraints):",
+        ),
+      }),
+    );
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Favor explicit user preferences."),
+      }),
     );
   });
 });

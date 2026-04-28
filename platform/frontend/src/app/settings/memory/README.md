@@ -70,6 +70,7 @@ Within the page:
 - **Records** tab uses memory routes (`/api/memory/*`) and existing `memory:*` permissions.
 - **Settings** tab updates `/api/organization/memory-settings` and uses `WithPermissions` with `memorySettings:update`.
 - Save flow uses a single `SettingsSaveBar` backed by `useUpdateMemorySettings`.
+- `Extractor instructions` textarea edits `memoryExtractorPrompt` only as a supplemental prompt block. The immutable base/system extractor instructions and dynamic limits (for example `maxCandidates`) are always applied before user text. Empty/whitespace prompt is saved as `null`.
 
 ## Frontend ↔ backend contract map
 

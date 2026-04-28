@@ -110,6 +110,12 @@ vi.mock("@/components/ui/input", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/textarea", () => ({
+  Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+    <textarea {...props} />
+  ),
+}));
+
 vi.mock("@/components/ui/select", () => ({
   Select: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -165,6 +171,7 @@ vi.mock("@/lib/organization.query", () => ({
       memoryIdleDelaySeconds: 300,
       memoryExtractorMaxTokens: 800,
       memoryExtractorModel: "gpt-4.1-mini",
+      memoryExtractorPrompt: null,
       memoryExtractorChatApiKeyId: "key-1",
       memoryInjectionTokenBudget: 600,
       memoryInjectionTopK: 10,
@@ -210,5 +217,42 @@ describe("MemorySettings", () => {
     });
 
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("shows extractor prompt textarea and saves changed prompt", async () => {
+    mutateAsyncMock.mockResolvedValueOnce({
+      memoryExtractionEnabled: true,
+      memoryInjectionEnabled: true,
+      memoryIdleDelaySeconds: 300,
+      memoryExtractorMaxTokens: 800,
+      memoryExtractorModel: "gpt-4.1-mini",
+      memoryExtractorPrompt: "Extract durable preferences only.",
+      memoryExtractorChatApiKeyId: "key-1",
+      memoryInjectionTokenBudget: 600,
+      memoryInjectionTopK: 10,
+      memoryTombstoneTtlDays: 90,
+      memoryCandidateTtlDays: 30,
+      memoryMaxContentLength: 500,
+      memoryMaxCandidatesPerExtraction: 5,
+    });
+
+    render(<MemorySettings />);
+
+    const textarea = screen.getByPlaceholderText(
+      "Optional custom extraction instructions...",
+    );
+    fireEvent.change(textarea, {
+      target: { value: "Extract durable preferences only." },
+    });
+
+    fireEvent.click(screen.getByText("Save"));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          memoryExtractorPrompt: "Extract durable preferences only.",
+        }),
+      );
+    });
   });
 });

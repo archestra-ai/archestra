@@ -88,6 +88,9 @@ const organizationsTable = pgTable("organization", {
   /** Optional org-specific extractor model override. */
   memoryExtractorModel: text("memory_extractor_model"),
 
+  /** Optional org-level custom extraction instructions. */
+  memoryExtractorPrompt: text("memory_extractor_prompt"),
+
   /**
    * Optional org-specific extractor chat API key.
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only.

@@ -50,6 +50,7 @@ describe("PATCH /api/organization/memory-settings", () => {
         memoryExtractionEnabled: true,
         memoryInjectionEnabled: true,
         memoryInjectionTopK: 12,
+        memoryExtractorPrompt: "Extract long-lived user preferences only.",
         memoryExtractorChatApiKeyId: apiKey.id,
       },
     });
@@ -59,6 +60,7 @@ describe("PATCH /api/organization/memory-settings", () => {
       memoryExtractionEnabled: true,
       memoryInjectionEnabled: true,
       memoryInjectionTopK: 12,
+      memoryExtractorPrompt: "Extract long-lived user preferences only.",
       memoryExtractorChatApiKeyId: apiKey.id,
     });
   });
@@ -81,7 +83,7 @@ describe("PATCH /api/organization/memory-settings", () => {
       method: "PATCH",
       url: "/api/organization/memory-settings",
       payload: {
-        memoryInjectionTopK: 1.5,
+        memoryExtractorPrompt: "x".repeat(8001),
       },
     });
 

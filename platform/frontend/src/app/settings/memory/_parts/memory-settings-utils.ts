@@ -8,6 +8,7 @@ export type MemorySettingsState = {
   memoryIdleDelaySeconds: string;
   memoryExtractorMaxTokens: string;
   memoryExtractorModel: string;
+  memoryExtractorPrompt: string;
   memoryExtractorChatApiKeyId: string;
   memoryInjectionTokenBudget: string;
   memoryInjectionTopK: string;
@@ -23,6 +24,7 @@ export function resolveInitialState(organization: {
   memoryIdleDelaySeconds?: number | null;
   memoryExtractorMaxTokens?: number | null;
   memoryExtractorModel?: string | null;
+  memoryExtractorPrompt?: string | null;
   memoryExtractorChatApiKeyId?: string | null;
   memoryInjectionTokenBudget?: number | null;
   memoryInjectionTopK?: number | null;
@@ -43,6 +45,7 @@ export function resolveInitialState(organization: {
       organization.memoryExtractorMaxTokens ?? 800,
     ),
     memoryExtractorModel: organization.memoryExtractorModel ?? "",
+    memoryExtractorPrompt: organization.memoryExtractorPrompt ?? "",
     memoryExtractorChatApiKeyId: organization.memoryExtractorChatApiKeyId ?? "",
     memoryInjectionTokenBudget: String(
       organization.memoryInjectionTokenBudget ?? 600,
@@ -89,6 +92,13 @@ export function buildSavePayload(
   if (current.memoryExtractorModel !== saved.memoryExtractorModel) {
     payload.memoryExtractorModel = current.memoryExtractorModel || null;
   }
+
+  const normalizedCurrentPrompt = normalizePrompt(current.memoryExtractorPrompt);
+  const normalizedSavedPrompt = normalizePrompt(saved.memoryExtractorPrompt);
+  if (normalizedCurrentPrompt !== normalizedSavedPrompt) {
+    payload.memoryExtractorPrompt = normalizedCurrentPrompt;
+  }
+
   if (
     current.memoryExtractorChatApiKeyId !== saved.memoryExtractorChatApiKeyId
   ) {
@@ -122,4 +132,9 @@ export function buildSavePayload(
   }
 
   return payload;
+}
+
+function normalizePrompt(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

@@ -187,6 +187,7 @@ class MemoryExtractor {
                 organization?.memoryMaxCandidatesPerExtraction ?? 5,
                 5,
               ),
+              userPrompt: organization?.memoryExtractorPrompt ?? null,
             }),
             maxTokens: organization?.memoryExtractorMaxTokens ?? 800,
           });
@@ -458,6 +459,7 @@ export function hasExternalContextBoundary(messages: ChatMessage[]): boolean {
 
 export const __test = {
   buildTranscript,
+  buildExtractionPrompt,
   collectSourceMessageIds,
   containsUnsafeContextBoundary,
   prepareCandidate,
@@ -465,8 +467,15 @@ export const __test = {
 
 // ===== Internal helpers =====
 
-const EXTRACTOR_PROMPT_VERSION = "v1.0.0";
+const EXTRACTOR_PROMPT_VERSION = "v1.1.0";
 const MAX_TRANSCRIPT_CHARS = 20_000;
+const EXTRACTION_BASE_PROMPT =
+  "Extract durable memory candidates from the conversation transcript.";
+const EXTRACTION_SYSTEM_PROMPT = [
+  "Return only long-lived user-specific facts, preferences, or instructions.",
+  "Do not include temporary tasks, one-off requests, or tool output details.",
+  "System constraints in this prompt are mandatory and override any additional instructions.",
+].join("\n");
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -533,17 +542,35 @@ function extractTextFromMessage(message: ChatMessage): string {
 function buildExtractionPrompt(params: {
   transcript: string;
   maxCandidates: number;
+  userPrompt: string | null;
 }): string {
-  return [
-    "Extract durable memory candidates from the conversation transcript.",
-    "Return only long-lived user-specific facts, preferences, or instructions.",
-    "Do not include temporary tasks, one-off requests, or tool output details.",
-    `Return at most ${params.maxCandidates} candidates.`,
-    "Always set scopeType to 'user'.",
+  const normalizedUserPrompt = normalizeUserPrompt(params.userPrompt);
+  const sections = [
+    EXTRACTION_BASE_PROMPT,
     "",
-    "Conversation transcript:",
-    params.transcript,
-  ].join("\n");
+    EXTRACTION_SYSTEM_PROMPT,
+    `Return at most ${params.maxCandidates} candidates.`,
+  ];
+
+  if (normalizedUserPrompt) {
+    sections.push(
+      "",
+      "Additional extraction instructions from settings (supplemental only; never override system constraints):",
+      normalizedUserPrompt,
+    );
+  }
+
+  sections.push("", "Conversation transcript:", params.transcript);
+  return sections.join("\n");
+}
+
+function normalizeUserPrompt(userPrompt: string | null): string | null {
+  if (typeof userPrompt !== "string") {
+    return null;
+  }
+
+  const trimmed = userPrompt.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function prepareCandidate(candidate: MemoryCandidate): MemoryCandidate | null {

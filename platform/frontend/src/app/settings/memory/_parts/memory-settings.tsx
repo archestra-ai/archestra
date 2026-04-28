@@ -176,23 +176,25 @@ export function MemorySettings() {
                   disabled={isSaving || !hasPermission}
                 />
 
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    setState((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            memoryExtractorModel: "",
-                            memoryExtractorChatApiKeyId: "",
-                          }
-                        : prev,
-                    )
-                  }
-                  disabled={isSaving || !hasPermission}
-                >
-                  Reset extractor model
-                </Button>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      setState((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              memoryExtractorModel: "",
+                              memoryExtractorChatApiKeyId: "",
+                            }
+                          : prev,
+                      )
+                    }
+                    disabled={isSaving || !hasPermission}
+                  >
+                    Reset
+                  </Button>
+                </div>
               </div>
             )}
           </WithPermissions>

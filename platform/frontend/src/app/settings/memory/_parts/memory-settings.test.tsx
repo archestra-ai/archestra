@@ -197,7 +197,7 @@ describe("MemorySettings", () => {
 
     expect(screen.getByText("Extractor model")).toBeInTheDocument();
     expect(screen.getByText("Extraction behavior")).toBeInTheDocument();
-    expect(screen.getByText("Reset extractor model")).toBeInTheDocument();
+    expect(screen.getByText("Reset")).toBeInTheDocument();
     expect(
       screen.getByText("Post-conversation extraction"),
     ).toBeInTheDocument();

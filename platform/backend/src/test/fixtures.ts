@@ -57,7 +57,7 @@ import type {
 } from "@/types";
 
 type MakeUserOverrides = Partial<
-  Pick<InsertUser, "email" | "name" | "emailVerified">
+  Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
 >;
 
 /**

@@ -35022,6 +35022,13 @@
                               "search_and_run_only"
                             ]
                           },
+                          "toolAssignmentMode": {
+                            "type": "string",
+                            "enum": [
+                              "automatic",
+                              "manual"
+                            ]
+                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -35330,6 +35337,7 @@
                           "identityProviderId",
                           "passthroughHeaders",
                           "toolExposureMode",
+                          "toolAssignmentMode",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -35730,6 +35738,13 @@
                       "search_and_run_only"
                     ]
                   },
+                  "toolAssignmentMode": {
+                    "type": "string",
+                    "enum": [
+                      "automatic",
+                      "manual"
+                    ]
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -35976,6 +35991,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -36286,6 +36308,7 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -36714,6 +36737,13 @@
                           "search_and_run_only"
                         ]
                       },
+                      "toolAssignmentMode": {
+                        "type": "string",
+                        "enum": [
+                          "automatic",
+                          "manual"
+                        ]
+                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -37022,6 +37052,7 @@
                       "identityProviderId",
                       "passthroughHeaders",
                       "toolExposureMode",
+                      "toolAssignmentMode",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -37390,6 +37421,13 @@
                         "search_and_run_only"
                       ]
                     },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -37698,6 +37736,7 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38066,6 +38105,13 @@
                         "search_and_run_only"
                       ]
                     },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38374,6 +38420,7 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38754,6 +38801,13 @@
                         "search_and_run_only"
                       ]
                     },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -39062,6 +39116,7 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39414,6 +39469,13 @@
                       "search_and_run_only"
                     ]
                   },
+                  "toolAssignmentMode": {
+                    "type": "string",
+                    "enum": [
+                      "automatic",
+                      "manual"
+                    ]
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -39665,6 +39727,13 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -39975,6 +40044,7 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -157269,6 +157339,286 @@
           "kind": "none",
           "note": "None (no additional RBAC permission required)",
           "permissions": []
+        }
+      }
+    },
+    "/api/user/impersonable": {
+      "get": {
+        "operationId": "getImpersonableUsers",
+        "tags": [
+          "User"
+        ],
+        "description": "List users in the caller's organization that admins can impersonate (role debugger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:update`: Change member roles and settings",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "email",
+                      "role"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "member:update"
+          ]
         }
       }
     },

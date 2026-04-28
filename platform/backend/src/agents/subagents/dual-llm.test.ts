@@ -61,6 +61,7 @@ function makeBuiltInAgent(params: {
     llmApiKeyId: null,
     llmModel: null,
     passthroughHeaders: null,
+    toolAssignmentMode: "manual",
     identityProviderId: null,
     builtInAgentConfig:
       params.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN

@@ -7,6 +7,10 @@ import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  BASIC_USER_EMAIL,
+  BASIC_USER_PASSWORD,
+  BASIC_USER_ROLE_NAME,
+  basicUserAuthFile,
   EDITOR_EMAIL,
   EDITOR_PASSWORD,
   editorAuthFile,
@@ -293,6 +297,103 @@ setup("authenticate as editor", async ({ page }) => {
   await page.context().storageState({ path: editorAuthFile });
 });
 
+/**
+ * Permission set granted to the basic-user custom role.
+ *
+ * Deliberately slim — these are the permissions a restricted user
+ * needs to access /chat once an admin has configured provider keys.
+ * Used by chat-permissions.spec.ts to regression-test PR #4142.
+ */
+const BASIC_USER_PERMISSION = {
+  agent: ["read"],
+  chat: ["read"],
+  llmProviderApiKey: ["read"],
+  llmModel: ["read"],
+} as const;
+
+/**
+ * Look up a custom role by display name. Returns the role's `id` (base62,
+ * used by PUT/DELETE) and `role` (slug, used by invitations) if found.
+ */
+async function findCustomRole(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: string; role: string } | null> {
+  const response = await request.get(
+    `${UI_BASE_URL}/api/roles?name=${encodeURIComponent(name)}`,
+    { headers: { Origin: UI_BASE_URL } },
+  );
+  if (!response.ok()) {
+    return null;
+  }
+  const body = await response.json();
+  const match = body?.data?.find(
+    (role: { name: string; id: string; role: string }) => role.name === name,
+  );
+  if (!match?.id || !match?.role) {
+    return null;
+  }
+  return { id: match.id, role: match.role };
+}
+
+/**
+ * Create or refresh the basic-user custom role. Returns the role slug
+ * (the value invitations require). Always rewrites the permission set so
+ * that prior runs with a stale set cannot poison this run.
+ */
+async function ensureBasicUserRole(
+  request: APIRequestContext,
+): Promise<string> {
+  const description =
+    "Slim role used by chat-permissions e2e regression test";
+  const existing = await findCustomRole(request, BASIC_USER_ROLE_NAME);
+
+  if (existing) {
+    const updateResponse = await request.put(
+      `${UI_BASE_URL}/api/roles/${existing.id}`,
+      {
+        data: {
+          name: BASIC_USER_ROLE_NAME,
+          description,
+          permission: BASIC_USER_PERMISSION,
+        },
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+    if (!updateResponse.ok()) {
+      const errorText = await updateResponse.text();
+      throw new Error(
+        `Failed to refresh basic-user role permissions (${updateResponse.status()}): ${errorText}`,
+      );
+    }
+    return existing.role;
+  }
+
+  const response = await request.post(`${UI_BASE_URL}/api/roles`, {
+    data: {
+      name: BASIC_USER_ROLE_NAME,
+      description,
+      permission: BASIC_USER_PERMISSION,
+    },
+    headers: { Origin: UI_BASE_URL },
+  });
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to create basic-user custom role (${response.status()}): ${errorText}`,
+    );
+  }
+
+  const created = await response.json();
+  if (!created?.role) {
+    throw new Error(
+      `Basic-user role create response missing 'role' field: ${JSON.stringify(created)}`,
+    );
+  }
+  return created.role;
+}
+
 // Setup member authentication - runs after admin setup
 setup("authenticate as member", async ({ page }) => {
   // Check if member user already exists
@@ -354,4 +455,65 @@ setup("authenticate as member", async ({ page }) => {
 
   // Save member auth state
   await page.context().storageState({ path: memberAuthFile });
+});
+
+// Setup basic-user authentication (custom role with slim permissions)
+setup("authenticate as basic-user (custom role)", async ({ page }) => {
+  const basicUserExists = await userExists(
+    page.request,
+    BASIC_USER_EMAIL,
+    BASIC_USER_PASSWORD,
+  );
+
+  // Always sign in as admin first so we can refresh the basic-user role's
+  // permission set on every run. Without this, prior runs that created the
+  // role with a stale permission set would persist and break the test.
+  await sleep(100);
+  const adminSignedIn = await signInUser(
+    page.request,
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+  );
+  expect(adminSignedIn, "Admin sign-in failed for basic-user setup").toBe(true);
+
+  // Establish cookie context with active organization
+  await page.goto(`${UI_BASE_URL}/chat`);
+  await page.waitForLoadState("domcontentloaded");
+
+  // Ensure the custom role exists with the current permission set
+  const basicUserRoleIdentifier = await ensureBasicUserRole(page.request);
+
+  if (!basicUserExists) {
+    // Invite basic user with the custom role identifier
+    const invitationId = await createInvitation(
+      page.request,
+      BASIC_USER_EMAIL,
+      basicUserRoleIdentifier,
+    );
+
+    await signOut(page.request);
+
+    await signUpWithInvitation(
+      page.request,
+      BASIC_USER_EMAIL,
+      BASIC_USER_PASSWORD,
+      invitationId,
+    );
+  } else {
+    await signOut(page.request);
+
+    const signedIn = await signInUser(
+      page.request,
+      BASIC_USER_EMAIL,
+      BASIC_USER_PASSWORD,
+    );
+    expect(signedIn, "Basic-user sign-in failed").toBe(true);
+  }
+
+  await page.goto(`${UI_BASE_URL}/chat`);
+  await page.waitForLoadState("domcontentloaded");
+
+  await expectAuthenticated(page);
+
+  await page.context().storageState({ path: basicUserAuthFile });
 });

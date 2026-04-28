@@ -96,22 +96,24 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
     });
 
-    test("should create an agent with toolExposureMode", async () => {
+    test("should create an agent with tool modes", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",
         payload: {
           name: `Search Only Agent ${crypto.randomUUID().slice(0, 8)}`,
-          agentType: "mcp_gateway",
+          agentType: "agent",
           scope: "personal",
           teams: [],
           toolExposureMode: "search_and_run_only",
+          toolAssignmentMode: "automatic",
         },
       });
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
       expect(agent.toolExposureMode).toBe("search_and_run_only");
+      expect(agent.toolAssignmentMode).toBe("automatic");
     });
   });
 
@@ -256,7 +258,7 @@ describe("agent routes", () => {
         organizationId,
         scope: "personal",
         authorId: user.id,
-        agentType: "mcp_gateway",
+        agentType: "agent",
       });
 
       const updateResponse = await app.inject({
@@ -264,6 +266,7 @@ describe("agent routes", () => {
         url: `/api/agents/${created.id}`,
         payload: {
           toolExposureMode: "search_and_run_only",
+          toolAssignmentMode: "automatic",
         },
       });
 
@@ -271,6 +274,7 @@ describe("agent routes", () => {
       expect(updateResponse.json().toolExposureMode).toBe(
         "search_and_run_only",
       );
+      expect(updateResponse.json().toolAssignmentMode).toBe("automatic");
 
       const getResponse = await app.inject({
         method: "GET",
@@ -279,6 +283,7 @@ describe("agent routes", () => {
 
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
+      expect(getResponse.json().toolAssignmentMode).toBe("automatic");
     });
   });
 

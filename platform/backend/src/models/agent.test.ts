@@ -8,6 +8,9 @@ import {
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import AgentLabelModel from "./agent-label";
+import AgentToolModel from "./agent-tool";
+import McpCatalogLabelModel from "./mcp-catalog-label";
 import MemberModel from "./member";
 import TeamModel from "./team";
 
@@ -2682,6 +2685,203 @@ describe("AgentModel", () => {
 
       const fetched = await AgentModel.findById(agent.id);
       expect(fetched?.passthroughHeaders).toEqual(["x-request-id"]);
+    });
+  });
+
+  describe("findByLabels", () => {
+    test("returns an empty array when no pairs are provided", async () => {
+      const result = await AgentModel.findByLabels([]);
+      expect(result).toEqual([]);
+    });
+
+    test("returns agents matching a single (key, value) pair", async ({
+      makeAgent,
+    }) => {
+      const matching = await makeAgent({
+        name: "Matching",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      await makeAgent({
+        name: "Non-matching",
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      const labels = await AgentLabelModel.getLabelsForAgent(matching.id);
+      const result = await AgentModel.findByLabels([
+        { keyId: labels[0].keyId, valueId: labels[0].valueId },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        id: matching.id,
+        name: matching.name,
+        agentType: matching.agentType,
+        toolAssignmentMode: matching.toolAssignmentMode,
+      });
+    });
+
+    test("returns agents matching any pair (OR) without duplicates", async ({
+      makeAgent,
+    }) => {
+      const matchesFirst = await makeAgent({
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      const matchesSecond = await makeAgent({
+        labels: [{ key: "region", value: "emea" }],
+      });
+      const matchesBoth = await makeAgent({
+        labels: [
+          { key: "team", value: "alpha" },
+          { key: "region", value: "emea" },
+        ],
+      });
+      await makeAgent({
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      const labelsA = await AgentLabelModel.getLabelsForAgent(matchesFirst.id);
+      const labelsB = await AgentLabelModel.getLabelsForAgent(matchesSecond.id);
+
+      const result = await AgentModel.findByLabels([
+        { keyId: labelsA[0].keyId, valueId: labelsA[0].valueId },
+        { keyId: labelsB[0].keyId, valueId: labelsB[0].valueId },
+      ]);
+
+      expect(result).toHaveLength(3);
+      expect(new Set(result.map((a) => a.id))).toEqual(
+        new Set([matchesFirst.id, matchesSecond.id, matchesBoth.id]),
+      );
+    });
+  });
+
+  describe("toolAssignmentMode transitions", () => {
+    test("automatic to manual wipes all materialized tools", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeTool({ catalogId: catalog.id });
+      await makeTool({ catalogId: catalog.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
+        { key: "team", value: "alpha" },
+      ]);
+
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "automatic",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toHaveLength(
+        2,
+      );
+
+      await AgentModel.update(gateway.id, { toolAssignmentMode: "manual" });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([]);
+    });
+
+    test("manual to automatic wipes manual assignments and materializes from labels", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const matchingCatalog = await makeInternalMcpCatalog();
+      const toolA1 = await makeTool({ catalogId: matchingCatalog.id });
+      const toolA2 = await makeTool({ catalogId: matchingCatalog.id });
+      await McpCatalogLabelModel.syncCatalogLabels(matchingCatalog.id, [
+        { key: "team", value: "alpha" },
+      ]);
+
+      const otherCatalog = await makeInternalMcpCatalog();
+      const manualTool = await makeTool({ catalogId: otherCatalog.id });
+
+      // Create the gateway in manual mode so create-time reconcile is a no-op,
+      // then manually assign a tool from a non-matching catalog.
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "manual",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      await makeAgentTool(gateway.id, manualTool.id);
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
+        manualTool.id,
+      ]);
+
+      await AgentModel.update(gateway.id, { toolAssignmentMode: "automatic" });
+
+      const toolIds = await AgentToolModel.findToolIdsByAgent(gateway.id);
+      expect(new Set(toolIds)).toEqual(new Set([toolA1.id, toolA2.id]));
+    });
+
+    test("label change while automatic reconciles to the new label set", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalogA = await makeInternalMcpCatalog();
+      const toolA = await makeTool({ catalogId: catalogA.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalogA.id, [
+        { key: "team", value: "alpha" },
+      ]);
+
+      const catalogB = await makeInternalMcpCatalog();
+      const toolB = await makeTool({ catalogId: catalogB.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalogB.id, [
+        { key: "team", value: "beta" },
+      ]);
+
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "automatic",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
+        toolA.id,
+      ]);
+
+      await AgentModel.update(gateway.id, {
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
+        toolB.id,
+      ]);
+    });
+
+    test("label change while manual does not reconcile", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeTool({ catalogId: catalog.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
+        { key: "team", value: "beta" },
+      ]);
+
+      const otherCatalog = await makeInternalMcpCatalog();
+      const manualTool = await makeTool({ catalogId: otherCatalog.id });
+
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "manual",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      await makeAgentTool(gateway.id, manualTool.id);
+
+      // Switch labels so they would match the catalog if reconcile were to fire.
+      await AgentModel.update(gateway.id, {
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      const toolIds = await AgentToolModel.findToolIdsByAgent(gateway.id);
+      expect(toolIds).toEqual([manualTool.id]);
     });
   });
 });

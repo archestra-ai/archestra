@@ -113,6 +113,10 @@ export const E2eTestId = {
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
   McpLogsTab: "mcp-logs-tab",
+  // Role debugger / impersonation
+  ImpersonationBanner: "impersonation-banner",
+  ImpersonationStopButton: "impersonation-stop-button",
+  ImpersonationViewAsButton: "impersonation-view-as-button",
 } as const;
 
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];

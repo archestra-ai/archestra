@@ -393,6 +393,9 @@ export async function isMcpServerAssignableToTarget(params: {
   }
 
   if (mcpServer.teamId) {
+    if (target.scope === "org") {
+      return true;
+    }
     if (target.scope === "team") {
       return target.teamIds.includes(mcpServer.teamId);
     }
@@ -538,6 +541,9 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
   }
 
   if (mcpServer.teamId) {
+    if (target.scope === "org") {
+      return true;
+    }
     if (target.scope === "team") {
       return target.teamIds.includes(mcpServer.teamId);
     }

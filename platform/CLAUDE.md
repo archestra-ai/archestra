@@ -86,6 +86,21 @@ drizzle-kit check    # Check consistency of generated SQL migrations history
 # IMPORTANT: Never create manually-named migration files - Drizzle tracks migrations
 # via the meta/_journal.json file which references the generated file names.
 
+# Resolving Migration Conflicts
+# When two branches both generate migrations, you'll get conflicts in
+# backend/src/database/migrations/meta/_journal.json and meta/*.json snapshot files.
+# The cleanest fix is to regenerate on top of the base branch:
+#
+# 1. Pull the base branch and resolve conflicts in schema files only:
+#      git pull origin main
+#      # resolve any conflicts in backend/src/database/migrations/*.ts schema files
+# 2. Discard your generated migrations, restore the base branch's:
+#      git checkout origin/main -- backend/src/database/migrations/
+# 3. Regenerate cleanly on top:
+#      pnpm db:generate
+#      pnpm db:migrate   # verify locally
+#      git add backend/src/database/migrations/
+
 # Custom Data-Only Migrations (no schema changes)
 # For pure data migrations (UPDATE, INSERT) with no schema changes, use:
 #   cd backend && npx drizzle-kit generate --custom --name=<descriptive-name>

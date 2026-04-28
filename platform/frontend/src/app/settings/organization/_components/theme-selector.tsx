@@ -4,6 +4,7 @@ import type { OrganizationTheme } from "@shared";
 import { Check } from "lucide-react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { LightDarkButtons } from "@/components/settings/light-dark-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { type ThemeMetadata, themes } from "@/themes";
@@ -17,26 +18,41 @@ export function ThemeSelector({
   selectedTheme,
   onThemeSelect,
 }: ThemeSelectorProps) {
+  const selectedThemeMetadata = themes.find((t) => t.id === selectedTheme);
+  const isLightOnly = selectedThemeMetadata?.mode === "light-only";
+  const isDarkOnly = selectedThemeMetadata?.mode === "dark-only";
+
+  function handleThemeSelect(themeMetadata: ThemeMetadata) {
+    onThemeSelect(themeMetadata.id);
+  }
+
   return (
     <Card>
       <SettingsCardHeader
         title="Color Theme"
         description="Choose a color theme for your organization. Changes are previewed in real-time."
+        action={
+          <LightDarkButtons
+            isLightOnly={isLightOnly}
+            isDarkOnly={isDarkOnly}
+            size="sm"
+          />
+        }
       />
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {themes.map((theme) => (
-            <div key={theme.id} className="flex-1">
+          {themes.map((themeItem) => (
+            <div key={themeItem.id} className="flex-1">
               <WithPermissions
                 permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
-                key={theme.id}
+                key={themeItem.id}
               >
                 {({ hasPermission }) => (
                   <ThemeOption
-                    theme={theme}
-                    isSelected={selectedTheme === theme.id}
-                    onClick={() => onThemeSelect(theme.id)}
+                    theme={themeItem}
+                    isSelected={selectedTheme === themeItem.id}
+                    onClick={() => handleThemeSelect(themeItem)}
                     disabled={!hasPermission}
                   />
                 )}

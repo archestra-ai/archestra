@@ -14,6 +14,7 @@ import type {
   AgentScope,
   AgentType,
   BuiltInAgentConfig,
+  ToolAssignmentMode,
   ToolExposureMode,
 } from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
@@ -106,6 +107,12 @@ const agentsTable = pgTable(
       .$type<ToolExposureMode>()
       .notNull()
       .default("full"),
+
+    /** Whether tools are assigned manually by an admin or automatically derived from catalog labels for MCP gateways */
+    toolAssignmentMode: text("tool_assignment_mode")
+      .$type<ToolAssignmentMode>()
+      .notNull()
+      .default("manual"),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(

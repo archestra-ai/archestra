@@ -7,10 +7,12 @@ import {
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
+  type ListToolsResult,
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   hasArchestraTokenPrefix,
   isAgentTool,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
@@ -38,6 +40,7 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   AgentTeamModel,
+  InternalMcpCatalogModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   McpToolCallModel,
@@ -198,9 +201,12 @@ export async function createAgentServer(
 
     // Dynamically enrich the knowledge sources tool description with
     // the agent's actual knowledge base names and connector types
-    const kbToolDescription = await buildKnowledgeSourcesDescription(agentId);
+    const [kbToolDescription, searchToolsDescription] = await Promise.all([
+      buildKnowledgeSourcesDescription(agentId),
+      buildSearchToolsDescription(mcpTools),
+    ]);
 
-    const toolsList = permittedTools.map(
+    const toolsList: McpListTool[] = permittedTools.map(
       ({ name, description, parameters, meta }) => ({
         name,
         title: archestraToolTitles.get(name) || name,
@@ -210,7 +216,12 @@ export async function createAgentServer(
               TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
             ) && kbToolDescription
             ? kbToolDescription
-            : description,
+            : name ===
+                  archestraMcpBranding.getToolName(
+                    TOOL_SEARCH_TOOLS_SHORT_NAME,
+                  ) && searchToolsDescription
+              ? searchToolsDescription
+              : (description ?? undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
@@ -1325,7 +1336,7 @@ export async function buildKnowledgeSourcesDescription(
 
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
-  tools: McpListTool[];
+  tools: McpListToolCandidate[];
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
@@ -1336,29 +1347,39 @@ function filterExposedTools(params: {
   });
 }
 
-type McpListTool = {
+type McpListTool = ListToolsResult["tools"][number];
+
+type McpToolForSearchDescription = {
+  catalogId: string | null;
+};
+
+type McpListToolCandidate = {
   name: string;
   description: string | null;
-  parameters: unknown;
+  parameters: McpListTool["inputSchema"];
+  catalogId?: string | null;
   meta?: {
-    annotations?: Record<string, unknown>;
-    _meta?: Record<string, unknown>;
+    annotations?: McpListTool["annotations"];
+    _meta?: McpListTool["_meta"];
   };
 };
 
 function toMcpListTool(tool: {
   name: string;
   description?: string | null;
+  catalogId?: string | null;
   parameters?: unknown;
+  inputSchema?: unknown;
   meta?: {
     annotations?: Record<string, unknown>;
     _meta?: Record<string, unknown>;
   } | null;
-}): McpListTool {
+}): McpListToolCandidate {
   return {
     name: tool.name,
     description: tool.description ?? null,
-    parameters: tool.parameters ?? {},
+    parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
+    catalogId: tool.catalogId,
     meta: tool.meta ?? undefined,
   };
 }
@@ -1375,6 +1396,70 @@ function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
     deduped.set(tool.name, tool);
   }
   return Array.from(deduped.values());
+}
+
+async function buildSearchToolsDescription(
+  mcpTools: McpToolForSearchDescription[],
+) {
+  const searchTool = getArchestraMcpTools().find(
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) ===
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const baseDescription = searchTool?.description;
+  if (!baseDescription) {
+    return null;
+  }
+
+  const catalogIds = [
+    ...new Set(
+      mcpTools
+        .map((tool) => tool.catalogId)
+        .filter(
+          (catalogId): catalogId is string =>
+            Boolean(catalogId) && catalogId !== ARCHESTRA_MCP_CATALOG_ID,
+        ),
+    ),
+  ];
+
+  if (catalogIds.length === 0) {
+    return baseDescription;
+  }
+
+  const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
+  const catalogSummaries = catalogIds
+    .map((catalogId) => catalogs.get(catalogId))
+    .filter((catalog) => catalog !== undefined)
+    .slice(0, 10)
+    .map((catalog) => {
+      const labels = catalog.labels
+        .slice(0, 3)
+        .map((label) => `${label.key}:${label.value}`)
+        .join(", ");
+      return labels ? `${catalog.name} (labels: ${labels})` : catalog.name;
+    });
+
+  if (catalogSummaries.length === 0) {
+    return baseDescription;
+  }
+
+  const remainingCount = catalogIds.length - catalogSummaries.length;
+  const remainingText =
+    remainingCount > 0 ? `, and ${remainingCount} more` : "";
+
+  return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
+}
+
+function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+  if (isRecord(schema) && schema.type === "object") {
+    return schema as McpListTool["inputSchema"];
+  }
+
+  return { type: "object", properties: {} };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isArchestraMetaTool(toolName: string) {

@@ -331,11 +331,57 @@ class AgentToolModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  static async deleteAllForAgent(agentId: string): Promise<number> {
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+    return result.rowCount ?? 0;
+  }
+
+  static async deleteCatalogToolsForAgent(agentId: string): Promise<number> {
+    const catalogToolIds =
+      await AgentToolModel.findCatalogToolIdsByAgent(agentId);
+    return AgentToolModel.bulkDelete(agentId, catalogToolIds);
+  }
+
+  static async bulkDelete(agentId: string, toolIds: string[]): Promise<number> {
+    if (toolIds.length === 0) return 0;
+
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.agentToolsTable.toolId, toolIds),
+        ),
+      );
+
+    return result.rowCount || 0;
+  }
+
   static async findToolIdsByAgent(agentId: string): Promise<string[]> {
     const results = await db
       .select({ toolId: schema.agentToolsTable.toolId })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.agentId, agentId));
+    return results.map((r) => r.toolId);
+  }
+
+  static async findCatalogToolIdsByAgent(agentId: string): Promise<string[]> {
+    const results = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.catalogId),
+          isNull(schema.toolsTable.delegateToAgentId),
+        ),
+      );
     return results.map((r) => r.toolId);
   }
 
@@ -352,6 +398,19 @@ class AgentToolModel {
       .select({ toolId: schema.agentToolsTable.toolId })
       .from(schema.agentToolsTable);
     return [...new Set(results.map((r) => r.toolId))];
+  }
+
+  static async getToolsForAgent(agentId: string) {
+    const results = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+
+    return results.map((r) => r.tool);
   }
 
   static async exists(agentId: string, toolId: string): Promise<boolean> {
@@ -477,6 +536,63 @@ class AgentToolModel {
         .insert(schema.agentToolsTable)
         .values(newAssignments)
         .onConflictDoNothing();
+    }
+  }
+
+  static async syncAgentToolsFromLabels(agentId: string): Promise<void> {
+    // Get the agent and verify it's eligible for automatic tool assignment based on labels
+    const { default: AgentModel } = await import("./agent");
+    const agent = await AgentModel.findById(agentId);
+
+    if (!agent) return;
+    if (!isAutomaticToolAssignmentSupported(agent.agentType)) return;
+    if (agent.toolAssignmentMode !== "automatic") return;
+
+    // Fetch the agent's labels and determine which tools should be assigned based on those labels
+    const { default: AgentLabelModel } = await import("./agent-label");
+    const labels = await AgentLabelModel.getLabelsForAgent(agentId);
+
+    // For each label, find catalog items that match the label, then find tools associated with those catalog items, and build a set of desired tool IDs to be assigned to the agent
+    const desiredToolIdsSet = new Set<string>();
+    if (labels.length > 0) {
+      const { default: McpCatalogLabelModel } = await import(
+        "./mcp-catalog-label"
+      );
+      const catalogIds =
+        await McpCatalogLabelModel.getCatalogIdsByLabels(labels);
+
+      if (catalogIds.length > 0) {
+        const { default: ToolModel } = await import("./tool");
+        const toolIds = await ToolModel.getToolIdsByCatalogIds(catalogIds);
+        for (const toolId of toolIds) {
+          desiredToolIdsSet.add(toolId);
+        }
+      }
+    }
+
+    // Fetch the agent's assigned tool IDs and determine which tools to add/remove
+    const currentToolIds =
+      await AgentToolModel.findCatalogToolIdsByAgent(agentId);
+    const currentToolIdsSet = new Set(currentToolIds);
+
+    const desiredToolIds = Array.from(desiredToolIdsSet);
+    const toInsert = desiredToolIds.filter((id) => !currentToolIdsSet.has(id));
+    const toDelete = currentToolIds.filter((id) => !desiredToolIdsSet.has(id));
+
+    // Assign new tools that are not currently assigned to the agent.
+    if (toInsert.length > 0) {
+      const entries = toInsert.map((toolId) => ({
+        agentId,
+        toolId,
+        credentialResolutionMode: "dynamic" as CredentialResolutionMode, // default to dynamic for automatically assigned tools
+      }));
+
+      await AgentToolModel.bulkCreate(entries);
+    }
+
+    // Remove tools that are currently assigned but not in the desired set.
+    if (toDelete.length > 0) {
+      await AgentToolModel.bulkDelete(agentId, toDelete);
     }
   }
 
@@ -1016,6 +1132,10 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
+
+function isAutomaticToolAssignmentSupported(agentType: string): boolean {
+  return agentType === "agent" || agentType === "mcp_gateway";
+}
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;

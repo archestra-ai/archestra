@@ -37,7 +37,10 @@ export function captureRawProviderErrorInSentry(params: {
   errorType: string | undefined;
   rawErrorJson: string;
 }): void {
-  Sentry.captureMessage("[ChatErrorMapper] rawErrorJson provider error", {
+  const error = new Error(params.errorMessage);
+  error.name = "RawProviderError";
+
+  Sentry.captureException(error, {
     level: "error",
     fingerprint: [
       "chat-provider-error-raw-error-json",

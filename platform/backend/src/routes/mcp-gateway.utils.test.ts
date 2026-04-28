@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
@@ -12,6 +13,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";
 import {
   AgentTeamModel,
+  McpCatalogLabelModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -45,6 +47,8 @@ const {
   validateExternalIdpToken,
   buildKnowledgeSourcesDescription,
 } = await import("./mcp-gateway.utils");
+
+type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {
@@ -1244,12 +1248,7 @@ describe("createAgentServer tools/list", () => {
     const { server } = await createAgentServer(agent.id);
     const listToolsHandler = (
       server.server as unknown as {
-        _requestHandlers: Map<
-          string,
-          (request: unknown) => Promise<{
-            tools: Array<{ name: string; description?: string }>;
-          }>
-        >;
+        _requestHandlers: Map<string, TestListToolsHandler>;
       }
     )._requestHandlers.get("tools/list");
 
@@ -1285,12 +1284,7 @@ describe("createAgentServer tools/list", () => {
     const { server } = await createAgentServer(agent.id);
     const listToolsHandler = (
       server.server as unknown as {
-        _requestHandlers: Map<
-          string,
-          (request: unknown) => Promise<{
-            tools: Array<{ name: string; description?: string }>;
-          }>
-        >;
+        _requestHandlers: Map<string, TestListToolsHandler>;
       }
     )._requestHandlers.get("tools/list");
 
@@ -1308,10 +1302,67 @@ describe("createAgentServer tools/list", () => {
       [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
     );
     expect(
+      response.tools.every((tool) => tool.inputSchema?.type === "object"),
+    ).toBe(true);
+    expect(
       response.tools.some(
         (tool) => tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
       ),
     ).toBe(false);
+  });
+
+  test("adds assigned MCP server context to search_tools description", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+    const sentryCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "sentry",
+    });
+    await McpCatalogLabelModel.syncCatalogLabels(sentryCatalog.id, [
+      { key: "app", value: "observability" },
+      { key: "type", value: "errors" },
+    ]);
+    const sentryTool = await makeTool({
+      catalogId: sentryCatalog.id,
+      name: "sentry__list_issues",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, sentryTool.id);
+
+    const { server } = await createAgentServer(agent.id);
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const searchTool = response.tools.find(
+      (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+    );
+
+    expect(searchTool?.description).toContain(
+      "Available MCP servers for this gateway include: sentry",
+    );
+    expect(searchTool?.description).toContain("app:observability");
+    expect(searchTool?.description).toContain("type:errors");
   });
 
   test("preserves user context when calling restricted Archestra tools", async ({

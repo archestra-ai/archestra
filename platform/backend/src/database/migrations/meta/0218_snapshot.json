@@ -1217,8 +1217,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "payload": {
-          "name": "payload",
+        "payloads": {
+          "name": "payloads",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true

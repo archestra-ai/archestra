@@ -2,7 +2,7 @@ CREATE TABLE "chat_active_run_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"run_id" uuid NOT NULL,
 	"seq" integer NOT NULL,
-	"payload" jsonb NOT NULL,
+	"payloads" jsonb NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "chat_active_run_events_run_id_seq_uidx" UNIQUE("run_id","seq")
 );

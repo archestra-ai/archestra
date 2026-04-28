@@ -52,7 +52,7 @@ const chatActiveRunEventsTable = pgTable(
       .notNull()
       .references(() => chatActiveRunsTable.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
-    payload: jsonb("payload").$type<UIMessageChunk>().notNull(),
+    payloads: jsonb("payloads").$type<UIMessageChunk[]>().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

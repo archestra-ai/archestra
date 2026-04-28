@@ -59,17 +59,29 @@ test("appends and reads ordered active chat run events", async ({
   ];
   await ActiveChatRunModel.appendEvents({
     runId: run?.id ?? "",
-    startSeq: 1,
+    seq: 1,
     payloads: chunks,
+  });
+  await ActiveChatRunModel.appendEvents({
+    runId: run?.id ?? "",
+    seq: 2,
+    payloads: [{ type: "finish", finishReason: "stop" }],
   });
 
   const events = await ActiveChatRunModel.readEventsAfter({
     runId: run?.id ?? "",
     seq: 0,
   });
+  const laterEvents = await ActiveChatRunModel.readEventsAfter({
+    runId: run?.id ?? "",
+    seq: 1,
+  });
 
-  expect(events.map((event) => event.seq)).toEqual([1, 2, 3]);
-  expect(events.map((event) => event.payload)).toEqual(chunks);
+  expect(events.map((event) => event.seq)).toEqual([1, 2]);
+  expect(events[0]?.payloads).toEqual(chunks);
+  expect(laterEvents.map((event) => event.payloads)).toEqual([
+    [{ type: "finish", finishReason: "stop" }],
+  ]);
 });
 
 test("updates stopRequestedAt on the running active chat run", async ({

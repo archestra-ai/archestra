@@ -100,7 +100,9 @@ class ActiveChatRunService {
             });
 
             for (const event of events) {
-              controller.enqueue(event.payload);
+              for (const payload of event.payloads) {
+                controller.enqueue(payload);
+              }
               lastSeq = event.seq;
             }
 
@@ -111,7 +113,9 @@ class ActiveChatRunService {
                 seq: lastSeq,
               });
               for (const event of finalEvents) {
-                controller.enqueue(event.payload);
+                for (const payload of event.payloads) {
+                  controller.enqueue(payload);
+                }
                 lastSeq = event.seq;
               }
               controller.close();
@@ -192,15 +196,15 @@ class ActiveChatRunEventBatcher {
       return;
     }
 
-    const payloads = this.pending;
-    const startSeq = this.nextSeq;
+    const payloads = compactReplayPayloads(this.pending);
+    const seq = this.nextSeq;
     this.pending = [];
-    this.nextSeq += payloads.length;
+    this.nextSeq += 1;
 
     this.flushPromise = this.flushPromise.then(() =>
       ActiveChatRunModel.appendEvents({
         runId: this.runId,
-        startSeq,
+        seq,
         payloads,
       }),
     );
@@ -210,6 +214,50 @@ class ActiveChatRunEventBatcher {
 }
 
 export const activeChatRunService = new ActiveChatRunService();
+
+function compactReplayPayloads(payloads: UIMessageChunk[]): UIMessageChunk[] {
+  const compacted: UIMessageChunk[] = [];
+
+  for (const payload of payloads) {
+    const previous = compacted.at(-1);
+    if (
+      canMergeDeltaChunks(previous, payload) &&
+      isMergeableDeltaChunk(payload)
+    ) {
+      previous.delta += payload.delta;
+      continue;
+    }
+
+    compacted.push({ ...payload });
+  }
+
+  return compacted;
+}
+
+function canMergeDeltaChunks(
+  previous: UIMessageChunk | undefined,
+  current: UIMessageChunk,
+): previous is MergeableDeltaChunk {
+  return (
+    isMergeableDeltaChunk(current) &&
+    (previous?.type === "text-delta" || previous?.type === "reasoning-delta") &&
+    previous.type === current.type &&
+    previous.id === current.id &&
+    !previous.providerMetadata &&
+    !current.providerMetadata
+  );
+}
+
+function isMergeableDeltaChunk(
+  payload: UIMessageChunk,
+): payload is MergeableDeltaChunk {
+  return payload.type === "text-delta" || payload.type === "reasoning-delta";
+}
+
+type MergeableDeltaChunk = Extract<
+  UIMessageChunk,
+  { type: "text-delta" | "reasoning-delta" }
+>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

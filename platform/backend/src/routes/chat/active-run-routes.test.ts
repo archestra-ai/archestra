@@ -103,8 +103,12 @@ describe("chat active-run routes", () => {
     });
     await ActiveChatRunModel.appendEvents({
       runId: run?.id ?? "",
-      startSeq: 1,
-      payloads: [{ type: "start" }],
+      seq: 1,
+      payloads: [
+        { type: "start" },
+        { type: "text-start", id: "text-1" },
+        { type: "text-delta", id: "text-1", delta: "hello" },
+      ],
     });
     await ActiveChatRunModel.markTerminal({
       runId: run?.id ?? "",
@@ -118,6 +122,11 @@ describe("chat active-run routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(readSsePayloads(response.body)).toContainEqual({ type: "start" });
+    expect(readSsePayloads(response.body)).toContainEqual({
+      type: "text-delta",
+      id: "text-1",
+      delta: "hello",
+    });
   });
 
   test("active-run streams later database events before closing", async () => {
@@ -136,7 +145,7 @@ describe("chat active-run routes", () => {
       void (async () => {
         await ActiveChatRunModel.appendEvents({
           runId: run?.id ?? "",
-          startSeq: 1,
+          seq: 1,
           payloads: [{ type: "start" }],
         });
         await ActiveChatRunModel.markTerminal({

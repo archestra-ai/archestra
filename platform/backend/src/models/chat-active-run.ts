@@ -27,7 +27,7 @@ class ActiveChatRunModel {
 
   static async appendEvents(params: {
     runId: string;
-    startSeq: number;
+    seq: number;
     payloads: UIMessageChunk[];
   }): Promise<void> {
     if (params.payloads.length === 0) {
@@ -35,13 +35,11 @@ class ActiveChatRunModel {
     }
 
     await db.transaction(async (tx) => {
-      await tx.insert(schema.chatActiveRunEventsTable).values(
-        params.payloads.map((payload, index) => ({
-          runId: params.runId,
-          seq: params.startSeq + index,
-          payload,
-        })),
-      );
+      await tx.insert(schema.chatActiveRunEventsTable).values({
+        runId: params.runId,
+        seq: params.seq,
+        payloads: params.payloads,
+      });
 
       await tx
         .update(schema.chatActiveRunsTable)

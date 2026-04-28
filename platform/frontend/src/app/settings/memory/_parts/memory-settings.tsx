@@ -101,8 +101,8 @@ export function MemorySettings() {
   return (
     <SettingsSectionStack>
       <SettingsBlock
-        title="Extractor"
-        description="Controls for post-conversation memory extraction."
+        title="Extractor model"
+        description="Choose the provider key and model used for extraction."
         control={
           <WithPermissions
             permissions={{ memorySettings: ["update"] }}
@@ -126,7 +126,7 @@ export function MemorySettings() {
                   }
                   disabled={isSaving || !hasPermission}
                 >
-                  <SelectTrigger className="w-80">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Extractor API key...">
                       {selectedApiKey ? (
                         <LlmProviderApiKeyOptionLabel
@@ -186,7 +186,22 @@ export function MemorySettings() {
                 >
                   Reset extractor model
                 </Button>
+              </div>
+            )}
+          </WithPermissions>
+        }
+      />
 
+      <SettingsBlock
+        title="Extraction behavior"
+        description="Tune when extraction runs and how much work it performs."
+        control={
+          <WithPermissions
+            permissions={{ memorySettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="w-80 space-y-2">
                 <ToggleField
                   label="Post-conversation extraction"
                   value={state.memoryExtractionEnabled}

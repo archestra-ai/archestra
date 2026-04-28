@@ -188,6 +188,7 @@ class MemoryExtractor {
                 5,
               ),
             }),
+            maxTokens: organization?.memoryExtractorMaxTokens ?? 800,
           });
           const parsedOutput = ExtractorOutputSchema.parse(extraction.object);
 

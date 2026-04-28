@@ -873,6 +873,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         }
                       }
                       try {
+                        const idleDelaySeconds =
+                          organization?.memoryIdleDelaySeconds ?? 300;
                         await taskQueueService.enqueue({
                           taskType: "memory_extract_candidates",
                           payload: {
@@ -881,6 +883,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             organizationId,
                             agentId,
                           },
+                          scheduledFor: new Date(
+                            Date.now() + idleDelaySeconds * 1000,
+                          ),
                         });
                         await ConversationModel.setMemoryExtractionStatus({
                           id: conversationId,

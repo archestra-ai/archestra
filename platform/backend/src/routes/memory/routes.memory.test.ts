@@ -1,5 +1,6 @@
 import MemoryItemModel from "@/models/memory-item";
 import MemoryTombstoneModel from "@/models/memory-tombstone";
+import OrganizationModel from "@/models/organization";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -351,5 +352,62 @@ describe("memory routes", () => {
 
     expect(rejectSource.statusCode).toBe(409);
     expect(rejectSource.body).toContain("tombstoned");
+  });
+
+  test("enforces memoryMaxContentLength from org settings on create and update", async () => {
+    // Default org limit is 500; content of exactly 500 chars must be accepted.
+    const exactLimit = "x".repeat(500);
+    const okCreate = await app.inject({
+      method: "POST",
+      url: "/api/memory",
+      payload: {
+        scopeType: "user",
+        scopeId: ownerUser.id,
+        kind: "preference",
+        content: exactLimit,
+      },
+    });
+    expect(okCreate.statusCode).toBe(200);
+
+    // One char over the default limit must be rejected with 400.
+    const overLimit = "x".repeat(501);
+    const tooLongCreate = await app.inject({
+      method: "POST",
+      url: "/api/memory",
+      payload: {
+        scopeType: "user",
+        scopeId: ownerUser.id,
+        kind: "preference",
+        content: overLimit,
+      },
+    });
+    expect(tooLongCreate.statusCode).toBe(400);
+    expect(tooLongCreate.body).toContain("too long");
+
+    // Raise the org limit to 1000 — content of 501 chars must now be accepted.
+    await OrganizationModel.patch(organizationId, { memoryMaxContentLength: 1000 });
+
+    const okAfterRaise = await app.inject({
+      method: "POST",
+      url: "/api/memory",
+      payload: {
+        scopeType: "user",
+        scopeId: ownerUser.id,
+        kind: "preference",
+        content: overLimit,
+      },
+    });
+    expect(okAfterRaise.statusCode).toBe(200);
+    const createdItem = okAfterRaise.json();
+
+    // PATCH with content over the raised limit must be rejected.
+    await OrganizationModel.patch(organizationId, { memoryMaxContentLength: 500 });
+    const tooLongPatch = await app.inject({
+      method: "PATCH",
+      url: `/api/memory/${createdItem.id}`,
+      payload: { content: overLimit },
+    });
+    expect(tooLongPatch.statusCode).toBe(400);
+    expect(tooLongPatch.body).toContain("too long");
   });
 });

@@ -11,7 +11,7 @@ import {
   MemoryReviewPolicyError,
   memoryReviewService,
 } from "@/memory/review/review-service";
-import { MemberModel, MemoryItemModel, TeamModel } from "@/models";
+import { MemberModel, MemoryItemModel, OrganizationModel, TeamModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -245,7 +245,7 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scopeType: MemoryScopeTypeSchema,
           scopeId: z.string(),
           kind: MemoryKindSchema,
-          content: z.string().min(1).max(500),
+          content: z.string().min(1).max(2000),
           policyFlags: z.array(MemoryPolicyFlagSchema).optional(),
           confidenceBand: MemoryConfidenceBandSchema.nullable().optional(),
           expiresAt: z.coerce.date().nullable().optional(),
@@ -263,10 +263,19 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
-      const [teamIds, member] = await Promise.all([
+      const [organization, teamIds, member] = await Promise.all([
+        OrganizationModel.getById(organizationId),
         TeamModel.getUserTeamIds(user.id),
         MemberModel.getByUserId(user.id, organizationId),
       ]);
+
+      const maxContentLength = organization?.memoryMaxContentLength ?? 500;
+      if (body.content.length > maxContentLength) {
+        throw new ApiError(
+          400,
+          `Memory content too long: max ${maxContentLength} characters`,
+        );
+      }
 
       let created: Awaited<ReturnType<typeof memoryReviewService.manualCreate>>;
       try {
@@ -312,7 +321,7 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Memory"],
         params: z.object({ id: z.string() }),
         body: z.object({
-          content: z.string().min(1).max(500).optional(),
+          content: z.string().min(1).max(2000).optional(),
           kind: MemoryKindSchema.optional(),
           expiresAt: z.coerce.date().nullable().optional(),
         }),
@@ -320,8 +329,9 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      const [item, teamIds, member] = await Promise.all([
+      const [item, organization, teamIds, member] = await Promise.all([
         MemoryItemModel.getById({ id, organizationId }),
+        OrganizationModel.getById(organizationId),
         TeamModel.getUserTeamIds(user.id),
         MemberModel.getByUserId(user.id, organizationId),
       ]);
@@ -341,6 +351,16 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         })
       ) {
         throw new ApiError(404, "Memory item not found");
+      }
+
+      if (body.content !== undefined) {
+        const maxContentLength = organization?.memoryMaxContentLength ?? 500;
+        if (body.content.length > maxContentLength) {
+          throw new ApiError(
+            400,
+            `Memory content too long: max ${maxContentLength} characters`,
+          );
+        }
       }
 
       // Drizzle's .set() handles partial updates; cast to satisfy the type contract

@@ -11,10 +11,10 @@ import {
 import { vi } from "vitest";
 import { beforeEach, describe, expect, it } from "@/test";
 
-const mockSentryCaptureMessage = vi.hoisted(() => vi.fn());
+const mockSentryCaptureException = vi.hoisted(() => vi.fn());
 
 vi.mock("@sentry/node", () => ({
-  captureMessage: mockSentryCaptureMessage,
+  captureException: mockSentryCaptureException,
 }));
 
 import {
@@ -24,7 +24,7 @@ import {
 } from "./errors";
 
 beforeEach(() => {
-  mockSentryCaptureMessage.mockClear();
+  mockSentryCaptureException.mockClear();
 });
 
 // =============================================================================
@@ -1430,7 +1430,7 @@ describe("mapProviderError - Fallback behavior", () => {
 // =============================================================================
 
 describe("mapProviderError - Sentry raw error capture", () => {
-  it("creates a Sentry issue event for rawErrorJson provider error logs", () => {
+  it("captures a Sentry exception event for rawErrorJson provider errors", () => {
     const error = {
       name: "AI_APICallError",
       statusCode: 500,
@@ -1445,8 +1445,11 @@ describe("mapProviderError - Sentry raw error capture", () => {
 
     mapProviderError(error, "openai");
 
-    expect(mockSentryCaptureMessage).toHaveBeenCalledWith(
-      "[ChatErrorMapper] rawErrorJson provider error",
+    expect(mockSentryCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "RawProviderError",
+        message: "Provider failed",
+      }),
       expect.objectContaining({
         level: "error",
         fingerprint: [

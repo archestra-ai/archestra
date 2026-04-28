@@ -11,6 +11,7 @@ export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
+export { default as ChatOpsThreadAgentOverrideModel } from "./chatops-thread-agent-override";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationChatErrorModel } from "./conversation-chat-error";

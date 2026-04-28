@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-04-23
+lastUpdated: 2026-04-27
 ---
 
 <!--
@@ -17,8 +17,33 @@ An agent can include:
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
 - one or more assigned tools
+- optional automatic tool assignment from matching MCP catalog labels
+- an optional search-and-run tool mode for hiding most tools from MCP `tools/list`
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
+
+## Tool Assignment Mode
+
+An agent has a tool assignment mode: **Manual** (default) or **Automatic**.
+
+In **Manual** mode, you pick each tool directly. In **Automatic** mode, the agent receives tools from MCP catalog entries that share at least one `key: value` label pair with the agent. For example, an agent labeled `department: finance` automatically receives tools from catalog items tagged `department: finance`.
+
+Use Automatic mode when labels already describe which MCP servers belong to a team, department, app, or environment and you want new matching catalog entries to be picked up without editing every agent.
+
+See [MCP Gateway - Tool Assignment Mode](/docs/platform-mcp-gateway#tool-assignment-mode) for the full behavior and constraints.
+
+## Search-and-Run Tool Mode
+
+By default, an agent exposes every assigned tool through MCP `tools/list`.
+
+For larger toolsets, you can switch the agent to **search-and-run tool mode**. In that mode, MCP clients only see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools. Those two tools are enabled implicitly by the mode and do not need normal tool assignment.
+
+- `search_tools` can still discover them
+- `run_tool` can still execute them
+
+Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+
+See [MCP Gateway - Search-and-Run Tool Mode](/docs/platform-mcp-gateway#search-and-run-tool-mode) for the MCP-client-facing behavior and the same mode on gateways.
 
 ## Invocation Paths
 

@@ -370,7 +370,7 @@ If your connector needs a migration (e.g., a new column), follow the standard Dr
 
 ## Testing
 
-Create `backend/src/knowledge-base/connectors/github/github-connector.test.ts`. Mock the external SDK or HTTP calls; test the three interface methods.
+Create a colocated test file next to the connector implementation, for example `backend/src/knowledge-base/connectors/<connector>/<connector>-connector.test.ts`. Mock the external SDK or HTTP calls; test the connector interface methods.
 
 Structure your test file with three `describe` blocks matching the interface:
 
@@ -381,22 +381,3 @@ Structure your test file with three `describe` blocks matching the interface:
 | `sync`           | Single-page results, pagination across multiple pages, incremental sync using checkpoint, label/filter exclusion, document metadata mapping, API errors propagate |
 
 Use `vi.mock()` to mock the external client library. See `backend/src/knowledge-base/connectors/jira/jira-connector.test.ts` for a complete example.
-
-## Reference Implementations
-
-| Connector    | Files                                                                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Jira         | `backend/src/knowledge-base/connectors/jira/jira-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/jira-config-fields.tsx`                                     |
-| Confluence   | `backend/src/knowledge-base/connectors/confluence/confluence-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/confluence-config-fields.tsx`                    |
-| GitHub       | `backend/src/knowledge-base/connectors/github/github-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`                               |
-| GitLab       | `backend/src/knowledge-base/connectors/gitlab/gitlab-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gitlab-config-fields.tsx`                               |
-| ServiceNow   | `backend/src/knowledge-base/connectors/servicenow/servicenow-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/servicenow-config-fields.tsx`                   |
-| Notion       | `backend/src/knowledge-base/connectors/notion/notion-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/notion-config-fields.tsx`                               |
-| SharePoint   | `backend/src/knowledge-base/connectors/sharepoint/sharepoint-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/sharepoint-config-fields.tsx`                   |
-| Google Drive | `backend/src/knowledge-base/connectors/gdrive/gdrive-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/gdrive-config-fields.tsx`                               |
-| Asana        | `backend/src/knowledge-base/connectors/asana/asana-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/asana-config-fields.tsx`                                 |
-| Dropbox      | `backend/src/knowledge-base/connectors/dropbox/dropbox-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/dropbox-config-fields.tsx`                             |
-| Linear      | `backend/src/knowledge-base/connectors/linear/linear-connector.ts`, `frontend/src/app/knowledge/knowledge-bases/_parts/linear-config-fields.tsx`                                  |
-
-The Jira connector is the best starting point -- it demonstrates both Cloud and Server API handling, ADF text extraction, comment filtering, and JQL-based incremental sync. The GitHub and GitLab connectors demonstrate using official SDKs (`@octokit/rest` and `@gitbeaker/rest`) with separate issue/PR sync passes and label filtering. The ServiceNow connector demonstrates using raw `fetch` calls against the ServiceNow Table API with offset-based pagination. The Google Drive connector demonstrates using the official `googleapis` SDK with service account / OAuth2 auth, recursive folder traversal, and Google Workspace file exports. The Linear connector demonstrates multi-entity incremental sync (issues plus optional projects/cycles) with resumable per-entity checkpoints.
-

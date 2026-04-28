@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
+import { ArchestraInternalErrorCode, BedrockErrorTypes } from "@shared";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
@@ -1729,6 +1730,25 @@ export const bedrockAdapterFactory: LLMProvider<
 
     // Use fetch-based client.converseStream() - returns events with __rawBytes already set
     return bedrockClient.converseStream(request.modelId, commandInput);
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // Bedrock returns ValidationException with per-model messages for
+    // context overflow: "Input is too long for requested model.",
+    // "prompt is too long: X tokens > Y maximum." (Claude on Bedrock),
+    // or "model_context_window_exceeded" on some Nova models. No structured
+    // code — read the SDK error's name + message.
+    if (!error || typeof error !== "object") return undefined;
+    const awsError = error as { name?: string; message?: string };
+    if (awsError.name !== BedrockErrorTypes.VALIDATION) return undefined;
+    const msg = awsError.message?.toLowerCase() ?? "";
+    if (
+      msg.includes("too long") ||
+      msg.includes("model_context_window_exceeded")
+    ) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

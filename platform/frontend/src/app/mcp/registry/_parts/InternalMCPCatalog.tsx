@@ -38,6 +38,7 @@ import {
   setOAuthMcpServerId,
   setOAuthPendingAfterEnvVars,
   setOAuthReturnUrl,
+  setOAuthScope,
   setOAuthServerType,
   setOAuthState,
   setOAuthTeamId,
@@ -84,6 +85,7 @@ import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
 } from "./remote-server-install-dialog";
+import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 
 export function InternalMCPCatalog({
   initialData,
@@ -144,6 +146,8 @@ export function InternalMCPCatalog({
   );
   // When true, install dialog hides the team selector (personal connection only)
   const [installPersonalOnly, setInstallPersonalOnly] = useState(false);
+  // When true, install dialog forces the organization-wide scope
+  const [installOrgOnly, setInstallOrgOnly] = useState(false);
 
   // Update URL when search query changes (debounced via DebouncedInput)
   const handleSearchChange = useCallback(
@@ -174,6 +178,10 @@ export function InternalMCPCatalog({
   const [reinstallServerTeamId, setReinstallServerTeamId] = useState<
     string | null
   >(null);
+  // Track the scope of the server being reinstalled (to pre-select scope)
+  const [reinstallServerScope, setReinstallServerScope] = useState<
+    McpServerInstallScope | undefined
+  >(undefined);
   // Track server ID for re-authentication (preserves tool assignments)
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
   const [detailsServerName, setDetailsServerName] = useState<string | null>(
@@ -401,6 +409,7 @@ export function InternalMCPCatalog({
     if (!options?.preserveInstallTarget) {
       setPreselectedTeamId(null);
       setInstallPersonalOnly(false);
+      setInstallOrgOnly(false);
     }
 
     const hasUserConfig =
@@ -426,6 +435,7 @@ export function InternalMCPCatalog({
     if (!options?.preserveInstallTarget) {
       setPreselectedTeamId(null);
       setInstallPersonalOnly(false);
+      setInstallOrgOnly(false);
     }
 
     // Check if this local server requires OAuth authentication
@@ -503,16 +513,19 @@ export function InternalMCPCatalog({
     return promptedEnvVars.length === 0 && promptableUserConfig.length === 0;
   };
 
-  // Install directly without opening a dialog (works for both personal and shared)
+  // Install directly without opening a dialog (works for personal, team, and org)
   const handleDirectInstall = async (
     catalogItem: CatalogItem,
-    teamId?: string,
+    target?: { teamId?: string; scope?: McpServerInstallScope },
   ) => {
     setInstallingItemId(catalogItem.id);
+    const scope: McpServerInstallScope =
+      target?.scope ?? (target?.teamId ? "team" : "personal");
     const result = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      ...(teamId && { teamId }),
+      scope,
+      ...(scope === "team" && target?.teamId ? { teamId: target.teamId } : {}),
       dontShowToast: true,
     });
 
@@ -555,9 +568,28 @@ export function InternalMCPCatalog({
     teamId: string,
   ) => {
     if (canDirectInstall(catalogItem)) {
-      handleDirectInstall(catalogItem, teamId);
+      handleDirectInstall(catalogItem, { teamId, scope: "team" });
     } else {
       setPreselectedTeamId(teamId);
+      if (catalogItem.serverType === "local") {
+        handleInstallLocalServer(catalogItem, {
+          preserveInstallTarget: true,
+        });
+      } else {
+        handleInstallRemoteServer(catalogItem, false, {
+          preserveInstallTarget: true,
+        });
+      }
+    }
+  };
+
+  // Add organization connection: skip dialog if no config needed, otherwise
+  // open dialog with scope locked to org.
+  const handleAddOrgConnection = (catalogItem: CatalogItem) => {
+    if (canDirectInstall(catalogItem)) {
+      handleDirectInstall(catalogItem, { scope: "org" });
+    } else {
+      setInstallOrgOnly(true);
       if (catalogItem.serverType === "local") {
         handleInstallLocalServer(catalogItem, {
           preserveInstallTarget: true,
@@ -579,7 +611,9 @@ export function InternalMCPCatalog({
     await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
-      teamId: result.teamId ?? undefined,
+      scope: result.scope,
+      teamId:
+        result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
@@ -663,6 +697,7 @@ export function InternalMCPCatalog({
       setLocalServerCatalogItem(null);
       setReinstallServerId(null);
       setReinstallServerTeamId(null);
+      setReinstallServerScope(undefined);
 
       const serverIdToReinstall = reinstallServerId;
       try {
@@ -699,7 +734,11 @@ export function InternalMCPCatalog({
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
       isByosVault: installResult.isByosVault,
-      teamId: installResult.teamId ?? undefined,
+      scope: installResult.scope,
+      teamId:
+        installResult.scope === "team"
+          ? (installResult.teamId ?? undefined)
+          : undefined,
       serviceAccount: installResult.serviceAccount,
       dontShowToast: true,
     });
@@ -747,7 +786,9 @@ export function InternalMCPCatalog({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...credentialPayload,
-      teamId: result.teamId ?? undefined,
+      scope: result.scope,
+      teamId:
+        result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
     setInstallingItemId(null);
   };
@@ -765,7 +806,8 @@ export function InternalMCPCatalog({
       // Store state in session storage for the callback
       setOAuthState(state);
       setOAuthCatalogId(selectedCatalogItem.id);
-      setOAuthTeamId(result.teamId ?? null);
+      setOAuthTeamId(result.scope === "team" ? (result.teamId ?? null) : null);
+      setOAuthScope(result.scope);
 
       // If re-authenticating via OAuth, store reauth context
       if (reauthServerId) {
@@ -883,6 +925,10 @@ export function InternalMCPCatalog({
         setLocalServerCatalogItem(catalogItem);
         setReinstallServerId(installedServer.id);
         setReinstallServerTeamId(installedServer.teamId ?? null);
+        setReinstallServerScope(
+          (installedServer as unknown as { scope?: McpServerInstallScope })
+            .scope,
+        );
         openDialog("local-install");
       } else {
         // No prompted env vars - still confirm before reinstalling
@@ -1146,6 +1192,7 @@ export function InternalMCPCatalog({
                     onAddSharedConnection={(teamId) =>
                       handleAddSharedConnection(item, teamId)
                     }
+                    onAddOrgConnection={() => handleAddOrgConnection(item)}
                     isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                   />
                 );
@@ -1203,6 +1250,7 @@ export function InternalMCPCatalog({
                     onAddSharedConnection={(teamId) =>
                       handleAddSharedConnection(item, teamId)
                     }
+                    onAddOrgConnection={() => handleAddOrgConnection(item)}
                     isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                   />
                 );
@@ -1303,6 +1351,7 @@ export function InternalMCPCatalog({
           setReauthServerId(null);
           setPreselectedTeamId(null);
           setInstallPersonalOnly(false);
+          setInstallOrgOnly(false);
         }}
         onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
@@ -1310,6 +1359,7 @@ export function InternalMCPCatalog({
         isReauth={!!reauthServerId}
         preselectedTeamId={preselectedTeamId}
         personalOnly={installPersonalOnly}
+        orgOnly={installOrgOnly}
       />
 
       <OAuthConfirmationDialog
@@ -1327,10 +1377,12 @@ export function InternalMCPCatalog({
           setReauthServerId(null);
           setPreselectedTeamId(null);
           setInstallPersonalOnly(false);
+          setInstallOrgOnly(false);
         }}
         catalogId={selectedCatalogItem?.id}
         preselectedTeamId={preselectedTeamId}
         personalOnly={installPersonalOnly}
+        orgOnly={installOrgOnly}
       />
 
       <ReinstallConfirmationDialog
@@ -1352,12 +1404,14 @@ export function InternalMCPCatalog({
           setNoAuthCatalogItem(null);
           setPreselectedTeamId(null);
           setInstallPersonalOnly(false);
+          setInstallOrgOnly(false);
         }}
         onInstall={handleNoAuthConfirm}
         catalogItem={noAuthCatalogItem}
         isInstalling={installMutation.isPending}
         preselectedTeamId={preselectedTeamId}
         personalOnly={installPersonalOnly}
+        orgOnly={installOrgOnly}
       />
 
       {localServerCatalogItem && (
@@ -1368,9 +1422,11 @@ export function InternalMCPCatalog({
             setLocalServerCatalogItem(null);
             setReinstallServerId(null);
             setReinstallServerTeamId(null);
+            setReinstallServerScope(undefined);
             setReauthServerId(null);
             setPreselectedTeamId(null);
             setInstallPersonalOnly(false);
+            setInstallOrgOnly(false);
           }}
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
@@ -1381,9 +1437,11 @@ export function InternalMCPCatalog({
           }
           isReinstall={!!reinstallServerId}
           existingTeamId={reinstallServerTeamId}
+          existingScope={reinstallServerScope}
           isReauth={!!reauthServerId}
           preselectedTeamId={preselectedTeamId}
           personalOnly={installPersonalOnly}
+          orgOnly={installOrgOnly}
         />
       )}
 
@@ -1405,6 +1463,13 @@ export function InternalMCPCatalog({
             );
             if (!catalogItem) return;
             handleAddSharedConnection(catalogItem, teamId);
+          }}
+          onAddOrgConnection={() => {
+            const catalogItem = catalogItems?.find(
+              (item) => item.id === manageCatalogId,
+            );
+            if (!catalogItem) return;
+            handleAddOrgConnection(catalogItem);
           }}
         />
       )}

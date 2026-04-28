@@ -97,6 +97,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           const installResponse = await installMcpServer(request, {
             name: "Test Context7 Remote Server",
             catalogId: catalogId,
+            scope: "team",
             teamId: defaultTeam.id,
           });
           return installResponse.json();
@@ -195,6 +196,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
           const installResponse = await installMcpServer(request, {
             name: catalogItem.name,
             catalogId: catalogItem.id,
+            scope: "team",
             teamId: defaultTeam.id,
             environmentValues: {
               ARCHESTRA_TEST: "e2e-test-value",
@@ -290,6 +292,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const installResponse = await installMcpServer(request, {
           name: "Test Context7 Docker Server",
           catalogId: catalogId,
+          scope: "team",
           teamId: defaultTeam.id,
         });
         const server = await installResponse.json();

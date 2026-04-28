@@ -23,6 +23,7 @@ export default function ConnectionPage() {
     organization?.connectionDefaultMcpGatewayId ?? null;
   const adminDefaultLlmProxyId =
     organization?.connectionDefaultLlmProxyId ?? null;
+  const adminDefaultClientId = organization?.connectionDefaultClientId ?? null;
   // Mirror the fallback chain ConnectionFlow uses for the MCP gateway so the
   // Exposed Servers card reflects the same gateway the rest of the page is
   // scoped to. URL param wins so deep links render the right servers.
@@ -45,6 +46,7 @@ export default function ConnectionPage() {
         defaultLlmProxyId={defaultLlmProxy?.id}
         adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
         adminDefaultLlmProxyId={adminDefaultLlmProxyId}
+        adminDefaultClientId={adminDefaultClientId}
         shownClientIds={organization?.connectionShownClientIds ?? null}
         shownProviders={getShownProviders(organization)}
       />

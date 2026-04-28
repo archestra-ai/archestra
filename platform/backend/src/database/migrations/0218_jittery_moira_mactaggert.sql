@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "is_personal_gateway" boolean DEFAULT false NOT NULL;

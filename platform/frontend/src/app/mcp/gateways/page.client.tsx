@@ -141,6 +141,12 @@ function McpGateways({
     excludeAuthorIds: excludeAuthorIdsFromUrl
       ? excludeAuthorIdsFromUrl.split(",")
       : undefined,
+    excludeOtherPersonalAgents:
+      scopeFromUrl !== "personal" &&
+      !authorIdsFromUrl &&
+      !excludeAuthorIdsFromUrl
+        ? true
+        : undefined,
     labels: labelsFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -429,7 +435,7 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter />
+                <AgentScopeFilter ownerLabelPlural="MCP gateways" />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint

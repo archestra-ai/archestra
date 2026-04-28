@@ -4,6 +4,7 @@
  * vLLM exposes an OpenAI-compatible API, so this adapter is largely based on the OpenAI adapter.
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
  */
+import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -1198,6 +1199,20 @@ export const vllmAdapterFactory: LLMProvider<
         }
       },
     };
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // vLLM returns `type: "BadRequestError"` with no structured code for
+    // context overflow; the signal is the OpenAI-style "maximum context
+    // length" phrasing in the message.
+    const message: unknown = get(error, "error.message");
+    if (
+      typeof message === "string" &&
+      message.toLowerCase().includes("maximum context length")
+    ) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

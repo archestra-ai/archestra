@@ -5,6 +5,8 @@ import {
   GithubConfigSchema,
   GitlabConfigSchema,
   JiraConfigSchema,
+  SalesforceCheckpointSchema,
+  SalesforceConfigSchema,
 } from "./knowledge-connector";
 
 describe("knowledge-connector schemas", () => {
@@ -227,6 +229,57 @@ describe("knowledge-connector schemas", () => {
       if (result.type === "confluence") {
         expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
       }
+    });
+  });
+
+  describe("Salesforce schemas", () => {
+    test("applies default loginUrl when omitted", () => {
+      const result = SalesforceConfigSchema.parse({
+        type: "salesforce",
+      });
+      expect(result.loginUrl).toBe("https://login.salesforce.com");
+    });
+
+    test("normalizes salesforce loginUrl and strips trailing slash", () => {
+      const result = SalesforceConfigSchema.parse({
+        type: "salesforce",
+        loginUrl: "login.salesforce.com/",
+      });
+      expect(result.loginUrl).toBe("https://login.salesforce.com");
+    });
+
+    test("accepts advancedObjectConfigJson when it is valid JSON object text", () => {
+      const result = SalesforceConfigSchema.safeParse({
+        type: "salesforce",
+        advancedObjectConfigJson: JSON.stringify({
+          Account: {
+            fields: ["Id", "Name"],
+            associations: { Contact: ["Id", "Email"] },
+          },
+        }),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    test("rejects advancedObjectConfigJson when not valid JSON object text", () => {
+      const result = SalesforceConfigSchema.safeParse({
+        type: "salesforce",
+        advancedObjectConfigJson: "[1,2,3]",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    test("parses objectCursorMap in salesforce checkpoint schema", () => {
+      const result = SalesforceCheckpointSchema.parse({
+        type: "salesforce",
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+        objectCursorMap: {
+          Account: "2026-01-01T00:00:00.000Z",
+          Contact: "2026-01-01T01:00:00.000Z",
+        },
+      });
+      expect(result.objectCursorMap?.Account).toBe("2026-01-01T00:00:00.000Z");
+      expect(result.objectCursorMap?.Contact).toBe("2026-01-01T01:00:00.000Z");
     });
   });
 });

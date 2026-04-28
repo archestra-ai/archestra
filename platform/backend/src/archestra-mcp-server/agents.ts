@@ -16,6 +16,7 @@ import {
 import {
   AgentScopeSchema,
   InsertAgentSchemaBase,
+  ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
@@ -145,6 +146,9 @@ const EditAgentToolArgsSchema = z
           .optional(),
         scope: AgentScopeSchema.optional().describe(
           "Updated visibility scope for the agent.",
+        ),
+        toolExposureMode: ToolExposureModeSchema.optional().describe(
+          "How tools should be exposed to MCP clients and models.",
         ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)

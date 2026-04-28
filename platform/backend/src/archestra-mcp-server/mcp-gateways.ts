@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import {
   AgentScopeSchema,
+  ToolAssignmentModeSchema,
   ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -26,6 +27,9 @@ import { defineArchestraTool, defineArchestraTools } from "./helpers";
 const CreateMcpGatewayToolArgsSchema = CreateBaseToolArgsSchema.extend({
   knowledgeBaseIds: KnowledgeBaseIdsToolInputSchema.optional(),
   connectorIds: ConnectorIdsToolInputSchema.optional(),
+  toolAssignmentMode: ToolAssignmentModeSchema.optional().describe(
+    "How tools are assigned to this gateway. 'manual' (default) lets an admin pick tools individually. 'automatic' derives the gateway's tools from catalog entries whose labels match the gateway's labels (key-value pairs, OR semantics).",
+  ),
 }).strict();
 
 const GetMcpGatewayToolArgsSchema = GetResourceToolArgsSchema.extend({
@@ -62,6 +66,9 @@ const EditMcpGatewayToolArgsSchema = z
     ),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be exposed to MCP clients and models.",
+    ),
+    toolAssignmentMode: ToolAssignmentModeSchema.optional().describe(
+      "How tools are assigned to this gateway. 'manual' lets an admin pick tools individually. 'automatic' derives the gateway's tools from catalog entries whose labels match the gateway's labels (key-value pairs, OR semantics).",
     ),
     teams: z
       .array(UuidIdSchema)

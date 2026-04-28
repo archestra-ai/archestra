@@ -302,6 +302,7 @@ Required RBAC permission: `mcpGateway:create`
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be exposed to MCP clients and models. Use 'search_and_run_only' to expose only search_tools and run_tool while keeping the full assigned tool set searchable and runnable. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
 | `connectorIds` | `string[]` | No | Knowledge connector IDs to assign directly to the agent. Use get_knowledge_connectors first when you need to look up IDs by name. |
+| `toolAssignmentMode` | `"automatic" \| "manual"` | No | How tools are assigned to this gateway. 'manual' (default) lets an admin pick tools individually. 'automatic' derives the gateway's tools from catalog entries whose labels match the gateway's labels (key-value pairs, OR semantics). |
 
 
 #### get_mcp_gateway
@@ -361,6 +362,7 @@ Required RBAC permission: `mcpGateway:update`
 | `name` | `string` | No | New name for the MCP gateway. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the MCP gateway. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be exposed to MCP clients and models. |
+| `toolAssignmentMode` | `"automatic" \| "manual"` | No | How tools are assigned to this gateway. 'manual' lets an admin pick tools individually. 'automatic' derives the gateway's tools from catalog entries whose labels match the gateway's labels (key-value pairs, OR semantics). |
 | `teams` | `string[]` | No | Replace the teams attached to a team-scoped MCP gateway. |
 | `knowledgeBaseIds` | `string[]` | No | Replace the MCP gateway's assigned knowledge bases with this set. |
 | `connectorIds` | `string[]` | No | Replace the MCP gateway's directly assigned knowledge connectors with this set. |

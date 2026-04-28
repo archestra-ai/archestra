@@ -209,9 +209,6 @@ export function ChatPageContent({
   const { data: canReadLlmModels } = useHasPermissions({
     llmModel: ["read"],
   });
-  const { data: canSeeProviderSettings } = useHasPermissions({
-    chatProviderSettings: ["enable"],
-  });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
   });

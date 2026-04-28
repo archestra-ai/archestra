@@ -370,6 +370,7 @@ describe.skip("AgentDialog", () => {
           identityProviderId: null,
           builtInAgentConfig: null,
           passthroughHeaders: null,
+          toolAssignmentMode: "manual",
           incomingEmailEnabled: false,
           incomingEmailSecurityMode: "public",
           incomingEmailAllowedDomain: null,

@@ -1552,8 +1552,22 @@
     {
       "idx": 221,
       "version": "7",
-      "when": 1777313227810,
-      "tag": "0221_perpetual_scarlet_spider",
+      "when": 1777326771525,
+      "tag": "0221_nebulous_mesmero",
+      "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1777340175999,
+      "tag": "0222_large_roland_deschain",
+      "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "7",
+      "when": 1777364365774,
+      "tag": "0223_hot_giant_man",
       "breakpoints": true
     }
   ]

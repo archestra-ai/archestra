@@ -306,7 +306,7 @@ setup("authenticate as editor", async ({ page }) => {
  */
 const BASIC_USER_PERMISSION = {
   agent: ["read"],
-  chat: ["read", "create", "update", "delete"],
+  chat: ["read"],
   llmProviderApiKey: ["read"],
   llmModel: ["read"],
 } as const;

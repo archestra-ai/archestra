@@ -120,6 +120,18 @@ Okta is an enterprise identity management platform. Archestra supports Okta OIDC
 
 Archestra does not support Okta DPoP for SSO clients. Disable **Require Demonstrating Proof of Possession (DPoP) header in token requests** in the Okta app integration.
 
+#### Okta OIN Fields
+
+If you are configuring an Okta Integration Network (OIN) app with integration variables, use:
+
+| Okta field | Value |
+| --- | --- |
+| Redirect URI | `https://{{app.baseurl}}/api/auth/sso/callback/Okta` |
+| Initiate login URI | `https://{{app.baseurl}}/auth/sign-in` |
+| Post-logout URI | `https://{{app.baseurl}}/auth/sign-in` |
+
+For a manually configured Okta app, replace `{{app.baseurl}}` with your Archestra external domain.
+
 #### Configuration Steps
 
 1. In the Okta Admin Console, go to **Applications > Applications**.
@@ -138,28 +150,37 @@ Archestra does not support Okta DPoP for SSO clients. Disable **Require Demonstr
    ```
 
 6. Assign the users or groups that should access Archestra.
-7. Save the Okta app integration, then copy the **Client ID** and **Client Secret**.
-8. In Archestra, go to **Settings > Identity Providers** and click **Enable** on the Okta card.
-9. Enter your Okta issuer URL, for example:
+7. Save the Okta app integration.
+8. On the app's **Sign On** tab, copy the **Client ID** and **Client Secret**. Keep the Client Secret private and do not commit it to version control.
+9. Find your Okta org issuer in the upper-right profile menu of the Okta Admin Console or from the Admin Console browser URL. It usually looks like:
 
    ```
    https://your-org.okta.com
    ```
 
-10. Enter your allowed email domains, Client ID, and Client Secret.
-11. Keep the discovery endpoint empty unless you need a custom value. Archestra derives it from the issuer as:
+10. In Archestra, go to **Settings > Identity Providers** and click **Enable** on the Okta card.
+11. Enter your Okta issuer URL, for example:
+
+   ```
+   https://your-org.okta.com
+   ```
+
+12. Enter your allowed email domains, Client ID, and Client Secret.
+13. Keep the discovery endpoint empty unless you need a custom value. Archestra derives it from the issuer as:
 
     ```
     https://your-org.okta.com/.well-known/openid-configuration
     ```
 
-12. Click **Create Provider**.
+14. Click **Create Provider**.
 
 If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
 
 #### SP-Initiated SSO
 
 Users can start sign-in from the Archestra sign-in page by selecting **Sign in with Okta**. After Okta authenticates the user, Archestra checks the returned email against **Allowed Email Domains**, provisions the user if needed, and opens the app.
+
+To test, use a private browser window with a user who is assigned to the Okta app and whose email domain is allowed in Archestra.
 
 #### Troubleshoot
 

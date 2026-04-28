@@ -88,8 +88,14 @@ export function MemorySettings() {
       state,
       savedStateRef.current as MemorySettingsState,
     );
-    await updateMemorySettings.mutateAsync(payload);
-    savedStateRef.current = { ...state };
+    const updatedOrganization = await updateMemorySettings.mutateAsync(payload);
+    if (!updatedOrganization) {
+      return;
+    }
+
+    const nextSavedState = resolveInitialState(updatedOrganization);
+    savedStateRef.current = nextSavedState;
+    setState(nextSavedState);
   };
 
   const handleCancel = () => {

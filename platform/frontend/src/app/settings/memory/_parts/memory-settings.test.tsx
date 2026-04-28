@@ -1,6 +1,6 @@
 "use client";
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemorySettings } from "./memory-settings";
@@ -20,10 +20,16 @@ vi.mock("@/components/llm-model-select", () => ({
   LlmModelSearchableSelect: ({
     placeholder,
     value,
+    onValueChange,
   }: {
     placeholder: string;
     value: string;
-  }) => <div>{value || placeholder}</div>,
+    onValueChange: (value: string) => void;
+  }) => (
+    <button type="button" onClick={() => onValueChange("gpt-4.1")}>
+      {value || placeholder}
+    </button>
+  ),
 }));
 
 vi.mock("@/components/llm-provider-options", () => ({
@@ -68,8 +74,20 @@ vi.mock("@/components/settings/settings-block", () => ({
   SettingsSectionStack: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  SettingsSaveBar: ({ hasChanges }: { hasChanges: boolean }) =>
-    hasChanges ? <div>Unsaved changes</div> : null,
+  SettingsSaveBar: ({
+    hasChanges,
+    onSave,
+  }: {
+    hasChanges: boolean;
+    onSave: () => Promise<void>;
+  }) => (
+    <div>
+      {hasChanges ? <div>Unsaved changes</div> : null}
+      <button type="button" onClick={() => void onSave()}>
+        Save
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -176,5 +194,21 @@ describe("MemorySettings", () => {
     expect(
       screen.getByText("Post-conversation extraction"),
     ).toBeInTheDocument();
+  });
+
+  it("keeps unsaved changes when save request fails", async () => {
+    mutateAsyncMock.mockResolvedValueOnce(null);
+    render(<MemorySettings />);
+
+    fireEvent.click(screen.getByText("gpt-4.1-mini"));
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Save"));
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledOnce();
+    });
+
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 });

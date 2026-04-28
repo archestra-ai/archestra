@@ -306,18 +306,19 @@ setup("authenticate as editor", async ({ page }) => {
  */
 const BASIC_USER_PERMISSION = {
   agent: ["read"],
+  chat: ["read", "create", "update", "delete"],
   llmProviderApiKey: ["read"],
   llmModel: ["read"],
 } as const;
 
 /**
- * Look up a custom role by display name. Returns the role identifier
- * (the immutable, slug-style `role` field) if it exists, else null.
+ * Look up a custom role by display name. Returns the role's `id` (base62,
+ * used by PUT/DELETE) and `role` (slug, used by invitations) if found.
  */
-async function findCustomRoleIdentifier(
+async function findCustomRole(
   request: APIRequestContext,
   name: string,
-): Promise<string | null> {
+): Promise<{ id: string; role: string } | null> {
   const response = await request.get(
     `${UI_BASE_URL}/api/roles?name=${encodeURIComponent(name)}`,
     { headers: { Origin: UI_BASE_URL } },
@@ -327,30 +328,51 @@ async function findCustomRoleIdentifier(
   }
   const body = await response.json();
   const match = body?.data?.find(
-    (role: { name: string; role: string }) => role.name === name,
+    (role: { name: string; id: string; role: string }) => role.name === name,
   );
-  return match?.role ?? null;
+  if (!match?.id || !match?.role) {
+    return null;
+  }
+  return { id: match.id, role: match.role };
 }
 
 /**
- * Create the basic-user custom role if it does not already exist.
- * Returns the role identifier suitable for use in invitations.
+ * Create or refresh the basic-user custom role. Returns the role slug
+ * (the value invitations require). Always rewrites the permission set so
+ * that prior runs with a stale set cannot poison this run.
  */
 async function ensureBasicUserRole(
   request: APIRequestContext,
 ): Promise<string> {
-  const existing = await findCustomRoleIdentifier(
-    request,
-    BASIC_USER_ROLE_NAME,
-  );
+  const description =
+    "Slim role used by chat-permissions e2e regression test";
+  const existing = await findCustomRole(request, BASIC_USER_ROLE_NAME);
+
   if (existing) {
-    return existing;
+    const updateResponse = await request.put(
+      `${UI_BASE_URL}/api/roles/${existing.id}`,
+      {
+        data: {
+          name: BASIC_USER_ROLE_NAME,
+          description,
+          permission: BASIC_USER_PERMISSION,
+        },
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+    if (!updateResponse.ok()) {
+      const errorText = await updateResponse.text();
+      throw new Error(
+        `Failed to refresh basic-user role permissions (${updateResponse.status()}): ${errorText}`,
+      );
+    }
+    return existing.role;
   }
 
   const response = await request.post(`${UI_BASE_URL}/api/roles`, {
     data: {
       name: BASIC_USER_ROLE_NAME,
-      description: "Slim role used by chat-permissions e2e regression test",
+      description,
       permission: BASIC_USER_PERMISSION,
     },
     headers: { Origin: UI_BASE_URL },
@@ -443,26 +465,25 @@ setup("authenticate as basic-user (custom role)", async ({ page }) => {
     BASIC_USER_PASSWORD,
   );
 
+  // Always sign in as admin first so we can refresh the basic-user role's
+  // permission set on every run. Without this, prior runs that created the
+  // role with a stale permission set would persist and break the test.
+  await sleep(100);
+  const adminSignedIn = await signInUser(
+    page.request,
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+  );
+  expect(adminSignedIn, "Admin sign-in failed for basic-user setup").toBe(true);
+
+  // Establish cookie context with active organization
+  await page.goto(`${UI_BASE_URL}/chat`);
+  await page.waitForLoadState("domcontentloaded");
+
+  // Ensure the custom role exists with the current permission set
+  const basicUserRoleIdentifier = await ensureBasicUserRole(page.request);
+
   if (!basicUserExists) {
-    await sleep(100);
-
-    // Sign in as admin to provision the custom role and invitation
-    const adminSignedIn = await signInUser(
-      page.request,
-      ADMIN_EMAIL,
-      ADMIN_PASSWORD,
-    );
-    expect(adminSignedIn, "Admin sign-in failed for basic-user setup").toBe(
-      true,
-    );
-
-    // Establish cookie context with active organization
-    await page.goto(`${UI_BASE_URL}/chat`);
-    await page.waitForLoadState("domcontentloaded");
-
-    // Ensure the custom role exists (idempotent across re-runs)
-    const basicUserRoleIdentifier = await ensureBasicUserRole(page.request);
-
     // Invite basic user with the custom role identifier
     const invitationId = await createInvitation(
       page.request,
@@ -479,6 +500,8 @@ setup("authenticate as basic-user (custom role)", async ({ page }) => {
       invitationId,
     );
   } else {
+    await signOut(page.request);
+
     const signedIn = await signInUser(
       page.request,
       BASIC_USER_EMAIL,

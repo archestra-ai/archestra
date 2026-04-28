@@ -10,6 +10,10 @@ lastUpdated: 2026-04-29
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
+<p align="center">
+  <img src="/docs/platform-memory-flow.webp" alt="Durable Memory Flow (Rollout 1)" style="width: 100%; max-width: 1667px;" />
+</p>
+
 > [!NOTE]
 > Preview feature (rollout 1). Automatic extraction and prompt-time injection are **disabled by default** and activate only for `user` scope when explicitly enabled in **Settings → Memory → Settings**.
 

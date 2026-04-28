@@ -1,3 +1,4 @@
+import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -1098,6 +1099,24 @@ export const minimaxAdapterFactory: LLMProvider<
       ...request,
       stream: true,
     });
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // MiniMax's Anthropic-compatible path surfaces context overflow only via
+    // the message (e.g. "context window exceeds limit (2013)"); the native
+    // path uses base_resp.status_code = 1039.
+    const nativeStatus = get(error, "base_resp.status_code");
+    if (nativeStatus === 1039) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    const message: unknown = get(error, "error.message");
+    if (
+      typeof message === "string" &&
+      message.toLowerCase().includes("context window exceeds limit")
+    ) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

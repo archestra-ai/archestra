@@ -330,6 +330,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       body: {
         name: newCatalogItem.name,
         catalogId: newCatalogItem.id,
+        scope: "team",
         teamId: defaultTeamId,
       },
     });

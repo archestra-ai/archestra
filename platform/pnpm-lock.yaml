@@ -39,7 +39,7 @@ overrides:
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
   undici: 7.24.5
-  '@xmldom/xmldom': '>=0.8.12'
+  '@xmldom/xmldom': '>=0.9.10'
   path-to-regexp: '>=8.4.0'
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
@@ -5659,8 +5659,8 @@ packages:
     resolution: {integrity: sha512-CJDxIgE5I0FH+ttq/Fxy6nRpxP70+e2O048EPe85J2use3XKdatVM7dDVvFNjQudd9B49NPoZ+8PG49zj4Er8Q==}
     engines: {node: '>= 16'}
 
-  '@xmldom/xmldom@0.9.9':
-    resolution: {integrity: sha512-qycIHAucxy/LXAYIjmLmtQ8q9GPnMbnjG1KXhWm9o5sCr6pOYDATkMPiTNa6/v8eELyqOQ2FsEqeoFYmgv/gJg==}
+  '@xmldom/xmldom@0.9.10':
+    resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
 
   '@xterm/addon-fit@0.11.0':
@@ -10252,7 +10252,7 @@ snapshots:
 
   '@authenio/xml-encryption@2.0.2':
     dependencies:
-      '@xmldom/xmldom': 0.9.9
+      '@xmldom/xmldom': 0.9.10
       escape-html: 1.0.3
       xpath: 0.0.32
 
@@ -15684,7 +15684,7 @@ snapshots:
 
   '@xmldom/is-dom-node@1.0.1': {}
 
-  '@xmldom/xmldom@0.9.9': {}
+  '@xmldom/xmldom@0.9.10': {}
 
   '@xterm/addon-fit@0.11.0': {}
 
@@ -18015,7 +18015,7 @@ snapshots:
 
   mammoth@1.12.0:
     dependencies:
-      '@xmldom/xmldom': 0.9.9
+      '@xmldom/xmldom': 0.9.10
       argparse: 1.0.10
       base64-js: 1.5.1
       bluebird: 3.4.7
@@ -19537,7 +19537,7 @@ snapshots:
   samlify@2.10.2:
     dependencies:
       '@authenio/xml-encryption': 2.0.2
-      '@xmldom/xmldom': 0.9.9
+      '@xmldom/xmldom': 0.9.10
       camelcase: 6.3.0
       node-forge: 1.4.0
       node-rsa: 1.1.1
@@ -20476,7 +20476,7 @@ snapshots:
   xml-crypto@6.1.2:
     dependencies:
       '@xmldom/is-dom-node': 1.0.1
-      '@xmldom/xmldom': 0.9.9
+      '@xmldom/xmldom': 0.9.10
       xpath: 0.0.33
 
   xml-escape@1.1.0: {}

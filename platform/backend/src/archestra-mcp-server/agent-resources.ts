@@ -12,7 +12,12 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import type { Agent, AgentScope, ToolExposureMode } from "@/types";
+import type {
+  Agent,
+  AgentScope,
+  ToolAssignmentMode,
+  ToolExposureMode,
+} from "@/types";
 import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
@@ -193,6 +198,7 @@ export async function handleCreateResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    toolAssignmentMode?: ToolAssignmentMode;
   },
 >(params: {
   args: TArgs;
@@ -268,6 +274,9 @@ export async function handleCreateResource<
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.toolAssignmentMode !== undefined) {
+      createParams.toolAssignmentMode = args.toolAssignmentMode;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -438,6 +447,7 @@ export async function handleEditResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    toolAssignmentMode?: ToolAssignmentMode;
   },
 >(params: {
   args: TArgs;
@@ -494,6 +504,9 @@ export async function handleEditResource<
     if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.toolAssignmentMode !== undefined) {
+      updateData.toolAssignmentMode = args.toolAssignmentMode;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

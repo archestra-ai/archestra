@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-04-20
+lastUpdated: 2026-04-27
 ---
 
 <!--
@@ -72,8 +72,14 @@ When assigning tools to an Agent or MCP Gateway, you can pin a specific installa
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 
+## Labels
+
+Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and act as a selector for [MCP Gateways](/docs/platform-mcp-gateway#tool-assignment-mode) in **Automatic** tool assignment mode. A gateway in Automatic mode receives every tool from every registry entry that shares at least one `key: value` label pair with the gateway.
+
+For example, every catalog entry tagged `department: finance` is automatically wired into a gateway tagged `department: finance`. Adding or removing labels on a registry entry reconciles the affected gateways in sync.
+
 ## From Registry To Gateway
 
 The registry does not expose tools to clients by itself. After a server is installed, Archestra discovers the tools exposed by that installed connection. Those tools become usable after they are assigned to an Agent or MCP Gateway.
 
-For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries, then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.
+For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries (or use Automatic tool assignment mode to derive them from labels), then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.

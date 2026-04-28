@@ -57,6 +57,7 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(mcpClient.executeToolCall).mockReset();
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
 });
 
@@ -636,6 +637,102 @@ describe("executeMcpTool error handling", () => {
 });
 
 describe("chat-mcp-client tool caching", () => {
+  test("passes token auth context when chat executes archestra run_tool", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Chat Run Tool Agent",
+    });
+
+    const conversationId = "conversation-1";
+    const cacheKey = chatClient.__test.getCacheKey(
+      agent.id,
+      user.id,
+      conversationId,
+    );
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({
+        tools: [
+          {
+            name: getArchestraToolFullName("run_tool"),
+            description: "Run tool",
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string" },
+                tool_args: { type: "object" },
+              },
+              required: ["tool_name"],
+            },
+          },
+        ],
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      content: [{ type: "text", text: "Sentry organizations" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      conversationId,
+    });
+
+    const runTool = tools[getArchestraToolFullName("run_tool")];
+    expect(runTool).toBeDefined();
+
+    const result = await runTool.execute?.(
+      {
+        tool_name: "sentry__find_organizations",
+        tool_args: {},
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
+      { messages: [] } as any,
+    );
+
+    expect(result).toBe("Sentry organizations");
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "sentry__find_organizations",
+        arguments: {},
+      }),
+      agent.id,
+      expect.objectContaining({
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+        teamId: null,
+        isOrganizationToken: false,
+        tokenId: expect.any(String),
+      }),
+      { conversationId },
+    );
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+  });
+
   test("reuses cached tool definitions for the same agent and user", async ({
     makeAgent,
     makeUser,

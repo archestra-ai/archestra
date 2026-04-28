@@ -198,6 +198,37 @@ describe("filterMcpServersAssignableToTarget", () => {
     getUserTeamIdsSpy.mockRestore();
     isUserInAnyTeamSpy.mockRestore();
   });
+
+  test("includes team-scoped servers when filtering for an org-scoped target", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const requester = await makeUser();
+    const team = await makeTeam(organization.id, requester.id, {
+      name: "Some Team",
+    });
+
+    const filtered = await filterMcpServersAssignableToTarget({
+      mcpServers: [
+        {
+          id: "team-server",
+          ownerId: requester.id,
+          teamId: team.id,
+          scope: "team",
+        },
+      ],
+      target: {
+        organizationId: organization.id,
+        scope: "org",
+        authorId: null,
+        teamIds: [],
+      },
+    });
+
+    expect(filtered.map((server) => server.id)).toEqual(["team-server"]);
+  });
 });
 
 describe("validateCredentialSource", () => {
@@ -346,6 +377,52 @@ describe("validateCredentialSource", () => {
         type: "validation_error",
       },
     });
+  });
+
+  test("allows a team-installed MCP server when the target resource is org-scoped", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const author = await makeUser();
+
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(author.id, organization.id, { role: "admin" });
+
+    const team = await makeTeam(organization.id, author.id, {
+      name: "Some Team",
+    });
+    await makeTeamMember(team.id, owner.id);
+
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "org",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({ catalogId: catalog.id, name: "remote_tool" });
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      teamId: team.id,
+      ownerId: owner.id,
+      catalogId: catalog.id,
+    });
+
+    const result = await validateCredentialSource({
+      agentId: agent.id,
+      mcpServerId: mcpServer.id,
+      toolId: tool.id,
+    });
+
+    expect(result).toBeNull();
   });
 
   test("rejects a personal credential for an org-scoped resource when the owner is outside the organization", async ({
@@ -886,7 +963,7 @@ describe("isMcpServerAssignableToTarget", () => {
     expect(assignable).toBe(false);
   });
 
-  test("team-scoped server is not assignable to org-scoped target", async () => {
+  test("team-scoped server is assignable to org-scoped target", async () => {
     const assignable = await isMcpServerAssignableToTarget({
       mcpServer: {
         ownerId: "owner-1",
@@ -901,7 +978,7 @@ describe("isMcpServerAssignableToTarget", () => {
       },
     });
 
-    expect(assignable).toBe(false);
+    expect(assignable).toBe(true);
   });
 
   test("team-scoped server with no teamId is not assignable", async () => {

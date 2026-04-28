@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppLogo } from "@/components/app-logo";
 import { LoadingSpinner } from "@/components/loading";
@@ -25,9 +25,10 @@ export default function IdpInitiatedSsoPage() {
 
   const providerId = params.providerId;
 
-  useEffect(() => {
+  const startSso = useCallback(() => {
     if (hasStarted.current) return;
     hasStarted.current = true;
+    setFailed(false);
 
     const redirectTo = searchParams.get("redirectTo");
     const callbackURL = getValidatedCallbackURLWithDefault(redirectTo);
@@ -45,6 +46,15 @@ export default function IdpInitiatedSsoPage() {
       });
   }, [providerId, searchParams]);
 
+  useEffect(() => {
+    startSso();
+  }, [startSso]);
+
+  const retrySso = useCallback(() => {
+    hasStarted.current = false;
+    startSso();
+  }, [startSso]);
+
   return (
     <main className="h-full flex items-center justify-center p-4">
       <div className="space-y-4 w-full max-w-md">
@@ -58,13 +68,7 @@ export default function IdpInitiatedSsoPage() {
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-4">
             {failed ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  hasStarted.current = false;
-                  setFailed(false);
-                }}
-              >
+              <Button type="button" onClick={retrySso}>
                 Try Again
               </Button>
             ) : (

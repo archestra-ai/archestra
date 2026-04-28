@@ -1,4 +1,5 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useParams, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hasSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
@@ -67,6 +68,27 @@ describe("IdpInitiatedSsoPage", () => {
           callbackURL: "https://app.example.com/chat",
         }),
       );
+    });
+  });
+
+  it("retries SSO when the initial request fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(authClient.signIn.sso)
+      .mockRejectedValueOnce(new Error("SSO failed"))
+      .mockResolvedValueOnce(
+        undefined as Awaited<ReturnType<typeof authClient.signIn.sso>>,
+      );
+
+    render(<IdpInitiatedSsoPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Try Again" })).toBeVisible();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Try Again" }));
+
+    await waitFor(() => {
+      expect(authClient.signIn.sso).toHaveBeenCalledTimes(2);
     });
   });
 });

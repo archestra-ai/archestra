@@ -35,7 +35,7 @@ Archestra supports Identity Provider (IdP) configuration for three purposes:
 1. Admin configures an Identity Provider in **Settings > Identity Providers**
 2. SSO buttons appear on the sign-in page for enabled providers
 3. Users click the SSO button and authenticate with their identity provider
-4. Archestra verifies the authenticated email belongs to the provider's allowed email domains
+4. Archestra applies provider configuration, role mapping, and team sync rules
 5. After successful authentication, users are automatically provisioned and logged in
 
 ![Sign-in with SSO](/docs/automated_screenshots/platform-identity-providers_sign-in-with-sso.webp)
@@ -167,11 +167,11 @@ your-archestra-domain.com
 10. In Archestra, go to **Settings > Identity Providers** and click **Enable** on the Okta card.
 11. Enter your Okta issuer URL, for example:
 
-   ```
-   https://your-org.okta.com
-   ```
+```
+https://your-org.okta.com
+```
 
-12. Enter your allowed email domains, Client ID, and Client Secret.
+12. Enter the Client ID and Client Secret.
 13. Keep the discovery endpoint empty unless you need a custom value. Archestra derives it from the issuer as:
 
     ```
@@ -184,9 +184,9 @@ If you also use IdP token exchange for downstream MCP calls, configure the excha
 
 #### SP-Initiated SSO
 
-Users can start sign-in from the Archestra sign-in page by selecting **Sign in with Okta**. After Okta authenticates the user, Archestra checks the returned email against **Allowed Email Domains**, provisions the user if needed, and opens the app.
+Users can start sign-in from the Archestra sign-in page by selecting **Sign in with Okta**. After Okta authenticates the user, Archestra provisions the user if needed and opens the app.
 
-To test, use a private browser window with a user who is assigned to the Okta app and whose email domain is allowed in Archestra.
+To test, use a private browser window with a user who is assigned to the Okta app.
 
 #### IdP-Initiated SSO
 

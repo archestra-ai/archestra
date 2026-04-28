@@ -2,7 +2,7 @@ import type { ModelInputModality } from "@shared";
 import type { drive_v3 } from "googleapis";
 import { google } from "googleapis";
 import JSZip from "jszip";
-import mammoth from "mammoth";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -815,8 +815,7 @@ async function extractTextFromBinary(
 ): Promise<string> {
   switch (ext) {
     case ".docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      return extractTextFromDocx(buffer);
     }
     case ".pdf": {
       // Lazy import: pdf-parse v1 tries to load a test file at import time

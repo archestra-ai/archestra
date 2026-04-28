@@ -1,6 +1,6 @@
 import JSZip from "jszip";
-import mammoth from "mammoth";
 import logger from "@/logging";
+import { extractTextFromDocx } from "../docx-text-extractor";
 
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 export const MAX_ZIP_TOTAL_BYTES = 50 * 1024 * 1024;
@@ -136,11 +136,11 @@ async function extractFromDocx(
   buffer: Buffer,
   filename: string,
 ): Promise<ExtractedFile[]> {
-  const result = await mammoth.extractRawText({ buffer });
+  const text = await extractTextFromDocx(buffer);
   return [
     {
       filename,
-      text: result.value,
+      text,
       rawBytes: buffer,
       mimeType:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -152,12 +152,14 @@ async function extractFromDoc(
   buffer: Buffer,
   filename: string,
 ): Promise<ExtractionResult> {
+  // .doc is a legacy binary format (not a ZIP), so we attempt to parse it
+  // as .docx which will fail gracefully for true .doc files.
   try {
-    const result = await mammoth.extractRawText({ buffer });
+    const text = await extractTextFromDocx(buffer);
     return toResult([
       {
         filename,
-        text: result.value,
+        text,
         rawBytes: buffer,
         mimeType: "application/msword",
       },

@@ -40,6 +40,7 @@ overrides:
   rollup: '>=4.59.0'
   undici: 7.24.5
   '@xmldom/xmldom': '>=0.9.10'
+  mammoth>@xmldom/xmldom: 0.8.10
   path-to-regexp: '>=8.4.0'
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
@@ -50,9 +51,6 @@ patchedDependencies:
   ai@6.0.90:
     hash: 8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2
     path: patches/ai@6.0.90.patch
-  mammoth@1.12.0:
-    hash: 05c1964b9b052ede2c310e8547c9a6084ac69a73a95b509c8cfd835bdbf5326b
-    path: patches/mammoth@1.12.0.patch
 
 importers:
 
@@ -364,7 +362,7 @@ importers:
         version: 4.18.1
       mammoth:
         specifier: ^1.12.0
-        version: 1.12.0(patch_hash=05c1964b9b052ede2c310e8547c9a6084ac69a73a95b509c8cfd835bdbf5326b)
+        version: 1.12.0
       node-vault:
         specifier: ^0.11.0
         version: 0.11.0
@@ -5661,6 +5659,11 @@ packages:
   '@xmldom/is-dom-node@1.0.1':
     resolution: {integrity: sha512-CJDxIgE5I0FH+ttq/Fxy6nRpxP70+e2O048EPe85J2use3XKdatVM7dDVvFNjQudd9B49NPoZ+8PG49zj4Er8Q==}
     engines: {node: '>= 16'}
+
+  '@xmldom/xmldom@0.8.10':
+    resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
+    engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
@@ -15687,6 +15690,8 @@ snapshots:
 
   '@xmldom/is-dom-node@1.0.1': {}
 
+  '@xmldom/xmldom@0.8.10': {}
+
   '@xmldom/xmldom@0.9.10': {}
 
   '@xterm/addon-fit@0.11.0': {}
@@ -18016,9 +18021,9 @@ snapshots:
       pify: 4.0.1
       semver: 5.7.2
 
-  mammoth@1.12.0(patch_hash=05c1964b9b052ede2c310e8547c9a6084ac69a73a95b509c8cfd835bdbf5326b):
+  mammoth@1.12.0:
     dependencies:
-      '@xmldom/xmldom': 0.9.10
+      '@xmldom/xmldom': 0.8.10
       argparse: 1.0.10
       base64-js: 1.5.1
       bluebird: 3.4.7

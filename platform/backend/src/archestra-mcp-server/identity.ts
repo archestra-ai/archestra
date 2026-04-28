@@ -39,8 +39,5 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-const _toolShortNames = registry.toolShortNames;
-const _toolArgsSchemas = registry.toolArgsSchemas;
-const _toolOutputSchemas = registry.toolOutputSchemas;
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;

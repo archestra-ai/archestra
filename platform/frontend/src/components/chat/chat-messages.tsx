@@ -388,6 +388,11 @@ export function ChatMessages({
     };
   });
 
+  const assistantMessageCount = useMemo(
+    () => messages.filter((m) => m.role === "assistant").length,
+    [messages],
+  );
+
   if (messages.length === 0 && chatErrors.length === 0) {
     // Don't show "start conversation" message while loading - prevents flash of empty state
     if (isLoadingConversation) {
@@ -1209,7 +1214,7 @@ export function ChatMessages({
           )}
         </div>
       </ConversationContent>
-      <ConversationScrollButton />
+      <ChatScrollButton assistantMessageCount={assistantMessageCount} />
       <McpInstallDialogs orchestrator={orchestrator} />
     </Conversation>
   );
@@ -1312,6 +1317,32 @@ function ScrollToBottomOnSubmit({ status }: { status: ChatStatus }) {
   }, [status, scrollToBottom]);
 
   return null;
+}
+
+// Scroll-to-bottom FAB with a "New messages" label when a new assistant
+// message has arrived while the user is scrolled up.
+function ChatScrollButton({
+  assistantMessageCount,
+}: {
+  assistantMessageCount: number;
+}) {
+  const { isAtBottom } = useStickToBottomContext();
+  const lastSeenCountRef = useRef(assistantMessageCount);
+
+  useEffect(() => {
+    if (isAtBottom) {
+      lastSeenCountRef.current = assistantMessageCount;
+    }
+  }, [isAtBottom, assistantMessageCount]);
+
+  const hasNewMessages =
+    !isAtBottom && assistantMessageCount > lastSeenCountRef.current;
+
+  return (
+    <ConversationScrollButton
+      label={hasNewMessages ? "New messages" : undefined}
+    />
+  );
 }
 
 const MessageTool = memo(

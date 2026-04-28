@@ -66,6 +66,23 @@ Combined, these endpoints expose metrics including:
 - `task_queue_active_tasks` - Currently active (in-flight) tasks by task_type
 - `task_queue_stuck_tasks_reset_total` - Total stuck tasks reset back to pending
 
+## Durable Memory Security Metrics
+
+- `archestra_memory_policy_blocked_total{reason}` - Total candidate writes blocked by pre-write policy reason.
+- `archestra_memory_screen_decision_total{decision,reason}` - Total screening outcomes (`allow`/`quarantine`/`block`) by decision and reason.
+- `archestra_memory_injection_block_total{reason}` - Total prompt-time memory injection blocks by runtime reason.
+- `archestra_memory_review_policy_block_total{reason}` - Total approval attempts blocked by review-path policy reason.
+- `archestra_memory_tombstone_hit_total{reason,match_type}` - Total tombstone replay suppression matches by reason and match type.
+- `archestra_memory_mcp_propose_block_total{reason}` - Total MCP memory proposal attempts blocked by policy reason.
+- `archestra_memory_candidates_created_total{source_type}` - Total memory candidates persisted, grouped by source type.
+- `archestra_memory_review_outcome_total{source_type,outcome}` - Total review outcomes (for example approve/reject) by source type.
+- `archestra_memory_quarantined_total{reason,scope_type}` - Total candidates moved to `quarantined` status by reason and scope.
+- `archestra_memory_candidate_scored_total{memory_type,scope_type,source_type,safety_score_bucket}` - Total candidates scored, grouped by memory/scope/source and safety bucket.
+- `archestra_memory_retrieved_total{memory_type,scope_type,safety_score_bucket}` - Total approved memory items retrieved for injection, grouped by type/scope/safety bucket.
+- `archestra_memory_extraction_status_total{status,organization_id}` - Total extraction status records (`pending`/`completed`/`failed`/`skipped`) by organization.
+- `archestra_memory_maintenance_duration_seconds` - Duration of periodic memory maintenance runs.
+- `archestra_memory_maintenance_retried_total{organization_id}` - Total failed extractions re-enqueued by maintenance per organization.
+
 ### Archestra Application Metrics
 
 #### HTTP Metrics

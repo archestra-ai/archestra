@@ -128,6 +128,51 @@ Policies can also be scoped to specific agents. For example, you might allow an 
 
 Subagent "delegation" does not reset that trust state. If a parent agent delegates to a subagent after the conversation has already become sensitive, the subagent inherits that unsafe context and the same tool call restrictions continue to apply.
 
+## Memory Injection Guard for External-Capable Tools
+
+Prompt-time durable memory injection is blocked when runtime detects an unsafe combination of:
+
+- trusted-context assumptions, and
+- active tools with external communication capability.
+
+### Runtime block reason
+
+`external_tools_with_trusted_context`
+
+### Security objective
+
+This guardrail reduces cross-context trust escalation risk when a session can access external web/API/file surfaces.
+
+## Tool Capability Assessment Model
+
+Memory uses a metadata-first model to classify tools for memory-injection safety.
+
+### Evaluation order
+
+1. If the tool definition provides explicit capability metadata, use it.
+2. If metadata is missing, use legacy name-based fallback classification.
+
+### Why fallback still exists
+
+Fallback is a temporary safety net during migration. Removing it before metadata coverage is complete can create blind spots where external-capable tools are misclassified as safe.
+
+### Operational expectation
+
+Fallback usage should decline over time as tool definitions gain explicit capability metadata.
+
+## Operator Guidance for Guardrail Blocks
+
+If memory injection starts being blocked for tool-enabled sessions:
+
+1. Confirm whether trusted-context mode is expected for that workload.
+2. Inspect active tools and identify which were classified as external-capable.
+3. Verify whether each classification came from metadata or fallback.
+4. Improve capability metadata before considering any guardrail relaxation.
+
+### Important note
+
+A nonzero rate of `external_tools_with_trusted_context` can be correct policy enforcement.
+
 ## Policy Configuration Agent
 
 Archestra includes a built-in [Tool Policy Configuration Agent](/docs/platform-built-in-agents-policy-config) that analyzes tool metadata and proposes default tool call policies and tool result policies automatically.

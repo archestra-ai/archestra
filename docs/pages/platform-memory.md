@@ -15,6 +15,12 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Archestra Memory is a durable, review-first store for long-lived context that agents can reuse across conversations. It is independent from chat history and from the knowledge base. Every automated pathway writes only `candidate` records; nothing becomes active memory without human approval.
 
+## Why teams enable Memory
+
+- **Higher answer consistency**: approved preferences and profile facts survive across sessions, so agents stop re-learning the same context.
+- **Lower review risk**: deterministic screening blocks sensitive and manipulative content before it can become active memory.
+- **Controlled rollout**: operators can enable extraction and injection gradually, observe metrics, and disable either path instantly if needed.
+
 ![Memory settings page](/docs/automated_screenshots/platform-memory_settings-page.webp)
 
 ## Who this is for

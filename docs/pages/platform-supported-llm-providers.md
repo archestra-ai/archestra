@@ -36,7 +36,7 @@ Use provider-qualified model IDs from `/models` for deterministic routing, for e
 
 The prefix before `:` is the provider. The value after `:` is the provider's native model ID, so provider model IDs can still contain slashes or colons.
 
-Each LLM Proxy exposes all available text chat models by default. To constrain a proxy, edit it and turn off **Expose all available models** in the Model Router section, then choose the allowed models. The `/models` response and `/chat/completions` route both enforce that list.
+Each LLM Proxy exposes all model-router-compatible text chat models by default. Native Gemini and Cohere models are not listed until OpenAI-format translation is available for those providers. To constrain a proxy, edit it and turn off **Expose all available models** in the Model Router section, then choose the allowed models. The `/models` response and `/chat/completions` route both enforce that list.
 
 ## OpenAI
 

@@ -6,6 +6,8 @@ type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 type AnthropicRequest = Anthropic.Types.MessagesRequest;
 type AnthropicResponse = Anthropic.Types.MessagesResponse;
 
+const DEFAULT_ANTHROPIC_MAX_TOKENS = 8192;
+
 type LooseMessage = {
   role: string;
   content?: unknown;
@@ -92,7 +94,7 @@ export function openaiToAnthropic(req: OpenAiRequest): {
 
   const anthropicBody: AnthropicRequest = {
     model: req.model,
-    max_tokens: req.max_tokens ?? 4096,
+    max_tokens: req.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
     messages,
     stream: req.stream === true ? true : undefined,
   };

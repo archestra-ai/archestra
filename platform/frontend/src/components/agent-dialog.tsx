@@ -1838,6 +1838,9 @@ export function AgentDialog({
                         <Checkbox
                           id="model-router-expose-all-models"
                           checked={modelRouterExposeAllModels}
+                          disabled={
+                            !canReadLlmModels && modelRouterExposeAllModels
+                          }
                           onCheckedChange={(checked) =>
                             setModelRouterExposeAllModels(checked === true)
                           }

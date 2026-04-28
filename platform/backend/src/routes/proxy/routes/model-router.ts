@@ -75,6 +75,12 @@ const openAiWireProviders: Partial<
   zhipuai: zhipuaiAdapterFactory as OpenAiWireProvider,
 };
 
+const modelRouterSupportedProviders = new Set<SupportedProvider>([
+  ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
+  "anthropic",
+  "bedrock",
+]);
+
 const ModelListResponseSchema = z.object({
   object: z.literal("list"),
   data: z.array(
@@ -261,6 +267,9 @@ async function listModels(params: {
       if (!ModelModel.supportsTextChat(model)) {
         return false;
       }
+      if (!modelRouterSupportedProviders.has(model.provider)) {
+        return false;
+      }
       if (!allowedSet) {
         return true;
       }
@@ -316,6 +325,7 @@ async function getVirtualKeyProviderScope(
 async function inferProviderForVirtualKey(
   tokenValue: string,
 ): Promise<SupportedProvider> {
+  // Load lazily to keep this proxy route independent from model index cycles.
   const { VirtualApiKeyModel } = await import("@/models");
   const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
   if (!resolved) {

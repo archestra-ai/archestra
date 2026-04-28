@@ -91,7 +91,7 @@ curl -X POST "https://your-archestra-instance/v1/model-router/{llm-proxy-id}/cha
   }'
 ```
 
-The router accepts OpenAI Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns an OpenAI-format response. Each LLM Proxy exposes all available models by default, or you can constrain its model router list in the create/edit dialog. See [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID and provider details.
+The router accepts OpenAI Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns an OpenAI-format response. Each LLM Proxy exposes all model-router-compatible models by default, or you can constrain its model router list in the create/edit dialog. See [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID and provider details.
 
 ## Custom Headers
 

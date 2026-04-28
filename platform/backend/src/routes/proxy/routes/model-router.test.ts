@@ -8,6 +8,7 @@ import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
+  type AnthropicStubOptions,
   createAnthropicTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
@@ -44,7 +45,7 @@ function createFastifyApp() {
 }
 
 async function upsertModel(params: {
-  provider: "anthropic" | "openai" | "groq";
+  provider: "anthropic" | "cohere" | "gemini" | "openai" | "groq";
   modelId: string;
 }) {
   await ModelModel.upsert({
@@ -60,7 +61,10 @@ async function upsertModel(params: {
 }
 
 describe("model router proxy routes", () => {
+  let anthropicStubOptions: AnthropicStubOptions;
+
   beforeEach(() => {
+    anthropicStubOptions = {};
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient() as never,
     );
@@ -68,7 +72,7 @@ describe("model router proxy routes", () => {
       () => createOpenAiTestClient() as never,
     );
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
-      () => createAnthropicTestClient() as never,
+      () => createAnthropicTestClient(anthropicStubOptions) as never,
     );
   });
 
@@ -219,6 +223,8 @@ describe("model router proxy routes", () => {
     await app.register(modelRouterProxyRoutes);
     await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
     await upsertModel({ provider: "groq", modelId: "llama-3.1-8b-instant" });
+    await upsertModel({ provider: "cohere", modelId: "command-a-03-2025" });
+    await upsertModel({ provider: "gemini", modelId: "gemini-2.5-pro" });
 
     const response = await app.inject({
       method: "GET",
@@ -244,6 +250,49 @@ describe("model router proxy routes", () => {
         }),
       ]),
     });
+    expect(response.json().data).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "cohere:command-a-03-2025" }),
+        expect.objectContaining({ id: "gemini:gemini-2.5-pro" }),
+      ]),
+    );
+  });
+
+  test("streams Anthropic model router responses as OpenAI SSE chunks", async ({
+    makeAgent,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({
+      provider: "anthropic",
+      modelId: "claude-opus-4-6-20250918",
+    });
+    const agent = await makeAgent({
+      name: "Model Router Streaming Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-anthropic-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "anthropic:claude-opus-4-6-20250918",
+        messages: [{ role: "user", content: "Hello" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("data: ");
+    expect(response.body).toContain('"object":"chat.completion.chunk"');
+    expect(response.body).toContain("Hello!");
+    expect(response.body).toContain("data: [DONE]");
+    expect(response.body).not.toContain("event: message_start");
   });
 
   test("lists only configured model router models for an LLM proxy", async ({

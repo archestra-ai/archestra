@@ -47,12 +47,16 @@ interface YamlConfigContentProps {
   item: CatalogItem;
   onClose: () => void;
   hideHeader?: boolean;
+  clusterName?: string | null;
+  k8sNamespace?: string | null;
 }
 
 export function YamlConfigContent({
   item,
   onClose,
   hideHeader = false,
+  clusterName,
+  k8sNamespace,
 }: YamlConfigContentProps) {
   const appName = useAppName();
   const updateMutation = useUpdateInternalMcpCatalogItem();
@@ -204,6 +208,20 @@ export function YamlConfigContent({
           </CollapsibleContent>
         </Collapsible>
       </div>
+
+      {(clusterName !== undefined || k8sNamespace !== undefined) && (
+        <div className="text-xs text-muted-foreground shrink-0 pt-2">
+          Cluster:{" "}
+          <span className="font-mono">
+            {clusterName ?? "Default cluster"}
+          </span>
+          {" ("}
+          <span className="font-mono text-foreground/60">
+            {k8sNamespace ?? "default"}
+          </span>
+          {")"}
+        </div>
+      )}
 
       <DialogForm
         onSubmit={handleSave}

@@ -861,6 +861,19 @@ export function McpServerCard({
         )}
         <div className="mt-auto flex flex-col gap-4">
           {compactInfoRow}
+          {variant === "local" && installedServer && (
+            <div className="text-xs text-muted-foreground border-t pt-3">
+              Cluster:{" "}
+              <span className="font-mono">
+                {installedServer.clusterName ?? "Default cluster"}
+              </span>
+              {" ("}
+              <span className="font-mono text-foreground/60">
+                {installedServer.k8sNamespace ?? "default"}
+              </span>
+              {")"}
+            </div>
+          )}
           {isBuiltinVariant
             ? builtinCardContent
             : isPlaywrightVariant

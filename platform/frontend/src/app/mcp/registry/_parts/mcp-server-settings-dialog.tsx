@@ -69,6 +69,8 @@ interface McpServerSettingsDialogProps {
     name: string;
     ownerEmail?: string | null;
     teamDetails?: { teamId: string; name: string } | null;
+    clusterName?: string | null;
+    k8sNamespace?: string | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   deploymentServerIds: string[];
@@ -421,6 +423,8 @@ export function McpServerSettingsDialog({
                   item={item}
                   onClose={handleClose}
                   hideHeader
+                  clusterName={installs[0]?.clusterName}
+                  k8sNamespace={installs[0]?.k8sNamespace}
                 />
               )}
             </div>

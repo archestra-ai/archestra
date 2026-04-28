@@ -103060,36 +103060,7 @@
                                 "type": "string"
                               },
                               "kubeconfig": {
-                                "anyOf": [
-                                  {
-                                    "anyOf": [
-                                      {
-                                        "type": "string"
-                                      },
-                                      {
-                                        "type": "number"
-                                      },
-                                      {
-                                        "type": "boolean"
-                                      },
-                                      {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "enum": [
-                                          null
-                                        ]
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "type": "object",
-                                    "additionalProperties": {}
-                                  },
-                                  {
-                                    "type": "array",
-                                    "items": {}
-                                  }
-                                ]
+                                "type": "string"
                               },
                               "createdAt": {
                                 "type": "string",
@@ -103409,36 +103380,7 @@
                       "type": "string"
                     },
                     "kubeconfig": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -103785,36 +103727,7 @@
                       "type": "string"
                     },
                     "kubeconfig": {
-                      "anyOf": [
-                        {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "string",
-                              "nullable": true,
-                              "enum": [
-                                null
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": {}
-                        },
-                        {
-                          "type": "array",
-                          "items": {}
-                        }
-                      ]
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -127075,6 +126988,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "clusterName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "users": {
                         "type": "array",
                         "items": {
@@ -127626,6 +127543,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "clusterName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "users": {
                       "type": "array",
                       "items": {
@@ -128072,6 +127993,10 @@
                       "type": "string"
                     },
                     "catalogName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "clusterName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -128830,6 +128755,10 @@
                       "type": "string"
                     },
                     "catalogName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "clusterName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -130216,6 +130145,10 @@
                       "type": "string"
                     },
                     "catalogName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "clusterName": {
                       "nullable": true,
                       "type": "string"
                     },

@@ -28069,9 +28069,7 @@ export type ListK8sClustersResponses = {
             id: string;
             organizationId: string;
             name: string;
-            kubeconfig: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown>;
+            kubeconfig: string;
             createdAt: string;
             updatedAt: string;
         }>;
@@ -28163,9 +28161,7 @@ export type CreateK8sClusterResponses = {
         id: string;
         organizationId: string;
         name: string;
-        kubeconfig: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        kubeconfig: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -28345,9 +28341,7 @@ export type UpdateK8sClusterResponses = {
         id: string;
         organizationId: string;
         name: string;
-        kubeconfig: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        kubeconfig: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -34108,6 +34102,7 @@ export type GetMcpServersResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
+        clusterName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
@@ -34246,6 +34241,7 @@ export type InstallMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
+        clusterName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
@@ -34446,6 +34442,7 @@ export type GetMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
+        clusterName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
@@ -34571,6 +34568,7 @@ export type ReauthenticateMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
+        clusterName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;
@@ -34968,6 +34966,7 @@ export type ReinstallMcpServerResponses = {
         updatedAt: string;
         ownerEmail?: string | null;
         catalogName?: string | null;
+        clusterName?: string | null;
         users?: Array<string>;
         userDetails?: Array<{
             userId: string;

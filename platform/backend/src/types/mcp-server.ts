@@ -32,6 +32,7 @@ export const SelectMcpServerSchema = createSelectSchema(
   scope: ResourceVisibilityScopeSchema,
   ownerEmail: z.string().nullable().optional(),
   catalogName: z.string().nullable().optional(),
+  clusterName: z.string().nullable().optional(),
   users: z.array(z.string()).optional(),
   userDetails: z
     .array(

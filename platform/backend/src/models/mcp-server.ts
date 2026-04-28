@@ -184,6 +184,7 @@ class McpServerModel {
         assignedUserId: schema.mcpServerUsersTable.userId,
         assignedUserEmail: assignedUsersTable.email,
         assignedUserCreatedAt: schema.mcpServerUsersTable.createdAt,
+        clusterName: schema.k8sClustersTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -209,6 +210,10 @@ class McpServerModel {
       .leftJoin(
         assignedUsersTable,
         eq(schema.mcpServerUsersTable.userId, assignedUsersTable.id),
+      )
+      .leftJoin(
+        schema.k8sClustersTable,
+        eq(schema.mcpServersTable.k8sClusterId, schema.k8sClustersTable.id),
       )
       .$dynamic();
 
@@ -270,6 +275,7 @@ class McpServerModel {
           ...row.server,
           ownerEmail: row.ownerEmail,
           catalogName: row.catalogName,
+          clusterName: row.clusterName,
           users: [],
           userDetails: [],
           teamDetails,
@@ -320,6 +326,7 @@ class McpServerModel {
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
         secretIsByosVault: schema.secretsTable.isByosVault,
+        clusterName: schema.k8sClustersTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -333,6 +340,10 @@ class McpServerModel {
       .leftJoin(
         schema.secretsTable,
         eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
+      )
+      .leftJoin(
+        schema.k8sClustersTable,
+        eq(schema.mcpServersTable.k8sClusterId, schema.k8sClustersTable.id),
       )
       .where(eq(schema.mcpServersTable.id, id));
 
@@ -361,6 +372,7 @@ class McpServerModel {
     return {
       ...result.server,
       ownerEmail: result.ownerEmail,
+      clusterName: result.clusterName,
       users: userDetails.map((u) => u.userId),
       userDetails,
       teamDetails,

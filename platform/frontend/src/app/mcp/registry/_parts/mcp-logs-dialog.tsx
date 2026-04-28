@@ -56,6 +56,8 @@ interface McpLogsDialogProps {
     name: string;
     ownerEmail?: string | null;
     teamDetails?: { teamId: string; name: string } | null;
+    clusterName?: string | null;
+    k8sNamespace?: string | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
@@ -623,16 +625,35 @@ export function McpLogsContent({
                   ) : (
                     <div />
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopyLogs}
-                    disabled={!!streamError || !streamedLogs}
-                    className="h-6 px-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                  >
-                    <Copy className="h-3 w-3 mr-1" />
-                    {copied ? "Copied!" : "Copy"}
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    {(() => {
+                      const install = installs.find((i) => i.id === serverId);
+                      if (!install) return null;
+                      return (
+                        <span className="text-xs text-slate-500">
+                          {"cluster: "}
+                          <span className="font-mono text-slate-300">
+                            {install.clusterName ?? "Default cluster"}
+                          </span>
+                          {" ("}
+                          <span className="font-mono text-slate-400">
+                            {install.k8sNamespace ?? "default"}
+                          </span>
+                          {")"}
+                        </span>
+                      );
+                    })()}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyLogs}
+                      disabled={!!streamError || !streamedLogs}
+                      className="h-6 px-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      {copied ? "Copied!" : "Copy"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -756,23 +777,34 @@ function InstanceSelector({
         {/* Identity block */}
         <div className="flex items-center gap-3 min-w-0 flex-1 pl-4 pr-3 py-3">
           <DeploymentStatusDot state={dotState} />
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="font-mono text-sm font-medium truncate leading-tight">
               {selected?.name ?? "—"}
             </span>
-            {stateLabel && (
-              <span
-                className={`text-[10px] tracking-[0.08em] leading-tight mt-0.5 ${
-                  isFailed
-                    ? "text-destructive"
-                    : isRunning
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-amber-600 dark:text-amber-400"
-                }`}
-              >
-                {stateLabel}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {stateLabel && (
+                <span
+                  className={`text-[10px] tracking-[0.08em] leading-tight ${
+                    isFailed
+                      ? "text-destructive"
+                      : isRunning
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {stateLabel}
+                </span>
+              )}
+              {selected && (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {"in "}
+                  {selected.clusterName ?? "Default cluster"}
+                  {" ("}
+                  {selected.k8sNamespace ?? "default"}
+                  {")"}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

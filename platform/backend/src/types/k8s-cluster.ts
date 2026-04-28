@@ -8,7 +8,9 @@ import { schema } from "@/database";
 
 export const SelectK8sClusterSchema = createSelectSchema(
   schema.k8sClustersTable,
-);
+).extend({
+  kubeconfig: z.string(),
+});
 
 export const InsertK8sClusterSchema = createInsertSchema(
   schema.k8sClustersTable,

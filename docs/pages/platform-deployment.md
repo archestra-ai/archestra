@@ -905,7 +905,7 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
   - Default: Helm release namespace (if relevant) or `default`
   - Example: `archestra-mcp` or `production`
-  - Can be overridden per individual catalog entry in the Private MCP Registry.
+  - Can be overridden per installation in the Private MCP Registry.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`

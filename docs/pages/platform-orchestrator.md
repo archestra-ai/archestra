@@ -88,6 +88,10 @@ If `tolerations` or `nodeSelector` are configured in the Helm values for the Arc
 
 These defaults can be overridden per-server via the advanced YAML config. See [Service, Deployment, & Ingress Configuration](/docs/platform-deployment#service-deployment--ingress-configuration) for the relevant Helm values.
 
+## Custom Clusters
+
+By default, the orchestrator deploys MCP server manifests into the same cluster as the platform. However, you can add additional clusters so installations can target them instead. Admins can register custom clusters in Settings → Organization → Kubernetes Clusters by providing a name and a kubeconfig (will be encrypted).
+
 ## Credentials
 
 The orchestrator injects the configuration and secrets required by self-hosted MCP servers. These values come from the installed server connection, not from the MCP client.

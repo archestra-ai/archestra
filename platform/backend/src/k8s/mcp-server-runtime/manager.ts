@@ -638,17 +638,6 @@ export class McpServerRuntimeManager {
     }
   }
 
-  async restartServerInNewNamespace(
-    mcpServerId: string,
-    newNamespace: string | null,
-  ): Promise<void> {
-    return this.restartServerInNewLocation(
-      mcpServerId,
-      newNamespace,
-      undefined,
-    );
-  }
-
   async restartServerInNewLocation(
     mcpServerId: string,
     newNamespace: string | null | undefined,

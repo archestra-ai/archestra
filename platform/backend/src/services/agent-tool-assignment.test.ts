@@ -886,7 +886,7 @@ describe("isMcpServerAssignableToTarget", () => {
     expect(assignable).toBe(false);
   });
 
-  test("team-scoped server is not assignable to org-scoped target", async () => {
+  test("team-scoped server is assignable to org-scoped target", async () => {
     const assignable = await isMcpServerAssignableToTarget({
       mcpServer: {
         ownerId: "owner-1",
@@ -901,7 +901,7 @@ describe("isMcpServerAssignableToTarget", () => {
       },
     });
 
-    expect(assignable).toBe(false);
+    expect(assignable).toBe(true);
   });
 
   test("team-scoped server with no teamId is not assignable", async () => {

@@ -11,6 +11,7 @@ import { AgentModel, ModelModel } from "@/models";
 import type { LLMProvider } from "@/types";
 import {
   ApiError,
+  Azure,
   constructResponseSchema,
   OpenAi,
   UuidIdSchema,
@@ -34,6 +35,12 @@ import { makeAnthropicOpenaiAdapterFactory } from "../adapters/anthropic-openai"
 import { openaiToAnthropic } from "../adapters/anthropic-openai-translator";
 import { makeBedrockOpenaiAdapterFactory } from "../adapters/bedrock-openai";
 import { openaiToConverse } from "../adapters/bedrock-openai-translator";
+import { makeCohereOpenaiAdapterFactory } from "../adapters/cohere-openai";
+import { openaiToCohere } from "../adapters/cohere-openai-translator";
+import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
+import { openaiToGemini } from "../adapters/gemini-openai-translator";
+import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
+import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
   validateVirtualApiKey,
@@ -55,6 +62,7 @@ type OpenAiWireProvider = LLMProvider<
 >;
 
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
+const RESPONSES_SUFFIX = "/responses";
 const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
 
 const openAiWireProviders: Partial<
@@ -79,6 +87,8 @@ const modelRouterSupportedProviders = new Set<SupportedProvider>([
   ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
   "anthropic",
   "bedrock",
+  "cohere",
+  "gemini",
 ]);
 
 const ModelListResponseSchema = z.object({
@@ -142,6 +152,47 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowedModelIds: agent.modelRouterAllowedModelIds,
         }),
       );
+    },
+  );
+
+  fastify.post(
+    `${MODEL_ROUTER_PREFIX}${RESPONSES_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.ModelRouterResponsesWithDefaultAgent,
+        description:
+          "Create a response through the OpenAI-compatible model router (default LLM proxy)",
+        tags: ["LLM Proxy"],
+        body: Azure.API.ResponsesRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(Azure.API.ResponsesResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      return routeResponse(request, reply);
+    },
+  );
+
+  fastify.post(
+    `${MODEL_ROUTER_PREFIX}/:agentId${RESPONSES_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.ModelRouterResponsesWithAgent,
+        description:
+          "Create a response through the OpenAI-compatible model router (specific LLM proxy)",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: Azure.API.ResponsesRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(Azure.API.ResponsesResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      return routeResponse(request, reply);
     },
   );
 
@@ -222,35 +273,111 @@ async function routeChatCompletion(
     "[ModelRouterProxy] Resolved model route",
   );
 
-  if (resolution.provider === "bedrock") {
-    const { converseBody, openaiContext } = openaiToConverse(routedBody);
-    return handleLLMProxy(
-      converseBody,
-      request,
-      reply,
-      makeBedrockOpenaiAdapterFactory(openaiContext),
-    );
-  }
+  const provider = getOpenAiChatProviderForResolution({
+    provider: resolution.provider,
+    body: routedBody,
+  });
 
-  if (resolution.provider === "anthropic") {
-    const { anthropicBody, openaiContext } = openaiToAnthropic(routedBody);
-    return handleLLMProxy(
-      anthropicBody,
-      request,
-      reply,
-      makeAnthropicOpenaiAdapterFactory(openaiContext),
-    );
-  }
+  return handleLLMProxy(provider.body, request, reply, provider.adapter);
+}
 
-  const provider = openAiWireProviders[resolution.provider];
-  if (!provider) {
+async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
+  const body = request.body as Azure.Types.ResponsesRequest;
+  if (body.stream === true) {
     throw new ApiError(
       501,
-      `Provider "${resolution.provider}" is not yet available through the OpenAI-compatible model router.`,
+      "Streaming is not yet available through the model router Responses API.",
     );
   }
 
-  return handleLLMProxy(routedBody, request, reply, provider);
+  const { chatBody, responsesContext } = responsesToOpenaiChat(body);
+  const params = request.params as { agentId?: string };
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await AgentModel.getDefaultProfile();
+  const allowedProvider = await getVirtualKeyProviderScope(request);
+  const resolution = await resolveModelRoute({
+    requestedModel: chatBody.model,
+    allowedProvider,
+    allowedModelIds: agent?.modelRouterAllowedModelIds,
+  });
+  const routedChatBody = {
+    ...chatBody,
+    model: resolution.modelId,
+  };
+
+  const provider = getOpenAiChatProviderForResolution({
+    provider: resolution.provider,
+    body: routedChatBody,
+  });
+
+  return handleLLMProxy(
+    provider.body,
+    request,
+    reply,
+    makeResponsesFromChatAdapterFactory(
+      provider.adapter as OpenAiWireProvider,
+      responsesContext,
+    ),
+  );
+}
+
+function getOpenAiChatProviderForResolution(params: {
+  provider: SupportedProvider;
+  body: OpenAi.Types.ChatCompletionsRequest;
+}): {
+  body: OpenAi.Types.ChatCompletionsRequest;
+  adapter: OpenAiWireProvider;
+} {
+  const provider = openAiWireProviders[params.provider];
+  if (provider) {
+    return { body: params.body, adapter: provider };
+  }
+
+  if (params.provider === "anthropic") {
+    const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
+    return {
+      body: anthropicBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+      adapter: makeAnthropicOpenaiAdapterFactory(
+        openaiContext,
+      ) as unknown as OpenAiWireProvider,
+    };
+  }
+
+  if (params.provider === "bedrock") {
+    const { converseBody, openaiContext } = openaiToConverse(params.body);
+    return {
+      body: converseBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+      adapter: makeBedrockOpenaiAdapterFactory(
+        openaiContext,
+      ) as unknown as OpenAiWireProvider,
+    };
+  }
+
+  if (params.provider === "cohere") {
+    const { cohereBody, openaiContext } = openaiToCohere(params.body);
+    return {
+      body: cohereBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+      adapter: makeCohereOpenaiAdapterFactory(
+        openaiContext,
+      ) as unknown as OpenAiWireProvider,
+    };
+  }
+
+  if (params.provider === "gemini") {
+    const { geminiBody, openaiContext } = openaiToGemini(params.body);
+    return {
+      body: geminiBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+      adapter: makeGeminiOpenaiAdapterFactory(
+        openaiContext,
+      ) as unknown as OpenAiWireProvider,
+    };
+  }
+
+  throw new ApiError(
+    501,
+    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
+  );
 }
 
 async function listModels(params: {

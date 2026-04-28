@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@shared";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -10,13 +11,28 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
+  createGeminiTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
 import { ApiError } from "@/types";
 import {
   anthropicAdapterFactory,
+  azureAdapterFactory,
+  bedrockAdapterFactory,
+  cerebrasAdapterFactory,
+  cohereAdapterFactory,
+  deepseekAdapterFactory,
+  geminiAdapterFactory,
   groqAdapterFactory,
+  minimaxAdapterFactory,
+  mistralAdapterFactory,
+  ollamaAdapterFactory,
   openaiAdapterFactory,
+  openrouterAdapterFactory,
+  perplexityAdapterFactory,
+  vllmAdapterFactory,
+  xaiAdapterFactory,
+  zhipuaiAdapterFactory,
 } from "../adapters";
 import modelRouterProxyRoutes from "./model-router";
 
@@ -45,7 +61,7 @@ function createFastifyApp() {
 }
 
 async function upsertModel(params: {
-  provider: "anthropic" | "cohere" | "gemini" | "openai" | "groq";
+  provider: SupportedProvider;
   modelId: string;
 }) {
   await ModelModel.upsert({
@@ -60,25 +76,253 @@ async function upsertModel(params: {
   });
 }
 
+const ROUTABLE_PROVIDER_CASES: Array<{
+  provider: SupportedProvider;
+  modelId: string;
+}> = [
+  { provider: "anthropic", modelId: "claude-opus-4-6-20250918" },
+  { provider: "azure", modelId: "gpt-4.1" },
+  { provider: "bedrock", modelId: "amazon.nova-pro-v1:0" },
+  { provider: "cerebras", modelId: "llama-4-scout-17b-16e-instruct" },
+  { provider: "cohere", modelId: "command-a-03-2025" },
+  { provider: "deepseek", modelId: "deepseek-chat" },
+  { provider: "gemini", modelId: "gemini-2.5-pro" },
+  { provider: "groq", modelId: "llama-3.1-8b-instant" },
+  { provider: "minimax", modelId: "MiniMax-M1" },
+  { provider: "mistral", modelId: "mistral-large-latest" },
+  { provider: "ollama", modelId: "llama3.1" },
+  { provider: "openai", modelId: "gpt-5.4" },
+  { provider: "openrouter", modelId: "openai/gpt-4o-mini" },
+  { provider: "perplexity", modelId: "sonar-pro" },
+  { provider: "vllm", modelId: "meta-llama/Llama-3.1-8B-Instruct" },
+  { provider: "xai", modelId: "grok-4" },
+  { provider: "zhipuai", modelId: "glm-4.5" },
+];
+
+function createCohereTestClient() {
+  return {
+    chat: {
+      create: async () => ({
+        id: "cohere-test",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hello from Cohere" }],
+        },
+        finish_reason: "COMPLETE",
+        usage: {
+          tokens: {
+            input_tokens: 12,
+            output_tokens: 10,
+          },
+        },
+      }),
+      stream: () => ({
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            type: "message-start",
+            message: { id: "cohere-test" },
+          };
+          yield {
+            type: "content-delta",
+            delta: { message: { content: { text: "Hello from Cohere" } } },
+          };
+          yield {
+            type: "message-end",
+            delta: {
+              finish_reason: "COMPLETE",
+              usage: { tokens: { input_tokens: 12, output_tokens: 10 } },
+            },
+          };
+        },
+      }),
+    },
+  };
+}
+
+function createBedrockTestClient() {
+  return {
+    converse: async () => ({
+      output: {
+        message: {
+          role: "assistant",
+          content: [{ text: "Hello from Bedrock" }],
+        },
+      },
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 10,
+      },
+    }),
+    converseStream: async () => ({
+      stream: [],
+    }),
+  };
+}
+
+function createMinimaxTestClient() {
+  return {
+    chatCompletions: async () => ({
+      id: "minimax-test",
+      object: "chat.completion",
+      created: 1,
+      model: "MiniMax-M1",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "Hello from MiniMax",
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: {
+        prompt_tokens: 12,
+        completion_tokens: 10,
+        total_tokens: 22,
+      },
+    }),
+  };
+}
+
+function createZhipuaiTestClient() {
+  return {
+    chatCompletions: async () => ({
+      id: "zhipuai-test",
+      object: "chat.completion",
+      created: 1,
+      model: "glm-4.5",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "Hello from ZhipuAI",
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: {
+        prompt_tokens: 12,
+        completion_tokens: 10,
+        total_tokens: 22,
+      },
+    }),
+  };
+}
+
 describe("model router proxy routes", () => {
   let anthropicStubOptions: AnthropicStubOptions;
 
   beforeEach(() => {
     anthropicStubOptions = {};
-    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
-      () => createOpenAiTestClient() as never,
-    );
-    vi.spyOn(groqAdapterFactory, "createClient").mockImplementation(
-      () => createOpenAiTestClient() as never,
-    );
+    for (const factory of [
+      azureAdapterFactory,
+      cerebrasAdapterFactory,
+      deepseekAdapterFactory,
+      groqAdapterFactory,
+      minimaxAdapterFactory,
+      mistralAdapterFactory,
+      ollamaAdapterFactory,
+      openaiAdapterFactory,
+      openrouterAdapterFactory,
+      perplexityAdapterFactory,
+      vllmAdapterFactory,
+      xaiAdapterFactory,
+    ]) {
+      vi.spyOn(factory, "createClient").mockImplementation(
+        () => createOpenAiTestClient() as never,
+      );
+    }
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () => createAnthropicTestClient(anthropicStubOptions) as never,
+    );
+    vi.spyOn(cohereAdapterFactory, "createClient").mockImplementation(
+      () => createCohereTestClient() as never,
+    );
+    vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+      () => createGeminiTestClient() as never,
+    );
+    vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
+      () => createBedrockTestClient() as never,
+    );
+    vi.spyOn(minimaxAdapterFactory, "createClient").mockImplementation(
+      () => createMinimaxTestClient() as never,
+    );
+    vi.spyOn(zhipuaiAdapterFactory, "createClient").mockImplementation(
+      () => createZhipuaiTestClient() as never,
     );
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  for (const { provider, modelId } of ROUTABLE_PROVIDER_CASES) {
+    test(`routes ${provider} models through chat completions`, async ({
+      makeAgent,
+    }) => {
+      const app = createFastifyApp();
+      await app.register(modelRouterProxyRoutes);
+      await upsertModel({ provider, modelId });
+      const agent = await makeAgent({
+        name: `${provider} Model Router Agent`,
+        agentType: "llm_proxy",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer test-${provider}-key`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: `${provider}:${modelId}`,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        object: "chat.completion",
+      });
+    });
+
+    test(`routes ${provider} models through responses`, async ({
+      makeAgent,
+    }) => {
+      const app = createFastifyApp();
+      await app.register(modelRouterProxyRoutes);
+      await upsertModel({ provider, modelId });
+      const agent = await makeAgent({
+        name: `${provider} Model Router Agent`,
+        agentType: "llm_proxy",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer test-${provider}-key`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: `${provider}:${modelId}`,
+          input: "Hello",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        object: "response",
+        model: `${provider}:${modelId}`,
+      });
+    });
+  }
 
   test("routes provider-qualified model ids to their provider", async ({
     makeAgent,
@@ -248,14 +492,18 @@ describe("model router proxy routes", () => {
           object: "model",
           owned_by: "groq",
         }),
+        expect.objectContaining({
+          id: "cohere:command-a-03-2025",
+          object: "model",
+          owned_by: "cohere",
+        }),
+        expect.objectContaining({
+          id: "gemini:gemini-2.5-pro",
+          object: "model",
+          owned_by: "gemini",
+        }),
       ]),
     });
-    expect(response.json().data).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "cohere:command-a-03-2025" }),
-        expect.objectContaining({ id: "gemini:gemini-2.5-pro" }),
-      ]),
-    );
   });
 
   test("streams Anthropic model router responses as OpenAI SSE chunks", async ({

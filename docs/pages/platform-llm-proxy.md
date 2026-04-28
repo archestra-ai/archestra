@@ -79,19 +79,19 @@ The LLM Proxy supports direct provider API keys, virtual API keys, and JWKS via 
 
 ## OpenAI-Compatible Model Router
 
-Use the model router when an application only supports OpenAI-style chat completions but you want to reach models from multiple configured providers through one endpoint.
+Use the model router when an application supports OpenAI-style APIs but you want to reach models from multiple configured providers through one endpoint.
 
 ```bash
-curl -X POST "https://your-archestra-instance/v1/model-router/{llm-proxy-id}/chat/completions" \
+curl -X POST "https://your-archestra-instance/v1/model-router/{llm-proxy-id}/responses" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai:gpt-5.4",
-    "messages": [{"role": "user", "content": "Hello!"}]
+    "input": "Hello!"
   }'
 ```
 
-The router accepts OpenAI Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns an OpenAI-format response. Each LLM Proxy exposes all model-router-compatible models by default, or you can constrain its model router list in the create/edit dialog. See [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID and provider details.
+The router accepts OpenAI Responses and Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns the matching OpenAI-format response. Each LLM Proxy exposes all model-router-compatible models by default, or you can constrain its model router list in the create/edit dialog. See [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID and provider details.
 
 ## Custom Headers
 

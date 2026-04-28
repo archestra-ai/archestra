@@ -165,11 +165,12 @@ export const RouteId = {
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
     "modelRouterChatCompletionsWithDefaultAgent",
-  ModelRouterChatCompletionsWithAgent:
-    "modelRouterChatCompletionsWithAgent",
+  ModelRouterChatCompletionsWithAgent: "modelRouterChatCompletionsWithAgent",
   ModelRouterListModelsWithDefaultAgent:
     "modelRouterListModelsWithDefaultAgent",
   ModelRouterListModelsWithAgent: "modelRouterListModelsWithAgent",
+  ModelRouterResponsesWithDefaultAgent: "modelRouterResponsesWithDefaultAgent",
+  ModelRouterResponsesWithAgent: "modelRouterResponsesWithAgent",
 
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",

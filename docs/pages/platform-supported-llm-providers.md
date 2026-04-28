@@ -18,11 +18,12 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ## OpenAI-Compatible Model Router
 
-The model router exposes one OpenAI Chat Completions interface for models across configured providers.
+The model router exposes one OpenAI-compatible interface for models across configured providers.
 
 ### Supported Model Router APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Supported for OpenAI-compatible providers, Anthropic Messages models, and Bedrock Converse-compatible models
+- **Responses API** (`/responses`) - ✅ Supported for text requests across model-router-compatible providers
+- **Chat Completions API** (`/chat/completions`) - ✅ Supported for text chat requests across model-router-compatible providers
 - **Models API** (`/models`) - ✅ Returns provider-qualified model IDs
 
 ### Model Router Connection Details
@@ -36,7 +37,7 @@ Use provider-qualified model IDs from `/models` for deterministic routing, for e
 
 The prefix before `:` is the provider. The value after `:` is the provider's native model ID, so provider model IDs can still contain slashes or colons.
 
-Each LLM Proxy exposes all model-router-compatible text chat models by default. Native Gemini and Cohere models are not listed until OpenAI-format translation is available for those providers. To constrain a proxy, edit it and turn off **Expose all available models** in the Model Router section, then choose the allowed models. The `/models` response and `/chat/completions` route both enforce that list.
+Each LLM Proxy exposes all model-router-compatible text models by default, including providers that use native request formats such as Anthropic, Bedrock, Gemini, and Cohere. Archestra translates between OpenAI request/response formats and the provider-native formats before forwarding the request. To constrain a proxy, edit it and turn off **Expose all available models** in the Model Router section, then choose the allowed models. The `/models`, `/responses`, and `/chat/completions` routes all enforce that list.
 
 ## OpenAI
 

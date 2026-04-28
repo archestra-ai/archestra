@@ -102,11 +102,13 @@ export class Authnz {
     const isLlmProxyRoute = SupportedProviders.some((provider) =>
       url.startsWith(`/v1/${provider}`),
     );
+    const isModelRouterRoute = url.startsWith("/v1/model-router");
 
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
+      isModelRouterRoute ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||

@@ -27,8 +27,99 @@ import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import type { OpenAi } from "@/types";
-import { openaiAdapterFactory } from "../adapters";
+import {
+  openAiResponsesAdapterFactory,
+  openaiAdapterFactory,
+} from "../adapters";
 import openAiProxyRoutes from "./openai";
+
+function createOpenAiResponsesTestClient() {
+  return {
+    responses: {
+      create: async (params: { stream?: boolean }) => {
+        if (params.stream) {
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              yield {
+                type: "response.created",
+                response: {
+                  id: "resp-test-openai",
+                  object: "response",
+                  created_at: Math.floor(Date.now() / 1000),
+                  model: "gpt-4o",
+                  status: "in_progress",
+                  output: [],
+                },
+              };
+              yield {
+                type: "response.output_text.delta",
+                delta: "Hello from Responses",
+              };
+              yield {
+                type: "response.completed",
+                response: {
+                  id: "resp-test-openai",
+                  object: "response",
+                  created_at: Math.floor(Date.now() / 1000),
+                  model: "gpt-4o",
+                  status: "completed",
+                  output: [
+                    {
+                      id: "msg-test-openai",
+                      type: "message",
+                      role: "assistant",
+                      status: "completed",
+                      content: [
+                        {
+                          type: "output_text",
+                          text: "Hello from Responses",
+                          annotations: [],
+                        },
+                      ],
+                    },
+                  ],
+                  usage: {
+                    input_tokens: 12,
+                    output_tokens: 10,
+                    total_tokens: 22,
+                  },
+                },
+              };
+            },
+          };
+        }
+
+        return {
+          id: "resp-test-openai",
+          object: "response",
+          created_at: Math.floor(Date.now() / 1000),
+          model: "gpt-4o",
+          status: "completed",
+          output: [
+            {
+              id: "msg-test-openai",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text: "Hello from Responses",
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 12,
+            output_tokens: 10,
+            total_tokens: 22,
+          },
+        };
+      },
+    },
+  };
+}
 
 describe("OpenAI proxy streaming", () => {
   let openAiStubOptions: { interruptAtChunk?: number };
@@ -181,6 +272,111 @@ describe("OpenAI cost tracking", () => {
     expect(interaction.baselineCost).toBeTruthy();
     expect(typeof interaction.cost).toBe("string");
     expect(typeof interaction.baselineCost).toBe("string");
+  });
+});
+
+describe("OpenAI Responses proxy", () => {
+  beforeEach(() => {
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiResponsesTestClient() as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("creates a response and records an openai responses interaction", async ({
+    makeAgent,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+
+    const agent = await makeAgent({ name: "Test Responses Agent" });
+    const { InteractionModel } = await import("@/models");
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForProfile(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        input: "Hello!",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "response",
+      model: "gpt-4o",
+      output: [
+        expect.objectContaining({
+          type: "message",
+        }),
+      ],
+    });
+
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialInteractions.length + 1);
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.type).toBe("openai:responses");
+    expect(interaction.model).toBe("gpt-4o");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+  });
+
+  test("streams responses as OpenAI Responses SSE events", async ({
+    makeAgent,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+
+    const agent = await makeAgent({ name: "Test Streaming Responses Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        input: "Hello!",
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("data: ");
+    expect(response.body).toContain('"type":"response.output_text.delta"');
+    expect(response.body).toContain("data: [DONE]");
   });
 });
 

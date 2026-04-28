@@ -44,7 +44,7 @@ Each LLM Proxy exposes all model-router-compatible text models by default, inclu
 ### Supported OpenAI APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
-- **Responses API** (`/responses`) - ⚠️ Not yet supported ([GitHub Issue #720](https://github.com/archestra-ai/archestra/issues/720))
+- **Responses API** (`/responses`) - ✅ Fully supported
 
 ### OpenAI Connection Details
 
@@ -53,7 +53,7 @@ Each LLM Proxy exposes all model-router-compatible text models by default, inclu
 
 ### Important Notes
 
-- **Use Chat Completions API**: Ensure your application uses the `/chat/completions` endpoint (not `/responses`). Many frameworks default to this, but some like Vercel AI SDK require explicit configuration (add `.chat` to the provider instance).
+- **Use Responses API for new clients**: OpenAI recommends `/responses` for new integrations. Chat Completions remains supported for existing clients.
 - **Streaming**: OpenAI streaming responses require your cloud provider's load balancer to support long-lived connections. See [Cloud Provider Configuration](/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings) for more details.
 
 ## Anthropic

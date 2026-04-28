@@ -77865,6 +77865,688 @@
                                       {
                                         "type": "array",
                                         "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ],
+                                          "additionalProperties": {}
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "instructions": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "max_output_tokens": {
+                                    "nullable": true,
+                                    "type": "number"
+                                  },
+                                  "metadata": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "previous_response_id": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "stream": {
+                                    "nullable": true,
+                                    "type": "boolean"
+                                  },
+                                  "temperature": {
+                                    "nullable": true,
+                                    "type": "number"
+                                  },
+                                  "text": {},
+                                  "tool_choice": {},
+                                  "tools": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "function"
+                                              ]
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "description": {
+                                              "nullable": true,
+                                              "type": "string"
+                                            },
+                                            "parameters": {
+                                              "nullable": true,
+                                              "type": "object",
+                                              "additionalProperties": {}
+                                            },
+                                            "strict": {
+                                              "nullable": true,
+                                              "type": "boolean"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "name"
+                                          ],
+                                          "additionalProperties": {}
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ],
+                                          "additionalProperties": {}
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "top_p": {
+                                    "nullable": true,
+                                    "type": "number"
+                                  },
+                                  "user": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "model"
+                                ],
+                                "additionalProperties": {},
+                                "description": "https://developers.openai.com/api-reference/responses/create"
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "input": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ],
+                                          "additionalProperties": {}
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "instructions": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "max_output_tokens": {
+                                    "nullable": true,
+                                    "type": "number"
+                                  },
+                                  "metadata": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "previous_response_id": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "stream": {
+                                    "nullable": true,
+                                    "type": "boolean"
+                                  },
+                                  "temperature": {
+                                    "nullable": true,
+                                    "type": "number"
+                                  },
+                                  "text": {},
+                                  "tool_choice": {},
+                                  "tools": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "function"
+                                              ]
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "description": {
+                                              "nullable": true,
+                                              "type": "string"
+                                            },
+                                            "parameters": {
+                                              "nullable": true,
+                                              "type": "object",
+                                              "additionalProperties": {}
+                                            },
+                                            "strict": {
+                                              "nullable": true,
+                                              "type": "boolean"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "name"
+                                          ],
+                                          "additionalProperties": {}
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ],
+                                          "additionalProperties": {}
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "top_p": {
+                                    "nullable": true,
+                                    "type": "number"
+                                  },
+                                  "user": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "model"
+                                ],
+                                "additionalProperties": {},
+                                "description": "https://developers.openai.com/api-reference/responses/create"
+                              },
+                              "response": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "object": {
+                                    "type": "string",
+                                    "enum": [
+                                      "response"
+                                    ]
+                                  },
+                                  "created_at": {
+                                    "type": "number"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string"
+                                            },
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "message"
+                                              ]
+                                            },
+                                            "role": {
+                                              "type": "string",
+                                              "enum": [
+                                                "assistant"
+                                              ]
+                                            },
+                                            "status": {
+                                              "type": "string"
+                                            },
+                                            "content": {
+                                              "type": "array",
+                                              "items": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "output_text"
+                                                        ]
+                                                      },
+                                                      "text": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": {}
+                                                  },
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "refusal"
+                                                        ]
+                                                      },
+                                                      "refusal": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "refusal"
+                                                    ],
+                                                    "additionalProperties": {}
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "type",
+                                            "role",
+                                            "status",
+                                            "content"
+                                          ],
+                                          "additionalProperties": {}
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "function_call"
+                                              ]
+                                            },
+                                            "id": {
+                                              "type": "string"
+                                            },
+                                            "call_id": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "arguments": {
+                                              "type": "string"
+                                            },
+                                            "status": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "call_id",
+                                            "name",
+                                            "arguments"
+                                          ],
+                                          "additionalProperties": {}
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ],
+                                          "additionalProperties": {}
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "usage": {
+                                    "type": "object",
+                                    "properties": {
+                                      "input_tokens": {
+                                        "type": "number"
+                                      },
+                                      "output_tokens": {
+                                        "type": "number"
+                                      },
+                                      "total_tokens": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "input_tokens",
+                                      "output_tokens",
+                                      "total_tokens"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "object",
+                                  "created_at",
+                                  "model",
+                                  "output",
+                                  "status"
+                                ],
+                                "additionalProperties": {},
+                                "description": "https://developers.openai.com/api-reference/responses/object"
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "openai:responses"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "requestType": {
+                                "type": "string",
+                                "enum": [
+                                  "main",
+                                  "subagent"
+                                ]
+                              },
+                              "externalAgentIdLabel": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "executionId",
+                              "userId",
+                              "sessionId",
+                              "sessionSource",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "outputTokens",
+                              "baselineCost",
+                              "cost",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "executionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "chat",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "email",
+                                  "schedule-trigger",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion"
+                                ]
+                              },
+                              "request": {
+                                "type": "object",
+                                "properties": {
+                                  "model": {
+                                    "type": "string"
+                                  },
+                                  "input": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "array",
+                                        "items": {
                                           "type": "string"
                                         }
                                       }
@@ -86702,6 +87384,688 @@
                           "type": "string",
                           "enum": [
                             "openai:chatCompletions"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "requestType": {
+                          "type": "string",
+                          "enum": [
+                            "main",
+                            "subagent"
+                          ]
+                        },
+                        "externalAgentIdLabel": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "executionId",
+                        "userId",
+                        "sessionId",
+                        "sessionSource",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "outputTokens",
+                        "baselineCost",
+                        "cost",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "executionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "chat",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "email",
+                            "schedule-trigger",
+                            "knowledge:embedding",
+                            "knowledge:reranker",
+                            "knowledge:query-expansion"
+                          ]
+                        },
+                        "request": {
+                          "type": "object",
+                          "properties": {
+                            "model": {
+                              "type": "string"
+                            },
+                            "input": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                }
+                              ]
+                            },
+                            "instructions": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "max_output_tokens": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "metadata": {
+                              "nullable": true,
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "previous_response_id": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "stream": {
+                              "nullable": true,
+                              "type": "boolean"
+                            },
+                            "temperature": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "text": {},
+                            "tool_choice": {},
+                            "tools": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "function"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "parameters": {
+                                        "nullable": true,
+                                        "type": "object",
+                                        "additionalProperties": {}
+                                      },
+                                      "strict": {
+                                        "nullable": true,
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
+                                    ],
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "top_p": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "user": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "model"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api-reference/responses/create"
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "model": {
+                              "type": "string"
+                            },
+                            "input": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                }
+                              ]
+                            },
+                            "instructions": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "max_output_tokens": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "metadata": {
+                              "nullable": true,
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "previous_response_id": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "stream": {
+                              "nullable": true,
+                              "type": "boolean"
+                            },
+                            "temperature": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "text": {},
+                            "tool_choice": {},
+                            "tools": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "function"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "parameters": {
+                                        "nullable": true,
+                                        "type": "object",
+                                        "additionalProperties": {}
+                                      },
+                                      "strict": {
+                                        "nullable": true,
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "name"
+                                    ],
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "top_p": {
+                              "nullable": true,
+                              "type": "number"
+                            },
+                            "user": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "model"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api-reference/responses/create"
+                        },
+                        "response": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "object": {
+                              "type": "string",
+                              "enum": [
+                                "response"
+                              ]
+                            },
+                            "created_at": {
+                              "type": "number"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "output": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "message"
+                                        ]
+                                      },
+                                      "role": {
+                                        "type": "string",
+                                        "enum": [
+                                          "assistant"
+                                        ]
+                                      },
+                                      "status": {
+                                        "type": "string"
+                                      },
+                                      "content": {
+                                        "type": "array",
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "output_text"
+                                                  ]
+                                                },
+                                                "text": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type",
+                                                "text"
+                                              ],
+                                              "additionalProperties": {}
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "refusal"
+                                                  ]
+                                                },
+                                                "refusal": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type",
+                                                "refusal"
+                                              ],
+                                              "additionalProperties": {}
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "type",
+                                      "role",
+                                      "status",
+                                      "content"
+                                    ],
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "function_call"
+                                        ]
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "call_id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "arguments": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "call_id",
+                                      "name",
+                                      "arguments"
+                                    ],
+                                    "additionalProperties": {}
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "usage": {
+                              "type": "object",
+                              "properties": {
+                                "input_tokens": {
+                                  "type": "number"
+                                },
+                                "output_tokens": {
+                                  "type": "number"
+                                },
+                                "total_tokens": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "input_tokens",
+                                "output_tokens",
+                                "total_tokens"
+                              ],
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "object",
+                            "created_at",
+                            "model",
+                            "output",
+                            "status"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api-reference/responses/object"
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "openai:responses"
                           ]
                         },
                         "model": {
@@ -133167,6 +134531,1170 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OllamaChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/responses": {
+      "post": {
+        "operationId": "openAiResponsesWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a response with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "max_output_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "metadata": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "stream": {
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "temperature": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "text": {},
+                  "tool_choice": {},
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "function"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "parameters": {
+                              "nullable": true,
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "strict": {
+                              "nullable": true,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  },
+                  "top_p": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "user": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api-reference/responses/create"
+              }
+            }
+          },
+          "description": "https://developers.openai.com/api-reference/responses/create"
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "https://developers.openai.com/api-reference/responses/object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "message"
+                                ]
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "output_text"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "text"
+                                      ],
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "refusal"
+                                          ]
+                                        },
+                                        "refusal": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "refusal"
+                                      ],
+                                      "additionalProperties": {}
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "role",
+                              "status",
+                              "content"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function_call"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "call_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "call_id",
+                              "name",
+                              "arguments"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "model",
+                    "output",
+                    "status"
+                  ],
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api-reference/responses/object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/{agentId}/responses": {
+      "post": {
+        "operationId": "openAiResponsesWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a response with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "max_output_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "metadata": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "stream": {
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "temperature": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "text": {},
+                  "tool_choice": {},
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "function"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "parameters": {
+                              "nullable": true,
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "strict": {
+                              "nullable": true,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  },
+                  "top_p": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "user": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api-reference/responses/create"
+              }
+            }
+          },
+          "description": "https://developers.openai.com/api-reference/responses/create"
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "https://developers.openai.com/api-reference/responses/object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "message"
+                                ]
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "output_text"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "text"
+                                      ],
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "refusal"
+                                          ]
+                                        },
+                                        "refusal": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "refusal"
+                                      ],
+                                      "additionalProperties": {}
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "role",
+                              "status",
+                              "content"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function_call"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "call_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "call_id",
+                              "name",
+                              "arguments"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "model",
+                    "output",
+                    "status"
+                  ],
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api-reference/responses/object"
                 }
               }
             }

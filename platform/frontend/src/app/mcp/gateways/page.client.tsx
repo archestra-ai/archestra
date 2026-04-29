@@ -33,7 +33,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
-import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
+import {
+  useDeleteProfile,
+  useProfile,
+  useProfilesPaginated,
+} from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -141,6 +145,12 @@ function McpGateways({
     excludeAuthorIds: excludeAuthorIdsFromUrl
       ? excludeAuthorIdsFromUrl.split(",")
       : undefined,
+    excludeOtherPersonalAgents:
+      scopeFromUrl !== "personal" &&
+      !authorIdsFromUrl &&
+      !excludeAuthorIdsFromUrl
+        ? true
+        : undefined,
     labels: labelsFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -181,6 +191,11 @@ function McpGateways({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
     searchParams.get("create") === "true",
   );
+  const editGatewayIdFromUrl = searchParams.get("edit");
+  const openToolsFromUrl = searchParams.get("openTools") === "true";
+  const { data: editGatewayFromUrl } = useProfile(
+    editGatewayIdFromUrl ?? undefined,
+  );
   const navigateToConnection = useCallback(
     (agentId: string) => {
       router.push(
@@ -192,6 +207,19 @@ function McpGateways({
   const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
     null,
   );
+  const [autoOpenedEditGatewayId, setAutoOpenedEditGatewayId] = useState<
+    string | null
+  >(null);
+  useEffect(() => {
+    if (
+      editGatewayIdFromUrl &&
+      editGatewayFromUrl &&
+      editGatewayFromUrl.id !== autoOpenedEditGatewayId
+    ) {
+      setEditingGateway(editGatewayFromUrl as unknown as GatewayData);
+      setAutoOpenedEditGatewayId(editGatewayFromUrl.id);
+    }
+  }, [editGatewayIdFromUrl, editGatewayFromUrl, autoOpenedEditGatewayId]);
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
@@ -429,7 +457,7 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter />
+                <AgentScopeFilter ownerLabelPlural="MCP gateways" />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -482,9 +510,8 @@ function McpGateways({
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
               defaultIconType="mcp_gateway"
-              onCreated={(gateway) => {
+              onCreated={() => {
                 setIsCreateDialogOpen(false);
-                navigateToConnection(gateway.id);
               }}
             />
 
@@ -494,6 +521,10 @@ function McpGateways({
               agent={editingGateway}
               agentType={editingGateway?.agentType || "mcp_gateway"}
               defaultIconType="mcp_gateway"
+              openToolsCombobox={
+                openToolsFromUrl &&
+                editingGateway?.id === autoOpenedEditGatewayId
+              }
             />
 
             {deletingGatewayId && (

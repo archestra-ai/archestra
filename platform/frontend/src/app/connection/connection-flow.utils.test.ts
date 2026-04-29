@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getShownProviders,
   resolveEffectiveId,
+  resolveInitialClientId,
   toMcpServerSlug,
 } from "./connection-flow.utils";
 
@@ -95,6 +96,60 @@ describe("resolveEffectiveId", () => {
         firstAvailable: "first-id",
       }),
     ).toBe("first-id");
+  });
+});
+
+describe("resolveInitialClientId", () => {
+  const visibleClientIds = ["claude-code", "cursor", "generic"] as const;
+
+  it("returns null when nothing else is specified", () => {
+    expect(
+      resolveInitialClientId({
+        urlClientId: null,
+        adminDefaultClientId: null,
+        visibleClientIds,
+      }),
+    ).toBeNull();
+  });
+
+  it("picks the admin default when no URL param is set", () => {
+    expect(
+      resolveInitialClientId({
+        urlClientId: null,
+        adminDefaultClientId: "cursor",
+        visibleClientIds,
+      }),
+    ).toBe("cursor");
+  });
+
+  it("lets the URL param override the admin default", () => {
+    expect(
+      resolveInitialClientId({
+        urlClientId: "claude-code",
+        adminDefaultClientId: "cursor",
+        visibleClientIds,
+      }),
+    ).toBe("claude-code");
+  });
+
+  it("ignores a URL param that isn't a visible client", () => {
+    expect(
+      resolveInitialClientId({
+        urlClientId: "unknown-client",
+        adminDefaultClientId: "cursor",
+        visibleClientIds,
+      }),
+    ).toBe("cursor");
+  });
+
+  it("returns null when the admin default isn't visible", () => {
+    expect(
+      resolveInitialClientId({
+        urlClientId: null,
+        adminDefaultClientId: "hidden-client",
+        visibleClientIds,
+      }),
+    ).toBeNull();
   });
 });
 

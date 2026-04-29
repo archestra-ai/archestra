@@ -28,7 +28,7 @@ import {
   getAgentTools,
 } from "@/archestra-mcp-server";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -152,7 +152,7 @@ const uiResourceCache = new LRUCacheManager<ToolUiResourceData | null>({
   defaultTtl: UI_RESOURCE_CACHE_TTL_MS,
 });
 
-/** Exported for test cleanup only. */
+/** @public — exported for testability (test cleanup) */
 export function clearUiResourceCache(): void {
   uiResourceCache.clear();
 }
@@ -188,6 +188,7 @@ function getToolCacheKey(
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
+/** @public — exported for testability */
 export const __test = {
   setCachedClient(cacheKey: string, client: Client, ttl?: number) {
     clientCache.set(cacheKey, client, ttl);
@@ -447,6 +448,7 @@ export function closeChatMcpClient(
  * @param organizationId - The organization ID for token creation
  * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
+ * @public — exported for testability
  */
 export async function getChatMcpClient(
   agentId: string,
@@ -702,6 +704,8 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
+  chatOpsBindingId,
+  chatOpsThreadId,
   enabledToolIds,
   conversationId,
   sessionId,
@@ -715,6 +719,10 @@ export async function getChatMcpTools({
   agentId: string;
   userId: string;
   organizationId: string;
+  /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
+  chatOpsBindingId?: string;
+  /** ChatOps thread identifier for thread-scoped agent overrides */
+  chatOpsThreadId?: string;
   enabledToolIds?: string[];
   conversationId?: string;
   /** Session ID for grouping related LLM requests in logs */
@@ -901,12 +909,19 @@ export async function getChatMcpTools({
                       {
                         agent: { id: agentId, name: agentName },
                         conversationId,
+                        chatOpsBindingId,
+                        chatOpsThreadId,
                         userId,
                         agentId,
                         organizationId,
                         sessionId,
                         scheduleTriggerRunId,
                         abortSignal,
+                        tokenAuth: buildTokenAuthContext({
+                          mcpGwToken,
+                          organizationId,
+                          userId,
+                        }),
                       },
                     );
 
@@ -1016,21 +1031,18 @@ export async function getChatMcpTools({
           agentId,
           organizationId,
           conversationId,
+          chatOpsBindingId,
+          chatOpsThreadId,
           sessionId,
           scheduleTriggerRunId,
           // Pass delegation chain for tracking delegated agent calls
           delegationChain,
           abortSignal,
-          tokenAuth: mcpGwToken
-            ? {
-                tokenId: mcpGwToken.tokenId,
-                teamId: mcpGwToken.teamId,
-                isOrganizationToken: mcpGwToken.isOrganizationToken,
-                organizationId,
-                isUserToken: mcpGwToken.isUserToken,
-                userId: mcpGwToken.isUserToken ? userId : undefined,
-              }
-            : undefined,
+          tokenAuth: buildTokenAuthContext({
+            mcpGwToken,
+            organizationId,
+            userId,
+          }),
         };
 
         // Convert agent tools to AI SDK Tool format
@@ -1205,6 +1217,7 @@ export async function getChatMcpTools({
  * Converts the rich output of `executeMcpTool` into a plain text model output.
  * Strips UI-only fields (structuredContent, rawContent, _meta) so the LLM
  * only receives the plain-text `content` summary (SEP-1865).
+ * @public — exported for testability
  */
 export function mcpToolToModelOutput({
   output,
@@ -1790,6 +1803,29 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+function buildTokenAuthContext({
+  mcpGwToken,
+  organizationId,
+  userId,
+}: {
+  mcpGwToken: Awaited<ReturnType<typeof selectMCPGatewayToken>>;
+  organizationId: string;
+  userId: string;
+}): TokenAuthContext | undefined {
+  if (!mcpGwToken) {
+    return undefined;
+  }
+
+  return {
+    tokenId: mcpGwToken.tokenId,
+    teamId: mcpGwToken.teamId,
+    isOrganizationToken: mcpGwToken.isOrganizationToken,
+    organizationId,
+    isUserToken: mcpGwToken.isUserToken,
+    userId: mcpGwToken.isUserToken ? userId : undefined,
+  };
 }
 
 function throwIfAborted(abortSignal?: AbortSignal): void {

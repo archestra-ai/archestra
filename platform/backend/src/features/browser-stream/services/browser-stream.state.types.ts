@@ -1,9 +1,3 @@
-// Option/Result type utilities
-export type Option<T> = { tag: "Some"; value: T } | { tag: "None" };
-
-export const Some = <T>(value: T): Option<T> => ({ tag: "Some", value });
-export const None: Option<never> = { tag: "None" };
-
 export type Result<E, T> = { tag: "Ok"; value: T } | { tag: "Err"; error: E };
 
 export const Ok = <E, T>(value: T): Result<E, T> => ({ tag: "Ok", value });

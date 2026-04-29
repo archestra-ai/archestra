@@ -177,6 +177,45 @@ describe("user routes", () => {
       await nonMemberApp.close();
     });
 
+    test("GET /api/user/impersonable lists org users excluding self and system admins", async ({
+      makeUser: makeOtherUser,
+      makeMember,
+    }) => {
+      const memberUser = await makeOtherUser({ name: "Bob Member" });
+      await makeMember(memberUser.id, organizationId, {
+        role: MEMBER_ROLE_NAME,
+      });
+
+      const adminUser = await makeOtherUser({
+        name: "Carol Admin",
+        role: "admin",
+      });
+      await makeMember(adminUser.id, organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/user/impersonable",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const candidates = response.json() as Array<{
+        id: string;
+        role: string | null;
+      }>;
+
+      const ids = candidates.map((c) => c.id);
+      expect(ids).toContain(memberUser.id);
+      // self excluded
+      expect(ids).not.toContain(user.id);
+      // system admins excluded — better-auth would reject impersonating them anyway
+      expect(ids).not.toContain(adminUser.id);
+
+      const member = candidates.find((c) => c.id === memberUser.id);
+      expect(member?.role).toBe(MEMBER_ROLE_NAME);
+    });
+
     test("admin permissions are unaffected by custom role creation", async ({
       makeCustomRole,
     }) => {

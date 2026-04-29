@@ -6,6 +6,7 @@ import {
   useDefaultMcpGateway,
   useProfile,
 } from "@/lib/agent.query";
+import { useCanManageGateway } from "@/lib/auth/use-can-manage-gateway";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectionFlow } from "./connection-flow";
 import { getShownProviders } from "./connection-flow.utils";
@@ -23,6 +24,7 @@ export default function ConnectionPage() {
     organization?.connectionDefaultMcpGatewayId ?? null;
   const adminDefaultLlmProxyId =
     organization?.connectionDefaultLlmProxyId ?? null;
+  const adminDefaultClientId = organization?.connectionDefaultClientId ?? null;
   // Mirror the fallback chain ConnectionFlow uses for the MCP gateway so the
   // Exposed Servers card reflects the same gateway the rest of the page is
   // scoped to. URL param wins so deep links render the right servers.
@@ -30,13 +32,17 @@ export default function ConnectionPage() {
     urlGatewayId ?? adminDefaultMcpGatewayId ?? defaultMcpGateway?.id ?? null;
   const { data: summaryGateway } = useProfile(summaryGatewayId ?? undefined);
   const hasMcps = (summaryGateway?.tools?.length ?? 0) > 0;
+  const { canManage } = useCanManageGateway(summaryGateway ?? undefined);
 
   return (
     <div className="mx-auto w-full max-w-[1680px] px-6 py-6">
       <div className="mb-7 flex flex-col gap-5">
         <ConnectionHero hasMcps={hasMcps} />
         {summaryGatewayId && (
-          <ExposedServersSummary gatewayId={summaryGatewayId} />
+          <ExposedServersSummary
+            gatewayId={summaryGatewayId}
+            canManage={canManage}
+          />
         )}
       </div>
 
@@ -45,8 +51,10 @@ export default function ConnectionPage() {
         defaultLlmProxyId={defaultLlmProxy?.id}
         adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
         adminDefaultLlmProxyId={adminDefaultLlmProxyId}
+        adminDefaultClientId={adminDefaultClientId}
         shownClientIds={organization?.connectionShownClientIds ?? null}
         shownProviders={getShownProviders(organization)}
+        connectionBaseUrls={organization?.connectionBaseUrls ?? null}
       />
     </div>
   );

@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "tool_assignment_mode" text DEFAULT 'manual' NOT NULL;

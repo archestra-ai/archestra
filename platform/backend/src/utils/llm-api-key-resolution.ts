@@ -6,7 +6,7 @@ import { getProviderEnvApiKey } from "@/config";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
-export interface ResolvedProviderApiKey {
+interface ResolvedProviderApiKey {
   apiKey: string | undefined;
   source: string;
   chatApiKeyId: string | undefined;

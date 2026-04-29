@@ -1,6 +1,39 @@
-import { isSupportedProvider, type SupportedProvider } from "@shared";
+import {
+  type archestraApiTypes,
+  isSupportedProvider,
+  type SupportedProvider,
+} from "@shared";
 
 const DEFAULT_MCP_SERVER_SLUG = "archestra";
+
+export type ConnectionBaseUrl = NonNullable<
+  archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
+>[number];
+
+/**
+ * Pick the env URLs end users should see on /connection. Admins can hide
+ * individual env URLs via `connectionBaseUrls` metadata; we filter those out.
+ * If everything is hidden (or env has none), fall back to the in-cluster
+ * internal URL so the page never renders an empty selector.
+ */
+export function resolveCandidateBaseUrls(params: {
+  externalProxyUrls: readonly string[];
+  internalProxyUrl: string;
+  metadata: readonly ConnectionBaseUrl[] | null | undefined;
+}): string[] {
+  const { externalProxyUrls, internalProxyUrl, metadata } = params;
+  const hidden = new Set(
+    (metadata ?? []).filter((m) => m.visible === false).map((m) => m.url),
+  );
+  const visibleExternal = externalProxyUrls.filter((url) => !hidden.has(url));
+  return visibleExternal.length > 0 ? visibleExternal : [internalProxyUrl];
+}
+
+export function resolveAdminDefaultBaseUrl(
+  metadata: readonly ConnectionBaseUrl[] | null | undefined,
+): string | null {
+  return metadata?.find((m) => m.isDefault)?.url ?? null;
+}
 
 /**
  * Slugify the org's app name for use as an MCP server key (e.g. the key in
@@ -41,6 +74,25 @@ export function getShownProviders(
  * arrived from the opposite slot's table (e.g. picked a specific LLM proxy),
  * so a pre-configured default on this side doesn't override their intent.
  */
+/**
+ * Decide which client to pre-select on the `/connection` page.
+ *
+ * Priority: URL param (`?clientId=`) → admin default. If neither is set, no
+ * client is pre-selected. Candidates that aren't in the visible set are
+ * skipped so we never select a tile the user can't see.
+ */
+export function resolveInitialClientId(params: {
+  urlClientId: string | null;
+  adminDefaultClientId: string | null | undefined;
+  visibleClientIds: readonly string[];
+}): string | null {
+  const { urlClientId, adminDefaultClientId, visibleClientIds } = params;
+  const visible = new Set(visibleClientIds);
+  const pick = (id: string | null | undefined): string | null =>
+    id && visible.has(id) ? id : null;
+  return pick(urlClientId) ?? pick(adminDefaultClientId);
+}
+
 export function resolveEffectiveId(params: {
   selected: string | null;
   fromUrl: string | null;
@@ -60,7 +112,7 @@ export function resolveEffectiveId(params: {
   return (
     selected ??
     fromUrl ??
-    (skipAdminDefault ? null : (adminDefault ?? null)) ??
+    (skipAdminDefault ? null : adminDefault) ??
     systemDefault ??
     firstAvailable ??
     null

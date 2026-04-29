@@ -30,6 +30,12 @@ import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { IconLogoUpload } from "./_components/icon-logo-upload";
 import { LogoUpload } from "./_components/logo-upload";
+import { OnboardingWizardEditor } from "./_components/onboarding-wizards-editor";
+import {
+  type OnboardingWizardValue,
+  sanitizeOnboardingWizard,
+  validateOnboardingWizard,
+} from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -78,6 +84,14 @@ export default function OrganizationSettingsPage() {
   );
   const [showChatLinkValidationErrors, setShowChatLinkValidationErrors] =
     useState(false);
+  // `undefined` = untouched (fall back to server value), `null` = explicitly cleared
+  const [onboardingWizardDraft, setOnboardingWizardDraft] = useState<
+    OnboardingWizardValue | null | undefined
+  >(undefined);
+  const [
+    showOnboardingWizardValidationErrors,
+    setShowOnboardingWizardValidationErrors,
+  ] = useState(false);
   const [chatErrorSupportMessage, setChatErrorSupportMessage] = useState<
     string | null
   >(null);
@@ -96,6 +110,18 @@ export default function OrganizationSettingsPage() {
     ogDescription ?? organization?.ogDescription ?? "";
   const effectiveFooterText = footerText ?? organization?.footerText ?? "";
   const effectiveChatLinks = chatLinks ?? organization?.chatLinks ?? [];
+  const effectiveOnboardingWizard: OnboardingWizardValue | null =
+    onboardingWizardDraft !== undefined
+      ? onboardingWizardDraft
+      : organization?.onboardingWizard
+        ? {
+            label: organization.onboardingWizard.label,
+            pages: organization.onboardingWizard.pages.map((page) => ({
+              image: page.image ?? null,
+              content: page.content,
+            })),
+          }
+        : null;
   const effectiveChatErrorSupportMessage =
     chatErrorSupportMessage ?? organization?.chatErrorSupportMessage ?? "";
   const effectiveSlimChatErrorUi =
@@ -122,11 +148,30 @@ export default function OrganizationSettingsPage() {
     (errors) => !!errors.label || !!errors.url,
   );
 
+  const liveOnboardingWizardValidationError = validateOnboardingWizard(
+    effectiveOnboardingWizard,
+  );
+  const saveOnboardingWizardValidationError = validateOnboardingWizard(
+    effectiveOnboardingWizard,
+    { requireComplete: true },
+  );
+  const hasLiveOnboardingWizardValidationError =
+    !!liveOnboardingWizardValidationError.label ||
+    !!liveOnboardingWizardValidationError.pages;
+  const displayedOnboardingWizardValidationError =
+    showOnboardingWizardValidationErrors
+      ? saveOnboardingWizardValidationError
+      : liveOnboardingWizardValidationError;
+  const hasOnboardingWizardValidationError =
+    !!saveOnboardingWizardValidationError.label ||
+    !!saveOnboardingWizardValidationError.pages;
+
   const hasFieldChanges =
     appName !== null ||
     ogDescription !== null ||
     footerText !== null ||
     chatLinks !== null ||
+    onboardingWizardDraft !== undefined ||
     chatErrorSupportMessage !== null ||
     slimChatErrorUi !== null ||
     chatPlaceholders !== null ||
@@ -142,6 +187,9 @@ export default function OrganizationSettingsPage() {
       const sanitizedChatLinks = sanitizeChatLinks(chatLinks);
       data.chatLinks =
         sanitizedChatLinks.length > 0 ? sanitizedChatLinks : null;
+    }
+    if (onboardingWizardDraft !== undefined) {
+      data.onboardingWizard = sanitizeOnboardingWizard(onboardingWizardDraft);
     }
     if (chatErrorSupportMessage !== null) {
       data.chatErrorSupportMessage = chatErrorSupportMessage.trim() || null;
@@ -168,6 +216,8 @@ export default function OrganizationSettingsPage() {
     setFooterText(null);
     setChatLinks(null);
     setShowChatLinkValidationErrors(false);
+    setOnboardingWizardDraft(undefined);
+    setShowOnboardingWizardValidationErrors(false);
     setChatErrorSupportMessage(null);
     setSlimChatErrorUi(null);
     setChatPlaceholders(null);
@@ -263,6 +313,22 @@ export default function OrganizationSettingsPage() {
                 validationErrors={displayedChatLinkValidationErrors}
                 onChange={setChatLinks}
               />
+              <OnboardingWizardEditor
+                wizard={effectiveOnboardingWizard}
+                validationError={displayedOnboardingWizardValidationError}
+                onChange={setOnboardingWizardDraft}
+                onPersist={async (sanitized) => {
+                  const result = await updateMutation.mutateAsync({
+                    onboardingWizard: sanitized,
+                  });
+                  if (!result) return false;
+                  // Clear the draft so the settings save bar no longer flags
+                  // onboarding as dirty.
+                  setOnboardingWizardDraft(undefined);
+                  setShowOnboardingWizardValidationErrors(false);
+                  return true;
+                }}
+              />
               <div className="space-y-2">
                 <Label htmlFor="chatErrorSupportMessage">
                   Support Contact Message
@@ -357,6 +423,10 @@ export default function OrganizationSettingsPage() {
             setShowChatLinkValidationErrors(true);
             return;
           }
+          if (hasFieldChanges && hasOnboardingWizardValidationError) {
+            setShowOnboardingWizardValidationErrors(true);
+            return;
+          }
 
           if (hasThemeChanges) {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
@@ -376,12 +446,17 @@ export default function OrganizationSettingsPage() {
           setFooterText(null);
           setChatLinks(null);
           setShowChatLinkValidationErrors(false);
+          setOnboardingWizardDraft(undefined);
+          setShowOnboardingWizardValidationErrors(false);
           setChatErrorSupportMessage(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
         }}
-        disabledSave={hasLiveChatLinkValidationErrors}
+        disabledSave={
+          hasLiveChatLinkValidationErrors ||
+          hasLiveOnboardingWizardValidationError
+        }
       />
     </SettingsSectionStack>
   );

@@ -361,6 +361,7 @@ function buildCql(
 /**
  * Extract the LOCAL date from an ISO 8601 timestamp with timezone offset.
  * CQL interprets date literals in the authenticating user's timezone.
+ * @public — exported for testability
  */
 export function formatCqlLocalDate(rawTimestamp: string): string {
   const match = rawTimestamp.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -443,6 +444,7 @@ function pageToDocument(
  *  - Decorative parameters (colour, icon) that should not appear in text
  *  - Table structure (cells separated by tabs, rows by newlines)
  *  - Proper spacing between adjacent inline elements
+ * @public — exported for testability
  */
 export function stripHtmlTags(html: string): string {
   if (!html) return "";

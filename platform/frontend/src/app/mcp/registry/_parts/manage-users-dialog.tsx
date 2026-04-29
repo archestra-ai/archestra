@@ -74,8 +74,10 @@ interface ManageUsersDialogProps {
   catalogId: string;
   /** Called when user wants to add a personal connection */
   onAddPersonalConnection?: () => void;
-  /** Called when user wants to add a shared connection for a specific team */
+  /** Called when user wants to add a team connection for a specific team */
   onAddSharedConnection?: (teamId: string) => void;
+  /** Called when user wants to add an organization-wide connection */
+  onAddOrgConnection?: () => void;
   /** Deployment statuses keyed by server ID */
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   /** Called when user clicks a pod name to open the debug dialog */
@@ -89,6 +91,7 @@ export function ManageUsersDialog({
   catalogId,
   onAddPersonalConnection,
   onAddSharedConnection,
+  onAddOrgConnection,
   deploymentStatuses = {},
   onOpenPodLogs,
 }: ManageUsersDialogProps) {
@@ -105,6 +108,7 @@ export function ManageUsersDialog({
           catalogId={catalogId}
           onAddPersonalConnection={onAddPersonalConnection}
           onAddSharedConnection={onAddSharedConnection}
+          onAddOrgConnection={onAddOrgConnection}
           deploymentStatuses={deploymentStatuses}
           onOpenPodLogs={onOpenPodLogs}
         />
@@ -120,6 +124,7 @@ interface ManageUsersContentProps {
   catalogId: string;
   onAddPersonalConnection?: () => void;
   onAddSharedConnection?: (teamId: string) => void;
+  onAddOrgConnection?: () => void;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
@@ -133,6 +138,7 @@ export function ManageUsersContent({
   catalogId,
   onAddPersonalConnection,
   onAddSharedConnection,
+  onAddOrgConnection,
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
@@ -157,6 +163,9 @@ export function ManageUsersContent({
   const { data: hasMcpServerUpdatePermission } = useHasPermissions({
     mcpServerInstallation: ["update"],
   });
+  const { data: hasMcpServerAdminPermission } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
 
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
@@ -165,17 +174,29 @@ export function ManageUsersContent({
   const catalogItem = catalogItems?.find((item) => item.id === catalogId);
   const isOAuthServer = !!catalogItem?.oauthConfig;
 
+  const getServerScope = (
+    mcpServer: (typeof allServers)[number],
+  ): "personal" | "team" | "org" => {
+    return mcpServer.scope ?? (mcpServer.teamId ? "team" : "personal");
+  };
+
   // Check if user can re-authenticate a credential
   // WHY: Permission requirements match team installation rules for consistency:
   // - Personal: mcpServer:create AND owner
   // - Team: team:admin OR (mcpServer:update AND team membership)
+  // - Org: mcpServerInstallation:admin
   // Members cannot re-authenticate team credentials, only editors and admins can.
   const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
     // Must have mcpServer create permission
     if (!hasMcpServerCreatePermission) return false;
+    const scope = getServerScope(mcpServer);
+
+    if (scope === "org") {
+      return !!hasMcpServerAdminPermission;
+    }
 
     // For personal credentials, only owner can re-authenticate
-    if (!mcpServer.teamId) {
+    if (scope === "personal") {
       return mcpServer.ownerId === currentUserId;
     }
 
@@ -194,7 +215,11 @@ export function ManageUsersContent({
     if (!hasMcpServerCreatePermission) {
       return "You need MCP server create permission to re-authenticate";
     }
-    if (!mcpServer.teamId) {
+    const scope = getServerScope(mcpServer);
+    if (scope === "org") {
+      return "Only an organization admin can re-authenticate an organization connection";
+    }
+    if (scope === "personal") {
       return "Only the connection owner can re-authenticate";
     }
     // WHY: Different messages for different failure reasons
@@ -205,9 +230,12 @@ export function ManageUsersContent({
   };
 
   // Check if user can revoke (delete) a credential
-  // Personal: owner OR mcpServer:update. Team: team:admin OR (mcpServer:update AND membership)
+  // Personal: owner OR mcpServer:update. Team: team:admin OR (mcpServer:update AND membership).
+  // Org: mcpServerInstallation:admin.
   const canRevoke = (mcpServer: (typeof allServers)[number]) => {
-    if (!mcpServer.teamId) {
+    const scope = getServerScope(mcpServer);
+    if (scope === "org") return !!hasMcpServerAdminPermission;
+    if (scope === "personal") {
       return (
         mcpServer.ownerId === currentUserId || !!hasMcpServerUpdatePermission
       );
@@ -219,7 +247,11 @@ export function ManageUsersContent({
 
   // Get tooltip message for disabled revoke button
   const getRevokeTooltip = (mcpServer: (typeof allServers)[number]): string => {
-    if (!mcpServer.teamId) {
+    const scope = getServerScope(mcpServer);
+    if (scope === "org") {
+      return "Only an organization admin can revoke an organization connection";
+    }
+    if (scope === "personal") {
       return "Only the connection owner or an editor/admin can revoke";
     }
     if (!hasMcpServerUpdatePermission) {
@@ -270,7 +302,10 @@ export function ManageUsersContent({
 
   // Close dialog when all credentials are revoked (only after data has loaded)
   // But keep dialog open if add callbacks are available
-  const hasAddCallbacks = !!onAddPersonalConnection || !!onAddSharedConnection;
+  const hasAddCallbacks =
+    !!onAddPersonalConnection ||
+    !!onAddSharedConnection ||
+    !!onAddOrgConnection;
   useEffect(() => {
     if (isActive && serversFetched && !firstServer && !hasAddCallbacks) {
       onClose();
@@ -281,23 +316,32 @@ export function ManageUsersContent({
     return null;
   }
 
-  // Compute which teams don't already have a connection
-  const teamsWithConnection = new Set(
-    allServers?.filter((s) => s.teamId).map((s) => s.teamId),
-  );
+  const teamServers =
+    allServers?.filter((s) => getServerScope(s) === "team" && !!s.teamId) ?? [];
+  const orgServers =
+    allServers?.filter((s) => getServerScope(s) === "org") ?? [];
+  const teamsWithConnection = new Set(teamServers.map((s) => s.teamId));
   const myPersonalServer =
-    allServers?.find((s) => s.ownerId === currentUserId && !s.teamId) ?? null;
+    allServers?.find(
+      (s) => getServerScope(s) === "personal" && s.ownerId === currentUserId,
+    ) ?? null;
   const otherPersonalServers =
-    allServers?.filter((s) => !s.teamId && s.ownerId !== currentUserId) ?? [];
+    allServers?.filter(
+      (s) => getServerScope(s) === "personal" && s.ownerId !== currentUserId,
+    ) ?? [];
   const availableTeamsForShared =
     userTeams?.filter((t) => !teamsWithConnection.has(t.id)) ?? [];
+  const hasOrgConnection = orgServers.length > 0;
+  const sharedServers = [...orgServers, ...teamServers];
 
   const getCredentialOwnerName = (
     mcpServer: (typeof allServers)[number],
-  ): string =>
-    mcpServer.teamId
-      ? mcpServer.teamDetails?.name || "Team"
-      : mcpServer.ownerEmail || "Deleted user";
+  ): string => {
+    const scope = getServerScope(mcpServer);
+    if (scope === "org") return "Organization";
+    if (scope === "team") return mcpServer.teamDetails?.name || "Team";
+    return mcpServer.ownerEmail || "Deleted user";
+  };
 
   return (
     <>
@@ -319,7 +363,8 @@ export function ManageUsersContent({
       <div className={hideHeader ? "space-y-6 px-4 py-4" : "space-y-6 pb-4"}>
         {allServers?.length === 0 &&
         !onAddPersonalConnection &&
-        !onAddSharedConnection ? (
+        !onAddSharedConnection &&
+        !onAddOrgConnection ? (
           <Empty>
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -372,7 +417,7 @@ export function ManageUsersContent({
             />
             <ConnectionsTable
               title="Shared connections"
-              servers={allServers?.filter((s) => !!s.teamId) ?? []}
+              servers={sharedServers}
               isOAuthServer={isOAuthServer}
               getCredentialOwnerName={getCredentialOwnerName}
               canReauthenticate={canReauthenticate}
@@ -395,6 +440,20 @@ export function ManageUsersContent({
                     }
                   : undefined
               }
+              onAddForOrg={
+                onAddOrgConnection && !hasOrgConnection
+                  ? () => {
+                      onClose();
+                      onAddOrgConnection();
+                    }
+                  : undefined
+              }
+              addOrgDisabled={!hasMcpServerAdminPermission}
+              addOrgDisabledReason={
+                !hasMcpServerAdminPermission
+                  ? "Only organization admins can install organization-wide"
+                  : undefined
+              }
               alwaysShow
               sectionTestId={
                 E2eTestId.ManageCredentialsSharedConnectionsSection
@@ -403,6 +462,7 @@ export function ManageUsersContent({
                 E2eTestId.ManageCredentialsSharedConnectionsEmptyState
               }
               addButtonTestId={E2eTestId.ManageCredentialsAddToTeamButton}
+              addOrgButtonTestId={E2eTestId.ManageCredentialsAddToOrgButton}
             />
           </>
         )}
@@ -596,15 +656,16 @@ function ConnectionsTable({
   isDeleting,
   deploymentStatuses = {},
   onOpenPodLogs,
-  onAdd,
-  addDisabled,
-  addDisabledReason,
   teamOptions,
   onAddForTeam,
+  onAddForOrg,
+  addOrgDisabled,
+  addOrgDisabledReason,
   alwaysShow = false,
   sectionTestId,
   emptyStateTestId,
   addButtonTestId,
+  addOrgButtonTestId,
 }: {
   title: string;
   servers: ServerEntry[];
@@ -619,23 +680,25 @@ function ConnectionsTable({
   isDeleting: boolean;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
-  /** Simple add button (for personal connections) */
-  onAdd?: () => void;
-  /** Disable the simple add button */
-  addDisabled?: boolean;
-  /** Tooltip reason when add button is disabled */
-  addDisabledReason?: string;
   /** Team options for dropdown add button (for shared connections) */
   teamOptions?: Array<{ id: string; name: string }>;
   /** Called when a team is selected from the dropdown */
   onAddForTeam?: (teamId: string) => void;
+  /** Called when user wants to install as an organization connection */
+  onAddForOrg?: () => void;
+  /** Disable the "Add to organization" button */
+  addOrgDisabled?: boolean;
+  /** Tooltip reason when "Add to organization" is disabled */
+  addOrgDisabledReason?: string;
   /** Always show the section even when empty and no add button */
   alwaysShow?: boolean;
   sectionTestId?: string;
   emptyStateTestId?: string;
   addButtonTestId?: string;
+  addOrgButtonTestId?: string;
 }) {
-  const hasAddButton = onAdd || (teamOptions && onAddForTeam);
+  const hasAddButton =
+    (teamOptions && onAddForTeam) || onAddForOrg !== undefined;
   if (servers.length === 0 && !hasAddButton && !alwaysShow) return null;
   const hasDeploymentStatuses = servers.some((s) => deploymentStatuses[s.id]);
 
@@ -643,72 +706,75 @@ function ConnectionsTable({
     <div data-testid={sectionTestId}>
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-sm font-medium">{title}</h4>
-        {onAdd && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={onAdd}
-                    disabled={addDisabled}
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    Add
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {addDisabled && addDisabledReason && (
-                <TooltipContent>{addDisabledReason}</TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        {teamOptions && onAddForTeam && (
-          <DropdownMenu>
+        <div className="flex items-center gap-2">
+          {onAddForOrg && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        disabled={teamOptions.length === 0}
-                        data-testid={addButtonTestId}
-                      >
-                        <Plus className="mr-1 h-3 w-3" />
-                        Add to team
-                        <ChevronDown className="ml-1 h-3 w-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={onAddForOrg}
+                      disabled={addOrgDisabled}
+                      data-testid={addOrgButtonTestId}
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Add to organization
+                    </Button>
                   </span>
                 </TooltipTrigger>
-                {teamOptions.length === 0 && (
-                  <TooltipContent>
-                    All teams already have a connection
-                  </TooltipContent>
+                {addOrgDisabled && addOrgDisabledReason && (
+                  <TooltipContent>{addOrgDisabledReason}</TooltipContent>
                 )}
               </Tooltip>
             </TooltipProvider>
-            <DropdownMenuContent align="end">
-              {teamOptions.map((team) => (
-                <DropdownMenuItem
-                  key={team.id}
-                  onClick={() => onAddForTeam(team.id)}
-                  data-testid={getManageCredentialsAddToTeamOptionTestId(
-                    team.name,
+          )}
+          {teamOptions && onAddForTeam && (
+            <DropdownMenu>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={teamOptions.length === 0}
+                          data-testid={addButtonTestId}
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          Add to team
+                          <ChevronDown className="ml-1 h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </span>
+                  </TooltipTrigger>
+                  {teamOptions.length === 0 && (
+                    <TooltipContent>
+                      All teams already have a connection
+                    </TooltipContent>
                   )}
-                >
-                  {team.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+                </Tooltip>
+              </TooltipProvider>
+              <DropdownMenuContent align="end">
+                {teamOptions.map((team) => (
+                  <DropdownMenuItem
+                    key={team.id}
+                    onClick={() => onAddForTeam(team.id)}
+                    data-testid={getManageCredentialsAddToTeamOptionTestId(
+                      team.name,
+                    )}
+                  >
+                    {team.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
       {servers.length === 0 ? (
         <div
@@ -757,7 +823,7 @@ function ConnectionsTable({
                         {getCredentialOwnerName(mcpServer)}
                       </span>
                     </div>
-                    {mcpServer.teamId && (
+                    {(mcpServer.teamId || mcpServer.scope === "org") && (
                       <span className="text-muted-foreground text-xs block">
                         Created by: {mcpServer.ownerEmail}
                       </span>

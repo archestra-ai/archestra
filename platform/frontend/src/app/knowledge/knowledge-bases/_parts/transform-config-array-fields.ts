@@ -19,6 +19,8 @@ export function transformConfigArrayFields(
     "fileTypes",
     "projectGids",
     "tagsToSkip",
+    "objects",
+    "collectionIds",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

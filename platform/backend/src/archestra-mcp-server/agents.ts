@@ -16,6 +16,7 @@ import {
 import {
   AgentScopeSchema,
   InsertAgentSchemaBase,
+  ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
@@ -145,6 +146,9 @@ const EditAgentToolArgsSchema = z
           .optional(),
         scope: AgentScopeSchema.optional().describe(
           "Updated visibility scope for the agent.",
+        ),
+        toolExposureMode: ToolExposureModeSchema.optional().describe(
+          "How tools should be exposed to MCP clients and models.",
         ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)
@@ -360,9 +364,6 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolShortNames = registry.toolShortNames;
-export const toolArgsSchemas = registry.toolArgsSchemas;
-export const toolOutputSchemas = registry.toolOutputSchemas;
 export const toolEntries = registry.toolEntries;
 
 // === Exports ===

@@ -1,4 +1,4 @@
-import { ZhipuaiErrorTypes } from "@shared";
+import { ArchestraInternalErrorCode, ZhipuaiErrorTypes } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
@@ -1021,6 +1021,17 @@ export const zhipuaiAdapterFactory: LLMProvider<
   ): Promise<AsyncIterable<ZhipuaiStreamChunk>> {
     const zhipuaiClient = client as ZhipuaiClient;
     return zhipuaiClient.chatCompletionsStream(request);
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // Zhipu returns a numeric string `error.code`; 1261 maps to
+    // "Prompt exceeds max length".
+    if (
+      get(error, "error.code") === ZhipuaiErrorTypes.CONTEXT_LENGTH_EXCEEDED
+    ) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    return undefined;
   },
 
   extractErrorMessage(error: unknown): string {

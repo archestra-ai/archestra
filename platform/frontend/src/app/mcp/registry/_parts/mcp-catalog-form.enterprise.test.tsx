@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useEnterpriseFeature } from "@/lib/config/config.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 
 const { useIdentityProvidersMock } = vi.hoisted(() => ({
@@ -75,6 +75,12 @@ vi.mock("@/components/visibility-selector", () => ({
 describe("McpCatalogForm enterprise gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useFeature).mockImplementation((feature: string) => {
+      if (feature === "mcpServerBaseImage") return "";
+      if (feature === "orchestratorK8sRuntime") return true;
+      if (feature === "byosEnabled") return false;
+      return undefined;
+    });
     useIdentityProvidersMock.mockReturnValue({ data: [] });
     global.ResizeObserver = class ResizeObserver {
       observe() {}
@@ -248,5 +254,31 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "new-password",
     );
+  });
+
+  it("hides automatic tool assignment label copy when advanced tool features are disabled", () => {
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(
+      screen.queryByText(
+        "Organize servers and drive automatic tool assignment",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows automatic tool assignment label copy when advanced tool features are enabled", () => {
+    vi.mocked(useFeature).mockImplementation((feature: string) => {
+      if (feature === "mcpServerBaseImage") return "";
+      if (feature === "orchestratorK8sRuntime") return true;
+      if (feature === "byosEnabled") return false;
+      if (feature === "advancedToolFeaturesEnabled") return true;
+      return undefined;
+    });
+
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(
+      screen.getByText("Organize servers and drive automatic tool assignment"),
+    ).toBeInTheDocument();
   });
 });

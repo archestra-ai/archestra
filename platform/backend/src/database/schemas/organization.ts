@@ -15,7 +15,9 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  ConnectionBaseUrl,
   GlobalToolPolicy,
+  OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
   OrganizationLimitCleanupInterval,
@@ -121,6 +123,9 @@ const organizationsTable = pgTable("organization", {
   /** Optional quick links shown on the new chat page */
   chatLinks: jsonb("chat_links").$type<OrganizationChatLink[]>(),
 
+  /** Optional multi-step onboarding wizard rendered beside chat links on the new chat page */
+  onboardingWizard: jsonb("onboarding_wizard").$type<OnboardingWizard>(),
+
   /** Chat input placeholder texts (cycles with typing animation) */
   chatPlaceholders: text("chat_placeholders").array(),
 
@@ -165,6 +170,13 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultLlmProxyId: uuid("connection_default_llm_proxy_id"),
 
   /**
+   * Admin-selected client pre-selected on /connection. Null falls back to the
+   * system default ("generic" / "Any Client"). Stored as a string because
+   * client IDs are a frontend-owned string enum, not a DB row.
+   */
+  connectionDefaultClientId: text("connection_default_client_id"),
+
+  /**
    * Client IDs shown on the /connection client grid. Null = show all.
    * ("generic" is always shown regardless of this list.)
    */
@@ -174,6 +186,15 @@ const organizationsTable = pgTable("organization", {
   connectionShownProviders: text("connection_shown_providers")
     .$type<SupportedProvider[]>()
     .array(),
+
+  /**
+   * Per-URL metadata (description + default flag) for the externally configured
+   * proxy URLs (NEXT_PUBLIC_ARCHESTRA_API_BASE_URL). The URLs themselves are
+   * still env-driven — this table just augments them with admin context.
+   */
+  connectionBaseUrls: jsonb("connection_base_urls").$type<
+    ConnectionBaseUrl[]
+  >(),
 });
 
 export default organizationsTable;

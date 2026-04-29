@@ -29,6 +29,7 @@
  */
 
 import type {
+  ArchestraInternalErrorCode,
   InteractionSource,
   SupportedProvider,
   SupportedProviderDiscriminator,
@@ -196,6 +197,15 @@ export interface LLMResponseAdapter<TResponse> {
 
   /** Get original response */
   getOriginalResponse(): TResponse;
+
+  /**
+   * Optional hook for adapters whose wire response shape differs from the
+   * shape we want to persist in the interaction log. When present, the proxy
+   * handler stores this value instead of `getOriginalResponse()`. Default
+   * (unimplemented) means log == wire, which is correct for every native
+   * adapter.
+   */
+  getLoggedResponse?(): TResponse;
 
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
   getFinishReasons(): string[];
@@ -403,6 +413,17 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * error.error.message structure), so this normalizes them to a string.
    */
   extractErrorMessage(error: unknown): string;
+
+  /**
+   * Classify a provider-specific SDK error into an Archestra-normalized
+   * internal code. Used by the proxy to emit a uniform `internal_code`
+   * field on the error response body, which downstream consumers (notably
+   * the chat-error mapper) can read without provider-specific knowledge.
+   *
+   * Returns `undefined` when the error doesn't match any known normalized
+   * category, in which case no `internal_code` is added to the envelope.
+   */
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined;
 }
 
 /**

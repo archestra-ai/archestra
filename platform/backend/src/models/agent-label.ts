@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import type { AgentLabelWithDetails } from "@/types";
+import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 
 class AgentLabelModel {
   /**
@@ -8,7 +8,7 @@ class AgentLabelModel {
    */
   static async getLabelsForAgent(
     agentId: string,
-  ): Promise<AgentLabelWithDetails[]> {
+  ): Promise<AgentLabelGetResponse[]> {
     const rows = await db
       .select({
         keyId: schema.agentLabelsTable.keyId,

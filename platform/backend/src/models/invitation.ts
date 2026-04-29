@@ -129,6 +129,19 @@ class InvitationModel {
         );
       }
 
+      // Create personal MCP gateway for the new member
+      try {
+        await AgentModel.ensurePersonalMcpGateway({
+          userId: user.id,
+          organizationId,
+        });
+      } catch (gatewayError) {
+        logger.error(
+          { err: gatewayError },
+          `❌ Failed to create personal MCP gateway for user ${user.email}:`,
+        );
+      }
+
       // Mark invitation as accepted
       await InvitationModel.patch(invitationId, { status: "accepted" });
 

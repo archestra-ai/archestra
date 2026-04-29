@@ -3,6 +3,7 @@
 import type { Permissions } from "@shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
@@ -65,6 +66,7 @@ export function AppShell({ children }: AppShellProps) {
     <SidebarProvider defaultOpen={!shouldCollapse}>
       <AppSidebar />
       <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        <ImpersonationBanner />
         <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
           <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
           <div id="mobile-header-actions" className="flex items-center gap-2" />

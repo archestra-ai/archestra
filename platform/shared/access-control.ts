@@ -171,8 +171,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatAgentPicker: [],
-  chatProviderSettings: [],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
@@ -736,9 +736,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
   },
-  [RouteId.GetVirtualApiKeys]: {
-    llmVirtualKey: ["read"],
-  },
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },
@@ -863,6 +860,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetImpersonableUsers]: { member: ["update"] }, // Role debugger picker — admin-only (better-auth still gates the actual impersonate-user call)
 
   // Member default agent routes - available to all authenticated users (manages their own default agent)
   [RouteId.GetMemberDefaultAgent]: {},

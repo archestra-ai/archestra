@@ -150,11 +150,17 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const advancedToolFeaturesEnabled =
+    useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
+  );
+  const gatewayLabelsDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformMcpGateway,
+    "tool-assignment-mode",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
@@ -1362,8 +1368,7 @@ export function McpCatalogForm({
                                       />
                                     </FormControl>
                                     <FormDescription>
-                                      Comma-separated list of OAuth scopes
-                                      (defaults to read, write)
+                                      Comma-separated list of OAuth scopes.
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>
@@ -1777,20 +1782,33 @@ export function McpCatalogForm({
 
           <div className={`border rounded-lg p-5 ${embedded ? "mb-4" : ""}`}>
             <Collapsible open={labelsOpen} onOpenChange={setLabelsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold hover:text-foreground text-foreground transition-colors w-full">
-                <ChevronRight
-                  className={`h-4 w-4 transition-transform ${labelsOpen ? "rotate-90" : ""}`}
-                />
-                Labels
-                <span className="text-xs font-normal text-muted-foreground ml-1">
-                  Organize, filter and search servers
-                </span>
-                {labels.length > 0 && (
-                  <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                    {labels.length}
-                  </span>
+              <div className="flex items-center justify-between gap-2">
+                <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold hover:text-foreground text-foreground transition-colors flex-1 min-w-0">
+                  <ChevronRight
+                    className={`h-4 w-4 transition-transform ${labelsOpen ? "rotate-90" : ""}`}
+                  />
+                  Labels
+                  {advancedToolFeaturesEnabled && (
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      Organize servers and drive automatic tool assignment
+                    </span>
+                  )}
+                  {labels.length > 0 && (
+                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                      {labels.length}
+                    </span>
+                  )}
+                </CollapsibleTrigger>
+                {advancedToolFeaturesEnabled && gatewayLabelsDocsUrl && (
+                  <ExternalDocsLink
+                    href={gatewayLabelsDocsUrl}
+                    className="text-xs text-muted-foreground underline shrink-0"
+                    showIcon={false}
+                  >
+                    Learn more
+                  </ExternalDocsLink>
                 )}
-              </CollapsibleTrigger>
+              </div>
               <CollapsibleContent className="pt-4">
                 <ProfileLabels
                   ref={labelsRef}

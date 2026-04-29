@@ -10,7 +10,6 @@ import {
 import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,14 +21,13 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useFetchTeamTokenValue,
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { ClientIcon } from "./client-grid";
+import { ClientIcon } from "./client-icon";
 import type {
   ConnectClient,
   McpBuildParams,
@@ -38,12 +36,13 @@ import type {
 import { toMcpServerSlug } from "./connection-flow.utils";
 import { TerminalBlock } from "./terminal-block";
 
-const { externalProxyUrls, internalProxyUrl } = config.api;
-
 interface McpClientInstructionsProps {
   client: ConnectClient;
   gatewayId: string;
   gatewaySlug: string;
+  gatewayName: string;
+  /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
+  baseUrl: string;
 }
 
 type AuthMethod = "oauth" | "token";
@@ -58,10 +57,9 @@ export function McpClientInstructions({
   client,
   gatewayId,
   gatewaySlug,
+  gatewayName,
+  baseUrl,
 }: McpClientInstructionsProps) {
-  const [baseUrl, setBaseUrl] = useState<string>(
-    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
-  );
   const supportedAuth =
     client.mcp.kind === "unsupported" ? "both" : client.mcp.supportedAuth;
   const tabs = authTabs(supportedAuth);
@@ -78,17 +76,13 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = toMcpServerSlug(appName);
+  const serverName = gatewayName.trim()
+    ? gatewayName.trim().toLowerCase().replace(/\s+/g, "_")
+    : toMcpServerSlug(appName);
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   return (
     <div id="mcp-instructions" className="space-y-4">
-      <ConnectionBaseUrlSelect
-        value={baseUrl}
-        onChange={setBaseUrl}
-        idPrefix="mcp"
-      />
-
       {client.mcp.kind === "generic" && <Eyebrow>Authentication</Eyebrow>}
       {tabs.length > 1 ? (
         <Tabs
@@ -214,16 +208,14 @@ function McpBody({
                   <div className="text-[13.5px] font-medium text-foreground">
                     {s.title}
                   </div>
-                  <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                    {s.body}
-                  </div>
+                  {s.body && (
+                    <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                      {s.body}
+                    </div>
+                  )}
                 </div>
                 {s.buildCommand && (
-                  <TerminalBlock
-                    title={s.terminalTitle ?? mcp.configFile}
-                    language={s.language ?? mcp.language}
-                    code={s.buildCommand(ctaParams)}
-                  />
+                  <TerminalBlock code={s.buildCommand(ctaParams)} />
                 )}
               </div>
             </li>
@@ -252,19 +244,17 @@ function McpBody({
                 <div className="text-[13.5px] font-medium text-foreground">
                   {s.title}
                 </div>
-                <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                  {s.body}
-                </div>
+                {s.body && (
+                  <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                    {s.body}
+                  </div>
+                )}
               </div>
             </li>
           ))}
         </ol>
 
-        <TerminalBlock
-          title={mcp.configFile}
-          language={mcp.language}
-          code={configCode}
-        />
+        <TerminalBlock code={configCode} />
       </div>
     </div>
   );

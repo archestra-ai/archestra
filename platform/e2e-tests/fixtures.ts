@@ -9,6 +9,7 @@ import {
   type Page,
 } from "@playwright/test";
 import {
+  basicUserAuthFile,
   E2eTestId,
   editorAuthFile,
   memberAuthFile,
@@ -32,12 +33,16 @@ interface TestFixtures {
   editorPage: Page;
   /** Page authenticated as member */
   memberPage: Page;
+  /** Page authenticated as a user with a slim custom role (see auth.users.setup.ts) */
+  basicUserPage: Page;
   /** Navigate admin page to a path */
   goToAdminPage: GoToPageFn;
   /** Navigate editor page to a path */
   goToEditorPage: GoToPageFn;
   /** Navigate member page to a path */
   goToMemberPage: GoToPageFn;
+  /** Navigate basic-user page to a path */
+  goToBasicUserPage: GoToPageFn;
 }
 
 export const goToPage = async (page: Page, path = "") => {
@@ -129,6 +134,17 @@ export const test = base.extend<TestFixtures>({
     await context.close();
   },
   /**
+   * Basic-user page - creates a new browser context with basic-user (custom role) auth
+   */
+  basicUserPage: async ({ browser }, use) => {
+    const { context, page } = await createAuthenticatedPage(
+      browser,
+      basicUserAuthFile,
+    );
+    await use(page);
+    await context.close();
+  },
+  /**
    * Navigate admin page to a path
    */
   goToAdminPage: async ({ adminPage }, use) => {
@@ -153,6 +169,15 @@ export const test = base.extend<TestFixtures>({
     await use(async (path = "") => {
       await memberPage.goto(`${UI_BASE_URL}${path}`);
       await dismissOnboarding(memberPage);
+    });
+  },
+  /**
+   * Navigate basic-user page to a path
+   */
+  goToBasicUserPage: async ({ basicUserPage }, use) => {
+    await use(async (path = "") => {
+      await basicUserPage.goto(`${UI_BASE_URL}${path}`);
+      await dismissOnboarding(basicUserPage);
     });
   },
 });

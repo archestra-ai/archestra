@@ -1,6 +1,7 @@
 import { ChatErrorCode } from "@shared";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
+import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 import MessageModel from "./message";
 
@@ -35,62 +36,64 @@ describe("ConversationModel", () => {
     expect(conversation.createdAt).toBeDefined();
     expect(conversation.updatedAt).toBeDefined();
     expect(Array.isArray(conversation.messages)).toBe(true);
-    expect(conversation.lastChatError).toBeNull();
+    expect(conversation.chatErrors).toEqual([]);
   });
 
-  test("can update and clear the persisted chat error", async ({
+  test("can persist chat error events on a conversation", async ({
     makeUser,
     makeOrganization,
     makeAgent,
   }) => {
     const user = await makeUser();
     const org = await makeOrganization();
-    const agent = await makeAgent({ name: "Error State Agent", teams: [] });
+    const agent = await makeAgent({ name: "Error Event Agent", teams: [] });
     const conversation = await ConversationModel.create({
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
-      title: "Error State",
+      title: "Error Events",
       selectedModel: "claude-3-haiku-20240307",
     });
 
-    await ConversationModel.updateLastChatError({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-      lastChatError: {
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
         code: ChatErrorCode.ServerError,
         message: "The AI provider is experiencing issues.",
         isRetryable: true,
-        traceId: "trace-123",
+        traceId: "trace-event-1",
+      },
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
+        code: ChatErrorCode.RateLimit,
+        message: "Rate limit exceeded.",
+        isRetryable: true,
+        traceId: "trace-event-2",
       },
     });
 
-    const withError = await ConversationModel.findById({
+    const found = await ConversationModel.findById({
       id: conversation.id,
       userId: user.id,
       organizationId: org.id,
-    });
-    expect(withError?.lastChatError).toEqual({
-      code: ChatErrorCode.ServerError,
-      message: "The AI provider is experiencing issues.",
-      isRetryable: true,
-      traceId: "trace-123",
     });
 
-    await ConversationModel.updateLastChatError({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-      lastChatError: null,
-    });
-
-    const cleared = await ConversationModel.findById({
-      id: conversation.id,
-      userId: user.id,
-      organizationId: org.id,
-    });
-    expect(cleared?.lastChatError).toBeNull();
+    expect(found?.chatErrors.map((chatError) => chatError.error)).toEqual([
+      {
+        code: ChatErrorCode.ServerError,
+        message: "The AI provider is experiencing issues.",
+        isRetryable: true,
+        traceId: "trace-event-1",
+      },
+      {
+        code: ChatErrorCode.RateLimit,
+        message: "Rate limit exceeded.",
+        isRetryable: true,
+        traceId: "trace-event-2",
+      },
+    ]);
   });
 
   test("can find conversation by id", async ({

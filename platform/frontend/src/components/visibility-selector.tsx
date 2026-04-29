@@ -39,6 +39,7 @@ export function VisibilitySelector<Value extends string>({
   const [expanded, setExpanded] = useState(false);
   const selected =
     options.find((option) => option.value === value) ?? options[0];
+  const isStatic = options.length <= 1;
 
   return (
     <div className="space-y-4">
@@ -49,7 +50,21 @@ export function VisibilitySelector<Value extends string>({
           <Label>{label}</Label>
         )}
 
-        {expanded ? (
+        {isStatic ? (
+          <div className="w-full rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                <selected.icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">{selected.label}</div>
+                <div className="text-xs text-muted-foreground">
+                  {selected.description}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : expanded ? (
           <div className="space-y-1.5">
             {options.map((option) => {
               const Icon = option.icon;

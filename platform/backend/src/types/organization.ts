@@ -158,6 +158,18 @@ export const OrganizationChatLinkSchema = z.object({
   url: ChatLinkUrlSchema,
 });
 
+/**
+ * Admin-curated metadata for a connection base URL. The URL itself is still
+ * supplied via `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL`; this lets admins attach a
+ * human description and pick one as the default for the /connection page.
+ */
+export const ConnectionBaseUrlSchema = z.object({
+  url: z.string().trim().min(1).max(2000),
+  description: z.string().trim().max(500).default(""),
+  isDefault: z.boolean().default(false),
+  visible: z.boolean().default(true),
+});
+
 export const OnboardingWizardPageSchema = z.object({
   image: Base64ImageSchema.optional(),
   content: z.string(),
@@ -229,6 +241,7 @@ const extendedFields = {
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
   mcpOauthAccessTokenLifetimeSeconds: McpOauthAccessTokenLifetimeSecondsSchema,
+  connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -301,6 +314,32 @@ export const UpdateConnectionSettingsSchema = z.object({
     .array(SupportedProvidersSchema)
     .nullable()
     .optional(),
+  connectionBaseUrls: z
+    .array(ConnectionBaseUrlSchema)
+    .max(50)
+    .nullable()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (!value) return;
+      const seen = new Set<string>();
+      let defaults = 0;
+      for (const item of value) {
+        if (seen.has(item.url)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Duplicate connection base URL",
+          });
+        }
+        seen.add(item.url);
+        if (item.isDefault) defaults += 1;
+      }
+      if (defaults > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Only one connection base URL can be marked as default",
+        });
+      }
+    }),
 });
 
 export const CompleteOnboardingSchema = z.object({
@@ -323,6 +362,7 @@ export type OnboardingWizard = z.infer<typeof OnboardingWizardSchema>;
 export type McpOauthAccessTokenLifetimeSeconds = z.infer<
   typeof McpOauthAccessTokenLifetimeSecondsSchema
 >;
+export type ConnectionBaseUrl = z.infer<typeof ConnectionBaseUrlSchema>;
 
 function isValidHttpUrl(value: string): boolean {
   try {

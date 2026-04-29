@@ -405,7 +405,6 @@ test("Verify tool calling using different static credentials", async ({
     expectedResult: "Admin-personal-credential",
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-    cookieHeaders,
     profileId: sharedGateway.id,
   });
 
@@ -422,7 +421,6 @@ test("Verify tool calling using different static credentials", async ({
     expectedResult: "Editor-personal-credential",
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-    cookieHeaders,
     profileId: teamGateway.id,
   });
 

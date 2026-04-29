@@ -1,3 +1,4 @@
+import { SupportedProvidersSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -6,6 +7,12 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
 const VirtualApiKeyTeamSchema = z.object({
   id: z.string(),
   name: z.string(),
+});
+
+export const VirtualApiKeyModelRouterMappingSchema = z.object({
+  provider: SupportedProvidersSchema,
+  chatApiKeyId: z.string().uuid(),
+  chatApiKeyName: z.string(),
 });
 
 export const SelectVirtualApiKeySchema = createSelectSchema(
@@ -31,16 +38,18 @@ export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
   value: z.string(),
   teams: z.array(VirtualApiKeyTeamSchema),
   authorName: z.string().nullable(),
+  modelRouterProviderApiKeys: z.array(VirtualApiKeyModelRouterMappingSchema),
 });
 
 /** Schema for virtual key with parent API key info (for org-wide listing) */
 export const VirtualApiKeyWithParentInfoSchema =
   SelectVirtualApiKeySchema.extend({
-    parentKeyName: z.string(),
-    parentKeyProvider: z.string(),
+    parentKeyName: z.string().nullable(),
+    parentKeyProvider: z.string().nullable(),
     parentKeyBaseUrl: z.string().nullable(),
     teams: z.array(VirtualApiKeyTeamSchema),
     authorName: z.string().nullable(),
+    modelRouterProviderApiKeys: z.array(VirtualApiKeyModelRouterMappingSchema),
   });
 
 export type SelectVirtualApiKey = z.infer<typeof SelectVirtualApiKeySchema>;

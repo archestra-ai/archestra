@@ -171,8 +171,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // UI behavior resources
   simpleView: ["enable"],
-  chatAgentPicker: [],
-  chatProviderSettings: [],
+  chatAgentPicker: ["enable"],
+  chatProviderSettings: ["enable"],
   chatExpandToolCalls: ["enable"],
 
   // better-auth internal resource — not exposed to users, kept for ACL compatibility
@@ -735,9 +735,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
-  },
-  [RouteId.GetVirtualApiKeys]: {
-    llmVirtualKey: ["read"],
   },
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],

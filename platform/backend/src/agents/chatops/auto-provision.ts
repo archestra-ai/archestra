@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
+  InvitationModel,
   MemberModel,
   OrganizationModel,
   UserModel,
@@ -92,7 +93,14 @@ export async function autoProvisionUser(params: {
       );
       const existingUser = await UserModel.findByEmail(normalizedEmail);
       if (existingUser) {
-        return { userId: existingUser.id, invitationId: "" };
+        const invitations = await InvitationModel.findByEmail(normalizedEmail);
+        const existingInvitation = invitations.find((inv) =>
+          inv.status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS),
+        );
+        return {
+          userId: existingUser.id,
+          invitationId: existingInvitation?.id ?? "",
+        };
       }
     }
     throw error;

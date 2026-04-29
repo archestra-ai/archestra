@@ -126,7 +126,6 @@ async function seedMockData() {
   logger.info("\nCreating agents, gateways, and proxies...");
 
   // Always recreate default agents
-  await AgentModel.getMCPGatewayOrCreateDefault();
   await AgentModel.getLLMProxyOrCreateDefault();
 
   const sharedUsers = [

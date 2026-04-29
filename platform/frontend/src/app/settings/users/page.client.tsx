@@ -1,8 +1,9 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Plus, Shield, Trash2, UserCog } from "lucide-react";
+import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -30,8 +31,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDisableInvitations } from "@/lib/config/config.query";
+import {
+  useImpersonateUser,
+  useImpersonationCandidates,
+} from "@/lib/impersonation.query";
 import {
   type Invitation,
   type Member,
@@ -212,6 +217,15 @@ function MembersTab({
   const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
   const deletePendingSignupMember = useDeletePendingSignupMember();
 
+  const { data: session } = useSession();
+  const currentUserId = session?.user.id;
+  const { data: impersonationCandidates } = useImpersonationCandidates();
+  const impersonableUserIds = new Set(
+    (impersonationCandidates ?? []).map((c) => c.id),
+  );
+  const { mutate: impersonateUser, isPending: isImpersonatingUser } =
+    useImpersonateUser();
+
   const [changingRole, setChangingRole] = useState<{
     member: Member;
     newRole: string;
@@ -349,6 +363,10 @@ function MembersTab({
           );
         }
 
+        const canImpersonateThisUser =
+          member.userId !== currentUserId &&
+          impersonableUserIds.has(member.userId);
+
         return (
           <TableRowActions
             actions={[
@@ -359,6 +377,18 @@ function MembersTab({
                 onClick: () =>
                   setChangingRole({ member, newRole: member.role }),
               },
+              ...(canImpersonateThisUser
+                ? [
+                    {
+                      icon: <Eye className="h-4 w-4" />,
+                      label: "View as user",
+                      permissions: { member: ["update"] },
+                      disabled: isImpersonatingUser,
+                      testId: `${E2eTestId.ImpersonationViewAsButton}-${member.userId}`,
+                      onClick: () => impersonateUser(member.userId),
+                    },
+                  ]
+                : []),
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Remove user",

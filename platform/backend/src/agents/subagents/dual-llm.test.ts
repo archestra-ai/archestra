@@ -48,8 +48,10 @@ function makeBuiltInAgent(params: {
     name: params.name,
     slug: null,
     isDefault: false,
+    isPersonalGateway: false,
     considerContextUntrusted: false,
     agentType: "agent",
+    toolExposureMode: "full",
     systemPrompt: params.systemPrompt,
     description: null,
     icon: null,
@@ -59,6 +61,7 @@ function makeBuiltInAgent(params: {
     llmApiKeyId: null,
     llmModel: null,
     passthroughHeaders: null,
+    toolAssignmentMode: "manual",
     identityProviderId: null,
     builtInAgentConfig:
       params.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN

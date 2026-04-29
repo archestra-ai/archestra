@@ -229,6 +229,111 @@ describe("IdentityProviderModel", () => {
       ).toBe("urn:ietf:params:oauth:token-type:access_token");
     });
 
+    test("clears persisted allowed email domains for non-Google API submissions", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+
+      const created = await IdentityProviderModel.create(
+        {
+          providerId: "Okta",
+          issuer: "https://integrator-8514409.okta.com",
+          domain: "example.com",
+          userId: user.id,
+          oidcConfig: {
+            issuer: "https://integrator-8514409.okta.com",
+            skipDiscovery: true,
+            pkce: true,
+            clientId: "okta-client-id",
+            clientSecret: "okta-client-secret",
+            discoveryEndpoint:
+              "https://integrator-8514409.okta.com/.well-known/openid-configuration",
+          },
+        },
+        org.id,
+        new Headers(),
+        {
+          api: {
+            registerSSOProvider,
+          },
+        } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+      );
+
+      expect(registerSSOProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            domain: "sso-placeholder.example.com",
+          }),
+        }),
+      );
+      expect(created.domain).toBe("");
+    });
+
+    test("keeps persisted allowed email domains for Google API submissions", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+
+      const created = await IdentityProviderModel.create(
+        {
+          providerId: "Google",
+          issuer: "https://accounts.google.com",
+          domain: "example.com",
+          userId: user.id,
+          oidcConfig: {
+            issuer: "https://accounts.google.com",
+            skipDiscovery: true,
+            pkce: true,
+            clientId: "google-client-id",
+            clientSecret: "google-client-secret",
+            discoveryEndpoint:
+              "https://accounts.google.com/.well-known/openid-configuration",
+          },
+        },
+        org.id,
+        new Headers(),
+        {
+          api: {
+            registerSSOProvider,
+          },
+        } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+      );
+
+      expect(created.domain).toBe("example.com");
+    });
+
     test("rejects registration when discovery fetch returns a non-2xx response", async ({
       makeOrganization,
       makeUser,
@@ -1023,8 +1128,29 @@ describe("IdentityProviderModel", () => {
 
       expect(updated).not.toBeNull();
       expect(updated?.issuer).toBe("https://new-issuer.com");
-      expect(updated?.domain).toBe("new.example.com");
+      expect(updated?.domain).toBe("");
       expect(updated?.providerId).toBe("Okta"); // Unchanged
+    });
+
+    test("keeps updated allowed email domains for Google providers", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      const inserted = await makeIdentityProvider(org.id, {
+        providerId: "Google",
+        issuer: "https://accounts.google.com",
+        domain: "old.example.com",
+      });
+
+      const updated = await IdentityProviderModel.update(
+        inserted.id,
+        { domain: "new.example.com" },
+        org.id,
+      );
+
+      expect(updated?.domain).toBe("new.example.com");
     });
 
     test("can update oidcConfig", async ({

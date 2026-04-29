@@ -357,7 +357,7 @@ export const createFastifyInstance = () =>
 
       // Handle ApiError objects
       if (error instanceof ApiError) {
-        const { statusCode, message, type } = error;
+        const { statusCode, message, type, internalCode } = error;
 
         if (statusCode >= 500) {
           this.log.error(
@@ -380,6 +380,7 @@ export const createFastifyInstance = () =>
           error: {
             message,
             type,
+            ...(internalCode && { internal_code: internalCode }),
           },
         });
       }

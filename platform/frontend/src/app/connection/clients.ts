@@ -2,7 +2,7 @@ import type { SupportedProvider } from "@shared";
 
 export interface ClientStep {
   title: string;
-  body: string;
+  body?: string;
   /** Optional per-step command, rendered in an inline terminal beneath the step. */
   buildCommand?: (params: McpBuildParams) => string;
   /** Language for this step's terminal. Falls back to the parent `language`. */
@@ -117,20 +117,19 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
       steps: [
         {
           title: "Add the gateway",
-          body: "Run this in your terminal. Claude Code stores the server in ~/.claude/mcp.json.",
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName }) =>
             `claude mcp add --transport http ${serverName} ${url}`,
         },
         {
-          title: "Open Claude and run /mcp",
-          body: "Start Claude Code, then type /mcp to list MCP servers and kick off the OAuth handshake.",
+          title:
+            "Open Claude and run /mcp. Select the gateway you just added and kick off the OAuth flow.",
           terminalTitle: "terminal",
           buildCommand: () => "claude /mcp",
         },
         {
           title: "Finish the OAuth flow",
-          body: "Claude Code opens your browser. Sign in and approve the gateway — Archestra refreshes the token automatically from there.",
+          body: "Claude Code opens your browser. Sign in and approve the gateway.",
         },
       ],
     },

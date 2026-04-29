@@ -49,6 +49,27 @@ describe("agent tool execution", () => {
     expect((result.content[0] as any).text).toContain("New Test Agent");
   });
 
+  test("create_agent persists toolExposureMode", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Search And Run Agent",
+        toolExposureMode: "search_and_run_only",
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+
+    const createdAgentId = extractCreatedId(result);
+    const created = await AgentModel.findById(
+      createdAgentId,
+      mockContext.userId,
+      true,
+    );
+
+    expect(created?.toolExposureMode).toBe("search_and_run_only");
+  });
+
   test("create_agent assigns knowledge bases and connectors", async ({
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -259,6 +280,41 @@ describe("agent tool execution", () => {
     );
     expect(updated?.knowledgeBaseIds).toEqual([replacementKb.id]);
     expect(updated?.connectorIds).toEqual([replacementConnector.id]);
+  });
+
+  test("edit_agent updates toolExposureMode", async ({ makeAgent }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const agent = await makeAgent({
+      name: "Editable Tool Exposure Agent",
+      agentType: "agent",
+      organizationId,
+      toolExposureMode: "full",
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_agent`,
+      {
+        id: agent.id,
+        toolExposureMode: "search_and_run_only",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully updated agent",
+    );
+
+    const updated = await AgentModel.findById(
+      agent.id,
+      mockContext.userId,
+      true,
+    );
+    expect(updated?.toolExposureMode).toBe("search_and_run_only");
   });
 
   test("edit_agent assigns MCP tools with late-bound resolution via toolAssignments", async ({

@@ -1,41 +1,47 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Globe, Lock, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-const PERSONAL_VALUE = "personal";
+export type McpServerInstallScope = "personal" | "team" | "org";
 
 interface SelectMcpServerCredentialTypeAndTeamsProps {
   onTeamChange: (teamId: string | null) => void;
   /** Catalog ID to filter existing installations - if provided, disables already-used options */
   catalogId?: string;
-  /** Callback when credential type changes (personal vs team) */
-  onCredentialTypeChange?: (type: "personal" | "team") => void;
-  /** When true, this is a reinstall - credential type is locked to existing value */
+  /** Callback when scope changes (personal vs team vs org) */
+  onScopeChange?: (scope: McpServerInstallScope) => void;
+  /** When true, this is a reinstall - scope is locked to existing value */
   isReinstall?: boolean;
-  /** The team ID of the existing server being reinstalled (null/undefined = personal) */
+  /** The team ID of the existing server being reinstalled (null/undefined = personal/org) */
   existingTeamId?: string | null;
-  /** When true, only personal installation is allowed (teams are disabled) */
+  /** The scope of the existing server being reinstalled */
+  existingScope?: McpServerInstallScope;
+  /** When true, only personal installation is allowed */
   personalOnly?: boolean;
-  /** When true, only team installation is allowed (personal is disabled) */
+  /** When true, only team installation is allowed */
   teamOnly?: boolean;
-  /** Callback when install availability changes (false when user lacks all options) */
+  /** When true, only organization installation is allowed */
+  orgOnly?: boolean;
+  /** Callback when install availability changes */
   onCanInstallChange?: (canInstall: boolean) => void;
   /** Pre-select a specific team (used when adding shared connection from manage dialog) */
   preselectedTeamId?: string | null;
@@ -44,11 +50,13 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
 export function SelectMcpServerCredentialTypeAndTeams({
   onTeamChange,
   catalogId,
-  onCredentialTypeChange,
+  onScopeChange,
   isReinstall = false,
   existingTeamId,
+  existingScope,
   personalOnly = false,
   teamOnly = false,
+  orgOnly = false,
   onCanInstallChange,
   preselectedTeamId,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
@@ -63,140 +71,235 @@ export function SelectMcpServerCredentialTypeAndTeams({
   const { data: hasMcpServerUpdate } = useHasPermissions({
     mcpServerInstallation: ["update"],
   });
+  // WHY: mcpServerInstallation:admin gates org-wide installations
+  const { data: isMcpServerAdmin } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
 
-  // Compute existing installations for this catalog item
-  const { hasPersonalInstallation, teamsWithInstallation } = useMemo(() => {
-    if (!catalogId || !installedServers) {
-      return { hasPersonalInstallation: false, teamsWithInstallation: [] };
-    }
+  const { hasPersonalInstallation, teamsWithInstallation, hasOrgInstallation } =
+    useMemo(() => {
+      if (!catalogId || !installedServers) {
+        return {
+          hasPersonalInstallation: false,
+          teamsWithInstallation: [] as string[],
+          hasOrgInstallation: false,
+        };
+      }
 
-    const serversForCatalog = installedServers.filter(
-      (s) => s.catalogId === catalogId,
-    );
+      const serversForCatalog = installedServers.filter(
+        (s) => s.catalogId === catalogId,
+      );
 
-    const hasPersonal = serversForCatalog.some(
-      (s) => s.ownerId === currentUserId && !s.teamId,
-    );
+      const hasPersonal = serversForCatalog.some((s) => {
+        const scope = s.scope ?? (s.teamId ? "team" : "personal");
+        return scope === "personal" && s.ownerId === currentUserId;
+      });
 
-    const teamsWithInstall = serversForCatalog
-      .filter((s): s is typeof s & { teamId: string } => !!s.teamId)
-      .map((s) => s.teamId);
+      const hasOrg = serversForCatalog.some((s) => s.scope === "org");
 
-    return {
-      hasPersonalInstallation: hasPersonal,
-      teamsWithInstallation: teamsWithInstall,
-    };
-  }, [catalogId, installedServers, currentUserId]);
+      const teamIds = serversForCatalog
+        .filter((s) => {
+          const scope = s.scope ?? (s.teamId ? "team" : "personal");
+          return scope === "team" && !!s.teamId;
+        })
+        .map((s) => s.teamId as string);
 
-  // Filter available teams to exclude those that already have this server installed
-  // For reinstall: include ALL teams (no filtering needed since we're updating, not creating)
+      return {
+        hasPersonalInstallation: hasPersonal,
+        teamsWithInstallation: teamIds,
+        hasOrgInstallation: hasOrg,
+      };
+    }, [catalogId, installedServers, currentUserId]);
+
   const availableTeams = useMemo(() => {
     if (!teams) return [];
-    if (isReinstall) return teams; // No filtering for reinstall
-    if (!catalogId) return teams; // No filtering if no catalogId provided
+    if (isReinstall) return teams;
+    if (!catalogId) return teams;
     return teams.filter((t) => !teamsWithInstallation.includes(t.id));
   }, [teams, catalogId, teamsWithInstallation, isReinstall]);
 
-  // WHY: During reinstall, lock credential type to existing value (can't change ownership)
-  // Personal is disabled if: reinstalling a team server, or (for new install) already has personal or BYOS enabled
-  const isPersonalDisabled = teamOnly
-    ? true
-    : personalOnly
-      ? false
-      : isReinstall
-        ? !!existingTeamId // Reinstalling team server - can't switch to personal
-        : hasPersonalInstallation;
+  const initialScope: McpServerInstallScope = useMemo(() => {
+    if (isReinstall) {
+      return existingScope ?? (existingTeamId ? "team" : "personal");
+    }
+    if (orgOnly) return "org";
+    if (personalOnly) return "personal";
+    if (teamOnly) return "team";
+    if (preselectedTeamId) return "team";
+    if (hasPersonalInstallation && availableTeams.length > 0) return "team";
+    return "personal";
+  }, [
+    isReinstall,
+    existingScope,
+    existingTeamId,
+    orgOnly,
+    personalOnly,
+    teamOnly,
+    preselectedTeamId,
+    hasPersonalInstallation,
+    availableTeams.length,
+  ]);
+
+  const [scope, setScope] = useState<McpServerInstallScope>(initialScope);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(() => {
+    if (isReinstall) return existingTeamId ?? null;
+    if (preselectedTeamId) return preselectedTeamId;
+    return null;
+  });
+
+  // WHY: During reinstall, lock scope to existing value (can't change ownership).
+  // Personal is disabled if: reinstalling a non-personal server, or (for new install)
+  // already has personal or BYOS enabled.
+  const isPersonalDisabled =
+    teamOnly || orgOnly
+      ? true
+      : personalOnly
+        ? false
+        : isReinstall
+          ? initialScope !== "personal"
+          : hasPersonalInstallation;
 
   // WHY: Team options are disabled if:
-  // 1. personalOnly mode (e.g. Playwright - only personal installs allowed)
-  // 2. Reinstalling a personal server (can't switch to team)
+  // 1. personalOnly or orgOnly mode (only that scope is allowed)
+  // 2. Reinstalling a non-team server (can't switch to team)
   // 3. User lacks mcpServer:update permission (members can never create team installations)
-  const areTeamsDisabled = personalOnly
-    ? true
-    : isReinstall
-      ? !existingTeamId // Reinstalling personal server - can't switch to team
-      : !hasMcpServerUpdate;
+  const isTeamDisabled =
+    personalOnly || orgOnly
+      ? true
+      : isReinstall
+        ? initialScope !== "team"
+        : !hasMcpServerUpdate || availableTeams.length === 0;
 
-  // When both personal and team options are unavailable, user cannot install at all
-  const canInstall = !isPersonalDisabled || !areTeamsDisabled;
+  const isOrgDisabled = personalOnly
+    ? true
+    : teamOnly
+      ? true
+      : orgOnly
+        ? false
+        : isReinstall
+          ? initialScope !== "org"
+          : !isMcpServerAdmin || hasOrgInstallation;
+
+  const canInstall = !(isPersonalDisabled && isTeamDisabled && isOrgDisabled);
 
   useEffect(() => {
     onCanInstallChange?.(canInstall);
   }, [canInstall, onCanInstallChange]);
 
-  // Compute the initial dropdown value
-  const initialValue = useMemo(() => {
-    if (personalOnly) {
-      return PERSONAL_VALUE;
-    }
-    if (preselectedTeamId) {
-      return preselectedTeamId;
-    }
-    if (teamOnly && availableTeams.length > 0) {
-      return availableTeams[0].id;
-    }
-    if (isReinstall) {
-      return existingTeamId || PERSONAL_VALUE;
-    }
-    // Force team selection when personal is already installed
-    if (hasPersonalInstallation && availableTeams.length > 0) {
-      return availableTeams[0].id;
-    }
-    return PERSONAL_VALUE;
-  }, [
-    personalOnly,
-    preselectedTeamId,
-    teamOnly,
-    hasPersonalInstallation,
-    availableTeams,
-    isReinstall,
-    existingTeamId,
-  ]);
-
-  const [selectedValue, setSelectedValue] = useState<string>(initialValue);
-
-  // Sync when constraints change (e.g., data loads asynchronously)
-  // Also notifies parent of the current credential type and team
   useEffect(() => {
-    // For reinstall, don't auto-switch - keep the existing value
     if (isReinstall) {
-      const isTeam = selectedValue !== PERSONAL_VALUE;
-      onCredentialTypeChange?.(isTeam ? "team" : "personal");
-      onTeamChange(isTeam ? selectedValue : null);
+      onScopeChange?.(initialScope);
+      onTeamChange(initialScope === "team" ? (existingTeamId ?? null) : null);
       return;
     }
 
-    // Force away from personal when personal already installed
-    if (hasPersonalInstallation && selectedValue === PERSONAL_VALUE) {
+    if (hasPersonalInstallation && scope === "personal") {
       if (availableTeams.length > 0) {
-        setSelectedValue(availableTeams[0].id);
-        onCredentialTypeChange?.("team");
+        setScope("team");
+        setSelectedTeamId(availableTeams[0].id);
+        onScopeChange?.("team");
         onTeamChange(availableTeams[0].id);
+        return;
+      }
+      if (!isOrgDisabled) {
+        setScope("org");
+        setSelectedTeamId(null);
+        onScopeChange?.("org");
+        onTeamChange(null);
         return;
       }
     }
 
-    // Always notify parent of current state when dependencies change
-    const isTeam = selectedValue !== PERSONAL_VALUE;
-    onCredentialTypeChange?.(isTeam ? "team" : "personal");
-    onTeamChange(isTeam ? selectedValue : null);
+    onScopeChange?.(scope);
+    onTeamChange(scope === "team" ? selectedTeamId : null);
   }, [
+    isReinstall,
+    initialScope,
+    existingTeamId,
     hasPersonalInstallation,
     availableTeams,
-    selectedValue,
-    onCredentialTypeChange,
+    scope,
+    selectedTeamId,
+    isOrgDisabled,
+    onScopeChange,
     onTeamChange,
-    isReinstall,
   ]);
 
-  const handleValueChange = (value: string) => {
-    setSelectedValue(value);
-    if (value === PERSONAL_VALUE) {
-      onCredentialTypeChange?.("personal");
-      onTeamChange(null);
+  const visibilityOptions = useMemo<
+    Array<VisibilityOption<McpServerInstallScope>>
+  >(() => {
+    const options: Array<VisibilityOption<McpServerInstallScope>> = [];
+
+    if (!teamOnly) {
+      options.push({
+        value: "personal",
+        label: "Personal",
+        description:
+          "Only you can use this connection. Admins can still assign it.",
+        icon: Lock,
+        disabled: isPersonalDisabled,
+        disabledReason: hasPersonalInstallation
+          ? "You have already installed this server personally"
+          : teamOnly
+            ? "Only team installation is allowed here"
+            : undefined,
+      });
+    }
+
+    if (!personalOnly) {
+      options.push({
+        value: "team",
+        label: "Team",
+        description: "Available to members of one selected team.",
+        icon: Users,
+        disabled: isTeamDisabled,
+        disabledReason: !hasMcpServerUpdate
+          ? "You need mcpServerInstallation:update to share with a team"
+          : availableTeams.length === 0
+            ? teams?.length === 0
+              ? "Create a team first to share this connection"
+              : "All teams already have this server installed"
+            : undefined,
+      });
+    }
+
+    if (!personalOnly && !teamOnly) {
+      options.push({
+        value: "org",
+        label: "Organization",
+        description: "Available to everyone in the organization.",
+        icon: Globe,
+        disabled: isOrgDisabled,
+        disabledReason: !isMcpServerAdmin
+          ? "You need mcpServerInstallation:admin to install organization-wide"
+          : hasOrgInstallation
+            ? "An organization-wide installation already exists"
+            : undefined,
+      });
+    }
+
+    return options;
+  }, [
+    teamOnly,
+    personalOnly,
+    isPersonalDisabled,
+    isTeamDisabled,
+    isOrgDisabled,
+    hasPersonalInstallation,
+    hasMcpServerUpdate,
+    availableTeams.length,
+    teams?.length,
+    isMcpServerAdmin,
+    hasOrgInstallation,
+  ]);
+
+  const handleScopeChange = (next: McpServerInstallScope) => {
+    setScope(next);
+    if (next === "team") {
+      const firstAvailable = availableTeams[0]?.id ?? null;
+      setSelectedTeamId((current) => current ?? firstAvailable);
     } else {
-      onCredentialTypeChange?.("team");
-      onTeamChange(value);
+      setSelectedTeamId(null);
     }
   };
 
@@ -207,83 +310,59 @@ export function SelectMcpServerCredentialTypeAndTeams({
         <AlertDescription>
           <span className="font-semibold">Already installed</span>
           <p className="mt-1">
-            You have already installed this MCP server for yourself. To install
-            for a team, you need the{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-              mcpServer:update
-            </code>{" "}
-            permission.
+            This MCP server is already installed everywhere you have permission
+            to install it.
           </p>
         </AlertDescription>
       </Alert>
     );
   }
 
-  // When personalOnly or preselectedTeamId, hide the selector entirely — already determined
-  if (personalOnly || preselectedTeamId) {
+  // When personalOnly, orgOnly, or preselectedTeamId, skip the selector
+  // entirely — scope is fixed.
+  if (personalOnly || orgOnly || preselectedTeamId) {
     return null;
   }
 
+  const hideSelector = isReinstall || visibilityOptions.length <= 1;
+
   return (
-    <div className="space-y-2">
-      <Label>{teamOnly ? "Select team" : "Connect MCP Server for"}</Label>
-      <Select
-        value={selectedValue}
-        onValueChange={handleValueChange}
-        disabled={isLoadingTeams || isReinstall}
-      >
-        <SelectTrigger data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}>
-          <SelectValue
-            placeholder={
-              isLoadingTeams ? "Loading..." : "Select installation type"
-            }
-          />
-        </SelectTrigger>
-        <SelectContent>
-          {!teamOnly && (
-            <SelectItem
-              value={PERSONAL_VALUE}
-              disabled={isPersonalDisabled}
-              data-testid={E2eTestId.SelectCredentialTypePersonal}
-            >
-              Myself
-              {hasPersonalInstallation && !isReinstall && (
-                <span className="text-muted-foreground ml-1">
-                  (already installed)
-                </span>
-              )}
-            </SelectItem>
-          )}
-          {(isReinstall ? availableTeams : (teams ?? [])).length > 0 && (
-            <SelectGroup>
-              {!teamOnly && <SelectLabel>Teams</SelectLabel>}
-              {(isReinstall ? availableTeams : (teams ?? [])).map((team) => {
-                const isAlreadyInstalled =
-                  !isReinstall && teamsWithInstallation.includes(team.id);
-                return (
-                  <SelectItem
-                    key={team.id}
-                    value={team.id}
-                    disabled={areTeamsDisabled || isAlreadyInstalled}
-                  >
-                    {team.name}
-                    {isAlreadyInstalled && (
-                      <span className="text-muted-foreground ml-1">
-                        (already installed)
-                      </span>
-                    )}
-                  </SelectItem>
-                );
-              })}
-            </SelectGroup>
-          )}
-        </SelectContent>
-      </Select>
-      <p className="text-xs text-muted-foreground">
-        {selectedValue === PERSONAL_VALUE
-          ? "Only admins can select this connection when assigning tools to agents and MCP gateways - other users will not see it."
-          : "Any team member can select this connection when assigning tools to agents and MCP gateways."}
-      </p>
+    <div
+      className="space-y-4"
+      data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
+    >
+      {!hideSelector && (
+        <VisibilitySelector
+          label="Install for"
+          value={scope}
+          options={visibilityOptions}
+          onValueChange={handleScopeChange}
+        />
+      )}
+
+      {scope === "team" && (
+        <div className="space-y-2">
+          <Label>Team</Label>
+          <Select
+            value={selectedTeamId ?? ""}
+            onValueChange={(value) => setSelectedTeamId(value)}
+            disabled={isLoadingTeams || isReinstall}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={isLoadingTeams ? "Loading..." : "Select a team"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {(isReinstall ? (teams ?? []) : availableTeams).map((team) => (
+                <SelectItem key={team.id} value={team.id}>
+                  {team.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }

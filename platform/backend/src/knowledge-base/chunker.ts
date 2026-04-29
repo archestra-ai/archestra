@@ -3,7 +3,7 @@ import type { Tiktoken } from "tiktoken";
 import { buildMetadataSuffixes } from "./metadata-suffix";
 import { countTokens, getEncoding } from "./tokenizer";
 
-export interface Chunk {
+interface Chunk {
   content: string;
   chunkIndex: number;
   tokenCount: number;
@@ -11,7 +11,7 @@ export interface Chunk {
   metadataSuffixKeyword: string | null;
 }
 
-export interface DocumentInput {
+interface DocumentInput {
   title: string;
   content: string;
   metadata?: Record<string, unknown>;

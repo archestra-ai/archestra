@@ -65,6 +65,19 @@ export async function autoProvisionUser(params: {
       );
     }
 
+    // Create personal MCP gateway for the new member
+    try {
+      await AgentModel.ensurePersonalMcpGateway({
+        userId,
+        organizationId: org.id,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "[ChatOps] Failed to create personal MCP gateway",
+      );
+    }
+
     // Create invitation record for the signup-completion link
     const invitationId = crypto.randomUUID();
     await db.insert(schema.invitationsTable).values({
@@ -110,7 +123,7 @@ export async function isSsoConfigured(): Promise<boolean> {
   return !!idp;
 }
 
-export interface WelcomeMessage {
+interface WelcomeMessage {
   text: string;
   actionUrl: string;
   actionLabel: string;

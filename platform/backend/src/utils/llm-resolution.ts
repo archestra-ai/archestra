@@ -16,7 +16,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
-export interface ConversationLlmSelection {
+interface ConversationLlmSelection {
   chatApiKeyId: string | null;
   selectedModel: string;
   selectedProvider: SupportedProvider;

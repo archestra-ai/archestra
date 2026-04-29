@@ -275,6 +275,7 @@ describe("websocket MCP logs", () => {
     const team = await makeTeam(org.id, owner.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: owner.id,
       teamId: team.id,
@@ -327,6 +328,7 @@ describe("websocket MCP logs", () => {
     const team = await makeTeam(org.id, owner.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: owner.id,
       teamId: team.id,
@@ -393,6 +395,7 @@ describe("websocket MCP logs", () => {
 
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: owner.id,
       teamId: team.id,
@@ -496,11 +499,13 @@ describe("websocket MCP logs", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer1 = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
     });
     const mcpServer2 = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -595,11 +600,13 @@ describe("websocket MCP deployment statuses", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "local" });
     const mcpServer1 = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
     });
     const mcpServer2 = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -678,6 +685,7 @@ describe("websocket MCP deployment statuses", () => {
 
     // Create a local server using the fixture (defaults to serverType: "local")
     const localServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -685,6 +693,7 @@ describe("websocket MCP deployment statuses", () => {
 
     // Create a remote server by first creating via fixture then updating serverType
     const remoteServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -758,6 +767,7 @@ describe("websocket MCP deployment statuses", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "local" });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -817,6 +827,7 @@ describe("websocket MCP deployment statuses", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "local" });
     await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -877,6 +888,7 @@ describe("websocket MCP deployment statuses", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "local" });
     await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -995,6 +1007,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, owner.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: owner.id,
       teamId: team.id,
@@ -1088,6 +1101,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, owner.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: owner.id,
       teamId: team.id,
@@ -1151,6 +1165,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -1205,6 +1220,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -1270,6 +1286,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -1340,6 +1357,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -1405,6 +1423,7 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
@@ -1468,11 +1487,13 @@ describe("websocket MCP exec", () => {
     const team = await makeTeam(org.id, user.id);
     const catalog = await makeInternalMcpCatalog();
     const mcpServer1 = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,
     });
     const mcpServer2 = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: team.id,

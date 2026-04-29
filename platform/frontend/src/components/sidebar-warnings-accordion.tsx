@@ -69,14 +69,6 @@ export function SidebarWarningsAccordion() {
 
   const isCollapsed = sidebarState === "collapsed";
 
-  const tooltipContent = (
-    <div className="flex flex-col gap-0.5">
-      {warnings.map((w) => (
-        <span key={w.label}>{w.label}</span>
-      ))}
-    </div>
-  );
-
   return (
     <SidebarGroup className="py-0 group-data-[collapsible=icon]:p-0">
       <SidebarGroupContent>
@@ -85,15 +77,12 @@ export function SidebarWarningsAccordion() {
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton
-                    tooltip={{ children: tooltipContent }}
-                    className="text-destructive hover:text-destructive"
-                  >
+                  <SidebarMenuButton className="text-destructive hover:text-destructive">
                     <AlertTriangle className="shrink-0" />
                     <span>Security warnings</span>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="end">
+                <DropdownMenuContent side="top" align="center">
                   {warnings.map((w) => (
                     <DropdownMenuItem asChild key={w.label}>
                       <Link href={w.href}>{w.label}</Link>

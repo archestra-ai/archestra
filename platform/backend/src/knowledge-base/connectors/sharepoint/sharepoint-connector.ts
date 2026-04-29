@@ -7,7 +7,6 @@ import type {
 } from "@microsoft/microsoft-graph-types";
 import type { ModelInputModality } from "@shared";
 import JSZip from "jszip";
-import { extractTextFromDocx } from "../docx-text-extractor";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -22,6 +21,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,

@@ -2,7 +2,6 @@ import type { ModelInputModality } from "@shared";
 import type { drive_v3 } from "googleapis";
 import { google } from "googleapis";
 import JSZip from "jszip";
-import { extractTextFromDocx } from "../docx-text-extractor";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -16,6 +15,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,

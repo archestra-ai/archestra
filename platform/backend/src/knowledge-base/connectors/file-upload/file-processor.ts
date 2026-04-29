@@ -152,8 +152,6 @@ async function extractFromDoc(
   buffer: Buffer,
   filename: string,
 ): Promise<ExtractionResult> {
-  // .doc is a legacy binary format (not a ZIP), so we attempt to parse it
-  // as .docx which will fail gracefully for true .doc files.
   try {
     const text = await extractTextFromDocx(buffer);
     return toResult([

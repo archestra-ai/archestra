@@ -29,7 +29,7 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { ClientIcon } from "./client-grid";
+import { ClientIcon } from "./client-icon";
 import type {
   ConnectClient,
   McpBuildParams,
@@ -214,9 +214,11 @@ function McpBody({
                   <div className="text-[13.5px] font-medium text-foreground">
                     {s.title}
                   </div>
-                  <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                    {s.body}
-                  </div>
+                  {s.body && (
+                    <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                      {s.body}
+                    </div>
+                  )}
                 </div>
                 {s.buildCommand && (
                   <TerminalBlock
@@ -252,9 +254,11 @@ function McpBody({
                 <div className="text-[13.5px] font-medium text-foreground">
                   {s.title}
                 </div>
-                <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                  {s.body}
-                </div>
+                {s.body && (
+                  <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                    {s.body}
+                  </div>
+                )}
               </div>
             </li>
           ))}

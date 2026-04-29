@@ -11043,6 +11043,10 @@ export type GetAllAgentsData = {
          * Filter by scope: personal, team, org, or built_in.
          */
         scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).
+         */
+        excludeOtherPersonalAgents?: boolean;
     };
     url: '/api/agents/all';
 };

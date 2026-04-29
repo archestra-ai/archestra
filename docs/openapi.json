@@ -36625,6 +36625,15 @@
             "name": "scope",
             "required": false,
             "description": "Filter by scope: personal, team, org, or built_in."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeOtherPersonalAgents",
+            "required": false,
+            "description": "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them)."
           }
         ],
         "responses": {

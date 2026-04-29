@@ -1,22 +1,28 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
+import type { archestraApiTypes, SupportedProvider } from "@shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import {
   resolveEffectiveId,
   resolveInitialClientId,
 } from "./connection-flow.utils";
+import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import { SearchableSelect } from "./searchable-select";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
+
+type ConnectionBaseUrl = NonNullable<
+  archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
+>[number];
 
 type OpenKey = "client" | "mcp" | "proxy";
 
@@ -30,6 +36,8 @@ interface ConnectionFlowProps {
   shownClientIds?: readonly string[] | null;
   /** When null/undefined: show all. Otherwise: only these providers. */
   shownProviders?: readonly SupportedProvider[] | null;
+  /** Admin-curated descriptions and default flag for env-configured base URLs. */
+  connectionBaseUrls?: readonly ConnectionBaseUrl[] | null;
 }
 
 export function ConnectionFlow({
@@ -40,6 +48,7 @@ export function ConnectionFlow({
   adminDefaultClientId,
   shownClientIds,
   shownProviders,
+  connectionBaseUrls,
 }: ConnectionFlowProps) {
   const searchParams = useSearchParams();
   const urlGatewayId = searchParams.get("gatewayId");
@@ -128,6 +137,37 @@ export function ConnectionFlow({
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
   const [selectedProxyId, setSelectedProxyId] = useState<string | null>(null);
 
+  // Connection base URL — chosen once for the whole page, threaded into each
+  // instruction panel below. Admins can hide individual env URLs from end
+  // users; we filter those out here. Falls back to the admin default, then the
+  // first remaining env URL, then the in-cluster internal URL.
+  const candidateBaseUrls = useMemo(() => {
+    const hidden = new Set(
+      (connectionBaseUrls ?? [])
+        .filter((m) => m.visible === false)
+        .map((m) => m.url),
+    );
+    const visibleExternal = config.api.externalProxyUrls.filter(
+      (url) => !hidden.has(url),
+    );
+    if (visibleExternal.length > 0) return visibleExternal;
+    return [config.api.internalProxyUrl];
+  }, [connectionBaseUrls]);
+  const adminDefaultBaseUrl = useMemo(
+    () => connectionBaseUrls?.find((m) => m.isDefault)?.url ?? null,
+    [connectionBaseUrls],
+  );
+  // Derived, not stateful: this lets the admin default take effect after the
+  // org data resolves on initial load. Once the user manually picks a URL,
+  // `userBaseUrl` overrides every fallback below.
+  const [userBaseUrl, setUserBaseUrl] = useState<string | null>(null);
+  const baseUrl =
+    (userBaseUrl && candidateBaseUrls.includes(userBaseUrl) && userBaseUrl) ||
+    (adminDefaultBaseUrl &&
+      candidateBaseUrls.includes(adminDefaultBaseUrl) &&
+      adminDefaultBaseUrl) ||
+    candidateBaseUrls[0];
+
   const handleMcpSelect = (id: string) => {
     setSelectedMcpId(id);
     updateUrlParams({ gatewayId: id });
@@ -180,6 +220,15 @@ export function ConnectionFlow({
         onSelect={selectClient}
       />
 
+      {/* Connection URL — picked once, reused by every snippet below. */}
+      <ConnectionUrlStep
+        candidateUrls={candidateBaseUrls}
+        metadata={connectionBaseUrls}
+        value={baseUrl}
+        onChange={setUserBaseUrl}
+        hideWhenSingleAndUnannotated
+      />
+
       {/* Step 2 — MCP Gateway */}
       {canReadMcpGateway && (
         <StepCard
@@ -210,6 +259,7 @@ export function ConnectionFlow({
               client={client}
               gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
+              baseUrl={baseUrl}
             />
           )}
           {client && !effectiveMcpId && (
@@ -257,6 +307,7 @@ export function ConnectionFlow({
               client={client}
               profileId={effectiveProxyId}
               shownProviders={shownProviders}
+              baseUrl={baseUrl}
             />
           )}
           {client && !effectiveProxyId && (

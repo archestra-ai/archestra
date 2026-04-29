@@ -41,13 +41,11 @@ export function getShownProviders(
  * arrived from the opposite slot's table (e.g. picked a specific LLM proxy),
  * so a pre-configured default on this side doesn't override their intent.
  */
-const DEFAULT_CLIENT_ID = "generic";
-
 /**
  * Decide which client to pre-select on the `/connection` page.
  *
- * Priority: URL param (`?clientId=`) → admin default → system default
- * (`"generic"` / "Any Client"). Candidates that aren't in the visible set are
+ * Priority: URL param (`?clientId=`) → admin default. If neither is set, no
+ * client is pre-selected. Candidates that aren't in the visible set are
  * skipped so we never select a tile the user can't see.
  */
 export function resolveInitialClientId(params: {
@@ -59,9 +57,7 @@ export function resolveInitialClientId(params: {
   const visible = new Set(visibleClientIds);
   const pick = (id: string | null | undefined): string | null =>
     id && visible.has(id) ? id : null;
-  return (
-    pick(urlClientId) ?? pick(adminDefaultClientId) ?? pick(DEFAULT_CLIENT_ID)
-  );
+  return pick(urlClientId) ?? pick(adminDefaultClientId);
 }
 
 export function resolveEffectiveId(params: {

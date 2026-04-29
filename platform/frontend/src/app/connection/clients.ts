@@ -122,7 +122,8 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
             `claude mcp add --transport http ${serverName} ${url}`,
         },
         {
-          title: "Open Claude and run /mcp. Select the gateway you just added and kick off the OAuth flow.",
+          title:
+            "Open Claude and run /mcp. Select the gateway you just added and kick off the OAuth flow.",
           terminalTitle: "terminal",
           buildCommand: () => "claude /mcp",
         },

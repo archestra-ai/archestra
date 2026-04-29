@@ -111,6 +111,7 @@ class GeminiOpenaiStreamAdapter
   readonly provider = "gemini" as const;
   private inner: LLMStreamAdapter<GeminiStreamChunk, GeminiResponse>;
   private ctx: GeminiOpenaiContext;
+  private pendingToolCallEvents: string[] = [];
 
   constructor(ctx: GeminiOpenaiContext) {
     this.inner = geminiAdapterFactory.createStreamAdapter();
@@ -123,9 +124,19 @@ class GeminiOpenaiStreamAdapter
 
   processChunk(chunk: GeminiStreamChunk) {
     const innerResult = this.inner.processChunk(chunk);
+    const sseData = this.toOpenaiSse(chunk);
+
+    if (innerResult.isToolCallChunk && sseData) {
+      this.pendingToolCallEvents.push(sseData);
+      return {
+        ...innerResult,
+        sseData: null,
+      };
+    }
+
     return {
       ...innerResult,
-      sseData: this.toOpenaiSse(chunk),
+      sseData,
     };
   }
 
@@ -142,7 +153,7 @@ class GeminiOpenaiStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return [];
+    return this.pendingToolCallEvents;
   }
 
   formatCompleteTextSSE(text: string): string[] {

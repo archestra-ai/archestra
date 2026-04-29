@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@shared";
-import { and, eq, ilike, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -62,6 +62,7 @@ class ModelModel {
   static async findAll(params?: {
     search?: string;
     provider?: SupportedProvider;
+    providers?: SupportedProvider[];
   }): Promise<Model[]> {
     const conditions = [];
 
@@ -70,6 +71,12 @@ class ModelModel {
     }
     if (params?.provider) {
       conditions.push(eq(schema.modelsTable.provider, params.provider));
+    }
+    if (params?.providers) {
+      if (params.providers.length === 0) {
+        return [];
+      }
+      conditions.push(inArray(schema.modelsTable.provider, params.providers));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

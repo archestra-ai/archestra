@@ -650,6 +650,69 @@ describe("model router proxy routes", () => {
     );
   });
 
+  test("rejects model router virtual keys for agents in another organization", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
+    const virtualKeyOrganization = await makeOrganization();
+    const agentOrganization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: virtualKeyOrganization.id,
+      provider: "openai",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: agentOrganization.id,
+      name: "Cross-org Model Router Agent",
+      agentType: "llm_proxy",
+    });
+
+    const requests = [
+      {
+        method: "GET" as const,
+        url: `/v1/model-router/${agent.id}/models`,
+      },
+      {
+        method: "POST" as const,
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        payload: {
+          model: "openai:gpt-5.4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      },
+      {
+        method: "POST" as const,
+        url: `/v1/model-router/${agent.id}/responses`,
+        payload: {
+          model: "openai:gpt-5.4",
+          input: "Hello",
+        },
+      },
+    ];
+
+    for (const request of requests) {
+      const response = await app.inject({
+        ...request,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toBe(
+        "Model Router virtual key cannot access this LLM Proxy.",
+      );
+    }
+  });
+
   test("resolves virtual keys and scopes model router access to the key provider", async ({
     makeAgent,
     makeOrganization,

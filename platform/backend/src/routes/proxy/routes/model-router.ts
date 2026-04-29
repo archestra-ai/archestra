@@ -9,7 +9,7 @@ import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import type { LLMProvider } from "@/types";
+import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
   Azure,
@@ -74,6 +74,7 @@ type ModelRouterMappedProviderKey = {
 };
 
 type ModelRouterVirtualKeyAuth = {
+  organizationId: string;
   providerApiKeysByProvider: Map<
     SupportedProvider,
     ModelRouterMappedProviderKey
@@ -137,7 +138,8 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const auth = await getModelRouterVirtualKeyAuth(request);
-      await AgentModel.getDefaultProfile();
+      const agent = await getDefaultModelRouterAgent();
+      ensureModelRouterAgentAccess({ agent, auth });
       return reply.send(
         await listModels({
           providers: getMappedProviders(auth),
@@ -162,7 +164,8 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const auth = await getModelRouterVirtualKeyAuth(request);
-      await getModelRouterAgent(request.params.agentId);
+      const agent = await getModelRouterAgent(request.params.agentId);
+      ensureModelRouterAgentAccess({ agent, auth });
       return reply.send(
         await listModels({
           providers: getMappedProviders(auth),
@@ -267,11 +270,10 @@ async function routeChatCompletion(
   const body = request.body as OpenAi.Types.ChatCompletionsRequest;
   const params = request.params as { agentId?: string };
   const auth = await getModelRouterVirtualKeyAuth(request);
-  if (params.agentId) {
-    await getModelRouterAgent(params.agentId);
-  } else {
-    await AgentModel.getDefaultProfile();
-  }
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await getDefaultModelRouterAgent();
+  ensureModelRouterAgentAccess({ agent, auth });
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
@@ -308,11 +310,10 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
   const auth = await getModelRouterVirtualKeyAuth(request);
-  if (params.agentId) {
-    await getModelRouterAgent(params.agentId);
-  } else {
-    await AgentModel.getDefaultProfile();
-  }
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await getDefaultModelRouterAgent();
+  ensureModelRouterAgentAccess({ agent, auth });
   const resolution = await resolveModelRoute({
     requestedModel: chatBody.model,
     allowedProviders: getMappedProviders(auth),
@@ -401,12 +402,12 @@ function getOpenAiChatProviderForResolution(params: {
 }
 
 async function listModels(params: { providers: Set<SupportedProvider> }) {
-  const allModels = await ModelModel.findAll({});
+  const providers = [...params.providers].filter((provider) =>
+    modelRouterSupportedProviders.has(provider),
+  );
+  const allModels = await ModelModel.findAll({ providers });
   const chatModels = sortRoutableModels(
     allModels.filter((model) => {
-      if (!params.providers.has(model.provider)) {
-        return false;
-      }
       if (!ModelModel.supportsTextChat(model)) {
         return false;
       }
@@ -437,6 +438,25 @@ async function getModelRouterAgent(agentId: string) {
     throw new ApiError(400, "Model router requires an LLM Proxy ID.");
   }
   return agent;
+}
+
+async function getDefaultModelRouterAgent() {
+  return AgentModel.getDefaultProfile();
+}
+
+function ensureModelRouterAgentAccess(params: {
+  agent: Agent | null;
+  auth: ModelRouterVirtualKeyAuth;
+}) {
+  if (!params.agent) {
+    return;
+  }
+  if (params.agent.organizationId !== params.auth.organizationId) {
+    throw new ApiError(
+      403,
+      "Model Router virtual key cannot access this LLM Proxy.",
+    );
+  }
 }
 
 async function getModelRouterVirtualKeyAuth(
@@ -473,6 +493,7 @@ async function getModelRouterVirtualKeyAuth(
     }
 
     return {
+      organizationId: resolved.virtualKey.organizationId,
       providerApiKeysByProvider: new Map(
         mappings.map((mapping) => [mapping.provider, mapping]),
       ),
@@ -519,9 +540,7 @@ async function applyModelRouterAuthOverride(params: {
   }
 
   const apiKey = mappedApiKey.secretId
-    ? ((await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)) as
-        | string
-        | undefined)
+    ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
     : undefined;
   (
     params.request as FastifyRequest & {

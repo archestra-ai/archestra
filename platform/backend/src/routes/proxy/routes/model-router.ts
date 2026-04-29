@@ -41,7 +41,10 @@ import { openaiToCohere } from "../adapters/cohere-openai-translator";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
 import { openaiToGemini } from "../adapters/gemini-openai-translator";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
-import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
+import {
+  type OpenaiResponsesContext,
+  responsesToOpenaiChat,
+} from "../adapters/openai-responses-translator";
 import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
   validateVirtualApiKeyToken,
@@ -80,6 +83,43 @@ type ModelRouterVirtualKeyAuth = {
     ModelRouterMappedProviderKey
   >;
 };
+
+type OpenAiWireModelRouterProvider = {
+  kind: "openai-wire";
+  body: OpenAi.Types.ChatCompletionsRequest;
+  adapter: OpenAiWireProvider;
+};
+
+type AnthropicModelRouterProvider = {
+  kind: "anthropic";
+  body: ReturnType<typeof openaiToAnthropic>["anthropicBody"];
+  adapter: ReturnType<typeof makeAnthropicOpenaiAdapterFactory>;
+};
+
+type BedrockModelRouterProvider = {
+  kind: "bedrock";
+  body: ReturnType<typeof openaiToConverse>["converseBody"];
+  adapter: ReturnType<typeof makeBedrockOpenaiAdapterFactory>;
+};
+
+type CohereModelRouterProvider = {
+  kind: "cohere";
+  body: ReturnType<typeof openaiToCohere>["cohereBody"];
+  adapter: ReturnType<typeof makeCohereOpenaiAdapterFactory>;
+};
+
+type GeminiModelRouterProvider = {
+  kind: "gemini";
+  body: ReturnType<typeof openaiToGemini>["geminiBody"];
+  adapter: ReturnType<typeof makeGeminiOpenaiAdapterFactory>;
+};
+
+type ModelRouterProvider =
+  | OpenAiWireModelRouterProvider
+  | AnthropicModelRouterProvider
+  | BedrockModelRouterProvider
+  | CohereModelRouterProvider
+  | GeminiModelRouterProvider;
 
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
@@ -302,7 +342,7 @@ async function routeChatCompletion(
     provider: resolution.provider,
   });
 
-  return handleLLMProxy(provider.body, request, reply, provider.adapter);
+  return handleModelRouterProvider(provider, request, reply);
 }
 
 async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
@@ -333,64 +373,54 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     provider: resolution.provider,
   });
 
-  return handleLLMProxy(
-    provider.body,
+  return handleModelRouterResponsesProvider(
+    provider,
+    responsesContext,
     request,
     reply,
-    makeResponsesFromChatAdapterFactory(
-      provider.adapter as OpenAiWireProvider,
-      responsesContext,
-    ),
   );
 }
 
 function getOpenAiChatProviderForResolution(params: {
   provider: SupportedProvider;
   body: OpenAi.Types.ChatCompletionsRequest;
-}): {
-  body: OpenAi.Types.ChatCompletionsRequest;
-  adapter: OpenAiWireProvider;
-} {
+}): ModelRouterProvider {
   const provider = openAiWireProviders[params.provider];
   if (provider) {
-    return { body: params.body, adapter: provider };
+    return { kind: "openai-wire", body: params.body, adapter: provider };
   }
 
   switch (params.provider) {
     case "anthropic": {
       const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
       return {
-        body: anthropicBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-        adapter: makeAnthropicOpenaiAdapterFactory(
-          openaiContext,
-        ) as unknown as OpenAiWireProvider,
+        kind: "anthropic",
+        body: anthropicBody,
+        adapter: makeAnthropicOpenaiAdapterFactory(openaiContext),
       };
     }
     case "bedrock": {
       const { converseBody, openaiContext } = openaiToConverse(params.body);
       return {
-        body: converseBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-        adapter: makeBedrockOpenaiAdapterFactory(
-          openaiContext,
-        ) as unknown as OpenAiWireProvider,
+        kind: "bedrock",
+        body: converseBody,
+        adapter: makeBedrockOpenaiAdapterFactory(openaiContext),
       };
     }
     case "cohere": {
       const { cohereBody, openaiContext } = openaiToCohere(params.body);
       return {
-        body: cohereBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-        adapter: makeCohereOpenaiAdapterFactory(
-          openaiContext,
-        ) as unknown as OpenAiWireProvider,
+        kind: "cohere",
+        body: cohereBody,
+        adapter: makeCohereOpenaiAdapterFactory(openaiContext),
       };
     }
     case "gemini": {
       const { geminiBody, openaiContext } = openaiToGemini(params.body);
       return {
-        body: geminiBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-        adapter: makeGeminiOpenaiAdapterFactory(
-          openaiContext,
-        ) as unknown as OpenAiWireProvider,
+        kind: "gemini",
+        body: geminiBody,
+        adapter: makeGeminiOpenaiAdapterFactory(openaiContext),
       };
     }
   }
@@ -399,6 +429,70 @@ function getOpenAiChatProviderForResolution(params: {
     501,
     `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
   );
+}
+
+function handleModelRouterProvider(
+  provider: ModelRouterProvider,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  switch (provider.kind) {
+    case "openai-wire":
+      return handleLLMProxy(provider.body, request, reply, provider.adapter);
+    case "anthropic":
+      return handleLLMProxy(provider.body, request, reply, provider.adapter);
+    case "bedrock":
+      return handleLLMProxy(provider.body, request, reply, provider.adapter);
+    case "cohere":
+      return handleLLMProxy(provider.body, request, reply, provider.adapter);
+    case "gemini":
+      return handleLLMProxy(provider.body, request, reply, provider.adapter);
+  }
+}
+
+function handleModelRouterResponsesProvider(
+  provider: ModelRouterProvider,
+  responsesContext: OpenaiResponsesContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  switch (provider.kind) {
+    case "openai-wire":
+      return handleLLMProxy(
+        provider.body,
+        request,
+        reply,
+        makeResponsesFromChatAdapterFactory(provider.adapter, responsesContext),
+      );
+    case "anthropic":
+      return handleLLMProxy(
+        provider.body,
+        request,
+        reply,
+        makeResponsesFromChatAdapterFactory(provider.adapter, responsesContext),
+      );
+    case "bedrock":
+      return handleLLMProxy(
+        provider.body,
+        request,
+        reply,
+        makeResponsesFromChatAdapterFactory(provider.adapter, responsesContext),
+      );
+    case "cohere":
+      return handleLLMProxy(
+        provider.body,
+        request,
+        reply,
+        makeResponsesFromChatAdapterFactory(provider.adapter, responsesContext),
+      );
+    case "gemini":
+      return handleLLMProxy(
+        provider.body,
+        request,
+        reply,
+        makeResponsesFromChatAdapterFactory(provider.adapter, responsesContext),
+      );
+  }
 }
 
 async function listModels(params: { providers: Set<SupportedProvider> }) {

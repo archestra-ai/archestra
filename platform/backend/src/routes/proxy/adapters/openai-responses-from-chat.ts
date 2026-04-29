@@ -14,7 +14,6 @@ import {
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
 
-type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 
 class ResponsesFromChatAdapter<TResponse>
@@ -396,14 +395,15 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 }
 
 export function makeResponsesFromChatAdapterFactory<
+  TRequest,
   TResponse,
   TMessages,
   TChunk,
   THeaders,
 >(
-  provider: LLMProvider<OpenAiRequest, TResponse, TMessages, TChunk, THeaders>,
+  provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
   ctx: OpenaiResponsesContext,
-): LLMProvider<OpenAiRequest, TResponse, TMessages, TChunk, THeaders> {
+): LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   return {
     ...provider,
     createResponseAdapter(response) {

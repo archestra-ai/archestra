@@ -12,7 +12,6 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
-  Azure,
   constructResponseSchema,
   OpenAi,
   UuidIdSchema,
@@ -233,9 +232,9 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Create a response through the OpenAI-compatible model router (default LLM proxy)",
         tags: ["LLM Proxy"],
-        body: Azure.API.ResponsesRequestSchema,
+        body: OpenAi.API.ResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(Azure.API.ResponsesResponseSchema),
+        response: constructResponseSchema(OpenAi.API.ResponsesResponseSchema),
       },
     },
     async (request, reply) => {
@@ -255,9 +254,9 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: Azure.API.ResponsesRequestSchema,
+        body: OpenAi.API.ResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(Azure.API.ResponsesResponseSchema),
+        response: constructResponseSchema(OpenAi.API.ResponsesResponseSchema),
       },
     },
     async (request, reply) => {
@@ -356,7 +355,7 @@ async function routeChatCompletion(
 }
 
 async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
-  const body = request.body as Azure.Types.ResponsesRequest;
+  const body = request.body as OpenAi.Types.ResponsesRequest;
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
   const auth = await getModelRouterVirtualKeyAuth(request);

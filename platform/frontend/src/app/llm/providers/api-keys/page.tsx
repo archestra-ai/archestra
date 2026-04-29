@@ -53,6 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -87,13 +88,20 @@ export default function ApiKeysPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
-  const { data: allApiKeys = [] } = useLlmProviderApiKeys();
+  const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
+    useHasPermissions({ llmProviderApiKey: ["read"] });
+  const apiKeyQueriesEnabled =
+    !permissionsPending && canReadLlmProviderApiKeys === true;
+  const { data: allApiKeys = [] } = useLlmProviderApiKeys({
+    enabled: apiKeyQueriesEnabled,
+  });
   const { data: queriedApiKeys = [], isPending } = useLlmProviderApiKeys({
     search: search || undefined,
     provider:
       providerFilter === "all"
         ? undefined
         : (providerFilter as LlmProviderApiKeyResponse["provider"]),
+    enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
   const updateMutation = useUpdateLlmProviderApiKey();
@@ -448,7 +456,7 @@ export default function ApiKeysPage() {
           data={apiKeys}
           getRowId={(row) => row.id}
           hideSelectedCount
-          isLoading={isPending}
+          isLoading={permissionsPending || isPending}
           emptyMessage="No API keys configured"
           hasActiveFilters={Boolean(search || providerFilter !== "all")}
           filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."

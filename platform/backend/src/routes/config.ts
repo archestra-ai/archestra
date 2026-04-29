@@ -60,6 +60,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
+              advancedToolFeaturesEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               bedrockIamAuthEnabled: z.boolean(),
@@ -100,6 +101,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+          advancedToolFeaturesEnabled:
+            config.agents.advancedToolFeaturesEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),

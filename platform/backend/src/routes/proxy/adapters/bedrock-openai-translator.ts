@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
+import {
+  parseJsonObject,
+  stringifyTextContent,
+} from "./openai-translator-utils";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -43,7 +47,7 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   for (const m of req.messages ?? []) {
     const role = (m as Loose).role as string;
     if (role === "system" || role === "developer") {
-      system.push({ text: stringifyContent((m as Loose).content) });
+      system.push({ text: stringifyTextContent((m as Loose).content, "") });
       continue;
     }
 
@@ -420,21 +424,6 @@ export function newChatcmplId(): string {
 // internal helpers
 // =============================================================================
 
-function stringifyContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((p) => {
-        if (p && typeof p === "object" && (p as Loose).type === "text") {
-          return String((p as Loose).text ?? "");
-        }
-        return "";
-      })
-      .join("");
-  }
-  return "";
-}
-
 function stringifyAssistantText(content: unknown): string {
   if (content == null) return "";
   if (typeof content === "string") return content;
@@ -493,18 +482,6 @@ function toolResultContent(content: unknown): Loose[] {
     }
   }
   return out.length > 0 ? out : [{ text: "" }];
-}
-
-function parseJsonObject(raw: unknown): Record<string, unknown> {
-  if (typeof raw !== "string" || raw.length === 0) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 function buildInferenceConfig(loose: Loose): BedrockRequest["inferenceConfig"] {

@@ -199,6 +199,193 @@ describe("getMessagesNotYetPersisted", () => {
     expect(newMessages).toHaveLength(1);
     expect(newMessages[0]?.id).toBe("assistant-1");
   });
+
+  it("dedupes by content fingerprint when content.id is empty and the SDK re-stamps the message id", () => {
+    // Reproduces the #4030 phantom: turn 2's assistant was persisted
+    // with id="" (AI SDK quirk), then turn 3's request body carries
+    // the same assistant under a fresh client-stamped id like
+    // `wEHcEHZJOgk2RiwS`. Standard id-based dedupe misses; fingerprint
+    // dedupe should catch it.
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "db-user-1",
+          content: {
+            id: "user-1",
+            role: "user",
+            parts: [{ type: "text", text: "hi" }],
+          },
+        },
+        {
+          id: "db-assistant-empty-id",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              { type: "text", text: "Hello! I'm here to help.", state: "done" },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hi" }],
+        },
+        {
+          id: "wEHcEHZJOgk2RiwS",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Hello! I'm here to help.", state: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(0);
+  });
+
+  it("does NOT fingerprint-dedupe an identical assistant reply when the prior row's content.id is non-empty", () => {
+    // Counterpart to the empty-content.id test: a model that legitimately
+    // produces the same text twice must keep both turns. Fingerprint
+    // dedupe only kicks in for rows persisted with empty content.id.
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "db-user-1",
+          content: {
+            id: "user-1",
+            role: "user",
+            parts: [{ type: "text", text: "hi" }],
+          },
+        },
+        {
+          id: "db-assistant-1",
+          content: {
+            id: "assistant-1",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              { type: "text", text: "Hi there!", state: "done" },
+            ],
+          },
+        },
+        {
+          id: "db-user-2",
+          content: {
+            id: "user-2",
+            role: "user",
+            parts: [{ type: "text", text: "hi" }],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hi" }],
+        },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Hi there!", state: "done" },
+          ],
+        },
+        {
+          id: "user-2",
+          role: "user",
+          parts: [{ type: "text", text: "hi" }],
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            { type: "text", text: "Hi there!", state: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("assistant-2");
+  });
+
+  it("includes reasoning text in the fingerprint so two reasoning blocks with different text are not collapsed", () => {
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "db-assistant-empty-id",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "reasoning", text: "Thinking about A" },
+              { type: "text", text: "Done.", state: "done" },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "fresh-id",
+          role: "assistant",
+          parts: [
+            { type: "reasoning", text: "Thinking about B" },
+            { type: "text", text: "Done.", state: "done" },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+    expect(newMessages[0]?.id).toBe("fresh-id");
+  });
+
+  it("does NOT fingerprint-dedupe a tool part still in approval-requested state", () => {
+    // Approval-pending tools must remain insertable so the
+    // approval-resolution sweep can later find and clean them up.
+    const newMessages = __test.getMessagesNotYetPersisted({
+      existingMessages: [
+        {
+          id: "db-assistant-prior",
+          content: {
+            id: "",
+            role: "assistant",
+            parts: [
+              { type: "step-start" },
+              {
+                type: "tool-foo__bar",
+                toolCallId: "tc-1",
+                state: "approval-requested",
+              },
+            ],
+          },
+        },
+      ],
+      uiMessages: [
+        {
+          id: "fresh-id",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "tool-foo__bar",
+              toolCallId: "tc-1",
+              state: "approval-requested",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(newMessages).toHaveLength(1);
+  });
 });
 
 describe("extractFirstMessages", () => {

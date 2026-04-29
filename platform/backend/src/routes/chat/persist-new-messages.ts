@@ -101,6 +101,11 @@ export async function persistNewMessages(
       messagesToStore = normalizeChatMessages(messagesToSave);
     }
 
+    // Persist each message as-is. We deliberately do NOT stamp `msg.id`
+    // when it's missing/empty: the AI SDK on the client doesn't read
+    // our stamp back, so a stamped UUID would just hide the row from
+    // the empty-content.id fingerprint pool below — the very pool that
+    // catches the SDK's later id rewrite (#4030).
     const now = Date.now();
     const messageData = messagesToStore.map((msg, index) => ({
       conversationId,
@@ -130,28 +135,134 @@ export function getMessagesNotYetPersisted(params: {
   uiMessages: ChatMessage[];
 }): ChatMessage[] {
   const existingIds = new Set<string>();
+  // Content fingerprint as a fallback dedupe key. The AI SDK occasionally
+  // emits assistant messages with `id: ""` during streaming and assigns a
+  // fresh client-side id (e.g. `wEHcEHZJOgk2RiwS`) on the next round-trip,
+  // bypassing id-based dedupe. We only seed the fingerprint set from rows
+  // whose `content.id` was empty at persist time — those are the only rows
+  // the SDK can re-stamp under a different id, so anything else stays
+  // dedup-by-id and a model that legitimately repeats an identical reply
+  // doesn't get its second turn dropped. (#4030)
+  //
+  // Note on normalization asymmetry: existing rows are stored post-
+  // `normalizeChatMessages`; incoming `uiMessages` are pre-normalize.
+  // Mismatched parts caused by stripping/dedupe would yield a fingerprint
+  // miss and fall through to insert (i.e. the original phantom returns in
+  // pathological cases) — never a false-positive that drops live data.
+  const existingFingerprints = new Set<string>();
 
   for (const message of params.existingMessages) {
     existingIds.add(message.id);
 
-    const contentId =
-      typeof message.content === "object" &&
-      message.content !== null &&
-      "id" in message.content &&
-      typeof message.content.id === "string"
-        ? message.content.id
+    const content =
+      typeof message.content === "object" && message.content !== null
+        ? (message.content as { id?: unknown })
         : null;
-
+    const contentId =
+      content && typeof content.id === "string" ? content.id : null;
     if (contentId) {
       existingIds.add(contentId);
+      continue;
+    }
+
+    const fingerprint = computeMessageFingerprint(message.content);
+    if (fingerprint) {
+      existingFingerprints.add(fingerprint);
     }
   }
 
   return params.uiMessages.filter((message) => {
-    if (!message.id || typeof message.id !== "string") {
-      return true;
+    if (
+      message.id &&
+      typeof message.id === "string" &&
+      existingIds.has(message.id)
+    ) {
+      return false;
     }
-
-    return !existingIds.has(message.id);
+    if (existingFingerprints.size > 0) {
+      const fingerprint = computeMessageFingerprint(message);
+      if (fingerprint && existingFingerprints.has(fingerprint)) {
+        return false;
+      }
+    }
+    return true;
   });
+}
+
+function computeMessageFingerprint(message: unknown): string | null {
+  if (
+    typeof message !== "object" ||
+    message === null ||
+    !("role" in message) ||
+    typeof (message as { role?: unknown }).role !== "string"
+  ) {
+    return null;
+  }
+  const m = message as { role: string; parts?: unknown };
+  const parts = Array.isArray(m.parts) ? m.parts : [];
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const partSignatures: string[] = [];
+  for (const part of parts) {
+    if (typeof part !== "object" || part === null) continue;
+    const p = part as {
+      type?: unknown;
+      text?: unknown;
+      toolCallId?: unknown;
+      state?: unknown;
+      url?: unknown;
+      mediaType?: unknown;
+      filename?: unknown;
+    };
+    const type = typeof p.type === "string" ? p.type : "unknown";
+    // step-start carries no semantic content and can repeat in a single
+    // multi-step tool turn — skip it to avoid avoidable collisions.
+    if (type === "step-start") {
+      continue;
+    }
+    if (type === "text" && typeof p.text === "string") {
+      partSignatures.push(`text:${p.text}`);
+      continue;
+    }
+    if (type === "reasoning" && typeof p.text === "string") {
+      partSignatures.push(`reasoning:${p.text}`);
+      continue;
+    }
+    if (type === "source-url" && typeof p.url === "string") {
+      partSignatures.push(`source-url:${p.url}`);
+      continue;
+    }
+    if (type === "file") {
+      const url = typeof p.url === "string" ? p.url : "";
+      const mediaType = typeof p.mediaType === "string" ? p.mediaType : "";
+      const filename = typeof p.filename === "string" ? p.filename : "";
+      partSignatures.push(`file:${url}:${mediaType}:${filename}`);
+      continue;
+    }
+    if (type.startsWith("tool-")) {
+      const toolCallId = typeof p.toolCallId === "string" ? p.toolCallId : "";
+      const state = typeof p.state === "string" ? p.state : "";
+      // approval-requested / input-* are transient — don't fingerprint
+      // them, otherwise a legitimate retry would be deduped against the
+      // pending row. (Mixed-state turns where one tool is settled and
+      // another is still pending also fall through here — the resulting
+      // re-insert is reconciled by the approval-resolution sweep that
+      // deletes the prior approval-requested row.)
+      if (state === "approval-requested" || state.startsWith("input-")) {
+        return null;
+      }
+      partSignatures.push(`${type}:${toolCallId}:${state}`);
+      continue;
+    }
+    // Fallback for shapes we don't explicitly disambiguate yet (e.g.
+    // data-*, dual-llm-analysis, blocked-tool).
+    partSignatures.push(type);
+  }
+
+  if (partSignatures.length === 0) {
+    return null;
+  }
+  return `${m.role}|${partSignatures.join("|")}`;
 }

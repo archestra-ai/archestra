@@ -218,6 +218,9 @@ export type AgentType = "profile" | "mcp_gateway" | "llm_proxy" | "agent";
 /** Database-level agent scope values */
 export type AgentScope = "personal" | "team" | "org";
 
+/** Database-level agent tool assignment mode values */
+export type AgentToolAssignmentMode = "manual" | "automatic";
+
 /**
  * Maps an agent's `agentType` to the corresponding RBAC resource.
  *

@@ -94,8 +94,16 @@ describe("OidcConfigForm", () => {
     );
   });
 
-  it("explains that allowed email domains gate SSO sign-in", () => {
+  it("hides allowed email domains for non-Google providers", () => {
     render(<TestWrapper />);
+
+    expect(
+      screen.queryByLabelText("Allowed Email Domains"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains that allowed email domains gate Google SSO sign-in", () => {
+    render(<TestWrapper providerId="Google" />);
 
     expect(screen.getByLabelText("Allowed Email Domains")).toBeInTheDocument();
     expect(

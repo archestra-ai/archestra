@@ -126,6 +126,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           body: {
             name: catalogItemName,
             catalogId: newCatalogItem.id,
+            scope: "team",
             teamId,
           },
         });
@@ -189,12 +190,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           catalogItemName,
           gatewayName: gatewayNameForAssignment,
         });
-        const expectedAssignableCredentials =
-          user === "Admin"
-            ? expectedCredentials.filter(
-                (credential) => credential !== DEFAULT_TEAM_NAME,
-              )
-            : expectedCredentials;
+        const expectedAssignableCredentials = expectedCredentials;
         const visibleStaticCredentials =
           await getVisibleStaticCredentials(page);
         for (const credential of expectedAssignableCredentials) {

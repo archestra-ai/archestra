@@ -18,6 +18,7 @@ const {
   k8sRestartServerMock,
   k8sStartServerMock,
   k8sStopServerMock,
+  userHasPermissionMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
   k8sRestartServerMock: vi.fn(),
   k8sStartServerMock: vi.fn(),
   k8sStopServerMock: vi.fn(),
+  userHasPermissionMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
   MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
 }));
@@ -50,6 +52,7 @@ vi.mock("@/services/identity-providers/enterprise-managed/exchange", () => ({
 
 vi.mock("@/auth/utils", () => ({
   hasPermission: hasPermissionMock,
+  userHasPermission: userHasPermissionMock,
 }));
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
@@ -65,13 +68,16 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
 describe("mcp server inspect route", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
-  let requestOrganizationId: string;
+  let organizationId: string;
   const originalFetch = global.fetch;
 
-  beforeEach(async ({ makeUser }) => {
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
     user = await makeUser();
-    requestOrganizationId = crypto.randomUUID();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    await makeMember(user.id, organization.id);
     hasPermissionMock.mockResolvedValue({ success: true });
+    userHasPermissionMock.mockResolvedValue(true);
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
     k8sStopServerMock.mockResolvedValue(undefined);
@@ -81,9 +87,18 @@ describe("mcp server inspect route", () => {
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: User }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        requestOrganizationId;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).user = user;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).organizationId = organizationId;
     });
 
     const { default: mcpServerRoutes } = await import("./mcp-server");
@@ -100,6 +115,7 @@ describe("mcp server inspect route", () => {
     k8sRestartServerMock.mockReset();
     k8sStartServerMock.mockReset();
     k8sStopServerMock.mockReset();
+    userHasPermissionMock.mockReset();
     global.fetch = originalFetch;
     await app.close();
   });
@@ -189,29 +205,31 @@ describe("mcp server inspect route", () => {
   test("filters team-installed connections by selected assignment team", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
-    makeOrganization,
     makeTeam,
     makeTeamMember,
   }) => {
     hasPermissionMock.mockResolvedValueOnce({ success: false });
 
-    const organization = await makeOrganization();
-    const selectedTeam = await makeTeam(organization.id, user.id, {
+    const selectedTeam = await makeTeam(organizationId, user.id, {
       name: "Selected Team",
     });
-    const otherTeam = await makeTeam(organization.id, user.id, {
+    const otherTeam = await makeTeam(organizationId, user.id, {
       name: "Other Team",
     });
     await makeTeamMember(selectedTeam.id, user.id);
     await makeTeamMember(otherTeam.id, user.id);
 
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+    });
     const selectedServer = await makeMcpServer({
+      scope: "team",
       ownerId: user.id,
       catalogId: catalog.id,
       teamId: selectedTeam.id,
     });
     await makeMcpServer({
+      scope: "team",
       ownerId: user.id,
       catalogId: catalog.id,
       teamId: otherTeam.id,
@@ -231,21 +249,21 @@ describe("mcp server inspect route", () => {
   test("filters out personal connections whose owner is not in the selected assignment team", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
-    makeOrganization,
     makeTeam,
     makeTeamMember,
     makeUser,
   }) => {
     hasPermissionMock.mockResolvedValueOnce({ success: true });
 
-    const organization = await makeOrganization();
     const otherUser = await makeUser({ email: "other-owner@example.com" });
-    const selectedTeam = await makeTeam(organization.id, user.id, {
+    const selectedTeam = await makeTeam(organizationId, user.id, {
       name: "Selected Team",
     });
     await makeTeamMember(selectedTeam.id, user.id);
 
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+    });
     const ownPersonalServer = await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
@@ -276,7 +294,7 @@ describe("mcp server inspect route", () => {
     hasPermissionMock.mockResolvedValueOnce({ success: true });
 
     const organization = await makeOrganization();
-    requestOrganizationId = organization.id;
+    organizationId = organization.id;
     const memberOwner = await makeUser({ email: "member-owner@example.com" });
     const outsideOwner = await makeUser({ email: "outside-owner@example.com" });
     await makeMember(memberOwner.id, organization.id, { role: "member" });
@@ -319,7 +337,7 @@ describe("mcp server inspect route", () => {
     hasPermissionMock.mockResolvedValueOnce({ success: true });
 
     const organization = await makeOrganization();
-    requestOrganizationId = organization.id;
+    organizationId = organization.id;
     const otherUser = await makeUser({ email: "personal-other@example.com" });
     const authorTeam = await makeTeam(organization.id, user.id, {
       name: "Author Team",
@@ -1017,6 +1035,31 @@ describe("mcp server inspect route", () => {
     }
   });
 
+  test("rejects reinstall of another user's personal connection by an editor", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser({ email: "reinstall-owner@example.com" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: { userConfigValues: { api_key: "attacker-value" } },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+  });
+
   test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
     makeAccount,
     makeIdentityProvider,
@@ -1459,7 +1502,9 @@ describe("mcp server inspect route", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+    });
     const mcpServer = await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
@@ -1491,7 +1536,9 @@ describe("mcp server inspect route", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+    });
     const mcpServer = await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
@@ -1523,7 +1570,9 @@ describe("mcp server inspect route", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+    });
     const mcpServer = await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
@@ -1675,6 +1724,31 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("rejects re-authenticate of another user's personal connection by an editor", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser({ email: "reauth-owner@example.com" });
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${mcpServer.id}/reauthenticate`,
+      payload: { accessToken: "attacker-pat" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+  });
+
   test("reinstalls a protected remote MCP server using the current identity-provider access token fallback", async ({
     makeAccount,
     makeInternalMcpCatalog,
@@ -1769,8 +1843,8 @@ describe("mcp server inspect route", () => {
   describe("personal gateway auto-assignment on install", () => {
     beforeEach(async ({ makeOrganization, makeMember }) => {
       const org = await makeOrganization();
-      requestOrganizationId = org.id;
-      await makeMember(user.id, requestOrganizationId);
+      organizationId = org.id;
+      await makeMember(user.id, organizationId);
     });
 
     test("remote install with empty agentIds auto-assigns every tool to the installer's personal gateway", async ({
@@ -1810,7 +1884,7 @@ describe("mcp server inspect route", () => {
 
       const personalGateway = await AgentModel.getPersonalMcpGateway(
         user.id,
-        requestOrganizationId,
+        organizationId,
       );
       if (!personalGateway) throw new Error("expected personal gateway");
       const assignments = await AgentToolModel.findToolIdsByAgent(
@@ -1830,7 +1904,7 @@ describe("mcp server inspect route", () => {
         name: "Explicit Target",
         agentType: "mcp_gateway",
         scope: "personal",
-        organizationId: requestOrganizationId,
+        organizationId: organizationId,
         authorId: user.id,
       });
 
@@ -1861,7 +1935,7 @@ describe("mcp server inspect route", () => {
 
       const personalGateway = await AgentModel.getPersonalMcpGateway(
         user.id,
-        requestOrganizationId,
+        organizationId,
       );
       if (!personalGateway) throw new Error("expected personal gateway");
       const personalAssignments = await AgentToolModel.findToolIdsByAgent(
@@ -1883,10 +1957,10 @@ describe("mcp server inspect route", () => {
       const { default: AgentToolModel } = await import("@/models/agent-tool");
 
       const otherUser = await makeUser({ email: "other-install@example.com" });
-      await makeMember(otherUser.id, requestOrganizationId);
+      await makeMember(otherUser.id, organizationId);
       const otherPersonalGateway = await AgentModel.ensurePersonalMcpGateway({
         userId: otherUser.id,
-        organizationId: requestOrganizationId,
+        organizationId: organizationId,
       });
 
       const catalog = await makeInternalMcpCatalog({
@@ -1964,7 +2038,7 @@ describe("mcp server inspect route", () => {
 
       const personalGateway = await AgentModel.getPersonalMcpGateway(
         user.id,
-        requestOrganizationId,
+        organizationId,
       );
       if (!personalGateway) throw new Error("expected personal gateway");
 
@@ -1988,7 +2062,7 @@ describe("mcp server inspect route", () => {
       const { default: AgentModel } = await import("@/models/agent");
       const { default: AgentToolModel } = await import("@/models/agent-tool");
 
-      const team = await makeTeam(requestOrganizationId, user.id, {
+      const team = await makeTeam(organizationId, user.id, {
         name: "Auto Assign Team",
       });
 
@@ -2012,6 +2086,7 @@ describe("mcp server inspect route", () => {
         payload: {
           name: "Auto Assign Team Remote",
           catalogId: catalog.id,
+          scope: "team",
           teamId: team.id,
         },
       });
@@ -2019,12 +2094,214 @@ describe("mcp server inspect route", () => {
 
       const personalGateway = await AgentModel.getPersonalMcpGateway(
         user.id,
-        requestOrganizationId,
+        organizationId,
       );
       const personalAssignments = personalGateway
         ? await AgentToolModel.findToolIdsByAgent(personalGateway.id)
         : [];
       expect(personalAssignments.length).toBe(0);
     });
+  });
+
+  function configurePermissions(opts: {
+    isTeamAdmin: boolean;
+    isEditor: boolean;
+  }) {
+    hasPermissionMock.mockImplementation(
+      async (permission: Record<string, string[]>) => {
+        if (permission.team?.includes("admin")) {
+          return { success: opts.isTeamAdmin };
+        }
+        if (permission.mcpServerInstallation?.includes("update")) {
+          return { success: opts.isEditor };
+        }
+        return { success: false };
+      },
+    );
+  }
+
+  test("install scope=team: team:admin can install for a non-member team", async ({
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeUser,
+  }) => {
+    configurePermissions({ isTeamAdmin: true, isEditor: false });
+    const otherUser = await makeUser();
+    const team = await makeTeam(organizationId, otherUser.id);
+    const catalog = await makeInternalMcpCatalog({
+      name: "Team Scoped Install",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Team Scoped Install",
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("install scope=team: editor + member of team succeeds", async ({
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    const otherUser = await makeUser();
+    const team = await makeTeam(organizationId, otherUser.id);
+    await makeTeamMember(team.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      name: "Team Scoped Install Editor Member",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Team Scoped Install Editor Member",
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("install scope=team: editor not a member of target team is rejected", async ({
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeUser,
+  }) => {
+    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    const otherUser = await makeUser();
+    const team = await makeTeam(organizationId, otherUser.id);
+    const catalog = await makeInternalMcpCatalog({
+      name: "Team Scoped Install Editor Non-Member",
+      serverType: "local",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Team Scoped Install Editor Non-Member",
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "You can only create MCP server installations for teams you are a member of",
+    );
+  });
+
+  test("install scope=team: caller without mcpServerInstallation:update is rejected", async ({
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    configurePermissions({ isTeamAdmin: false, isEditor: false });
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      name: "Team Scoped Install No Editor",
+      serverType: "local",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Team Scoped Install No Editor",
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "You don't have permission to create team MCP server installations",
+    );
+  });
+
+  test("revoke team-scoped: team:admin can revoke for a non-member team", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeUser,
+  }) => {
+    configurePermissions({ isTeamAdmin: true, isEditor: false });
+    const otherUser = await makeUser();
+    const team = await makeTeam(organizationId, otherUser.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "team",
+      teamId: team.id,
+      ownerId: otherUser.id,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/mcp_server/${mcpServer.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("revoke team-scoped: editor not a member is rejected", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeUser,
+  }) => {
+    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    const otherUser = await makeUser();
+    const team = await makeTeam(organizationId, otherUser.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "team",
+      teamId: team.id,
+      ownerId: otherUser.id,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/mcp_server/${mcpServer.id}`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "You can only revoke connections for teams you are a member of",
+    );
   });
 });

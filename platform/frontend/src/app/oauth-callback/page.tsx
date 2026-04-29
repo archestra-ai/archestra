@@ -23,6 +23,7 @@ import {
   getOAuthIsFirstInstallation,
   getOAuthMcpServerId,
   getOAuthReturnUrl,
+  getOAuthScope,
   getOAuthServerType,
   getOAuthTeamId,
   getOAuthUserConfigValues,
@@ -110,6 +111,7 @@ function OAuthCallbackContent() {
         } else {
           // New installation flow
           const teamId = getOAuthTeamId();
+          const scope = getOAuthScope() ?? (teamId ? "team" : "personal");
           const serverType = getOAuthServerType();
           const environmentValues = getOAuthEnvironmentValues();
           const userConfigValues = getOAuthUserConfigValues();
@@ -119,7 +121,8 @@ function OAuthCallbackContent() {
             name,
             catalogId,
             secretId,
-            teamId: teamId || undefined,
+            scope,
+            ...(scope === "team" && teamId ? { teamId } : {}),
             // For local servers: include environment values collected before OAuth redirect
             ...(serverType === "local" &&
               environmentValues && { environmentValues }),

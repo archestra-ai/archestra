@@ -410,15 +410,14 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const appIconLogo = useAppIconLogo();
-  // Connect page requires at least one of these (OR logic)
-  const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
+  // Connect page requires both MCP gateway and LLM proxy read permissions
   const { data: canReadLlmProxy } = useHasPermissions({
     llmProxy: ["read"],
   });
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
   });
-  const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
+  const showConnect = canReadMcpGateway && canReadLlmProxy;
 
   // Filter nav groups based on connect permissions
   const filteredNavGroups = React.useMemo(() => {

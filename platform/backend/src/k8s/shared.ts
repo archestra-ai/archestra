@@ -9,7 +9,7 @@ const {
   },
 } = config;
 
-export interface K8sClients {
+interface K8sClients {
   kubeConfig: k8s.KubeConfig;
   coreApi: k8s.CoreV1Api;
   appsApi: k8s.AppsV1Api;
@@ -22,6 +22,7 @@ export interface K8sClients {
 
 /**
  * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ * @public — exported for testability
  */
 export function validateKubeconfig(path?: string) {
   if (!path) {
@@ -121,6 +122,7 @@ export function createK8sClients(
 /**
  * Check if K8s runtime is enabled based on environment configuration.
  * Returns true when either KUBECONFIG or LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is set.
+ * @public — exported for testability
  */
 export function isK8sConfigured(): boolean {
   return (
@@ -131,6 +133,7 @@ export function isK8sConfigured(): boolean {
 
 /**
  * Returns the resolved K8s namespace from configuration.
+ * @public — exported for testability
  */
 export function getK8sNamespace(): string {
   return namespace || "default";

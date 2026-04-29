@@ -5,6 +5,7 @@ import {
 } from "@opentelemetry/api";
 import {
   AnthropicErrorTypes,
+  ArchestraInternalErrorCode,
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
@@ -156,6 +157,34 @@ interface ParsedGeminiError {
   details?: unknown[];
   /** Extracted ErrorInfo from details array, if present */
   errorInfo?: GeminiErrorInfo;
+}
+
+// =============================================================================
+// Archestra Envelope Reader
+// =============================================================================
+
+/**
+ * Read the Archestra-normalized `internal_code` field from the LLM-proxy
+ * error envelope. The envelope has shape `{ error: { message, type,
+ * internal_code } }` and is produced by the Fastify error handler from
+ * `ApiError.internalCode`, which in turn is populated by the adapter's
+ * `extractInternalCode` classifier. Provider-agnostic — any provider whose
+ * adapter emits a code can be short-circuited here.
+ */
+function extractArchestraInternalCode(
+  responseBody: string | undefined,
+): ArchestraInternalErrorCode | undefined {
+  if (!responseBody) return undefined;
+  try {
+    const parsed = JSON.parse(responseBody);
+    const code = parsed?.error?.internal_code;
+    if (code === ArchestraInternalErrorCode.ContextLengthExceeded) {
+      return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+  } catch {
+    // Not JSON — fall through.
+  }
+  return undefined;
 }
 
 // =============================================================================
@@ -588,12 +617,6 @@ function mapBedrockErrorToCode(
   parsedError: ParsedBedrockError | null,
 ): ChatErrorCode {
   const errorType = parsedError?.type;
-  const errorMessage = parsedError?.message;
-
-  // Check for context window exceeded in message
-  if (errorMessage?.toLowerCase().includes("model_context_window_exceeded")) {
-    return ChatErrorCode.ContextTooLong;
-  }
 
   if (errorType) {
     switch (errorType) {
@@ -1492,7 +1515,16 @@ export function mapProviderError(
   }
 
   // Map to error code using provider-specific mapper
-  const errorCode = mapError(statusCode, parsedError);
+  let errorCode = mapError(statusCode, parsedError);
+
+  // An Archestra-normalized `internal_code` emitted by the adapter's
+  // extractInternalCode takes precedence over the per-provider mapper. This
+  // is how cross-provider categories (context_length_exceeded, ...) are
+  // surfaced uniformly without each mapper re-implementing the detection.
+  const normalizedCode = extractArchestraInternalCode(responseBody);
+  if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
+    errorCode = ChatErrorCode.ContextTooLong;
+  }
 
   // Extract the most meaningful error message
   const errorMessage = extractErrorMessage(parsedError, responseBody, error);

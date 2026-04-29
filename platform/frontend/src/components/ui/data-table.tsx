@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils";
 import { DataTablePagination } from "./data-table-pagination";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
+const ACTIONS_COLUMN_ID = "actions";
+const ACTIONS_COLUMN_WIDTH = 288;
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -203,16 +205,12 @@ export function DataTable<TData, TValue>({
                       <TableHead
                         key={header.id}
                         data-column-id={header.column.id}
-                        className={
-                          COMPACT_ICON_COLUMN_IDS.has(header.column.id)
-                            ? "w-0 px-2 md:px-2"
-                            : undefined
-                        }
-                        style={
-                          header.column.columnDef.size
-                            ? { width: header.getSize() }
-                            : undefined
-                        }
+                        className={getColumnClassName(header.column.id)}
+                        style={getColumnStyle({
+                          columnId: header.column.id,
+                          configuredSize: header.column.columnDef.size,
+                          renderedSize: header.getSize(),
+                        })}
                       >
                         {header.isPlaceholder
                           ? null
@@ -243,16 +241,12 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         data-column-id={cell.column.id}
-                        className={
-                          COMPACT_ICON_COLUMN_IDS.has(cell.column.id)
-                            ? "px-2 md:px-2"
-                            : undefined
-                        }
-                        style={
-                          cell.column.columnDef.size
-                            ? { width: cell.column.getSize() }
-                            : undefined
-                        }
+                        className={getColumnClassName(cell.column.id)}
+                        style={getColumnStyle({
+                          columnId: cell.column.id,
+                          configuredSize: cell.column.columnDef.size,
+                          renderedSize: cell.column.getSize(),
+                        })}
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
@@ -325,4 +319,32 @@ export function DataTable<TData, TValue>({
         )}
     </div>
   );
+}
+
+function getColumnClassName(columnId: string) {
+  if (COMPACT_ICON_COLUMN_IDS.has(columnId)) {
+    return "w-0 px-2 md:px-2";
+  }
+
+  if (columnId === ACTIONS_COLUMN_ID) {
+    return "whitespace-nowrap";
+  }
+
+  return undefined;
+}
+
+function getColumnStyle(params: {
+  columnId: string;
+  configuredSize?: number;
+  renderedSize: number;
+}): React.CSSProperties | undefined {
+  if (params.columnId === ACTIONS_COLUMN_ID) {
+    return { width: ACTIONS_COLUMN_WIDTH };
+  }
+
+  if (params.configuredSize) {
+    return { width: params.renderedSize };
+  }
+
+  return undefined;
 }

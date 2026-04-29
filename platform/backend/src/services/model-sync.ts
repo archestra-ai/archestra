@@ -171,7 +171,7 @@ export const modelSyncService = new ModelSyncService();
 // Helper functions
 // ============================================================================
 
-export interface ProviderModelCapabilities {
+interface ProviderModelCapabilities {
   description: string | null;
   contextLength: number | null;
   inputModalities: ModelInputModality[] | null;
@@ -217,7 +217,7 @@ export function buildModelsToUpsert(params: {
  * Best-effort inference of embedding dimensions for known models.
  * Unknown models return null and can be configured manually in the model editor.
  */
-export function inferEmbeddingDimensions(
+function inferEmbeddingDimensions(
   modelId: string,
   provider: SupportedProvider,
 ): SupportedEmbeddingDimension | null {
@@ -242,6 +242,7 @@ export function inferEmbeddingDimensions(
   return null;
 }
 
+/** @public — exported for testability */
 export function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
@@ -300,7 +301,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
 /**
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
  */
-export function buildCapabilitiesMap(
+function buildCapabilitiesMap(
   modelsDevData: ModelsDevApiResponse,
   targetProvider: SupportedProvider,
 ): Map<string, ProviderModelCapabilities> {

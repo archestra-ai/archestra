@@ -3,31 +3,9 @@ import {
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@shared";
 import { describe, expect, test } from "@/test";
-import TeamTokenModel, { isArchestraPrefixedToken } from "./team-token";
+import TeamTokenModel from "./team-token";
 
 describe("TeamTokenModel", () => {
-  describe("isArchestraPrefixedToken", () => {
-    test("returns true for current platform token prefix", () => {
-      expect(isArchestraPrefixedToken(`${ARCHESTRA_TOKEN_PREFIX}abc123`)).toBe(
-        true,
-      );
-    });
-
-    test("returns true for legacy token prefixes", () => {
-      expect(
-        isArchestraPrefixedToken(`${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}abc123`),
-      ).toBe(true);
-    });
-
-    test("returns false for non-prefixed tokens", () => {
-      expect(isArchestraPrefixedToken("abc123")).toBe(false);
-    });
-
-    test("returns false for empty string", () => {
-      expect(isArchestraPrefixedToken("")).toBe(false);
-    });
-  });
-
   describe("create", () => {
     test("creates token with correct format", async ({ makeOrganization }) => {
       const org = await makeOrganization();

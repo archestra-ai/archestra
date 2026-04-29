@@ -26,6 +26,8 @@ export async function createLlmProviderApiKey(
     name: string;
     apiKey: string;
     providerOptionName?: string | RegExp;
+    scope?: "personal" | "org";
+    baseUrl?: string;
   },
 ): Promise<void> {
   const addApiKeyButton = page
@@ -45,6 +47,18 @@ export async function createLlmProviderApiKey(
 
   await page.getByLabel(/Name/i).fill(params.name);
   await page.getByRole("textbox", { name: /API Key/i }).fill(params.apiKey);
+
+  if (params.scope === "org") {
+    // Scope selector is a collapsible custom control — click the current
+    // ("Personal") option to expand it before picking "Organization".
+    await page.getByRole("button", { name: /^Personal/ }).click();
+    await page.getByRole("button", { name: /^Organization/ }).click();
+  }
+
+  if (params.baseUrl) {
+    await page.getByLabel(/Base URL/i).fill(params.baseUrl);
+  }
+
   await clickButton({ page, options: { name: "Test & Create" } });
   await expect(
     page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),
@@ -166,4 +180,18 @@ async function getParentKeyOptionNameForProvider(
     },
     { targetProvider: provider, route: LLM_PROVIDER_API_KEYS_ROUTE },
   );
+}
+
+/**
+ * Returns true if an API key row with the given name is already on the
+ * provider API keys page. Caller is responsible for navigating there first.
+ */
+export async function hasLlmProviderApiKey(
+  page: Page,
+  name: string,
+): Promise<boolean> {
+  return page
+    .getByTestId(`${E2eTestId.ChatApiKeyRow}-${name}`)
+    .isVisible()
+    .catch(() => false);
 }

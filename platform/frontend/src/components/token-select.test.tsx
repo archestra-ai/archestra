@@ -54,17 +54,25 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 describe("TokenSelect", () => {
-  it("renders separate team and user static credential groups", () => {
+  it("renders separate team, organization, and user static credential groups by scope", () => {
     const groupedCredentials = {
       "catalog-1": [
         {
           id: "team-credential",
           ownerEmail: "owner@example.com",
+          scope: "team",
           teamDetails: { teamId: "team-1", name: "Scope Repro Team" },
+        },
+        {
+          id: "organization-credential",
+          ownerEmail: "admin@example.com",
+          scope: "org",
+          teamDetails: null,
         },
         {
           id: "user-credential",
           ownerEmail: "member@example.com",
+          scope: "personal",
           teamDetails: null,
         },
       ],
@@ -81,12 +89,19 @@ describe("TokenSelect", () => {
     );
 
     expect(screen.getByText("Dynamic")).toBeInTheDocument();
+    expect(
+      screen.getByText("Static - Organization Credentials"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeInTheDocument();
+    expect(
+      screen.getByText("Available to the organization"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Static - Team Credentials")).toBeInTheDocument();
-    expect(screen.getByText("Static - User Credentials")).toBeInTheDocument();
-    expect(screen.getByText("Scope Repro Team")).toBeInTheDocument();
     expect(
       screen.getByText("Shared with team Scope Repro Team"),
     ).toBeInTheDocument();
+    expect(screen.getByText("Scope Repro Team")).toBeInTheDocument();
+    expect(screen.getByText("Static - User Credentials")).toBeInTheDocument();
     expect(screen.getByText("member@example.com")).toBeInTheDocument();
     expect(screen.getByText("Owned by member@example.com")).toBeInTheDocument();
   });

@@ -160,6 +160,19 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
+
+    it("should allow access to IdP-initiated SSO route without adding redirectTo", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sso/Okta");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
   });
 
   describe("when user is authenticated", () => {

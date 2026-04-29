@@ -126,6 +126,7 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
       const installResponse = await installMcpServer(request, {
         name: serverName,
         catalogId: catalogItem.id,
+        scope: "team",
         teamId: defaultTeam.id,
       });
       const server = await installResponse.json();

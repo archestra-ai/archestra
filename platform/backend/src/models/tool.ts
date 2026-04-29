@@ -2173,6 +2173,7 @@ class ToolModel {
 
 export default ToolModel;
 
+/** @public — exported for testability */
 export function parseArchestraBuiltInName(toolName: string): {
   serverName: string | null;
   shortName: string | null;

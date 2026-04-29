@@ -1,7 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { validateAssignment } from "@/services/agent-tool-assignment";
+import {
+  type PrefetchedMcpServer,
+  validateAssignment,
+} from "@/services/agent-tool-assignment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   EnterpriseManagedCredentialConfig,
@@ -51,10 +54,7 @@ function emptyPreFetchedData() {
     existingAgentIds: new Set<string>(),
     toolsMap: new Map<string, Tool>(),
     catalogItemsMap: new Map<string, InternalMcpCatalog>(),
-    mcpServersBasicMap: new Map<
-      string,
-      { id: string; ownerId: string | null; catalogId: string | null }
-    >(),
+    mcpServersBasicMap: new Map<string, PrefetchedMcpServer>(),
   };
 }
 
@@ -163,10 +163,15 @@ describe("validateAssignment", () => {
       existingAgentIds: new Set([agent.id]),
       toolsMap: new Map([[tool.id, tool]]),
       catalogItemsMap: new Map([[catalogItem.id, catalogItem]]),
-      mcpServersBasicMap: new Map([
+      mcpServersBasicMap: new Map<string, PrefetchedMcpServer>([
         [
           server.id,
-          { id: server.id, ownerId: null, catalogId: catalogItem.id },
+          {
+            id: server.id,
+            ownerId: null,
+            catalogId: catalogItem.id,
+            scope: server.scope,
+          },
         ],
       ]),
     };
@@ -515,6 +520,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       name: "agent-tool",
     });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: adminUser.id,
       teamId: sharedTeam.id,
@@ -556,6 +562,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       name: "mcp_gateway-tool",
     });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: adminUser.id,
       teamId: sharedTeam.id,
@@ -600,6 +607,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       name: "agent-tool",
     });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: adminUser.id,
       teamId: otherTeam.id,
@@ -648,6 +656,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       name: "mcp_gateway-tool",
     });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: adminUser.id,
       teamId: otherTeam.id,
@@ -834,6 +843,7 @@ describe("GET /api/agents/:agentId/tools", () => {
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({ name: "agent-tool", catalogId: catalog.id });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: sharedTeam.id,
@@ -886,6 +896,7 @@ describe("GET /api/agents/:agentId/tools", () => {
       catalogId: catalog.id,
     });
     const mcpServer = await makeMcpServer({
+      scope: "team",
       catalogId: catalog.id,
       ownerId: user.id,
       teamId: sharedTeam.id,

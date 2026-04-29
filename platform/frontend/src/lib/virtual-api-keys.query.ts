@@ -8,7 +8,6 @@ type AllVirtualApiKeysQuery = NonNullable<
 >;
 
 const {
-  getVirtualApiKeys,
   getAllVirtualApiKeys,
   createVirtualApiKey,
   updateVirtualApiKey,
@@ -20,14 +19,18 @@ export function useVirtualApiKeys(chatApiKeyId: string | null) {
     queryKey: ["virtual-api-keys", chatApiKeyId],
     queryFn: async () => {
       if (!chatApiKeyId) return [];
-      const { data, error } = await getVirtualApiKeys({
-        path: { chatApiKeyId },
+      const { data, error } = await getAllVirtualApiKeys({
+        query: {
+          chatApiKeyId,
+          limit: 100,
+          offset: 0,
+        },
       });
       if (error) {
         handleApiError(error);
         return [];
       }
-      return data ?? [];
+      return data?.data ?? [];
     },
     enabled: !!chatApiKeyId,
   });

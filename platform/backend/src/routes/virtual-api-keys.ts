@@ -19,7 +19,6 @@ import {
   constructResponseSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
-  SelectVirtualApiKeySchema,
   type User,
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
@@ -89,43 +88,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys",
-    {
-      schema: {
-        operationId: RouteId.GetVirtualApiKeys,
-        description: "Get visible virtual API keys for an LLM provider API key",
-        tags: ["Virtual API Keys"],
-        params: z.object({
-          chatApiKeyId: z.string().uuid(),
-        }),
-        response: constructResponseSchema(z.array(SelectVirtualApiKeySchema)),
-      },
-    },
-    async ({ params, organizationId, user }, reply) => {
-      const chatApiKey = await LlmProviderApiKeyModel.findById(
-        params.chatApiKeyId,
-      );
-      if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "LLM provider API key not found");
-      }
-
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
-        TeamModel.getUserTeamIds(user.id),
-        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-      ]);
-
-      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
-        chatApiKeyId: params.chatApiKeyId,
-        organizationId,
-        userId: user.id,
-        userTeamIds,
-        isAdmin: isVirtualKeyAdmin,
-      });
-      return reply.send(virtualKeys);
-    },
-  );
-
   fastify.post(
     "/api/llm-virtual-keys",
     {
@@ -142,32 +104,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const response = await createVirtualApiKey({
         body,
         chatApiKeyId: body.chatApiKeyId ?? null,
-        organizationId,
-        user,
-      });
-      return reply.send(response);
-    },
-  );
-
-  fastify.post(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys",
-    {
-      schema: {
-        operationId: RouteId.CreateProviderVirtualApiKey,
-        description:
-          "Create a new virtual API key. Returns the full token value once.",
-        tags: ["Virtual API Keys"],
-        params: z.object({
-          chatApiKeyId: z.string().uuid(),
-        }),
-        body: CreateOrUpdateVirtualApiKeyBodySchema,
-        response: constructResponseSchema(VirtualApiKeyWithValueSchema),
-      },
-    },
-    async ({ params, body, organizationId, user }, reply) => {
-      const response = await createVirtualApiKey({
-        body,
-        chatApiKeyId: params.chatApiKeyId,
         organizationId,
         user,
       });
@@ -200,33 +136,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.patch(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id",
-    {
-      schema: {
-        operationId: RouteId.UpdateProviderVirtualApiKey,
-        description: "Update a virtual API key",
-        tags: ["Virtual API Keys"],
-        params: z.object({
-          chatApiKeyId: z.string().uuid(),
-          id: z.string().uuid(),
-        }),
-        body: CreateOrUpdateVirtualApiKeyBodySchema,
-        response: constructResponseSchema(UpdateVirtualApiKeyResponseSchema),
-      },
-    },
-    async ({ params, body, organizationId, user }, reply) => {
-      const response = await updateVirtualApiKey({
-        id: params.id,
-        chatApiKeyId: params.chatApiKeyId,
-        body,
-        organizationId,
-        user,
-      });
-      return reply.send(response);
-    },
-  );
-
   fastify.delete(
     "/api/llm-virtual-keys/:id",
     {
@@ -243,31 +152,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params, organizationId, user }, reply) => {
       const response = await deleteVirtualApiKey({
         id: params.id,
-        organizationId,
-        user,
-      });
-      return reply.send(response);
-    },
-  );
-
-  fastify.delete(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id",
-    {
-      schema: {
-        operationId: RouteId.DeleteProviderVirtualApiKey,
-        description: "Delete a virtual API key",
-        tags: ["Virtual API Keys"],
-        params: z.object({
-          chatApiKeyId: z.string().uuid(),
-          id: z.string().uuid(),
-        }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async ({ params, organizationId, user }, reply) => {
-      const response = await deleteVirtualApiKey({
-        id: params.id,
-        chatApiKeyId: params.chatApiKeyId,
         organizationId,
         user,
       });
@@ -356,20 +240,15 @@ async function createVirtualApiKey(params: {
 
 async function updateVirtualApiKey(params: {
   id: string;
-  chatApiKeyId?: string;
   body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
   organizationId: string;
   user: User;
 }): Promise<z.infer<typeof UpdateVirtualApiKeyResponseSchema>> {
-  const { id, chatApiKeyId, body, organizationId, user } = params;
+  const { id, body, organizationId, user } = params;
 
   const accessContext = await VirtualApiKeyModel.findAccessContextById(id);
 
-  if (
-    !accessContext ||
-    accessContext.organizationId !== organizationId ||
-    (chatApiKeyId && accessContext.chatApiKeyId !== chatApiKeyId)
-  ) {
+  if (!accessContext || accessContext.organizationId !== organizationId) {
     throw new ApiError(404, "Virtual API key not found");
   }
 
@@ -429,19 +308,14 @@ async function updateVirtualApiKey(params: {
 
 async function deleteVirtualApiKey(params: {
   id: string;
-  chatApiKeyId?: string;
   organizationId: string;
   user: User;
 }): Promise<{ success: boolean }> {
-  const { id, chatApiKeyId, organizationId, user } = params;
+  const { id, organizationId, user } = params;
 
   const accessContext = await VirtualApiKeyModel.findAccessContextById(id);
 
-  if (
-    !accessContext ||
-    accessContext.organizationId !== organizationId ||
-    (chatApiKeyId && accessContext.chatApiKeyId !== chatApiKeyId)
-  ) {
+  if (!accessContext || accessContext.organizationId !== organizationId) {
     throw new ApiError(404, "Virtual API key not found");
   }
 

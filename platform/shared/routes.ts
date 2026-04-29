@@ -295,14 +295,10 @@ export const RouteId = {
   DeleteApiKey: "deleteApiKey",
 
   // Virtual API Key Routes
-  GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
-  CreateProviderVirtualApiKey: "createProviderVirtualApiKey",
-  UpdateProviderVirtualApiKey: "updateProviderVirtualApiKey",
-  DeleteProviderVirtualApiKey: "deleteProviderVirtualApiKey",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",

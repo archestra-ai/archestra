@@ -164,7 +164,7 @@ describe("virtualApiKeysRoutes", () => {
     );
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects org scope without llmVirtualKey admin", async ({
+  test("POST /api/llm-virtual-keys rejects org scope without llmVirtualKey admin", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -173,9 +173,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "Org Key",
+        chatApiKeyId: parentKey.id,
         scope: "org",
         teams: [],
       },
@@ -190,7 +191,7 @@ describe("virtualApiKeysRoutes", () => {
     });
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys allows llmVirtualKey admins to assign any team", async ({
+  test("POST /api/llm-virtual-keys allows llmVirtualKey admins to assign any team", async ({
     makeLlmProviderApiKey,
     makeSecret,
     makeTeam,
@@ -207,9 +208,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "Team Key",
+        chatApiKeyId: parentKey.id,
         scope: "team",
         teams: [otherTeam.id],
       },
@@ -223,7 +225,7 @@ describe("virtualApiKeysRoutes", () => {
     });
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys returns the full token value once", async ({
+  test("POST /api/llm-virtual-keys returns the full token value once", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -236,9 +238,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "my-test-key",
+        chatApiKeyId: parentKey.id,
       },
     });
 
@@ -253,7 +256,7 @@ describe("virtualApiKeysRoutes", () => {
     expect(body.lastUsedAt).toBeNull();
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys stores model router provider mappings", async ({
+  test("POST /api/llm-virtual-keys stores model router provider mappings", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -276,9 +279,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${openaiKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "router-key",
+        chatApiKeyId: openaiKey.id,
         modelRouterProviderApiKeys: [
           { provider: "openai", chatApiKeyId: openaiKey.id },
           { provider: "anthropic", chatApiKeyId: anthropicKey.id },
@@ -361,7 +365,7 @@ describe("virtualApiKeysRoutes", () => {
     );
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects duplicate model router provider mappings", async ({
+  test("POST /api/llm-virtual-keys rejects duplicate model router provider mappings", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -382,9 +386,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${firstKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "router-key",
+        chatApiKeyId: firstKey.id,
         modelRouterProviderApiKeys: [
           { provider: "openai", chatApiKeyId: firstKey.id },
           { provider: "openai", chatApiKeyId: secondKey.id },
@@ -398,7 +403,7 @@ describe("virtualApiKeysRoutes", () => {
     );
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects provider mismatches in model router mappings", async ({
+  test("POST /api/llm-virtual-keys rejects provider mismatches in model router mappings", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -412,9 +417,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${openaiKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "router-key",
+        chatApiKeyId: openaiKey.id,
         modelRouterProviderApiKeys: [
           { provider: "anthropic", chatApiKeyId: openaiKey.id },
         ],
@@ -427,7 +433,7 @@ describe("virtualApiKeysRoutes", () => {
     );
   });
 
-  test("GET /api/llm-provider-api-keys/:id/virtual-keys lists keys without exposing token values", async ({
+  test("GET /api/llm-virtual-keys?chatApiKeyId lists keys without exposing token values", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -440,16 +446,18 @@ describe("virtualApiKeysRoutes", () => {
 
     const firstResponse = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "key-alpha",
+        chatApiKeyId: parentKey.id,
       },
     });
     const secondResponse = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "key-beta",
+        chatApiKeyId: parentKey.id,
       },
     });
 
@@ -458,11 +466,11 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: `/api/llm-virtual-keys?chatApiKeyId=${parentKey.id}`,
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json() as Array<{
+    const body = response.json().data as Array<{
       id: string;
       name: string;
       tokenStart: string;
@@ -500,16 +508,18 @@ describe("virtualApiKeysRoutes", () => {
 
     await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "org-list-key-1",
+        chatApiKeyId: parentKey.id,
       },
     });
     await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "org-list-key-2",
+        chatApiKeyId: parentKey.id,
       },
     });
 
@@ -588,7 +598,7 @@ describe("virtualApiKeysRoutes", () => {
     );
   });
 
-  test("DELETE /api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id removes the key", async ({
+  test("DELETE /api/llm-virtual-keys/:id removes the key", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -601,9 +611,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const createResponse = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "delete-me",
+        chatApiKeyId: parentKey.id,
       },
     });
 
@@ -611,7 +622,7 @@ describe("virtualApiKeysRoutes", () => {
 
     const deleteResponse = await app.inject({
       method: "DELETE",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys/${createResponse.json().id}`,
+      url: `/api/llm-virtual-keys/${createResponse.json().id}`,
     });
 
     expect(deleteResponse.statusCode).toBe(200);
@@ -619,19 +630,19 @@ describe("virtualApiKeysRoutes", () => {
 
     const listResponse = await app.inject({
       method: "GET",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: `/api/llm-virtual-keys?chatApiKeyId=${parentKey.id}`,
     });
 
     expect(listResponse.statusCode).toBe(200);
     expect(
       listResponse
         .json()
-        .map((key: { id: string }) => key.id)
+        .data.map((key: { id: string }) => key.id)
         .includes(createResponse.json().id),
     ).toBe(false);
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys supports keyless parent keys", async () => {
+  test("POST /api/llm-virtual-keys supports keyless parent keys", async () => {
     mockUserHasPermission.mockResolvedValue(true);
 
     const parentKey = await LlmProviderApiKeyModel.create({
@@ -646,9 +657,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "vk-for-keyless",
+        chatApiKeyId: parentKey.id,
       },
     });
 
@@ -658,7 +670,7 @@ describe("virtualApiKeysRoutes", () => {
     expect(body.name).toBe("vk-for-keyless");
   });
 
-  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects past expiration dates", async ({
+  test("POST /api/llm-virtual-keys rejects past expiration dates", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -671,9 +683,10 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: `/api/llm-provider-api-keys/${parentKey.id}/virtual-keys`,
+      url: "/api/llm-virtual-keys",
       payload: {
         name: "expired-from-the-start",
+        chatApiKeyId: parentKey.id,
         expiresAt: new Date(Date.now() - 60_000).toISOString(),
       },
     });

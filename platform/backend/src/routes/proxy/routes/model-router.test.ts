@@ -606,6 +606,50 @@ describe("model router proxy routes", () => {
     expect(response.json().error.message).toBe("Virtual API key expired");
   });
 
+  test("rejects provider-specific virtual keys that are not configured for model router", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
+    const organization = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "regular-provider-vk",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Regular Virtual Key Model Router Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "openai:gpt-5.4",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toBe(
+      "This virtual API key is not configured for Model Router usage.",
+    );
+  });
+
   test("resolves virtual keys and scopes model router access to the key provider", async ({
     makeAgent,
     makeOrganization,
@@ -818,6 +862,77 @@ describe("model router proxy routes", () => {
     expect(response.statusCode).toBe(200);
     expect(groqAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(openaiAdapterFactory.createClient).not.toHaveBeenCalled();
+  });
+
+  test("routes multiple providers through one model router virtual key", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
+    await upsertModel({ provider: "groq", modelId: "llama-3.1-8b-instant" });
+
+    const organization = await makeOrganization();
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const groqSecret = await makeSecret({ secret: { apiKey: "sk-groq" } });
+    const openaiKey = await makeLlmProviderApiKey(
+      organization.id,
+      openaiSecret.id,
+      { provider: "openai" },
+    );
+    const groqKey = await makeLlmProviderApiKey(
+      organization.id,
+      groqSecret.id,
+      { provider: "groq" },
+    );
+    const { value } = await VirtualApiKeyModel.create({
+      chatApiKeyId: openaiKey.id,
+      name: "model-router-openai-groq-vk",
+      modelRouterProviderApiKeys: [
+        { provider: "openai", chatApiKeyId: openaiKey.id },
+        { provider: "groq", chatApiKeyId: groqKey.id },
+      ],
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Multi-provider Model Router Agent",
+      agentType: "llm_proxy",
+    });
+
+    const openaiResponse = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "openai:gpt-5.4",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+    const groqResponse = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "groq:llama-3.1-8b-instant",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(openaiResponse.statusCode).toBe(200);
+    expect(groqResponse.statusCode).toBe(200);
+    expect(openaiAdapterFactory.createClient).toHaveBeenCalledOnce();
+    expect(groqAdapterFactory.createClient).toHaveBeenCalledOnce();
   });
 
   test("rejects unqualified model ids", async ({

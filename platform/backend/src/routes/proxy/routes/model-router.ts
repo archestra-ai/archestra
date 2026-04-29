@@ -83,23 +83,23 @@ type ModelRouterVirtualKeyAuth = {
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
 
-const openAiWireProviders: Partial<
+const openAiWireProviders = {
+  openai: openaiAdapterFactory,
+  azure: azureAdapterFactory,
+  cerebras: cerebrasAdapterFactory,
+  deepseek: deepseekAdapterFactory,
+  groq: groqAdapterFactory,
+  minimax: minimaxAdapterFactory,
+  mistral: mistralAdapterFactory,
+  ollama: ollamaAdapterFactory,
+  openrouter: openrouterAdapterFactory,
+  perplexity: perplexityAdapterFactory,
+  vllm: vllmAdapterFactory,
+  xai: xaiAdapterFactory,
+  zhipuai: zhipuaiAdapterFactory,
+} satisfies Partial<Record<SupportedProvider, unknown>> as Partial<
   Record<SupportedProvider, OpenAiWireProvider>
-> = {
-  openai: openaiAdapterFactory as OpenAiWireProvider,
-  azure: azureAdapterFactory as OpenAiWireProvider,
-  cerebras: cerebrasAdapterFactory as OpenAiWireProvider,
-  deepseek: deepseekAdapterFactory as OpenAiWireProvider,
-  groq: groqAdapterFactory as OpenAiWireProvider,
-  minimax: minimaxAdapterFactory as OpenAiWireProvider,
-  mistral: mistralAdapterFactory as OpenAiWireProvider,
-  ollama: ollamaAdapterFactory as OpenAiWireProvider,
-  openrouter: openrouterAdapterFactory as OpenAiWireProvider,
-  perplexity: perplexityAdapterFactory as OpenAiWireProvider,
-  vllm: vllmAdapterFactory as OpenAiWireProvider,
-  xai: xaiAdapterFactory as OpenAiWireProvider,
-  zhipuai: zhipuaiAdapterFactory as OpenAiWireProvider,
-};
+>;
 
 const modelRouterSupportedProviders = new Set<SupportedProvider>([
   ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
@@ -266,12 +266,12 @@ async function routeChatCompletion(
 ) {
   const body = request.body as OpenAi.Types.ChatCompletionsRequest;
   const params = request.params as { agentId?: string };
+  const auth = await getModelRouterVirtualKeyAuth(request);
   if (params.agentId) {
     await getModelRouterAgent(params.agentId);
   } else {
     await AgentModel.getDefaultProfile();
   }
-  const auth = await getModelRouterVirtualKeyAuth(request);
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
@@ -307,12 +307,12 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const body = request.body as Azure.Types.ResponsesRequest;
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
+  const auth = await getModelRouterVirtualKeyAuth(request);
   if (params.agentId) {
     await getModelRouterAgent(params.agentId);
   } else {
     await AgentModel.getDefaultProfile();
   }
-  const auth = await getModelRouterVirtualKeyAuth(request);
   const resolution = await resolveModelRoute({
     requestedModel: chatBody.model,
     allowedProviders: getMappedProviders(auth),
@@ -355,44 +355,43 @@ function getOpenAiChatProviderForResolution(params: {
     return { body: params.body, adapter: provider };
   }
 
-  if (params.provider === "anthropic") {
-    const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
-    return {
-      body: anthropicBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-      adapter: makeAnthropicOpenaiAdapterFactory(
-        openaiContext,
-      ) as unknown as OpenAiWireProvider,
-    };
-  }
-
-  if (params.provider === "bedrock") {
-    const { converseBody, openaiContext } = openaiToConverse(params.body);
-    return {
-      body: converseBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-      adapter: makeBedrockOpenaiAdapterFactory(
-        openaiContext,
-      ) as unknown as OpenAiWireProvider,
-    };
-  }
-
-  if (params.provider === "cohere") {
-    const { cohereBody, openaiContext } = openaiToCohere(params.body);
-    return {
-      body: cohereBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-      adapter: makeCohereOpenaiAdapterFactory(
-        openaiContext,
-      ) as unknown as OpenAiWireProvider,
-    };
-  }
-
-  if (params.provider === "gemini") {
-    const { geminiBody, openaiContext } = openaiToGemini(params.body);
-    return {
-      body: geminiBody as unknown as OpenAi.Types.ChatCompletionsRequest,
-      adapter: makeGeminiOpenaiAdapterFactory(
-        openaiContext,
-      ) as unknown as OpenAiWireProvider,
-    };
+  switch (params.provider) {
+    case "anthropic": {
+      const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
+      return {
+        body: anthropicBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+        adapter: makeAnthropicOpenaiAdapterFactory(
+          openaiContext,
+        ) as unknown as OpenAiWireProvider,
+      };
+    }
+    case "bedrock": {
+      const { converseBody, openaiContext } = openaiToConverse(params.body);
+      return {
+        body: converseBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+        adapter: makeBedrockOpenaiAdapterFactory(
+          openaiContext,
+        ) as unknown as OpenAiWireProvider,
+      };
+    }
+    case "cohere": {
+      const { cohereBody, openaiContext } = openaiToCohere(params.body);
+      return {
+        body: cohereBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+        adapter: makeCohereOpenaiAdapterFactory(
+          openaiContext,
+        ) as unknown as OpenAiWireProvider,
+      };
+    }
+    case "gemini": {
+      const { geminiBody, openaiContext } = openaiToGemini(params.body);
+      return {
+        body: geminiBody as unknown as OpenAi.Types.ChatCompletionsRequest,
+        adapter: makeGeminiOpenaiAdapterFactory(
+          openaiContext,
+        ) as unknown as OpenAiWireProvider,
+      };
+    }
   }
 
   throw new ApiError(
@@ -461,6 +460,12 @@ async function getModelRouterVirtualKeyAuth(
         resolved.virtualKey.id,
       );
     if (mappings.length === 0) {
+      if (resolved.virtualKey.chatApiKeyId) {
+        throw new ApiError(
+          401,
+          "This virtual API key is not configured for Model Router usage.",
+        );
+      }
       throw new ApiError(
         401,
         "Model Router virtual key has no provider API keys configured.",

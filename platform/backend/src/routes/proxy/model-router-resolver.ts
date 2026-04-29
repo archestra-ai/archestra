@@ -41,6 +41,12 @@ export async function resolveModelRoute(params: {
     if (providerMatches.length === 1) {
       return toResolution(providerMatches[0], requestedModel);
     }
+    if (providerMatches.length > 1) {
+      throw new ApiError(
+        500,
+        `Ambiguous model resolution: "${requestedModel}" matched ${providerMatches.length} models.`,
+      );
+    }
   }
 
   throw new ApiError(

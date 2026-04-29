@@ -1,6 +1,7 @@
 import { ApiError } from "@shared";
+import { vi } from "vitest";
 import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import {
   buildRoutableModelId,
   parseProviderQualifiedModel,
@@ -9,6 +10,10 @@ import {
 } from "./model-router-resolver";
 
 describe("model-router-resolver", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe("parseProviderQualifiedModel", () => {
     test("parses the first colon as the provider separator", () => {
       expect(parseProviderQualifiedModel("anthropic:claude:haiku")).toEqual({
@@ -100,6 +105,32 @@ describe("model-router-resolver", () => {
           message: `Model "${requestedModel}" is not available. Use a provider-qualified model id such as "anthropic:claude-opus-4-6-20250918".`,
         });
       }
+    });
+
+    test("returns 500 when a provider-qualified model resolves ambiguously", async () => {
+      const firstModel = await createTextModel({
+        provider: "openai",
+        modelId: "duplicate-resolver-test-a",
+      });
+      const secondModel = await createTextModel({
+        provider: "openai",
+        modelId: "duplicate-resolver-test-b",
+      });
+      vi.spyOn(ModelModel, "findTextChatModelsByModelId").mockResolvedValue([
+        firstModel,
+        secondModel,
+      ]);
+
+      await expectApiError(
+        resolveModelRoute({
+          requestedModel: "openai:duplicate-resolver-test",
+        }),
+        {
+          statusCode: 500,
+          message:
+            'Ambiguous model resolution: "openai:duplicate-resolver-test" matched 2 models.',
+        },
+      );
     });
 
     test("returns 400 when the model is blank", async () => {

@@ -1,5 +1,5 @@
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { WIREMOCK_INTERNAL_URL } from "../consts";
+import { WIREMOCK_BASE_URL, WIREMOCK_INTERNAL_URL } from "../consts";
 import { expect, goToPage, test } from "../fixtures";
 import { makeApiRequest } from "../utils/mcp-gateway";
 import { LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE } from "./api-fixtures";
@@ -8,9 +8,10 @@ import { LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE } from "./api-fixtures";
  * Chat - Approval flow survives reload
  *
  * After Approve or Decline on a tool call, refreshing the chat must not
- * bring back the "Approval required" banner. Reuses the existing
- * auth-ui-e2e WireMock stubs (Anthropic tool_use keyed on the body tag
- * defined in TEST_MESSAGE_TAG below).
+ * bring back the "Approval required" banner. Drives WireMock LLM stubs
+ * keyed on TEST_MESSAGE_TAG; the stubs use isolated scenarios
+ * (auth-ui-approval-e2e / gemini-auth-ui-approval-e2e) so we do not
+ * collide with chat-auth-required.spec.ts and can reset state per test.
  */
 test.describe.configure({ mode: "serial" });
 
@@ -18,14 +19,18 @@ test.describe("Chat - Approval flow survives reload", () => {
   test.setTimeout(120_000);
 
   // Catalog name MUST match the existing WireMock mappings under
-  // `helm/e2e-tests/mappings/mcp-auth-ui-e2e-*.json` and
-  // `anthropic-chat-auth-ui-e2e-*.json`.
+  // `helm/e2e-tests/mappings/mcp-auth-ui-e2e-*.json`. LLM stubs use a
+  // dedicated tag + scenario (see `*-chat-auth-ui-approval-e2e-*.json`)
+  // so this spec does not share scenario state with chat-auth-required.
   const CATALOG_NAME = "auth-ui-e2e";
   const MCP_TOOL_BASE_NAME = "test_ui_auth_tool";
   const FULL_TOOL_NAME = `${CATALOG_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${MCP_TOOL_BASE_NAME}`;
   const WIREMOCK_MCP_PATH = `/mcp/${CATALOG_NAME}`;
-  // The body tag that the existing Anthropic WireMock mappings match on.
-  const TEST_MESSAGE_TAG = "auth-calltime-ui-e2e";
+  const TEST_MESSAGE_TAG = "auth-calltime-ui-approval-e2e";
+  const APPROVAL_SCENARIOS = [
+    "auth-ui-approval-e2e",
+    "gemini-auth-ui-approval-e2e",
+  ];
 
   let catalogItemId: string | null = null;
   let serverId: string | null = null;
@@ -169,6 +174,32 @@ test.describe("Chat - Approval flow survives reload", () => {
     });
     const policy = await policyResponse.json();
     policyId = policy.id;
+  });
+
+  test.beforeEach(async ({ request }) => {
+    // Both approval tests reuse the same stateful WireMock scenarios;
+    // reset to `Started` so each test gets a fresh tool_use response
+    // instead of the follow-up text from the previous run. Surface
+    // non-2xx loudly — a silent reset failure manifests as a 60s
+    // "Approval required" timeout downstream, which is exactly the
+    // confusing failure mode this beforeEach exists to prevent.
+    await Promise.all(
+      APPROVAL_SCENARIOS.map(async (name) => {
+        const url = `${WIREMOCK_BASE_URL}/__admin/scenarios/${name}/state`;
+        try {
+          const resp = await request.put(url);
+          if (!resp.ok()) {
+            console.warn(
+              `[chat-approval] WireMock reset for scenario '${name}' returned ${resp.status()}`,
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[chat-approval] WireMock reset for scenario '${name}' failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }),
+    );
   });
 
   test.afterAll(async ({ request }) => {

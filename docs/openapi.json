@@ -135779,12 +135779,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -136571,12 +136576,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -137631,12 +137641,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -138293,12 +138308,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -138973,12 +138993,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -139357,6 +139382,10 @@
                         "isDefault": {
                           "default": false,
                           "type": "boolean"
+                        },
+                        "visible": {
+                          "default": true,
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -139693,12 +139722,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -140339,12 +140373,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -141001,12 +141040,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -141630,12 +141674,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }
@@ -142572,12 +142621,17 @@
                           "isDefault": {
                             "default": false,
                             "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "url",
                           "description",
-                          "isDefault"
+                          "isDefault",
+                          "visible"
                         ],
                         "additionalProperties": false
                       }

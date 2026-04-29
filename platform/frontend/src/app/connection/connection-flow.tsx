@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes, SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -10,6 +10,9 @@ import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import {
+  type ConnectionBaseUrl,
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
   resolveEffectiveId,
   resolveInitialClientId,
 } from "./connection-flow.utils";
@@ -19,10 +22,6 @@ import { ProxyClientInstructions } from "./proxy-client-instructions";
 import { SearchableSelect } from "./searchable-select";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
-
-type ConnectionBaseUrl = NonNullable<
-  archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
->[number];
 
 type OpenKey = "client" | "mcp" | "proxy";
 
@@ -141,20 +140,17 @@ export function ConnectionFlow({
   // instruction panel below. Admins can hide individual env URLs from end
   // users; we filter those out here. Falls back to the admin default, then the
   // first remaining env URL, then the in-cluster internal URL.
-  const candidateBaseUrls = useMemo(() => {
-    const hidden = new Set(
-      (connectionBaseUrls ?? [])
-        .filter((m) => m.visible === false)
-        .map((m) => m.url),
-    );
-    const visibleExternal = config.api.externalProxyUrls.filter(
-      (url) => !hidden.has(url),
-    );
-    if (visibleExternal.length > 0) return visibleExternal;
-    return [config.api.internalProxyUrl];
-  }, [connectionBaseUrls]);
+  const candidateBaseUrls = useMemo(
+    () =>
+      resolveCandidateBaseUrls({
+        externalProxyUrls: config.api.externalProxyUrls,
+        internalProxyUrl: config.api.internalProxyUrl,
+        metadata: connectionBaseUrls,
+      }),
+    [connectionBaseUrls],
+  );
   const adminDefaultBaseUrl = useMemo(
-    () => connectionBaseUrls?.find((m) => m.isDefault)?.url ?? null,
+    () => resolveAdminDefaultBaseUrl(connectionBaseUrls),
     [connectionBaseUrls],
   );
   // Derived, not stateful: this lets the admin default take effect after the

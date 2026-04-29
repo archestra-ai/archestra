@@ -244,7 +244,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       expectedResult: secretValue,
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
-      cookieHeaders,
       profileId: sharedGateway.id,
     });
 
@@ -397,7 +396,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       expectedResult: secretValue,
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
-      cookieHeaders,
       profileId: sharedGateway.id,
     });
 

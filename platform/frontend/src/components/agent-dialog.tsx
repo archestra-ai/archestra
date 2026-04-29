@@ -134,6 +134,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
@@ -649,8 +650,11 @@ export function AgentDialog({
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
+  const advancedToolFeaturesEnabled =
+    useFeature("advancedToolFeaturesEnabled") === true;
   const supportsAutomaticToolAssignment =
-    agentType === "agent" || agentType === "mcp_gateway";
+    advancedToolFeaturesEnabled &&
+    (agentType === "agent" || agentType === "mcp_gateway");
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -1550,42 +1554,44 @@ export function AgentDialog({
                     />
                   </div>
 
-                  <div className="rounded-md border p-3 space-y-2">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="search-and-run-tool-mode"
-                        checked={toolExposureMode === "search_and_run_only"}
-                        onCheckedChange={(checked) =>
-                          setToolExposureMode(
-                            checked ? "search_and_run_only" : "full",
-                          )
-                        }
-                        className="mt-0.5"
-                      />
-                      <div className="space-y-1">
-                        <Label
-                          htmlFor="search-and-run-tool-mode"
-                          className="font-medium"
-                        >
-                          Search-and-run tool mode
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Expose only{" "}
-                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                          <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
-                          <code>tools/list</code>; assigned tools stay
-                          searchable and runnable.{" "}
-                          <ExternalDocsLink
-                            href={toolExposureDocsUrl}
-                            className="underline"
-                            showIcon={false}
+                  {advancedToolFeaturesEnabled && (
+                    <div className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id="search-and-run-tool-mode"
+                          checked={toolExposureMode === "search_and_run_only"}
+                          onCheckedChange={(checked) =>
+                            setToolExposureMode(
+                              checked ? "search_and_run_only" : "full",
+                            )
+                          }
+                          className="mt-0.5"
+                        />
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="search-and-run-tool-mode"
+                            className="font-medium"
                           >
-                            Learn more
-                          </ExternalDocsLink>
-                        </p>
+                            Search-and-run tool mode
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Expose only{" "}
+                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
+                            <code>tools/list</code>; assigned tools stay
+                            searchable and runnable.{" "}
+                            <ExternalDocsLink
+                              href={toolExposureDocsUrl}
+                              className="underline"
+                              showIcon={false}
+                            >
+                              Learn more
+                            </ExternalDocsLink>
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Knowledge Sources */}
                   {(knowledgeBases.length > 0 || connectors.length > 0) && (

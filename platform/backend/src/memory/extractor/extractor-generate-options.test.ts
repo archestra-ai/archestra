@@ -9,8 +9,7 @@ vi.mock("ai", async (importOriginal) => {
 
 const mockCreateDirectLLMModel = vi.hoisted(() => vi.fn(() => "mock-model"));
 vi.mock("@/clients/llm-client", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/clients/llm-client")>();
+  const actual = await importOriginal<typeof import("@/clients/llm-client")>();
   return {
     ...actual,
     createDirectLLMModel: mockCreateDirectLLMModel,

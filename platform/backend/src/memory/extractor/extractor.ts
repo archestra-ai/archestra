@@ -20,8 +20,8 @@ import {
   reportMemoryCandidates,
   reportMemoryDedupDrop,
   reportMemoryExtractionDuration,
-  reportMemoryExtractorDrop,
   reportMemoryExtractionUnavailable,
+  reportMemoryExtractorDrop,
   reportMemoryExtractorNoModel,
 } from "@/memory/telemetry/metrics";
 import {

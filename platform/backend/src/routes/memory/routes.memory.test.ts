@@ -385,7 +385,9 @@ describe("memory routes", () => {
     expect(tooLongCreate.body).toContain("too long");
 
     // Raise the org limit to 1000 — content of 501 chars must now be accepted.
-    await OrganizationModel.patch(organizationId, { memoryMaxContentLength: 1000 });
+    await OrganizationModel.patch(organizationId, {
+      memoryMaxContentLength: 1000,
+    });
 
     const okAfterRaise = await app.inject({
       method: "POST",
@@ -401,7 +403,9 @@ describe("memory routes", () => {
     const createdItem = okAfterRaise.json();
 
     // PATCH with content over the raised limit must be rejected.
-    await OrganizationModel.patch(organizationId, { memoryMaxContentLength: 500 });
+    await OrganizationModel.patch(organizationId, {
+      memoryMaxContentLength: 500,
+    });
     const tooLongPatch = await app.inject({
       method: "PATCH",
       url: `/api/memory/${createdItem.id}`,

@@ -243,8 +243,8 @@ describe("memory telemetry metrics", () => {
     expect(
       dedupDropBySourceValues?.values.some((value) => value.value === 1),
     ).toBe(true);
-    expect(
-      extractorDropValues?.values.some((value) => value.value === 1),
-    ).toBe(true);
+    expect(extractorDropValues?.values.some((value) => value.value === 1)).toBe(
+      true,
+    );
   });
 });

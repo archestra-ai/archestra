@@ -86,7 +86,13 @@ describe("chat routes memory extraction queue scheduling", () => {
   let agentId: string;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeMember, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
       vi.clearAllMocks();
       mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
       mockGetChatMcpTools.mockResolvedValue({});
@@ -118,7 +124,11 @@ describe("chat routes memory extraction queue scheduling", () => {
       }));
 
       mockCreateUIMessageStream.mockImplementation(
-        ({ execute }: { execute: (args: { writer: unknown }) => Promise<void> }) => {
+        ({
+          execute,
+        }: {
+          execute: (args: { writer: unknown }) => Promise<void>;
+        }) => {
           const writer = {
             write: vi.fn(),
             merge: vi.fn(),

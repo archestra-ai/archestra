@@ -284,4 +284,111 @@ describe("MessageThread", () => {
 
     expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
   });
+
+  it("renders only one divider when the same boundary tool runs in multiple messages", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "call-a",
+            state: "output-available",
+            input: {},
+            output: { content: "first" },
+          },
+          { type: "text", text: "First." },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "call-b",
+            state: "output-available",
+            input: {},
+            output: { content: "second" },
+          },
+          { type: "text", text: "Second." },
+        ],
+      },
+    ];
+
+    render(
+      <MessageThread
+        messages={messages}
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
+  it("renders only one divider when a preexisting boundary precedes a later boundary tool result", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-a",
+            state: "output-available",
+            input: {},
+            output: { content: "later" },
+          },
+          { type: "text", text: "Continuing." },
+        ],
+      },
+    ];
+
+    render(
+      <MessageThread
+        messages={messages}
+        unsafeContextBoundary={{
+          kind: "preexisting_untrusted",
+          reason: "inherited_from_parent",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
+  it("renders only one divider when two policy-denied texts share the thread", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-denied-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+      {
+        id: "assistant-denied-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
 });

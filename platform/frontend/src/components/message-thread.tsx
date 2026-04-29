@@ -67,6 +67,11 @@ import {
   getRenderedToolName,
   getSwapToolShortName,
 } from "@/lib/chat/swap-agent.utils";
+import {
+  computeFirstUnsafeDividerLocation,
+  type FirstUnsafeDividerLocation,
+  isFirstDividerAtText,
+} from "@/lib/chat/unsafe-context-divider";
 import { cn } from "@/lib/utils";
 
 const MessageThread = ({
@@ -96,6 +101,34 @@ const MessageThread = ({
     }
     return -1;
   }, [messages]);
+  // Once the chat becomes sensitive, render only the first divider —
+  // every later message is implicitly sensitive too (#4030 follow-up).
+  const firstUnsafeDividerLocation: FirstUnsafeDividerLocation | null = useMemo(
+    () =>
+      computeFirstUnsafeDividerLocation({
+        messages,
+        unsafeContextBoundary,
+        canReadToolPolicy: true,
+        isUnsafeBoundaryTool: (part, boundary) => {
+          if (boundary?.kind !== "tool_result") return false;
+          if (
+            typeof part !== "object" ||
+            part === null ||
+            !("type" in part) ||
+            typeof (part as { type?: unknown }).type !== "string" ||
+            !("state" in part) ||
+            (part as { state?: unknown }).state !== "output-available"
+          ) {
+            return false;
+          }
+          return toolPartMatchesUnsafeContextBoundary(
+            part as PartialUIMessage["parts"][number],
+            boundary,
+          );
+        },
+      }),
+    [messages, unsafeContextBoundary],
+  );
   const unsafeBoundaryRef = useRef<HTMLDivElement>(null);
   const [showStickyUnsafeIndicator, setShowStickyUnsafeIndicator] =
     useState(false);
@@ -151,7 +184,7 @@ const MessageThread = ({
             <SensitiveContextStickyIndicator
               visible={showStickyUnsafeIndicator}
             />
-            {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
+            {firstUnsafeDividerLocation?.kind === "preexisting" && (
               <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
             )}
             {!hideDivider && <Divider className="my-4" />}
@@ -233,15 +266,15 @@ const MessageThread = ({
                               message,
                               partIndex: i,
                               unsafeContextBoundary,
-                            });
+                            }) &&
+                            firstUnsafeDividerLocation?.kind === "tool" &&
+                            firstUnsafeDividerLocation.messageId === message.id;
                           const shouldRenderPolicyDeniedUnsafeBoundary =
-                            policyDenied?.unsafeContextActiveAtRequestStart &&
-                            !hasUnsafeBoundaryBefore({
-                              messages,
-                              beforeMessageIndex: idx,
-                              beforePartIndex: i,
-                              unsafeContextBoundary,
-                            });
+                            isFirstDividerAtText(
+                              firstUnsafeDividerLocation,
+                              message.id,
+                              i,
+                            );
                           if (policyDenied) {
                             return (
                               <Fragment key={partKey}>
@@ -705,11 +738,13 @@ const MessageThread = ({
                   {shouldRenderUnsafeContextDividerAfterMessage({
                     message,
                     unsafeContextBoundary,
-                  }) && (
-                    <UnsafeContextStartsHereDivider
-                      dividerRef={unsafeBoundaryRef}
-                    />
-                  )}
+                  }) &&
+                    firstUnsafeDividerLocation?.kind === "tool" &&
+                    firstUnsafeDividerLocation.messageId === message.id && (
+                      <UnsafeContextStartsHereDivider
+                        dividerRef={unsafeBoundaryRef}
+                      />
+                    )}
                   {message.role === "assistant" && (
                     <SwapAgentBoundaryDivider
                       parts={message.parts ?? []}
@@ -854,71 +889,6 @@ function shouldRenderUnsafeContextDividerAfterMessage(params: {
   }
 
   return sawBoundaryToolResult;
-}
-
-function hasUnsafeBoundaryBefore(params: {
-  messages: PartialUIMessage[];
-  beforeMessageIndex: number;
-  beforePartIndex: number;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
-}): boolean {
-  if (params.unsafeContextBoundary?.kind === "preexisting_untrusted") {
-    return true;
-  }
-
-  for (
-    let messageIndex = 0;
-    messageIndex <= params.beforeMessageIndex;
-    messageIndex++
-  ) {
-    const message = params.messages[messageIndex];
-    const lastPartIndex =
-      messageIndex === params.beforeMessageIndex
-        ? params.beforePartIndex - 1
-        : (message.parts?.length ?? 0) - 1;
-
-    for (let partIndex = 0; partIndex <= lastPartIndex; partIndex++) {
-      const part = message.parts?.[partIndex];
-      if (!part) {
-        continue;
-      }
-
-      if (
-        part.type === "text" &&
-        parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart
-      ) {
-        return true;
-      }
-
-      if (
-        "state" in part &&
-        part.state === "output-available" &&
-        toolPartMatchesUnsafeContextBoundaryInThread(
-          part,
-          params.unsafeContextBoundary,
-        )
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function toolPartMatchesUnsafeContextBoundaryInThread(
-  part: PartialUIMessage["parts"][number],
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"],
-): boolean {
-  if (!("type" in part) || typeof part.type !== "string") {
-    return false;
-  }
-
-  if (unsafeContextBoundary?.kind !== "tool_result") {
-    return false;
-  }
-
-  return toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary);
 }
 
 function toolPartMatchesUnsafeContextBoundary(

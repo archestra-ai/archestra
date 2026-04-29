@@ -73,6 +73,12 @@ import {
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
 import { getSwapToolShortName } from "@/lib/chat/swap-agent.utils";
+import {
+  computeFirstUnsafeDividerLocation,
+  type FirstUnsafeDividerLocation,
+  isFirstDividerAtText,
+  isFirstDividerAtTool,
+} from "@/lib/chat/unsafe-context-divider";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -350,6 +356,52 @@ export function ChatMessages({
       }),
     [messages, canReadToolPolicy, unsafeContextBoundary],
   );
+  // Once the chat becomes sensitive, render only the first divider —
+  // every later message is implicitly sensitive too, so repeating the
+  // marker is just noise (#4030 follow-up).
+  //
+  // Precedence: preexisting > inferredUnsafeTextBoundary > traversal.
+  // The inferred branch and the traversal cannot disagree about
+  // ordering: inferUnsafeTextBoundary returns undefined whenever the
+  // conversation-level boundary is `tool_result`, when any tool output
+  // carries its own `unsafeContextBoundary`, or when no policy denial
+  // exists past message 0. In every other case the traversal would
+  // only match a denial text — the inferred location lands at an
+  // earlier assistant text in document order, so preferring it is
+  // correct. Revisit this precedence if those short-circuits change.
+  const firstUnsafeDividerLocation: FirstUnsafeDividerLocation | null =
+    useMemo(() => {
+      if (!canReadToolPolicy) return null;
+      if (unsafeContextBoundary?.kind === "preexisting_untrusted") {
+        return { kind: "preexisting" };
+      }
+      if (inferredUnsafeTextBoundary) {
+        return {
+          kind: "before-text",
+          messageId: inferredUnsafeTextBoundary.messageId,
+          partIndex: inferredUnsafeTextBoundary.partIndex,
+        };
+      }
+      return computeFirstUnsafeDividerLocation({
+        messages,
+        unsafeContextBoundary,
+        canReadToolPolicy: true,
+        isUnsafeBoundaryTool: (part, boundary) => {
+          if (!isToolPart(part)) return false;
+          const fromOutput = extractUnsafeContextBoundaryFromToolOutput(
+            (part as { output?: unknown }).output,
+          );
+          if (fromOutput?.kind === "tool_result") return true;
+          if (boundary?.kind !== "tool_result") return false;
+          return toolPartMatchesUnsafeContextBoundary(part, boundary);
+        },
+      });
+    }, [
+      messages,
+      unsafeContextBoundary,
+      canReadToolPolicy,
+      inferredUnsafeTextBoundary,
+    ]);
 
   useEffect(() => {
     const boundaryElement = unsafeBoundaryRef.current;
@@ -443,7 +495,7 @@ export function ChatMessages({
           <SensitiveContextStickyIndicator
             visible={showStickyUnsafeIndicator}
           />
-          {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
+          {firstUnsafeDividerLocation?.kind === "preexisting" && (
             <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
           )}
           {timelineItems.map((item) => {
@@ -505,6 +557,13 @@ export function ChatMessages({
                         dividerRef: unsafeBoundaryRef,
                         unsafeContextBoundary,
                         canReadToolPolicy: !!canReadToolPolicy,
+                        firstUnsafeDividerLocation,
+                        messageId: message.id,
+                        partIndices: group.entries.flatMap((entry) =>
+                          entry.toolResultPartIndex !== null
+                            ? [entry.partIndex, entry.toolResultPartIndex]
+                            : [entry.partIndex],
+                        ),
                         renderedPart: (
                           <CompactToolGroup
                             key={getCompactGroupKey(
@@ -564,16 +623,11 @@ export function ChatMessages({
                         });
                         if (textToolAuthState?.kind === "policy-denied") {
                           const shouldRenderPolicyDeniedUnsafeBoundary =
-                            !!canReadToolPolicy &&
-                            textToolAuthState.policyDenied
-                              .unsafeContextActiveAtRequestStart &&
-                            !hasUnsafeBoundaryBefore({
-                              messages,
-                              beforeMessageIndex: idx,
-                              beforePartIndex: i,
-                              unsafeContextBoundary,
-                              inferredUnsafeTextBoundary,
-                            });
+                            isFirstDividerAtText(
+                              firstUnsafeDividerLocation,
+                              message.id,
+                              i,
+                            );
                           return (
                             <Fragment key={partKey}>
                               {shouldRenderPolicyDeniedUnsafeBoundary && (
@@ -594,9 +648,11 @@ export function ChatMessages({
                         // Use editable component for assistant messages
                         if (message.role === "assistant") {
                           const shouldRenderInferredUnsafeBoundary =
-                            inferredUnsafeTextBoundary?.messageId ===
-                              message.id &&
-                            inferredUnsafeTextBoundary.partIndex === i;
+                            isFirstDividerAtText(
+                              firstUnsafeDividerLocation,
+                              message.id,
+                              i,
+                            );
                           if (
                             hasMessageAuthToolError(message) &&
                             isAuthInstructionText(part.text)
@@ -955,6 +1011,9 @@ export function ChatMessages({
                           dividerRef: unsafeBoundaryRef,
                           unsafeContextBoundary,
                           canReadToolPolicy: !!canReadToolPolicy,
+                          firstUnsafeDividerLocation,
+                          messageId: message.id,
+                          partIndices: toolResultPart ? [i, i + 1] : [i],
                           renderedPart: (
                             <MessageTool
                               part={part}
@@ -1039,12 +1098,26 @@ export function ChatMessages({
                             output: outputPart?.output,
                           }) as ToolUIPart;
 
+                          const inputPartIndex = inputPart
+                            ? allParts.indexOf(inputPart)
+                            : -1;
+                          const outputPartIndex = outputPart
+                            ? allParts.indexOf(outputPart)
+                            : -1;
+                          const toolPartIndices = [i].concat(
+                            inputPartIndex !== -1 ? [inputPartIndex] : [],
+                            outputPartIndex !== -1 ? [outputPartIndex] : [],
+                          );
+
                           return renderPartWithUnsafeContextDivider({
                             partKey,
                             part: outputPart ?? effectivePart,
                             dividerRef: unsafeBoundaryRef,
                             unsafeContextBoundary,
                             canReadToolPolicy: !!canReadToolPolicy,
+                            firstUnsafeDividerLocation,
+                            messageId: message.id,
+                            partIndices: toolPartIndices,
                             renderedPart: (
                               <MessageTool
                                 key={`${message.id}-${tcId}`}
@@ -1120,6 +1193,9 @@ export function ChatMessages({
                             dividerRef: unsafeBoundaryRef,
                             unsafeContextBoundary,
                             canReadToolPolicy: !!canReadToolPolicy,
+                            firstUnsafeDividerLocation,
+                            messageId: message.id,
+                            partIndices: toolResultPart ? [i, i + 1] : [i],
                             renderedPart: (
                               <MessageTool
                                 part={part}
@@ -1794,6 +1870,9 @@ function renderPartWithUnsafeContextDivider({
   dividerRef,
   unsafeContextBoundary,
   canReadToolPolicy,
+  firstUnsafeDividerLocation,
+  messageId,
+  partIndices,
 }: {
   partKey: string;
   part: DynamicToolUIPart | ToolUIPart;
@@ -1801,6 +1880,9 @@ function renderPartWithUnsafeContextDivider({
   dividerRef: React.Ref<HTMLDivElement>;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
   canReadToolPolicy: boolean;
+  firstUnsafeDividerLocation: FirstUnsafeDividerLocation | null;
+  messageId: string | undefined;
+  partIndices: ReadonlyArray<number>;
 }) {
   if (!canReadToolPolicy) {
     return renderedPart;
@@ -1823,6 +1905,12 @@ function renderPartWithUnsafeContextDivider({
     return renderedPart;
   }
 
+  if (
+    !isFirstDividerAtTool(firstUnsafeDividerLocation, messageId, partIndices)
+  ) {
+    return renderedPart;
+  }
+
   return (
     <Fragment key={`${partKey}-unsafe-context-boundary`}>
       {renderedPart}
@@ -1838,6 +1926,9 @@ function renderCompactGroupWithUnsafeContextDivider({
   dividerRef,
   unsafeContextBoundary,
   canReadToolPolicy,
+  firstUnsafeDividerLocation,
+  messageId,
+  partIndices,
 }: {
   partKey: string;
   parts: Array<DynamicToolUIPart | ToolUIPart>;
@@ -1845,6 +1936,9 @@ function renderCompactGroupWithUnsafeContextDivider({
   dividerRef: React.Ref<HTMLDivElement>;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
   canReadToolPolicy: boolean;
+  firstUnsafeDividerLocation: FirstUnsafeDividerLocation | null;
+  messageId: string | undefined;
+  partIndices: ReadonlyArray<number>;
 }) {
   if (!canReadToolPolicy) {
     return renderedPart;
@@ -1867,6 +1961,12 @@ function renderCompactGroupWithUnsafeContextDivider({
     !parts.some((part) =>
       toolPartMatchesUnsafeContextBoundary(part, resolvedUnsafeContextBoundary),
     )
+  ) {
+    return renderedPart;
+  }
+
+  if (
+    !isFirstDividerAtTool(firstUnsafeDividerLocation, messageId, partIndices)
   ) {
     return renderedPart;
   }
@@ -2051,117 +2151,6 @@ function inferUnsafeTextBoundary(params: {
   }
 
   return undefined;
-}
-
-function hasUnsafeBoundaryBefore(params: {
-  messages: UIMessage[];
-  beforeMessageIndex: number;
-  beforePartIndex: number;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
-  inferredUnsafeTextBoundary?: { messageId: string; partIndex: number };
-}): boolean {
-  if (params.unsafeContextBoundary?.kind === "preexisting_untrusted") {
-    return true;
-  }
-
-  if (
-    params.inferredUnsafeTextBoundary &&
-    isMessagePositionBefore({
-      messages: params.messages,
-      boundaryMessageId: params.inferredUnsafeTextBoundary.messageId,
-      boundaryPartIndex: params.inferredUnsafeTextBoundary.partIndex,
-      beforeMessageIndex: params.beforeMessageIndex,
-      beforePartIndex: params.beforePartIndex,
-    })
-  ) {
-    return true;
-  }
-
-  for (
-    let messageIndex = 0;
-    messageIndex <= params.beforeMessageIndex;
-    messageIndex++
-  ) {
-    const message = params.messages[messageIndex];
-    const lastPartIndex =
-      messageIndex === params.beforeMessageIndex
-        ? params.beforePartIndex - 1
-        : (message.parts?.length ?? 0) - 1;
-
-    for (let partIndex = 0; partIndex <= lastPartIndex; partIndex++) {
-      const part = message.parts?.[partIndex];
-      if (!part) {
-        continue;
-      }
-
-      if (
-        part.type === "text" &&
-        parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart
-      ) {
-        return true;
-      }
-
-      if (
-        isToolPart(part) &&
-        part.state === "output-available" &&
-        matchesThreadUnsafeBoundary({
-          part,
-          unsafeContextBoundary: params.unsafeContextBoundary,
-        })
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function matchesThreadUnsafeBoundary(params: {
-  part: DynamicToolUIPart | ToolUIPart;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
-}): boolean {
-  const boundaryFromOutput = extractUnsafeContextBoundaryFromToolOutput(
-    params.part.output,
-  );
-  if (boundaryFromOutput?.kind === "tool_result") {
-    return true;
-  }
-
-  if (params.unsafeContextBoundary?.kind !== "tool_result") {
-    return false;
-  }
-
-  return toolPartMatchesUnsafeContextBoundary(
-    params.part,
-    params.unsafeContextBoundary,
-  );
-}
-
-function isMessagePositionBefore(params: {
-  messages: UIMessage[];
-  boundaryMessageId: string;
-  boundaryPartIndex: number;
-  beforeMessageIndex: number;
-  beforePartIndex: number;
-}): boolean {
-  const boundaryMessageIndex = params.messages.findIndex(
-    (message) => message.id === params.boundaryMessageId,
-  );
-
-  if (boundaryMessageIndex === -1) {
-    return false;
-  }
-
-  if (boundaryMessageIndex < params.beforeMessageIndex) {
-    return true;
-  }
-
-  if (boundaryMessageIndex > params.beforeMessageIndex) {
-    return false;
-  }
-
-  return params.boundaryPartIndex < params.beforePartIndex;
 }
 
 function renderToolAuthPart(params: {

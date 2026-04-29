@@ -17,6 +17,7 @@ export type CompactToolGroup = {
   startIndex: number;
   entries: Array<{
     partIndex: number;
+    toolResultPartIndex: number | null;
     toolName: string;
     part: DynamicToolUIPart | ToolUIPart;
     toolResultPart: DynamicToolUIPart | ToolUIPart | null;
@@ -174,6 +175,7 @@ export function identifyCompactToolGroups(
       }
       currentGroup.entries.push({
         partIndex: idx,
+        toolResultPartIndex: resultIdx ?? null,
         toolName,
         part: rawPart,
         toolResultPart,

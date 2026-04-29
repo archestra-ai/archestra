@@ -580,6 +580,190 @@ describe("ChatMessages", () => {
     expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
   });
 
+  it("renders only one divider when multiple tool calls match the unsafe boundary by toolName across messages", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "call-a",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = first" },
+          },
+          { type: "text", text: "First." },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "call-b",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = second" },
+          },
+          { type: "text", text: "Second." },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
+  it("renders only one divider when two tool results carry their own unsafe boundary across messages", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-a",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: {
+              content: "first",
+              unsafeContextBoundary: {
+                kind: "tool_result",
+                reason: "tool_result_marked_untrusted",
+                toolCallId: "call-a",
+                toolName: "read_email",
+              },
+            },
+          },
+          { type: "text", text: "First." },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-b",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: {
+              content: "second",
+              unsafeContextBoundary: {
+                kind: "tool_result",
+                reason: "tool_result_marked_untrusted",
+                toolCallId: "call-b",
+                toolName: "read_email",
+              },
+            },
+          },
+          { type: "text", text: "Second." },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
+  it("renders only one divider when a preexisting unsafe boundary precedes later unsafe tool results", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-a",
+            state: "output-available",
+            input: {},
+            output: {
+              content: "later",
+              unsafeContextBoundary: {
+                kind: "tool_result",
+                reason: "tool_result_marked_untrusted",
+                toolCallId: "call-a",
+                toolName: "read_email",
+              },
+            },
+          },
+          { type: "text", text: "Continuing." },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "preexisting_untrusted",
+          reason: "inherited_from_parent",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
+  it("renders only one divider when two policy-denied texts share the thread", () => {
+    const messages = [
+      {
+        id: "assistant-denied-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+      {
+        id: "assistant-denied-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
     const initialMessages = [
       {

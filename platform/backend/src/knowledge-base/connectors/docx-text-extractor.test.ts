@@ -61,18 +61,18 @@ describe("extractTextFromDocx", () => {
     expect((await extractTextFromDocx(buffer)).trim()).toBe("");
   });
 
-	it("decodes XML entities", async () => {
-		const buffer = await buildDocx(
-			'<w:p><w:r><w:t>Tom &amp; Jerry &lt;3 &quot;cartoons&quot;</w:t></w:r></w:p>',
-		);
-		expect((await extractTextFromDocx(buffer)).trim()).toBe(
-			'Tom & Jerry <3 "cartoons"',
-		);
-	});
+  it("decodes XML entities", async () => {
+    const buffer = await buildDocx(
+      "<w:p><w:r><w:t>Tom &amp; Jerry &lt;3 &quot;cartoons&quot;</w:t></w:r></w:p>",
+    );
+    expect((await extractTextFromDocx(buffer)).trim()).toBe(
+      'Tom & Jerry <3 "cartoons"',
+    );
+  });
 
-	it("throws for invalid buffer", async () => {
-		await expect(
-			extractTextFromDocx(Buffer.from("not a docx")),
-		).rejects.toThrow();
-	});
+  it("throws for invalid buffer", async () => {
+    await expect(
+      extractTextFromDocx(Buffer.from("not a docx")),
+    ).rejects.toThrow();
+  });
 });

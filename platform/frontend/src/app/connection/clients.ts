@@ -31,6 +31,11 @@ export type McpSupport =
       kind: "custom";
       supportedAuth: McpSupportedAuth;
       /**
+       * Preferred auth tab — controls tab ordering and whether the OAuth tab
+       * gets a "Recommended" chip. Defaults to "oauth".
+       */
+      preferredAuth?: "oauth" | "token";
+      /**
        * When true, the client exposes a working deeplink — we show only the
        * one-click CTA and hide the manual steps + config block. Requires `cta`.
        */
@@ -39,7 +44,7 @@ export type McpSupport =
       configFile: string;
       /** Language hint for syntax highlighting. */
       language: "json" | "toml" | "bash";
-      steps: ClientStep[];
+      steps: ClientStep[] | ((params: McpBuildParams) => ClientStep[]);
       /**
        * Returns the code snippet to display in the side-by-side layout. Omit
        * when steps carry their own per-step commands (vertical layout).
@@ -71,6 +76,8 @@ export interface ProxyStep {
   /** Pre-rendered code for this step's terminal block. */
   code?: string;
   language?: "json" | "toml" | "bash";
+  /** Inline labelled values rendered as individual rows. Non-copyable rows render as plain text (e.g. for placeholder values the user must replace). */
+  fields?: { label: string; value: string; copyable?: boolean }[];
 }
 
 export type ProxyInstruction =
@@ -83,6 +90,11 @@ export type ProxyInstruction =
   | {
       kind: "steps";
       steps: ProxyStep[];
+      note?: string;
+    }
+  | {
+      kind: "sections";
+      sections: { title: string; description?: string; steps: ProxyStep[] }[];
       note?: string;
     };
 
@@ -288,6 +300,205 @@ requires_openai_auth = true`,
           },
         ],
       }),
+    },
+  },
+  {
+    id: "n8n",
+    label: "n8n",
+    sub: "Workflow automation",
+    tileBg: "#fff1ec",
+    iconOverride: { bg: "#ea4b71", fg: "#fff", glyph: "n8n" },
+    mcp: {
+      kind: "custom",
+      supportedAuth: "both",
+      preferredAuth: "token",
+      configFile: "n8n workflow",
+      language: "bash",
+      steps: ({ token }) => {
+        const common: ClientStep[] = [
+          {
+            title: 'Add an "MCP Client Tool" node',
+            body: 'In your AI Agent workflow, add the "MCP Client Tool" node from the AI nodes panel.',
+          },
+          {
+            title: "Configure Transport",
+            body: 'In the node settings, set the "Server Transport" dropdown to "HTTP Streamable".',
+          },
+          {
+            title: "Configure URL",
+            body: 'Copy the value below and paste it into the "Endpoint URL" field.',
+            terminalTitle: "Endpoint URL",
+            buildCommand: ({ url }) => url,
+          },
+        ];
+        if (token) {
+          return [
+            ...common,
+            {
+              title: "Configure Auth",
+              body: 'Set "Authentication" to "Header Auth", create a new credential, set "Name" to "Authorization", and paste the header value from below into the "Value" field.',
+            },
+          ];
+        }
+        return [
+          ...common,
+          {
+            title: "Run the OAuth flow",
+            body: 'Set "Authentication" to "OAuth2" and follow n8n\'s OAuth prompts to authorize the gateway.',
+          },
+        ];
+      },
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: [
+        "openai",
+        "anthropic",
+        "bedrock",
+        "gemini",
+        "mistral",
+        "groq",
+        "cerebras",
+        "perplexity",
+        "xai",
+        "openrouter",
+        "vllm",
+        "ollama",
+        "deepseek",
+        "cohere",
+        "zhipuai",
+        "minimax",
+        "azure",
+      ],
+      build: ({ provider, providerLabel, url, tokenPlaceholder }) => {
+        if (provider === "bedrock") {
+          const openaiUrl = url.replace("/bedrock/", "/bedrock/openai/");
+          return {
+            kind: "steps",
+            note: "n8n doesn't currently support Bedrock API keys, so the native AWS Bedrock node can't be used here. Route through the OpenAI-compatible endpoint instead.",
+            steps: [
+              {
+                title: 'Add an "OpenAI Chat Model" node',
+                body: 'In your AI Agent workflow, add the "OpenAI Chat Model" node. Archestra exposes Bedrock through an OpenAI-compatible URL.',
+              },
+              {
+                title: "Create new OpenAI credentials",
+                body: 'In the node\'s "Credential to connect with" dropdown, click "Create new credential" to open the credential editor.',
+              },
+              {
+                title: "Fill in the credential",
+                body: 'Paste the values below into the "API Key" and "Base URL" fields, then click "Save".',
+                fields: [
+                  {
+                    label: "API Key",
+                    value: tokenPlaceholder,
+                    copyable: false,
+                  },
+                  { label: "Base URL", value: openaiUrl },
+                ],
+              },
+              {
+                title: "Pick a model and run",
+                body: 'Select a Bedrock model in the node\'s "Model" dropdown and execute the workflow.',
+              },
+            ],
+          };
+        }
+        if (provider === "anthropic") {
+          return {
+            kind: "steps",
+            steps: [
+              {
+                title: 'Add an "Anthropic Chat Model" node',
+                body: 'In your AI Agent workflow, add the "Anthropic Chat Model" node from the AI nodes panel.',
+              },
+              {
+                title: "Create new Anthropic credentials",
+                body: 'In the node\'s "Credential to connect with" dropdown, click "Create new credential" to open the credential editor.',
+              },
+              {
+                title: "Fill in the credential",
+                body: 'Paste the values below into the "API Key" and "Base URL" fields, then click "Save".',
+                fields: [
+                  {
+                    label: "API Key",
+                    value: tokenPlaceholder,
+                    copyable: false,
+                  },
+                  { label: "Base URL", value: url },
+                ],
+              },
+              {
+                title: "Pick a model and run",
+                body: 'Select an Anthropic model in the node\'s "Model" dropdown and execute the workflow.',
+              },
+            ],
+          };
+        }
+        if (provider === "gemini") {
+          return {
+            kind: "steps",
+            steps: [
+              {
+                title: 'Add a "Google Gemini Chat Model" node',
+                body: 'In your AI Agent workflow, add the "Google Gemini Chat Model" node.',
+              },
+              {
+                title: "Create new Google Gemini(PaLM) credentials",
+                body: 'In the node\'s "Credential to connect with" dropdown, click "Create new credential" to open the credential editor.',
+              },
+              {
+                title: "Fill in the credential",
+                body: 'Paste the values below into the "API Key" and "Host" fields, then click "Save".',
+                fields: [
+                  {
+                    label: "API Key",
+                    value: tokenPlaceholder,
+                    copyable: false,
+                  },
+                  { label: "Host", value: url },
+                ],
+              },
+              {
+                title: "Pick a model and run",
+                body: "Select a Gemini model in the node and execute the workflow.",
+              },
+            ],
+          };
+        }
+        return {
+          kind: "steps",
+          steps: [
+            {
+              title: 'Add an "OpenAI Chat Model" node',
+              body:
+                provider === "openai"
+                  ? 'In your AI Agent workflow, add the "OpenAI Chat Model" node from the AI nodes panel.'
+                  : `In your AI Agent workflow, add the "OpenAI Chat Model" node. Archestra exposes ${providerLabel} as an OpenAI-compatible endpoint, so the OpenAI node is the right one.`,
+            },
+            {
+              title: "Create new OpenAI credentials",
+              body: 'In the node\'s "Credential to connect with" dropdown, click "Create new credential" to open the credential editor.',
+            },
+            {
+              title: "Fill in the credential",
+              body: 'Paste the values below into the "API Key" and "Base URL" fields, then click "Save".',
+              fields: [
+                {
+                  label: "API Key",
+                  value: tokenPlaceholder,
+                  copyable: false,
+                },
+                { label: "Base URL", value: url },
+              ],
+            },
+            {
+              title: "Pick a model and run",
+              body: `Select a ${providerLabel} model in the node's "Model" dropdown and execute the workflow.`,
+            },
+          ],
+        };
+      },
     },
   },
   {

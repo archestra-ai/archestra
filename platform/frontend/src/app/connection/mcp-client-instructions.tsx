@@ -62,7 +62,12 @@ export function McpClientInstructions({
 }: McpClientInstructionsProps) {
   const supportedAuth =
     client.mcp.kind === "unsupported" ? "both" : client.mcp.supportedAuth;
+  const preferredAuth =
+    client.mcp.kind === "custom"
+      ? (client.mcp.preferredAuth ?? "oauth")
+      : "oauth";
   const tabs = authTabs(supportedAuth);
+  if (preferredAuth === "token" && tabs.length > 1) tabs.reverse();
   const [authMethod, setAuthMethod] = useState<AuthMethod>(tabs[0]);
   const appName = useAppName();
 
@@ -91,17 +96,23 @@ export function McpClientInstructions({
           className="-mt-2"
         >
           <TabsList className="w-full">
-            <TabsTrigger value="oauth" className="flex-1">
-              OAuth 2.1
-              {client.mcp.kind !== "generic" && (
-                <span className="ml-1.5 text-[10px] opacity-70">
-                  Recommended
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="token" className="flex-1">
-              Static token
-            </TabsTrigger>
+            {tabs.map((t) =>
+              t === "oauth" ? (
+                <TabsTrigger key="oauth" value="oauth" className="flex-1">
+                  OAuth 2.1
+                  {client.mcp.kind !== "generic" &&
+                    preferredAuth === "oauth" && (
+                      <span className="ml-1.5 text-[10px] opacity-70">
+                        Recommended
+                      </span>
+                    )}
+                </TabsTrigger>
+              ) : (
+                <TabsTrigger key="token" value="token" className="flex-1">
+                  Static token
+                </TabsTrigger>
+              ),
+            )}
           </TabsList>
 
           <TabsContent value="oauth" className="mt-4">
@@ -186,7 +197,9 @@ function McpBody({
     return <DeeplinkHero client={client} href={ctaHref} label={cta.label} />;
   }
 
-  const hasStepCommands = mcp.steps.some((s) => !!s.buildCommand);
+  const steps =
+    typeof mcp.steps === "function" ? mcp.steps(ctaParams) : mcp.steps;
+  const hasStepCommands = steps.some((s) => !!s.buildCommand);
 
   if (hasStepCommands) {
     return (
@@ -195,7 +208,7 @@ function McpBody({
           <DeeplinkHero client={client} href={ctaHref} label={cta.label} />
         )}
         <ol className="grid gap-5">
-          {mcp.steps.map((s, i) => (
+          {steps.map((s, i) => (
             <li
               key={s.title}
               className="grid grid-cols-[22px_1fr] items-start gap-3"
@@ -221,6 +234,7 @@ function McpBody({
             </li>
           ))}
         </ol>
+        {token && <GenericAuthRow gatewayId={gatewayId} placeholder={token} />}
       </div>
     );
   }
@@ -235,7 +249,7 @@ function McpBody({
       )}
       <div className="grid items-start gap-4 lg:grid-cols-[320px_1fr]">
         <ol className="grid gap-3.5">
-          {mcp.steps.map((s, i) => (
+          {steps.map((s, i) => (
             <li key={s.title} className="flex gap-3">
               <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
                 {i + 1}

@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import { SOURCE_HEADER, type SupportedProvider } from "@shared";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -6,7 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -533,6 +533,56 @@ describe("model router proxy routes", () => {
       );
     });
   }
+
+  test("records model router requests with a model router interaction source", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Source Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        [SOURCE_HEADER]: "chat",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data).toHaveLength(1);
+    expect(interactions.data[0].source).toBe("model_router");
+  });
 
   test("rejects raw provider keys on model router routes", async ({
     makeAgent,

@@ -87,6 +87,8 @@ export function openaiToGemini(req: OpenAiRequest): {
           {
             functionResponse: {
               id: message.tool_call_id,
+              // OpenAI tool result messages only include tool_call_id, not the
+              // original function name. Use a stable synthetic name for Gemini.
               name: "tool_result",
               response: { content: stringifyTextContent(message.content) },
             },

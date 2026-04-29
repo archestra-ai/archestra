@@ -35,6 +35,8 @@ Combined, these endpoints expose metrics including:
 
 > **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, the label will be empty. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 
+Model Router requests emit LLM metrics with `source="model_router"`, so they can be filtered separately from direct LLM Proxy API calls.
+
 ### MCP Metrics
 
 - `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
@@ -188,7 +190,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
-- `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `api`, `chat`). Useful for filtering traces by origin.
+- `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `model_router`, `api`, `chat`). Useful for filtering traces by origin.
 - `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
 - `archestra.user.id` - The Archestra user ID who made the request (when available)
 - `archestra.user.email` - The Archestra user email (when available)

@@ -121,6 +121,12 @@ type ModelRouterProvider =
   | CohereModelRouterProvider
   | GeminiModelRouterProvider;
 
+type TranslatedModelRouterProvider =
+  | "anthropic"
+  | "bedrock"
+  | "cohere"
+  | "gemini";
+
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
 
@@ -142,12 +148,16 @@ const openAiWireProviders = {
   Record<SupportedProvider, OpenAiWireProvider>
 >;
 
-const modelRouterSupportedProviders = new Set<SupportedProvider>([
-  ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
+const translatedModelRouterProviders = [
   "anthropic",
   "bedrock",
   "cohere",
   "gemini",
+] as const satisfies ReadonlyArray<TranslatedModelRouterProvider>;
+
+const modelRouterSupportedProviders = new Set<SupportedProvider>([
+  ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
+  ...translatedModelRouterProviders,
 ]);
 
 const ModelListResponseSchema = z.object({
@@ -390,6 +400,23 @@ function getOpenAiChatProviderForResolution(params: {
     return { kind: "openai-wire", body: params.body, adapter: provider };
   }
 
+  if (isTranslatedModelRouterProvider(params.provider)) {
+    return getTranslatedModelRouterProvider({
+      provider: params.provider,
+      body: params.body,
+    });
+  }
+
+  throw new ApiError(
+    501,
+    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
+  );
+}
+
+function getTranslatedModelRouterProvider(params: {
+  provider: TranslatedModelRouterProvider;
+  body: OpenAi.Types.ChatCompletionsRequest;
+}): ModelRouterProvider {
   switch (params.provider) {
     case "anthropic": {
       const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
@@ -423,12 +450,9 @@ function getOpenAiChatProviderForResolution(params: {
         adapter: makeGeminiOpenaiAdapterFactory(openaiContext),
       };
     }
+    default:
+      return assertNever(params.provider);
   }
-
-  throw new ApiError(
-    501,
-    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
-  );
 }
 
 function handleModelRouterProvider(
@@ -618,6 +642,18 @@ function getMappedProviders(
   return new Set(auth.providerApiKeysByProvider.keys());
 }
 
+function isTranslatedModelRouterProvider(
+  provider: SupportedProvider,
+): provider is TranslatedModelRouterProvider {
+  return translatedModelRouterProviders.includes(
+    provider as TranslatedModelRouterProvider,
+  );
+}
+
+function assertNever(value: never): never {
+  throw new ApiError(500, `Unhandled model router provider "${value}".`);
+}
+
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterVirtualKeyAuth;
@@ -644,5 +680,6 @@ async function applyModelRouterAuthOverride(params: {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
     authenticated: true,
+    source: "model_router",
   };
 }

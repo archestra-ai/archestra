@@ -77523,6 +77523,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -77793,6 +77794,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -78486,6 +78488,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -78870,6 +78873,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -79140,6 +79144,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -79410,6 +79415,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -81392,6 +81398,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -81662,6 +81669,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -81932,6 +81940,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -82202,6 +82211,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -82472,6 +82482,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -82742,6 +82753,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -83012,6 +83024,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -83271,6 +83284,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -83530,6 +83544,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -83800,6 +83815,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -84070,6 +84086,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -84340,6 +84357,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -84610,6 +84628,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -85106,6 +85125,7 @@
                                 "type": "string",
                                 "enum": [
                                   "api",
+                                  "model_router",
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -86083,6 +86103,7 @@
               "type": "string",
               "enum": [
                 "api",
+                "model_router",
                 "chat",
                 "chatops:slack",
                 "chatops:ms-teams",
@@ -86187,6 +86208,7 @@
                             "type": "string",
                             "enum": [
                               "api",
+                              "model_router",
                               "chat",
                               "chatops:slack",
                               "chatops:ms-teams",
@@ -87225,6 +87247,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -87495,6 +87518,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -88188,6 +88212,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -88572,6 +88597,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -88842,6 +88868,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -89112,6 +89139,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -91094,6 +91122,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -91364,6 +91393,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -91634,6 +91664,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -91904,6 +91935,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -92174,6 +92206,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -92444,6 +92477,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -92714,6 +92748,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -92973,6 +93008,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -93232,6 +93268,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -93502,6 +93539,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -93772,6 +93810,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -94042,6 +94081,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -94312,6 +94352,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -94808,6 +94849,7 @@
                           "type": "string",
                           "enum": [
                             "api",
+                            "model_router",
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",

@@ -32,6 +32,8 @@ export function parseJsonObject(raw: unknown): Record<string, unknown> {
       return parsed as Record<string, unknown>;
     }
   } catch {
+    // Translators should preserve request flow if provider-returned tool
+    // arguments are malformed. Treat them as an empty argument object.
     return {};
   }
 

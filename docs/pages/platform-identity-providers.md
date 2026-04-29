@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Configure Identity Providers for SSO authentication, MCP Gateway JWKS validation, and IdP token exchange for downstream MCP calls"
 order: 2
-lastUpdated: 2026-04-28
+lastUpdated: 2026-04-29
 ---
 
 <!--
@@ -104,106 +104,59 @@ http://localhost:3000/api/auth/sso/saml2/sp/acs/{ProviderId}
 
 ### Okta
 
-Okta is an enterprise identity management platform. Archestra supports Okta OIDC SSO with self-service configuration.
+Okta is an enterprise identity management platform. Archestra supports Okta OIDC SSO through the Okta Integration Network (OIN).
 
 #### Prerequisites
 
-- An Okta admin account with permission to create app integrations
+- An Okta admin account with permission to add app integrations from the OIN
 - An Archestra admin account
-- Your Archestra external URL, for example `https://your-archestra-domain.com`
-- Your Okta org issuer, for example `https://your-org.okta.com`
+- Your Archestra hostname without protocol, for example `your-archestra-domain.com`
 
 #### Supported Features
 
 - SP-initiated SSO
 - IdP-initiated SSO through Okta's OIDC app tile
 - Just-In-Time user provisioning
-- SP-initiated logout when Okta publishes an `end_session_endpoint`
-
-Archestra does not support Okta DPoP for SSO clients. Disable **Require Demonstrating Proof of Possession (DPoP) header in token requests** in the Okta app integration.
-
-#### Okta OIN App Installation
-
-When installing Archestra from the Okta Integration Network (OIN), enter your Archestra hostname without the protocol.
-
-For example, if your Archestra URL is:
-
-```
-https://your-archestra-domain.com
-```
-
-enter:
-
-```
-your-archestra-domain.com
-```
+- SP-initiated logout
 
 #### Configuration Steps
 
 1. In the Okta Admin Console, go to **Applications > Applications**.
-2. Click **Create App Integration**.
-3. Select **OIDC - OpenID Connect** and **Web Application**.
-4. Set **Sign-in redirect URIs** to:
+2. Click **Browse App Catalog** and search for **Archestra**.
+3. Open the Archestra app integration and click **Add**.
+4. In **General Settings**, enter an application label and your Archestra hostname without protocol.
+
+   For example, if your Archestra URL is:
 
    ```
-   https://your-archestra-domain.com/api/auth/sso/callback/Okta
+   https://your-archestra-domain.com
    ```
 
-5. Set **Sign-out redirect URIs** to:
+   enter:
 
    ```
-   https://your-archestra-domain.com/auth/sign-in
+   your-archestra-domain.com
    ```
 
+5. Complete the Okta app setup.
 6. Assign the users or groups that should access Archestra.
-7. Save the Okta app integration.
-8. On the app's **Sign On** tab, copy the **Client ID** and **Client Secret**. Keep the Client Secret private and do not commit it to version control.
-9. Find your Okta org issuer in the upper-right profile menu of the Okta Admin Console or from the Admin Console browser URL. It usually looks like:
+7. Users can sign in from the Archestra sign-in page or from the Archestra tile on their Okta End-User Dashboard.
 
-   ```
-   https://your-org.okta.com
-   ```
-
-10. In Archestra, go to **Settings > Identity Providers** and click **Enable** on the Okta card.
-11. Enter your Okta issuer URL, for example:
-
-```
-https://your-org.okta.com
-```
-
-12. Enter the Client ID and Client Secret.
-13. Keep the discovery endpoint empty unless you need a custom value. Archestra derives it from the issuer as:
-
-    ```
-    https://your-org.okta.com/.well-known/openid-configuration
-    ```
-
-14. Click **Create Provider**.
-
-If you also use IdP token exchange for downstream MCP calls, configure the exchange client details in the optional **Enterprise-Managed Credentials** section of the OIDC provider form. See [Okta's AI agent token exchange guide](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/).
+For Okta's general catalog installation flow, see [Add existing app integrations](https://help.okta.com/oie/en-us/Content/Topics/Apps/apps-add-applications.htm).
 
 #### SP-Initiated SSO
 
 Users can start sign-in from the Archestra sign-in page by selecting **Sign in with Okta**. After Okta authenticates the user, Archestra provisions the user if needed and opens the app.
 
-To test, use a private browser window with a user who is assigned to the Okta app.
-
 #### IdP-Initiated SSO
 
-Okta app tile launches should use:
-
-```
-https://your-archestra-domain.com/auth/sso/Okta
-```
-
-This route starts the Okta SSO flow immediately and redirects the user back to Okta with the required authorization request.
+Users can start sign-in from the Archestra tile on their Okta End-User Dashboard. Okta redirects the user to Archestra and Archestra starts the Okta SSO flow.
 
 #### Troubleshoot
 
-- If setup fails with an issuer mismatch, verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.
-- If login fails after redirect, verify that the Okta **Sign-in redirect URI** exactly matches the Archestra callback URL, including `Okta` casing.
-- If sign-out returns an Okta error, verify that the Okta **Sign-out redirect URI** is set to `https://your-archestra-domain.com/auth/sign-in`, or disable **Enable RP-Initiated Logout** in Archestra for that provider.
-- If a user is denied after successful Okta authentication, verify that the user is assigned to the Okta app and matches any configured Archestra role mapping rules.
+- If the app tile opens the wrong place, verify that the Archestra hostname in Okta does not include `https://` or a path.
+- If a user cannot sign in, verify that the user is assigned to the Archestra app integration in Okta.
+- If a user is denied after successful Okta authentication, verify that the user matches any configured Archestra role mapping rules.
 
 ### Google
 
@@ -652,10 +605,6 @@ The identity provider didn't return required user information. For GitHub, ensur
 ### "account not linked" Error
 
 The SSO provider is not trusted for automatic account linking, or the provider returned an email that does not match the existing account. Verify the provider is configured in Identity Providers and that the user is signing in with the same email address as their existing account.
-
-### "invalid_dpop_proof" Error (Okta)
-
-DPoP is enabled in your Okta application. Disable it in Okta Admin Console under the application's security settings.
 
 ### "account_not_found" Error (SAML)
 

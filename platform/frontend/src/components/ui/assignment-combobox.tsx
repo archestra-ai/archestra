@@ -43,6 +43,7 @@ interface AssignmentComboboxProps {
   className?: string;
   label?: string;
   testId?: string;
+  defaultOpen?: boolean;
 }
 
 export function AssignmentCombobox({
@@ -56,6 +57,7 @@ export function AssignmentCombobox({
   className,
   label = "Add",
   testId,
+  defaultOpen,
 }: AssignmentComboboxProps) {
   const [search, setSearch] = React.useState("");
 
@@ -87,7 +89,7 @@ export function AssignmentCombobox({
   }, [items, search, selectedSet]);
 
   return (
-    <DropdownMenu onOpenChange={() => setSearch("")}>
+    <DropdownMenu defaultOpen={defaultOpen} onOpenChange={() => setSearch("")}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"

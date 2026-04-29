@@ -1,38 +1,100 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, Terminal } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 
-const CLIENTS_PER_PAGE = 6;
+const CLIENT_PICKER_PAGE_SIZE = 8;
 
-interface ClientGridProps {
+interface ClientPickerProps {
   clients: ConnectClient[];
   selected: string | null;
   onSelect: (id: string) => void;
 }
 
-export function ClientGrid({ clients, selected, onSelect }: ClientGridProps) {
+export function ClientPicker({
+  clients,
+  selected,
+  onSelect,
+}: ClientPickerProps) {
+  const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
 
-  const totalPages = Math.max(1, Math.ceil(clients.length / CLIENTS_PER_PAGE));
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        c.sub.toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q),
+    );
+  }, [clients, query]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filtered.length / CLIENT_PICKER_PAGE_SIZE),
+  );
+
   const safePage = Math.min(page, totalPages - 1);
-  const start = safePage * CLIENTS_PER_PAGE;
-  const pageItems = clients.slice(start, start + CLIENTS_PER_PAGE);
+  const start = safePage * CLIENT_PICKER_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + CLIENT_PICKER_PAGE_SIZE);
 
   return (
-    <div>
-      {totalPages > 1 && (
-        <div className="mb-3.5 flex items-center justify-end">
-          <span className="font-mono text-[11px] tracking-wider text-muted-foreground">
-            {safePage + 1} / {totalPages}
-          </span>
+    <section className="border-b pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
+        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+          Select your client
+        </h3>
+        <div className="flex items-center gap-3">
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setPage(safePage - 1)}
+                disabled={safePage === 0}
+                aria-label="Previous page"
+                className="flex size-6 items-center justify-center rounded transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft className="size-3.5" />
+              </button>
+              <span className="px-1 tabular-nums">
+                {safePage + 1} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(safePage + 1)}
+                disabled={safePage >= totalPages - 1}
+                aria-label="Next page"
+                className="flex size-6 items-center justify-center rounded transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronRight className="size-3.5" />
+              </button>
+            </div>
+          )}
+          {clients.length > CLIENT_PICKER_PAGE_SIZE && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(0);
+                }}
+                placeholder="Search"
+                className="h-9 w-56 rounded-full pl-8"
+              />
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
         {pageItems.map((c) => (
           <ClientTile
             key={c.id}
@@ -41,36 +103,28 @@ export function ClientGrid({ clients, selected, onSelect }: ClientGridProps) {
             onSelect={() => onSelect(c.id)}
           />
         ))}
+        {pageItems.length === 0 && (
+          <div className="col-span-full flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+            <span>
+              No clients match{" "}
+              <span className="font-medium text-foreground">“{query}”</span>
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setQuery("");
+                setPage(0);
+              }}
+            >
+              <X className="size-3" />
+              Clear
+            </Button>
+          </div>
+        )}
       </div>
-
-      {totalPages > 1 && (
-        <div className="mt-3.5 flex items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={safePage === 0}
-            onClick={() => setPage(safePage - 1)}
-          >
-            <ChevronLeft className="size-3" />
-            Prev
-          </Button>
-          <span className="min-w-12 text-center font-mono text-xs text-muted-foreground">
-            {safePage + 1} / {totalPages}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={safePage >= totalPages - 1}
-            onClick={() => setPage(safePage + 1)}
-          >
-            Next
-            <ChevronRight className="size-3" />
-          </Button>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
 
@@ -105,53 +159,5 @@ function ClientTile({ client, selected, onSelect }: ClientTileProps) {
         </div>
       )}
     </button>
-  );
-}
-
-interface ClientIconProps {
-  client: ConnectClient;
-  size?: number;
-}
-
-export function ClientIcon({ client, size = 36 }: ClientIconProps) {
-  const radius = Math.round(size / 4.25);
-  return (
-    <div
-      className="flex shrink-0 items-center justify-center border"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius,
-        background: client.tileBg || "var(--muted)",
-      }}
-    >
-      {client.svg ? (
-        <svg
-          viewBox="0 0 24 24"
-          width={size * 0.6}
-          height={size * 0.6}
-          role="img"
-          aria-label={`${client.label} logo`}
-        >
-          <path d={client.svg} fill={client.iconColor || "currentColor"} />
-        </svg>
-      ) : client.iconOverride ? (
-        <div
-          className="flex size-full items-center justify-center font-mono font-bold"
-          style={{
-            background: client.iconOverride.bg,
-            color: client.iconOverride.fg,
-            borderRadius: Math.round(size / 5),
-            fontSize:
-              client.iconOverride.glyph.length > 1 ? size * 0.27 : size * 0.42,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {client.iconOverride.glyph}
-        </div>
-      ) : (
-        <Terminal className="size-1/2 text-foreground" strokeWidth={1.8} />
-      )}
-    </div>
   );
 }

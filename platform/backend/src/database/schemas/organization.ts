@@ -15,6 +15,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  ConnectionBaseUrl,
   GlobalToolPolicy,
   OnboardingWizard,
   OrganizationChatLink,
@@ -185,6 +186,15 @@ const organizationsTable = pgTable("organization", {
   connectionShownProviders: text("connection_shown_providers")
     .$type<SupportedProvider[]>()
     .array(),
+
+  /**
+   * Per-URL metadata (description + default flag) for the externally configured
+   * proxy URLs (NEXT_PUBLIC_ARCHESTRA_API_BASE_URL). The URLs themselves are
+   * still env-driven — this table just augments them with admin context.
+   */
+  connectionBaseUrls: jsonb("connection_base_urls").$type<
+    ConnectionBaseUrl[]
+  >(),
 });
 
 export default organizationsTable;

@@ -102,14 +102,14 @@ describe("resolveEffectiveId", () => {
 describe("resolveInitialClientId", () => {
   const visibleClientIds = ["claude-code", "cursor", "generic"] as const;
 
-  it("defaults to 'generic' when nothing else is specified", () => {
+  it("returns null when nothing else is specified", () => {
     expect(
       resolveInitialClientId({
         urlClientId: null,
         adminDefaultClientId: null,
         visibleClientIds,
       }),
-    ).toBe("generic");
+    ).toBeNull();
   });
 
   it("picks the admin default when no URL param is set", () => {
@@ -142,22 +142,12 @@ describe("resolveInitialClientId", () => {
     ).toBe("cursor");
   });
 
-  it("ignores an admin default that isn't visible", () => {
+  it("returns null when the admin default isn't visible", () => {
     expect(
       resolveInitialClientId({
         urlClientId: null,
         adminDefaultClientId: "hidden-client",
         visibleClientIds,
-      }),
-    ).toBe("generic");
-  });
-
-  it("returns null when even 'generic' is not in the visible set", () => {
-    expect(
-      resolveInitialClientId({
-        urlClientId: null,
-        adminDefaultClientId: null,
-        visibleClientIds: ["claude-code", "cursor"],
       }),
     ).toBeNull();
   });

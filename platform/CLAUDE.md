@@ -91,13 +91,16 @@ drizzle-kit check    # Check consistency of generated SQL migrations history
 # backend/src/database/migrations/meta/_journal.json and meta/*.json snapshot files.
 # The cleanest fix is to regenerate on top of the base branch:
 #
-# 1. Pull the base branch and resolve conflicts in schema files only:
+# 1. Copy any custom data migration SQL (INSERT/UPDATE statements) from your
+#    conflicting .sql file to a temporary location — they will be lost in step 3.
+# 2. Pull the base branch and resolve conflicts in schema files only:
 #      git pull origin main
 #      # resolve any conflicts in backend/src/database/migrations/*.ts schema files
-# 2. Discard your generated migrations, restore the base branch's:
+# 3. Discard your generated migrations, restore the base branch's:
 #      git checkout origin/main -- backend/src/database/migrations/
-# 3. Regenerate cleanly on top:
+# 4. Regenerate cleanly on top:
 #      pnpm db:generate
+# 5. If you had data migration SQL, paste it back into the newly generated .sql file.
 #      pnpm db:migrate   # verify locally
 #      git add backend/src/database/migrations/
 

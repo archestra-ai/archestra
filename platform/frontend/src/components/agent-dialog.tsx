@@ -512,6 +512,8 @@ interface AgentDialogProps {
   onCreated?: (created: { id: string; name: string }) => void;
   /** When true, all fields are disabled and the save button is hidden */
   readOnly?: boolean;
+  /** When true, the tools "Add MCP server" combobox starts open. */
+  openToolsCombobox?: boolean;
 }
 
 export function AgentDialog({
@@ -522,6 +524,7 @@ export function AgentDialog({
   defaultIconType = "agent",
   onCreated,
   readOnly = false,
+  openToolsCombobox = false,
 }: AgentDialogProps) {
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
@@ -1526,6 +1529,7 @@ export function AgentDialog({
                           assignmentScope={scope}
                           assignmentTeamIds={assignedTeamIds}
                           onSelectedCountChange={setSelectedToolsCount}
+                          openComboboxOnMount={openToolsCombobox}
                         />
                       </>
                     ) : agent ? (

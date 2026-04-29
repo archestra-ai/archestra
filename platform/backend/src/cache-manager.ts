@@ -320,7 +320,7 @@ export const cacheManager = new CacheManager();
 /**
  * Configuration options for LRU cache instances.
  */
-export interface LRUCacheOptions {
+interface LRUCacheOptions {
   /** Maximum number of entries in the cache (required) */
   maxSize: number;
   /** Default TTL in milliseconds for cache entries (optional, defaults to 1 hour) */

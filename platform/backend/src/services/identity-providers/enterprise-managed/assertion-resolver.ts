@@ -4,7 +4,7 @@ import { AgentModel } from "@/models";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 
-export interface EnterpriseAssertionResolution {
+interface EnterpriseAssertionResolution {
   assertion: string;
   identityProviderId: string;
   providerId: string;

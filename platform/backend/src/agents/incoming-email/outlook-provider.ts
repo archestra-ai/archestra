@@ -30,6 +30,7 @@ import {
  * The Graph API's `hasAttachments` flag can be `false` for messages that only
  * contain inline images (pasted/dragged into the body). We detect those by
  * looking for `cid:` references in the HTML body.
+ * @public — exported for testability
  */
 export function shouldFetchAttachments(
   hasAttachments: boolean,

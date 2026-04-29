@@ -8,6 +8,7 @@ import { UserModel } from "@/models";
 import { type AgentScope, ApiError } from "@/types";
 import { userHasPermission } from "./utils";
 
+/** @public — re-exported for testability */
 export { getResourceForAgentType };
 
 /**
@@ -189,6 +190,7 @@ export function requireAgentModifyPermission(params: {
 
 // ===== Types =====
 
+/** @public — exported for testability */
 export interface AgentTypePermissionChecker {
   /** Throws ApiError(403) if the user lacks the action on the agent type's resource. */
   require(agentType: AgentType, action: Action): void;

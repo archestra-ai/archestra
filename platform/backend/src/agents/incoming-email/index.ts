@@ -25,20 +25,9 @@ import {
 } from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
 
-export type {
-  AgentIncomingEmailProvider,
-  ConversationMessage,
-  EmailProviderConfig,
-  EmailProviderType,
-  EmailReplyOptions,
-  IncomingEmail,
-  SubscriptionInfo,
-} from "@/types";
 export {
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
-  MAX_EMAIL_BODY_SIZE,
   PROCESSED_EMAIL_CLEANUP_INTERVAL_MS,
-  PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
 export { OutlookEmailProvider } from "./outlook-provider";
 
@@ -48,6 +37,7 @@ export { OutlookEmailProvider } from "./outlook-provider";
  *
  * @param messageId - The email provider's message ID
  * @returns true if successfully marked (first to process), false if already processed
+ * @public — exported for testability
  */
 export async function tryMarkEmailAsProcessed(
   messageId: string,
@@ -60,6 +50,7 @@ export async function tryMarkEmailAsProcessed(
  * The raw Outlook conversation ID is too long (90+ chars) and exceeds
  * upstream label size limits (e.g., Vertex AI 128 UTF-8 char constraint).
  * Returns undefined when no conversation ID is available.
+ * @public — exported for testability
  */
 export function buildEmailSessionId(
   conversationId: string | undefined,
@@ -90,27 +81,13 @@ let emailProviderInstance: AgentIncomingEmailProvider | null = null;
 /**
  * Get the email provider configuration from environment variables
  */
-export function getEmailProviderConfig(): EmailProviderConfig {
+function getEmailProviderConfig(): EmailProviderConfig {
   return config.agents.incomingEmail;
 }
 
 /**
- * Check if the incoming email feature is enabled
- */
-export function isIncomingEmailEnabled(): boolean {
-  const providerConfig = getEmailProviderConfig();
-  return providerConfig.provider !== undefined;
-}
-
-/**
- * Get the configured email provider type
- */
-export function getEmailProviderType(): EmailProviderType | undefined {
-  return getEmailProviderConfig().provider;
-}
-
-/**
  * Create an email provider instance based on configuration
+ * @public — exported for testability
  */
 export function createEmailProvider(
   providerType: EmailProviderType,
@@ -427,19 +404,6 @@ export async function cleanupEmailProvider(): Promise<void> {
 }
 
 /**
- * Generate an email address for an agent (prompt)
- * Returns null if no provider is configured
- */
-export function generateAgentEmailAddress(promptId: string): string | null {
-  const provider = getEmailProvider();
-  if (!provider) {
-    return null;
-  }
-
-  return provider.generateEmailAddress(promptId);
-}
-
-/**
  * Get email provider information for the features endpoint
  */
 export function getEmailProviderInfo(): {
@@ -470,7 +434,7 @@ export function getEmailProviderInfo(): {
 /**
  * Options for processing incoming emails
  */
-export interface ProcessIncomingEmailOptions {
+interface ProcessIncomingEmailOptions {
   /**
    * Whether to send the agent's response back via email reply
    * @default false

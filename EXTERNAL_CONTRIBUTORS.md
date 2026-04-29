@@ -155,3 +155,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @RyanSStephens
 - @Boci1337
 - @bitsbyritik
+- @akashadsare
+- @Aquixv
+- @piercypixel
+- @suleman1412
+- @DanProgrammer1999

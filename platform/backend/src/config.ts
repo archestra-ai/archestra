@@ -44,6 +44,7 @@ const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 /**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
+ * @public — exported for testability
  */
 export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
   const username =
@@ -82,6 +83,7 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
 
 /**
  * Get database URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
+ * @public — exported for testability
  */
 export const getDatabaseUrl = (): string => {
   const databaseUrl =
@@ -183,6 +185,7 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
  * Get CORS origin configuration for Fastify.
  * When no origin env vars are set, accepts all origins.
  * When configured, only allows the specified origins.
+ * @public — exported for testability
  */
 export const getCorsOrigins = (): (string | RegExp)[] => {
   const origins = getConfiguredOrigins();
@@ -198,6 +201,7 @@ export const getCorsOrigins = (): (string | RegExp)[] => {
  * Get trusted origins for better-auth.
  * When no origin env vars are set, accepts all origins.
  * When configured, only allows the specified origins.
+ * @public — exported for testability
  */
 export const getTrustedOrigins = (): string[] => {
   const origins = getConfiguredOrigins();
@@ -222,6 +226,7 @@ const parseIncomingEmailProvider = (): EmailProviderType | undefined => {
 /**
  * Parse body limit from environment variable.
  * Supports numeric bytes (e.g., "52428800") or human-readable format (e.g., "50MB", "100KB").
+ * @public — exported for testability
  */
 export const parseBodyLimit = (
   envValue: string | undefined,
@@ -272,6 +277,7 @@ const OTEL_LOGS_PATH = "/v1/logs";
  *
  * @param envValue - The environment variable value (for testing)
  * @returns The full OTEL endpoint URL with /v1/traces suffix
+ * @public — exported for testability
  */
 export const getOtelExporterOtlpEndpoint = (
   envValue?: string | undefined,
@@ -312,6 +318,7 @@ export const getOtelExporterOtlpEndpoint = (
  *
  * @param envValue - The environment variable value (for testing)
  * @returns The full OTEL endpoint URL with /v1/logs suffix
+ * @public — exported for testability
  */
 export const getOtelExporterOtlpLogEndpoint = (
   envValue?: string | undefined,
@@ -337,6 +344,7 @@ export const getOtelExporterOtlpLogEndpoint = (
   return `${normalizedUrl}${OTEL_LOGS_PATH}`;
 };
 
+/** @public — exported for testability */
 export const parseContentMaxLength = (
   envValue?: string | undefined,
 ): number => {
@@ -361,6 +369,7 @@ export const parseContentMaxLength = (
  * Must be a non-negative integer (seconds). 0 means "never expires".
  * Returns the default (30 days) for invalid or negative values.
  * Capped at 1 year (31,536,000 seconds) to prevent unreasonably long expirations.
+ * @public — exported for testability
  */
 export const parseVirtualKeyDefaultExpiration = (
   envValue: string | undefined,
@@ -409,6 +418,7 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
+/** @public — exported for testability */
 export const parseSampleRate = (
   envValue: string | undefined,
   defaultRate: number,
@@ -432,6 +442,7 @@ export const parseSampleRate = (
  *   "true"          → true
  *   "false"         → false
  *   anything else   → trimmed string passed directly to Fastify (IP/CIDR list)
+ * @public — exported for testability
  */
 export const parseTrustProxy = (
   envValue: string | undefined,
@@ -446,6 +457,7 @@ export const parseTrustProxy = (
     .join(",");
 };
 
+/** @public — exported for testability */
 export const getAnalyticsConfig = () => ({
   enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
   posthog: {
@@ -854,6 +866,7 @@ export default config;
 
 // ===== Internal helpers =====
 
+/** @public — exported for testability */
 export function parseConnectorSyncMaxDuration(
   value: string | undefined,
 ): number | undefined {
@@ -877,12 +890,14 @@ export function getProviderEnvApiKey(
   return undefined;
 }
 
+/** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
   if (normalized === "web" || normalized === "worker") return normalized;
   return "all";
 }
 
+/** @public — exported for testability */
 export function parseCommaSeparatedList(value: string): string[] {
   return value
     .split(",")

@@ -379,7 +379,7 @@ function CreateVirtualKeyDialog({
     getDefaultVirtualKeyScope(visibilityOptions),
   );
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [modelRouterEnabled, setModelRouterEnabled] = useState(false);
+  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
   const [modelRouterProviderApiKeyIds, setModelRouterProviderApiKeyIds] =
     useState<ModelRouterProviderApiKeyMap>({});
   const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
@@ -401,7 +401,7 @@ function CreateVirtualKeyDialog({
       setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
       setScope(getDefaultVirtualKeyScope(visibilityOptions));
       setTeamIds([]);
-      setModelRouterEnabled(false);
+      setShowModelRouterFields(false);
       setModelRouterProviderApiKeyIds({});
     }
   }, [open, defaultParentKeyId, defaultExpirationSeconds, visibilityOptions]);
@@ -411,18 +411,20 @@ function CreateVirtualKeyDialog({
     const modelRouterProviderApiKeys = toModelRouterProviderApiKeys(
       modelRouterProviderApiKeyIds,
     );
-    if (modelRouterEnabled && modelRouterProviderApiKeys.length === 0) return;
-    if (!modelRouterEnabled && !selectedParentKeyId) return;
+    if (showModelRouterFields && modelRouterProviderApiKeys.length === 0)
+      return;
+    if (!showModelRouterFields && !selectedParentKeyId) return;
     try {
       const result = await createMutation.mutateAsync({
-        chatApiKeyId: modelRouterEnabled ? null : selectedParentKeyId,
+        chatApiKeyId: showModelRouterFields ? null : selectedParentKeyId,
         data: {
           name: newKeyName.trim(),
           expiresAt: expiresAt ?? undefined,
           scope,
           teams: scope === "team" ? teamIds : [],
-          modelRouterEnabled,
-          modelRouterProviderApiKeys,
+          modelRouterProviderApiKeys: showModelRouterFields
+            ? modelRouterProviderApiKeys
+            : [],
         },
       });
       setNewKeyName("");
@@ -436,7 +438,7 @@ function CreateVirtualKeyDialog({
   }, [
     createMutation,
     expiresAt,
-    modelRouterEnabled,
+    showModelRouterFields,
     modelRouterProviderApiKeyIds,
     newKeyName,
     scope,
@@ -479,7 +481,7 @@ function CreateVirtualKeyDialog({
             </div>
           ) : (
             <>
-              {!modelRouterEnabled && (
+              {!showModelRouterFields && (
                 <ProviderApiKeyField
                   value={selectedParentKeyId}
                   onValueChange={setSelectedParentKeyId}
@@ -522,8 +524,8 @@ function CreateVirtualKeyDialog({
               </div>
 
               <ModelRouterVirtualKeyFields
-                enabled={modelRouterEnabled}
-                onEnabledChange={setModelRouterEnabled}
+                enabled={showModelRouterFields}
+                onEnabledChange={setShowModelRouterFields}
                 providerApiKeyIds={modelRouterProviderApiKeyIds}
                 onProviderApiKeyIdsChange={setModelRouterProviderApiKeyIds}
                 providerApiKeys={parentableKeys}
@@ -544,9 +546,9 @@ function CreateVirtualKeyDialog({
               type="submit"
               disabled={
                 !newKeyName.trim() ||
-                (!modelRouterEnabled && !selectedParentKeyId) ||
+                (!showModelRouterFields && !selectedParentKeyId) ||
                 (scope === "team" && teamIds.length === 0) ||
-                (modelRouterEnabled &&
+                (showModelRouterFields &&
                   toModelRouterProviderApiKeys(modelRouterProviderApiKeyIds)
                     .length === 0) ||
                 createMutation.isPending
@@ -588,7 +590,7 @@ function EditVirtualKeyDialog({
     getDefaultVirtualKeyScope(visibilityOptions),
   );
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [modelRouterEnabled, setModelRouterEnabled] = useState(false);
+  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
   const [modelRouterProviderApiKeyIds, setModelRouterProviderApiKeyIds] =
     useState<ModelRouterProviderApiKeyMap>({});
 
@@ -601,7 +603,7 @@ function EditVirtualKeyDialog({
     setExpiresAt(virtualKey.expiresAt ? new Date(virtualKey.expiresAt) : null);
     setScope((virtualKey.scope as VirtualKeyScope) ?? "personal");
     setTeamIds(virtualKey.teams.map((team) => team.id));
-    setModelRouterEnabled(virtualKey.modelRouterEnabled);
+    setShowModelRouterFields(virtualKey.modelRouterProviderApiKeys.length > 0);
     setModelRouterProviderApiKeyIds(
       Object.fromEntries(
         virtualKey.modelRouterProviderApiKeys.map((mapping) => [
@@ -619,7 +621,7 @@ function EditVirtualKeyDialog({
     const modelRouterProviderApiKeys = toModelRouterProviderApiKeys(
       modelRouterProviderApiKeyIds,
     );
-    if (modelRouterEnabled && modelRouterProviderApiKeys.length === 0) {
+    if (showModelRouterFields && modelRouterProviderApiKeys.length === 0) {
       return;
     }
 
@@ -632,8 +634,9 @@ function EditVirtualKeyDialog({
           expiresAt: expiresAt ?? undefined,
           scope,
           teams: scope === "team" ? teamIds : [],
-          modelRouterEnabled,
-          modelRouterProviderApiKeys,
+          modelRouterProviderApiKeys: showModelRouterFields
+            ? modelRouterProviderApiKeys
+            : [],
         },
       });
 
@@ -645,7 +648,7 @@ function EditVirtualKeyDialog({
     }
   }, [
     expiresAt,
-    modelRouterEnabled,
+    showModelRouterFields,
     modelRouterProviderApiKeyIds,
     name,
     onOpenChange,
@@ -675,7 +678,7 @@ function EditVirtualKeyDialog({
     >
       <DialogForm onSubmit={handleUpdate}>
         <DialogBody className="space-y-4">
-          {!modelRouterEnabled && (
+          {!showModelRouterFields && (
             <div className="space-y-2">
               <Label>Provider API Key</Label>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -728,8 +731,8 @@ function EditVirtualKeyDialog({
           </div>
 
           <ModelRouterVirtualKeyFields
-            enabled={modelRouterEnabled}
-            onEnabledChange={setModelRouterEnabled}
+            enabled={showModelRouterFields}
+            onEnabledChange={setShowModelRouterFields}
             providerApiKeyIds={modelRouterProviderApiKeyIds}
             onProviderApiKeyIdsChange={setModelRouterProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
@@ -748,7 +751,7 @@ function EditVirtualKeyDialog({
             disabled={
               !name.trim() ||
               (scope === "team" && teamIds.length === 0) ||
-              (modelRouterEnabled &&
+              (showModelRouterFields &&
                 toModelRouterProviderApiKeys(modelRouterProviderApiKeyIds)
                   .length === 0) ||
               updateMutation.isPending
@@ -963,7 +966,8 @@ function ModelRouterVirtualKeyFields({
               </Select>
             </div>
 
-            <div className="flex items-end">
+            <div className="space-y-2">
+              <Label className="invisible">Add provider key</Label>
               <Button
                 type="button"
                 variant="outline"

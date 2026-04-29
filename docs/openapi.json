@@ -163524,9 +163524,6 @@
                             "type": "string",
                             "format": "date-time"
                           },
-                          "modelRouterEnabled": {
-                            "type": "boolean"
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -163626,7 +163623,6 @@
                           "scope",
                           "authorId",
                           "expiresAt",
-                          "modelRouterEnabled",
                           "createdAt",
                           "lastUsedAt",
                           "parentKeyName",
@@ -163962,10 +163958,6 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterEnabled": {
-                    "default": false,
-                    "type": "boolean"
-                  },
                   "modelRouterProviderApiKeys": {
                     "default": [],
                     "type": "array",
@@ -164072,9 +164064,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "modelRouterEnabled": {
-                      "type": "boolean"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -164165,7 +164154,6 @@
                     "scope",
                     "authorId",
                     "expiresAt",
-                    "modelRouterEnabled",
                     "createdAt",
                     "lastUsedAt",
                     "value",
@@ -164488,9 +164476,6 @@
                         "type": "string",
                         "format": "date-time"
                       },
-                      "modelRouterEnabled": {
-                        "type": "boolean"
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -164511,7 +164496,6 @@
                       "scope",
                       "authorId",
                       "expiresAt",
-                      "modelRouterEnabled",
                       "createdAt",
                       "lastUsedAt"
                     ],
@@ -164794,10 +164778,6 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterEnabled": {
-                    "default": false,
-                    "type": "boolean"
-                  },
                   "modelRouterProviderApiKeys": {
                     "default": [],
                     "type": "array",
@@ -164910,9 +164890,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "modelRouterEnabled": {
-                      "type": "boolean"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -165003,7 +164980,6 @@
                     "scope",
                     "authorId",
                     "expiresAt",
-                    "modelRouterEnabled",
                     "createdAt",
                     "lastUsedAt",
                     "value",
@@ -165291,10 +165267,6 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterEnabled": {
-                    "default": false,
-                    "type": "boolean"
-                  },
                   "modelRouterProviderApiKeys": {
                     "default": [],
                     "type": "array",
@@ -165407,9 +165379,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "modelRouterEnabled": {
-                      "type": "boolean"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -165497,7 +165466,6 @@
                     "scope",
                     "authorId",
                     "expiresAt",
-                    "modelRouterEnabled",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
@@ -166058,10 +166026,6 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterEnabled": {
-                    "default": false,
-                    "type": "boolean"
-                  },
                   "modelRouterProviderApiKeys": {
                     "default": [],
                     "type": "array",
@@ -166184,9 +166148,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "modelRouterEnabled": {
-                      "type": "boolean"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -166274,7 +166235,6 @@
                     "scope",
                     "authorId",
                     "expiresAt",
-                    "modelRouterEnabled",
                     "createdAt",
                     "lastUsedAt",
                     "teams",

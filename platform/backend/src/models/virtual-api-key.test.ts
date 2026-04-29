@@ -530,7 +530,6 @@ describe("VirtualApiKeyModel", () => {
       scope: "team",
       authorId: user.id,
       teamIds: [team.id],
-      modelRouterEnabled: false,
       modelRouterProviderApiKeys: [],
     });
 

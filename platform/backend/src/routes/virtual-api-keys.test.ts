@@ -279,7 +279,6 @@ describe("virtualApiKeysRoutes", () => {
       url: `/api/llm-provider-api-keys/${openaiKey.id}/virtual-keys`,
       payload: {
         name: "router-key",
-        modelRouterEnabled: true,
         modelRouterProviderApiKeys: [
           { provider: "openai", chatApiKeyId: openaiKey.id },
           { provider: "anthropic", chatApiKeyId: anthropicKey.id },
@@ -289,7 +288,6 @@ describe("virtualApiKeysRoutes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      modelRouterEnabled: true,
       modelRouterProviderApiKeys: expect.arrayContaining([
         {
           provider: "openai",
@@ -324,7 +322,6 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "parentless-router-key",
         chatApiKeyId: null,
-        modelRouterEnabled: true,
         modelRouterProviderApiKeys: [
           { provider: "openai", chatApiKeyId: openaiKey.id },
         ],
@@ -336,7 +333,6 @@ describe("virtualApiKeysRoutes", () => {
       name: "parentless-router-key",
       chatApiKeyId: null,
       organizationId,
-      modelRouterEnabled: true,
       modelRouterProviderApiKeys: [
         {
           provider: "openai",
@@ -356,13 +352,12 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "missing-parent",
         chatApiKeyId: null,
-        modelRouterEnabled: false,
       },
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toBe(
-      "Provider API key is required unless Model Router is enabled",
+      "Provider API key is required unless Model Router provider keys are configured",
     );
   });
 
@@ -390,7 +385,6 @@ describe("virtualApiKeysRoutes", () => {
       url: `/api/llm-provider-api-keys/${firstKey.id}/virtual-keys`,
       payload: {
         name: "router-key",
-        modelRouterEnabled: true,
         modelRouterProviderApiKeys: [
           { provider: "openai", chatApiKeyId: firstKey.id },
           { provider: "openai", chatApiKeyId: secondKey.id },
@@ -421,7 +415,6 @@ describe("virtualApiKeysRoutes", () => {
       url: `/api/llm-provider-api-keys/${openaiKey.id}/virtual-keys`,
       payload: {
         name: "router-key",
-        modelRouterEnabled: true,
         modelRouterProviderApiKeys: [
           { provider: "anthropic", chatApiKeyId: openaiKey.id },
         ],
@@ -571,7 +564,6 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "router-only-list-key",
         chatApiKeyId: null,
-        modelRouterEnabled: true,
         modelRouterProviderApiKeys: [
           { provider: "openai", chatApiKeyId: openaiKey.id },
         ],
@@ -591,7 +583,6 @@ describe("virtualApiKeysRoutes", () => {
           chatApiKeyId: null,
           parentKeyName: null,
           parentKeyProvider: null,
-          modelRouterEnabled: true,
         }),
       ]),
     );

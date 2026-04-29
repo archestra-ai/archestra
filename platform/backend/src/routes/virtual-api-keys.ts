@@ -34,7 +34,6 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
   expiresAt: z.coerce.date().nullable().optional(),
   scope: ResourceVisibilityScopeSchema.default("org"),
   teams: z.array(z.string()).default([]),
-  modelRouterEnabled: z.boolean().default(false),
   modelRouterProviderApiKeys: z
     .array(
       z.object({
@@ -286,11 +285,12 @@ async function createVirtualApiKey(params: {
   user: User;
 }): Promise<z.infer<typeof VirtualApiKeyWithValueSchema>> {
   const { body, chatApiKeyId, organizationId, user } = params;
+  const isModelRouterKey = body.modelRouterProviderApiKeys.length > 0;
 
-  if (!chatApiKeyId && !body.modelRouterEnabled) {
+  if (!chatApiKeyId && !isModelRouterKey) {
     throw new ApiError(
       400,
-      "Provider API key is required unless Model Router is enabled",
+      "Provider API key is required unless Model Router provider keys are configured",
     );
   }
 
@@ -318,7 +318,6 @@ async function createVirtualApiKey(params: {
     isAdmin: isVirtualKeyAdmin,
   });
   await validateModelRouterProviderApiKeys({
-    enabled: body.modelRouterEnabled,
     mappings: body.modelRouterProviderApiKeys,
     organizationId,
   });
@@ -343,7 +342,6 @@ async function createVirtualApiKey(params: {
       scope: body.scope,
       authorId: user.id,
       teamIds: body.teams,
-      modelRouterEnabled: body.modelRouterEnabled,
       modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
     });
 
@@ -398,7 +396,6 @@ async function updateVirtualApiKey(params: {
     isAdmin: isVirtualKeyAdmin,
   });
   await validateModelRouterProviderApiKeys({
-    enabled: body.modelRouterEnabled,
     mappings: body.modelRouterProviderApiKeys,
     organizationId,
   });
@@ -410,7 +407,6 @@ async function updateVirtualApiKey(params: {
     scope: body.scope,
     authorId: user.id,
     teamIds: body.teams,
-    modelRouterEnabled: body.modelRouterEnabled,
     modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
   });
 
@@ -514,19 +510,12 @@ async function validateVirtualKeyScope(params: {
 }
 
 async function validateModelRouterProviderApiKeys(params: {
-  enabled: boolean;
   mappings: Array<{ provider: SupportedProvider; chatApiKeyId: string }>;
   organizationId: string;
 }): Promise<void> {
-  const { enabled, mappings, organizationId } = params;
-  if (!enabled) {
-    return;
-  }
+  const { mappings, organizationId } = params;
   if (mappings.length === 0) {
-    throw new ApiError(
-      400,
-      "Select at least one provider API key for Model Router use.",
-    );
+    return;
   }
 
   const providers = new Set<SupportedProvider>();

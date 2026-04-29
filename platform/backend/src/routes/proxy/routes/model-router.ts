@@ -456,13 +456,6 @@ async function getModelRouterVirtualKeyAuth(
   await virtualKeyRateLimiter.check(request.ip);
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
-    if (!resolved.virtualKey.modelRouterEnabled) {
-      throw new ApiError(
-        401,
-        "Model router requests require a Model Router-enabled virtual API key.",
-      );
-    }
-
     const mappings =
       await VirtualApiKeyModel.getModelRouterProviderApiKeysForRouting(
         resolved.virtualKey.id,

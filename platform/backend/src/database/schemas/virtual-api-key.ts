@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   pgTable,
   text,
@@ -36,9 +35,6 @@ const virtualApiKeysTable = pgTable(
       onDelete: "set null",
     }),
     expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
-    modelRouterEnabled: boolean("model_router_enabled")
-      .notNull()
-      .default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },

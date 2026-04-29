@@ -1,5 +1,5 @@
 {
-  "id": "5e741486-1c13-4cc5-97c2-2278c7b9ea78",
+  "id": "3a170676-b857-403f-83c5-22f2dd86347d",
   "prevId": "3962e239-e49a-4648-bd19-17f62c295695",
   "version": "7",
   "dialect": "postgresql",
@@ -8562,13 +8562,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "model_router_enabled": {
-          "name": "model_router_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",

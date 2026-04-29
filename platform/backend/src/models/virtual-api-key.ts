@@ -61,7 +61,6 @@ class VirtualApiKeyModel {
     scope?: ResourceVisibilityScope;
     authorId?: string | null;
     teamIds?: string[];
-    modelRouterEnabled?: boolean;
     modelRouterProviderApiKeys?: ModelRouterProviderApiKeyInput[];
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
@@ -78,7 +77,6 @@ class VirtualApiKeyModel {
       scope = "org",
       authorId = null,
       teamIds = [],
-      modelRouterEnabled = false,
       modelRouterProviderApiKeys = [],
     } = params;
 
@@ -112,7 +110,6 @@ class VirtualApiKeyModel {
           scope,
           authorId,
           expiresAt: expiresAt ?? null,
-          modelRouterEnabled,
         })
         .returning();
 
@@ -125,7 +122,7 @@ class VirtualApiKeyModel {
       await syncModelRouterProviderApiKeys({
         tx,
         virtualApiKeyId: createdVirtualKey.id,
-        mappings: modelRouterEnabled ? modelRouterProviderApiKeys : [],
+        mappings: modelRouterProviderApiKeys,
       });
 
       return createdVirtualKey;
@@ -160,7 +157,6 @@ class VirtualApiKeyModel {
     scope: ResourceVisibilityScope;
     authorId: string;
     teamIds: string[];
-    modelRouterEnabled: boolean;
     modelRouterProviderApiKeys: ModelRouterProviderApiKeyInput[];
   }): Promise<SelectVirtualApiKey | null> {
     const {
@@ -170,7 +166,6 @@ class VirtualApiKeyModel {
       scope,
       authorId,
       teamIds,
-      modelRouterEnabled,
       modelRouterProviderApiKeys,
     } = params;
 
@@ -182,7 +177,6 @@ class VirtualApiKeyModel {
           expiresAt: expiresAt ?? null,
           scope,
           authorId,
-          modelRouterEnabled,
         })
         .where(eq(schema.virtualApiKeysTable.id, id))
         .returning();
@@ -200,7 +194,7 @@ class VirtualApiKeyModel {
       await syncModelRouterProviderApiKeys({
         tx,
         virtualApiKeyId: id,
-        mappings: modelRouterEnabled ? modelRouterProviderApiKeys : [],
+        mappings: modelRouterProviderApiKeys,
       });
 
       return updated;
@@ -418,7 +412,6 @@ class VirtualApiKeyModel {
           scope: schema.virtualApiKeysTable.scope,
           authorId: schema.virtualApiKeysTable.authorId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
-          modelRouterEnabled: schema.virtualApiKeysTable.modelRouterEnabled,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
           parentKeyName: schema.llmProviderApiKeysTable.name,

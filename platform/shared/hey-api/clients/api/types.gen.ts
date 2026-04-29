@@ -44227,7 +44227,6 @@ export type GetAllVirtualApiKeysResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             expiresAt: string | null;
-            modelRouterEnabled: boolean;
             createdAt: string;
             lastUsedAt: string | null;
             parentKeyName: string | null;
@@ -44263,7 +44262,6 @@ export type CreateVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        modelRouterEnabled?: boolean;
         modelRouterProviderApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
@@ -44354,7 +44352,6 @@ export type CreateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
-        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
@@ -44461,7 +44458,6 @@ export type GetVirtualApiKeysResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
-        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
     }>;
@@ -44475,7 +44471,6 @@ export type CreateProviderVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        modelRouterEnabled?: boolean;
         modelRouterProviderApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
@@ -44567,7 +44562,6 @@ export type CreateProviderVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
-        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
@@ -44677,7 +44671,6 @@ export type UpdateVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        modelRouterEnabled?: boolean;
         modelRouterProviderApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
@@ -44769,7 +44762,6 @@ export type UpdateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
-        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -44879,7 +44871,6 @@ export type UpdateProviderVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        modelRouterEnabled?: boolean;
         modelRouterProviderApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
@@ -44972,7 +44963,6 @@ export type UpdateProviderVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
-        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{

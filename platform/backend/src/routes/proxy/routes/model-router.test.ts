@@ -104,7 +104,6 @@ async function createModelRouterVirtualKey(params: {
     chatApiKeyId: chatApiKey.id,
     name: `${params.provider} model router virtual key`,
     expiresAt: params.expiresAt,
-    modelRouterEnabled: true,
     modelRouterProviderApiKeys: [
       {
         provider: params.provider,
@@ -631,7 +630,6 @@ describe("model router proxy routes", () => {
     } = await VirtualApiKeyModel.create({
       chatApiKeyId: chatApiKey.id,
       name: "model-router-openai-vk",
-      modelRouterEnabled: true,
       modelRouterProviderApiKeys: [
         { provider: "openai", chatApiKeyId: chatApiKey.id },
       ],
@@ -700,7 +698,6 @@ describe("model router proxy routes", () => {
     const { value } = await VirtualApiKeyModel.create({
       chatApiKeyId: systemKey.id,
       name: "model-router-gemini-system-vk",
-      modelRouterEnabled: true,
       modelRouterProviderApiKeys: [
         { provider: "gemini", chatApiKeyId: systemKey.id },
       ],
@@ -953,7 +950,6 @@ describe("model router proxy routes", () => {
     const { value } = await VirtualApiKeyModel.create({
       chatApiKeyId: openaiKey.id,
       name: "model-router-multi-vk",
-      modelRouterEnabled: true,
       modelRouterProviderApiKeys: [
         { provider: "openai", chatApiKeyId: openaiKey.id },
         { provider: "groq", chatApiKeyId: groqKey.id },

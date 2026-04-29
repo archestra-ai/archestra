@@ -3,6 +3,7 @@
 import { archestraApiSdk } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { clearSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 
 export function SignOutWithIdpLogout() {
   const hasStarted = useRef(false);
@@ -23,6 +24,8 @@ export function SignOutWithIdpLogout() {
 }
 
 async function performSignOut() {
+  clearSsoSignInAttempt();
+
   // Fetch IdP logout URL while still authenticated
   let idpLogoutUrl: string | null = null;
   try {

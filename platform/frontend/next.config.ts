@@ -9,6 +9,7 @@ const platformPkg = JSON.parse(
 ) as { name: string; version: string };
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: getAllowedDevOrigins(),
   env: {
     NEXT_PUBLIC_APP_VERSION: platformPkg.version,
   },
@@ -75,6 +76,21 @@ const nextConfig: NextConfig = {
     ];
   },
 };
+
+function getAllowedDevOrigins(): string[] {
+  return [
+    process.env.ARCHESTRA_FRONTEND_URL,
+    process.env.ARCHESTRA_NGROK_DOMAIN,
+  ]
+    .filter((value): value is string => !!value)
+    .map((value) => {
+      try {
+        return new URL(value).host;
+      } catch {
+        return value;
+      }
+    });
+}
 
 export default withSentryConfig(nextConfig, {
   // For all available options, see:

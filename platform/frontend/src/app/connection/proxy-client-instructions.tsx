@@ -69,6 +69,8 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
 interface ProxyClientInstructionsProps {
   client: ConnectClient;
   profileId: string;
+  /** Display name of the LLM proxy (profile) — used as a provider id in client configs. */
+  profileName: string;
   /** When null/undefined: show all providers. Otherwise: only these. */
   shownProviders?: readonly SupportedProvider[] | null;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
@@ -77,9 +79,22 @@ interface ProxyClientInstructionsProps {
 
 const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
 
+/**
+ * Slugify the LLM proxy name into a TOML-friendly identifier (e.g. used as
+ * `[model_providers.<slug>]` in Codex's config).
+ */
+function toProxyProviderSlug(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || "archestra";
+}
+
 export function ProxyClientInstructions({
   client,
   profileId,
+  profileName,
   shownProviders,
   baseUrl,
 }: ProxyClientInstructionsProps) {
@@ -157,8 +172,9 @@ export function ProxyClientInstructions({
       providerLabel,
       url,
       tokenPlaceholder: `<your-${selectedProvider}-api-key>`,
+      proxyName: toProxyProviderSlug(profileName),
     });
-  }, [client.proxy, selectedProvider, providerLabel, url]);
+  }, [client.proxy, selectedProvider, providerLabel, url, profileName]);
 
   if (client.proxy.kind === "unsupported") {
     return <UnsupportedPanel reason={client.proxy.reason} />;
@@ -227,19 +243,27 @@ export function ProxyClientInstructions({
           </div>
         ) : (
           <div>
-            <ol className="grid gap-4">
+            <ol className="grid gap-5">
               {instruction.steps.map((s, i) => (
-                <li key={s.title} className="flex gap-3">
-                  <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                <li
+                  key={s.title}
+                  className="grid grid-cols-[22px_1fr] items-start gap-3"
+                >
+                  <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
                     {i + 1}
                   </div>
-                  <div>
-                    <div className="text-[13.5px] font-medium text-foreground">
-                      {s.title}
+                  <div className="min-w-0 space-y-3">
+                    <div>
+                      <div className="text-[13.5px] font-medium text-foreground">
+                        {s.title}
+                      </div>
+                      {s.body && (
+                        <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                          {s.body}
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                      {s.body}
-                    </div>
+                    {s.code && <TerminalBlock code={s.code} />}
                   </div>
                 </li>
               ))}

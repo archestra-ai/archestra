@@ -34,7 +34,7 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-interface A2AManagerConfig {
+export interface A2AManagerConfig {
   /**
    * In statless mode A2AManager:
    * - Does not save context/task/messages in the db by default.
@@ -551,7 +551,7 @@ export class A2AManager {
   }
 }
 
-function extractProtocolPartsFromUIMessage(
+export function extractProtocolPartsFromUIMessage(
   uiMessage: UIMessage,
 ): A2AProtocolPart[] {
   const protocolParts: A2AProtocolPart[] = [];
@@ -564,7 +564,7 @@ function extractProtocolPartsFromUIMessage(
   return protocolParts;
 }
 
-function extractApprovalRequestsFromUiMessage(
+export function extractApprovalRequestsFromUiMessage(
   uiMessage: UIMessage,
 ): A2AArchestraApprovalRequest[] {
   const approvalRequests: A2AArchestraApprovalRequest[] = [];

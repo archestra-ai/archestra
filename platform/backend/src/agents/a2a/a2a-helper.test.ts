@@ -1,4 +1,3 @@
-import type { WithImplicitCoercion } from "node:buffer";
 import { describe, expect, test } from "@/test";
 import { buildAttachmentsMessageParts } from "./a2a-helper";
 
@@ -28,10 +27,10 @@ describe("buildAttachmentsMessageParts", () => {
     expect(parts[0]).toMatchObject({
       mediaType: "image/png",
     });
-    expect(
-      Buffer.from(parts[0].raw as WithImplicitCoercion<Buffer>).toString(
-        "base64",
-      ),
-    ).toBe(imageBase64);
+    const raw = parts[0]?.raw;
+    expect(raw).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(raw as Uint8Array).toString("base64")).toBe(
+      imageBase64,
+    );
   });
 });

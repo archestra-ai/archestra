@@ -1,16 +1,21 @@
+import type { UIMessage } from "ai";
 import { vi } from "vitest";
 import { A2AContextModel, A2AMessageModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   buildApprovalDecisionSendMessageRequest,
+  buildGetTaskRequest,
   extractApprovalRequestsFromSendMessageResult,
+  extractApprovalRequestsFromTask,
 } from "./a2a-helper";
-import { A2AManager } from "./a2a-manager";
+import {
+  A2AManager,
+  extractApprovalRequestsFromUiMessage,
+} from "./a2a-manager";
 import {
   type A2AArchestraApprovalRequest,
   type A2AArchestraTaskApprovalDecision,
-  type A2AProtocolGetTaskRequest,
   type A2AProtocolPart,
   A2AProtocolRole,
   type A2AProtocolSendMessageResponse,
@@ -139,14 +144,6 @@ function getApprovalRequest(
   };
 }
 
-function buildGetTaskRequest(params: {
-  taskId: string;
-}): A2AProtocolGetTaskRequest {
-  return {
-    id: params.taskId,
-  };
-}
-
 describe("A2AManager.sendMessage", () => {
   test("empty message parts", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "agent1", teams: [] });
@@ -266,7 +263,7 @@ describe("A2AManager.sendMessage", () => {
       });
       expect(task.status?.state).toBe(A2AProtocolTaskState.Completed);
       // Completed tasks should not return approval requests
-      expect(task.metadata?.approvalRequests).toEqual([]);
+      expect(extractApprovalRequestsFromTask(task)).toEqual([]);
       expect((await A2ATaskModel.findById(response.task.id))?.state).toBe(
         A2AProtocolTaskState.Completed,
       );
@@ -500,7 +497,7 @@ describe("A2AManager.sendMessage", () => {
       });
       expect(task.status?.state).toBe(A2AProtocolTaskState.Completed);
       // Completed tasks should not return approval requests
-      expect(task.metadata?.approvalRequests).toEqual([]);
+      expect(extractApprovalRequestsFromTask(task)).toEqual([]);
       expect((await A2ATaskModel.findById(response.task.id))?.state).toBe(
         A2AProtocolTaskState.Completed,
       );
@@ -818,5 +815,38 @@ describe("A2AManager.sendMessage", () => {
       });
       expect(task.status?.state).toBe(A2AProtocolTaskState.Completed);
     });
+  });
+});
+
+describe("A2AManager utils", () => {
+  test("extractApprovalRequestsFromUiMessage", () => {
+    const uiMessage = {
+      id: "msg-1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-tool-1",
+          state: "approval-requested",
+          approval: {
+            id: "approval-1",
+          },
+          toolCallId: "toolCall-1",
+        },
+      ],
+    };
+
+    const approvalRequests = extractApprovalRequestsFromUiMessage(
+      uiMessage as UIMessage,
+    );
+
+    expect(approvalRequests).toEqual([
+      {
+        approvalId: "approval-1",
+        toolCallId: "toolCall-1",
+        toolName: "tool-1",
+        approved: false,
+        resolved: false,
+      },
+    ]);
   });
 });

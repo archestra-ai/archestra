@@ -73303,6 +73303,9 @@
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
+                        "advancedToolFeaturesEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -73373,6 +73376,7 @@
                       },
                       "required": [
                         "orchestratorK8sRuntime",
+                        "advancedToolFeaturesEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "bedrockIamAuthEnabled",

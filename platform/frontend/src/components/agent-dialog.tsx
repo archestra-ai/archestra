@@ -529,7 +529,6 @@ export function AgentDialog({
     open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
-  const shouldLoadModelRouterModels = open && agentType === "llm_proxy";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
   const { data: allInternalAgents = [] } = useInternalAgents({
@@ -574,9 +573,7 @@ export function AgentDialog({
     enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
   });
   const { modelsByProvider } = useLlmModelsByProvider({
-    enabled:
-      (shouldLoadLlmConfiguration || shouldLoadModelRouterModels) &&
-      !!canReadLlmModels,
+    enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
   });
 
   // Fetch fresh agent data when dialog opens

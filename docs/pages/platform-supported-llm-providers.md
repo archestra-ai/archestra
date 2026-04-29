@@ -31,6 +31,10 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Base URL**: `http://localhost:9000/v1/model-router/{llm-proxy-id}`
 - **Authentication**: Pass a Model Router-enabled virtual API key in the `Authorization` header as `Bearer <key>`. See [Model Router Virtual Keys](/docs/platform-llm-proxy-authentication#model-router-virtual-keys).
 
+### List Models
+
+Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual API key used for the request. See [Model Router Virtual Keys](/docs/platform-llm-proxy-authentication#model-router-virtual-keys) for configuration details.
+
 ### Model Resolution
 
 Use provider-qualified model IDs from `/models` for deterministic routing, for example `openai:gpt-5.4`, `anthropic:claude-opus-4-6-20250918`, `groq:llama-3.1-8b-instant`, or `bedrock:amazon.nova-pro-v1:0`.

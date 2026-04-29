@@ -52463,7 +52463,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       }
                     ]
@@ -52531,7 +52532,8 @@
                             "type",
                             "name"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         {
                           "type": "object",
@@ -52543,7 +52545,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       ]
                     }
@@ -52559,10 +52562,12 @@
                 "required": [
                   "model"
                 ],
-                "additionalProperties": {}
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
               }
             }
-          }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
         },
         "parameters": [
           {
@@ -52586,7 +52591,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
             "content": {
               "application/json": {
                 "schema": {
@@ -52653,7 +52658,8 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                     },
                                     {
                                       "type": "object",
@@ -52672,7 +52678,8 @@
                                         "type",
                                         "refusal"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                     }
                                   ]
                                 }
@@ -52685,7 +52692,8 @@
                               "status",
                               "content"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -52718,7 +52726,8 @@
                               "name",
                               "arguments"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -52756,7 +52765,8 @@
                         "output_tokens",
                         "total_tokens"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                     }
                   },
                   "required": [
@@ -52767,7 +52777,8 @@
                     "output",
                     "status"
                   ],
-                  "additionalProperties": {}
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }
@@ -53037,7 +53048,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       }
                     ]
@@ -53105,7 +53117,8 @@
                             "type",
                             "name"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         {
                           "type": "object",
@@ -53117,7 +53130,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       ]
                     }
@@ -53133,10 +53147,12 @@
                 "required": [
                   "model"
                 ],
-                "additionalProperties": {}
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
               }
             }
-          }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
         },
         "parameters": [
           {
@@ -53170,7 +53186,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
             "content": {
               "application/json": {
                 "schema": {
@@ -53237,7 +53253,8 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                     },
                                     {
                                       "type": "object",
@@ -53256,7 +53273,8 @@
                                         "type",
                                         "refusal"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                     }
                                   ]
                                 }
@@ -53269,7 +53287,8 @@
                               "status",
                               "content"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -53302,7 +53321,8 @@
                               "name",
                               "arguments"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -53340,7 +53360,8 @@
                         "output_tokens",
                         "total_tokens"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                     }
                   },
                   "required": [
@@ -53351,7 +53372,8 @@
                     "output",
                     "status"
                   ],
-                  "additionalProperties": {}
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }
@@ -77804,7 +77826,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       }
                                     ]
@@ -77872,7 +77895,8 @@
                                             "type",
                                             "name"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         },
                                         {
                                           "type": "object",
@@ -77884,7 +77908,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       ]
                                     }
@@ -77901,7 +77926,7 @@
                                   "model"
                                 ],
                                 "additionalProperties": {},
-                                "description": "https://developers.openai.com/api-reference/responses/create"
+                                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                               },
                               "processedRequest": {
                                 "nullable": true,
@@ -77927,7 +77952,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       }
                                     ]
@@ -77995,7 +78021,8 @@
                                             "type",
                                             "name"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         },
                                         {
                                           "type": "object",
@@ -78007,7 +78034,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       ]
                                     }
@@ -78024,7 +78052,7 @@
                                   "model"
                                 ],
                                 "additionalProperties": {},
-                                "description": "https://developers.openai.com/api-reference/responses/create"
+                                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                               },
                               "response": {
                                 "type": "object",
@@ -78090,7 +78118,8 @@
                                                       "type",
                                                       "text"
                                                     ],
-                                                    "additionalProperties": {}
+                                                    "additionalProperties": {},
+                                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                                   },
                                                   {
                                                     "type": "object",
@@ -78109,7 +78138,8 @@
                                                       "type",
                                                       "refusal"
                                                     ],
-                                                    "additionalProperties": {}
+                                                    "additionalProperties": {},
+                                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                                   }
                                                 ]
                                               }
@@ -78122,7 +78152,8 @@
                                             "status",
                                             "content"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                                         },
                                         {
                                           "type": "object",
@@ -78155,7 +78186,8 @@
                                             "name",
                                             "arguments"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                                         },
                                         {
                                           "type": "object",
@@ -78193,7 +78225,8 @@
                                       "output_tokens",
                                       "total_tokens"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                   }
                                 },
                                 "required": [
@@ -78205,7 +78238,7 @@
                                   "status"
                                 ],
                                 "additionalProperties": {},
-                                "description": "https://developers.openai.com/api-reference/responses/object"
+                                "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                               },
                               "dualLlmAnalyses": {
                                 "nullable": true,
@@ -85106,7 +85139,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       }
                                     ]
@@ -85174,7 +85208,8 @@
                                             "type",
                                             "name"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         },
                                         {
                                           "type": "object",
@@ -85186,7 +85221,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       ]
                                     }
@@ -85202,7 +85238,8 @@
                                 "required": [
                                   "model"
                                 ],
-                                "additionalProperties": {}
+                                "additionalProperties": {},
+                                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                               },
                               "processedRequest": {
                                 "nullable": true,
@@ -85228,7 +85265,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       }
                                     ]
@@ -85296,7 +85334,8 @@
                                             "type",
                                             "name"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         },
                                         {
                                           "type": "object",
@@ -85308,7 +85347,8 @@
                                           "required": [
                                             "type"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
                                       ]
                                     }
@@ -85324,7 +85364,8 @@
                                 "required": [
                                   "model"
                                 ],
-                                "additionalProperties": {}
+                                "additionalProperties": {},
+                                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                               },
                               "response": {
                                 "type": "object",
@@ -85390,7 +85431,8 @@
                                                       "type",
                                                       "text"
                                                     ],
-                                                    "additionalProperties": {}
+                                                    "additionalProperties": {},
+                                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                                   },
                                                   {
                                                     "type": "object",
@@ -85409,7 +85451,8 @@
                                                       "type",
                                                       "refusal"
                                                     ],
-                                                    "additionalProperties": {}
+                                                    "additionalProperties": {},
+                                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                                   }
                                                 ]
                                               }
@@ -85422,7 +85465,8 @@
                                             "status",
                                             "content"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                                         },
                                         {
                                           "type": "object",
@@ -85455,7 +85499,8 @@
                                             "name",
                                             "arguments"
                                           ],
-                                          "additionalProperties": {}
+                                          "additionalProperties": {},
+                                          "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                                         },
                                         {
                                           "type": "object",
@@ -85493,7 +85538,8 @@
                                       "output_tokens",
                                       "total_tokens"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                   }
                                 },
                                 "required": [
@@ -85504,7 +85550,8 @@
                                   "output",
                                   "status"
                                 ],
-                                "additionalProperties": {}
+                                "additionalProperties": {},
+                                "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                               },
                               "dualLlmAnalyses": {
                                 "nullable": true,
@@ -87481,7 +87528,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 }
                               ]
@@ -87549,7 +87597,8 @@
                                       "type",
                                       "name"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   },
                                   {
                                     "type": "object",
@@ -87561,7 +87610,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 ]
                               }
@@ -87578,7 +87628,7 @@
                             "model"
                           ],
                           "additionalProperties": {},
-                          "description": "https://developers.openai.com/api-reference/responses/create"
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         "processedRequest": {
                           "nullable": true,
@@ -87604,7 +87654,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 }
                               ]
@@ -87672,7 +87723,8 @@
                                       "type",
                                       "name"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   },
                                   {
                                     "type": "object",
@@ -87684,7 +87736,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 ]
                               }
@@ -87701,7 +87754,7 @@
                             "model"
                           ],
                           "additionalProperties": {},
-                          "description": "https://developers.openai.com/api-reference/responses/create"
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         "response": {
                           "type": "object",
@@ -87767,7 +87820,8 @@
                                                 "type",
                                                 "text"
                                               ],
-                                              "additionalProperties": {}
+                                              "additionalProperties": {},
+                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                             },
                                             {
                                               "type": "object",
@@ -87786,7 +87840,8 @@
                                                 "type",
                                                 "refusal"
                                               ],
-                                              "additionalProperties": {}
+                                              "additionalProperties": {},
+                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                             }
                                           ]
                                         }
@@ -87799,7 +87854,8 @@
                                       "status",
                                       "content"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                                   },
                                   {
                                     "type": "object",
@@ -87832,7 +87888,8 @@
                                       "name",
                                       "arguments"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                                   },
                                   {
                                     "type": "object",
@@ -87870,7 +87927,8 @@
                                 "output_tokens",
                                 "total_tokens"
                               ],
-                              "additionalProperties": {}
+                              "additionalProperties": {},
+                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                             }
                           },
                           "required": [
@@ -87882,7 +87940,7 @@
                             "status"
                           ],
                           "additionalProperties": {},
-                          "description": "https://developers.openai.com/api-reference/responses/object"
+                          "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                         },
                         "dualLlmAnalyses": {
                           "nullable": true,
@@ -94783,7 +94841,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 }
                               ]
@@ -94851,7 +94910,8 @@
                                       "type",
                                       "name"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   },
                                   {
                                     "type": "object",
@@ -94863,7 +94923,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 ]
                               }
@@ -94879,7 +94940,8 @@
                           "required": [
                             "model"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         "processedRequest": {
                           "nullable": true,
@@ -94905,7 +94967,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 }
                               ]
@@ -94973,7 +95036,8 @@
                                       "type",
                                       "name"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   },
                                   {
                                     "type": "object",
@@ -94985,7 +95049,8 @@
                                     "required": [
                                       "type"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
                                 ]
                               }
@@ -95001,7 +95066,8 @@
                           "required": [
                             "model"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         "response": {
                           "type": "object",
@@ -95067,7 +95133,8 @@
                                                 "type",
                                                 "text"
                                               ],
-                                              "additionalProperties": {}
+                                              "additionalProperties": {},
+                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                             },
                                             {
                                               "type": "object",
@@ -95086,7 +95153,8 @@
                                                 "type",
                                                 "refusal"
                                               ],
-                                              "additionalProperties": {}
+                                              "additionalProperties": {},
+                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                             }
                                           ]
                                         }
@@ -95099,7 +95167,8 @@
                                       "status",
                                       "content"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                                   },
                                   {
                                     "type": "object",
@@ -95132,7 +95201,8 @@
                                       "name",
                                       "arguments"
                                     ],
-                                    "additionalProperties": {}
+                                    "additionalProperties": {},
+                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                                   },
                                   {
                                     "type": "object",
@@ -95170,7 +95240,8 @@
                                 "output_tokens",
                                 "total_tokens"
                               ],
-                              "additionalProperties": {}
+                              "additionalProperties": {},
+                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                             }
                           },
                           "required": [
@@ -95181,7 +95252,8 @@
                             "output",
                             "status"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                         },
                         "dualLlmAnalyses": {
                           "nullable": true,
@@ -131688,7 +131760,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       }
                     ]
@@ -131756,7 +131829,8 @@
                             "type",
                             "name"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         {
                           "type": "object",
@@ -131768,7 +131842,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       ]
                     }
@@ -131784,10 +131859,12 @@
                 "required": [
                   "model"
                 ],
-                "additionalProperties": {}
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
               }
             }
-          }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
         },
         "parameters": [
           {
@@ -131811,7 +131888,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
             "content": {
               "application/json": {
                 "schema": {
@@ -131878,7 +131955,8 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                     },
                                     {
                                       "type": "object",
@@ -131897,7 +131975,8 @@
                                         "type",
                                         "refusal"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                     }
                                   ]
                                 }
@@ -131910,7 +131989,8 @@
                               "status",
                               "content"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -131943,7 +132023,8 @@
                               "name",
                               "arguments"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -131981,7 +132062,8 @@
                         "output_tokens",
                         "total_tokens"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                     }
                   },
                   "required": [
@@ -131992,7 +132074,8 @@
                     "output",
                     "status"
                   ],
-                  "additionalProperties": {}
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }
@@ -132262,7 +132345,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       }
                     ]
@@ -132330,7 +132414,8 @@
                             "type",
                             "name"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         {
                           "type": "object",
@@ -132342,7 +132427,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       ]
                     }
@@ -132358,10 +132444,12 @@
                 "required": [
                   "model"
                 ],
-                "additionalProperties": {}
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
               }
             }
-          }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
         },
         "parameters": [
           {
@@ -132395,7 +132483,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
             "content": {
               "application/json": {
                 "schema": {
@@ -132462,7 +132550,8 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                     },
                                     {
                                       "type": "object",
@@ -132481,7 +132570,8 @@
                                         "type",
                                         "refusal"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                     }
                                   ]
                                 }
@@ -132494,7 +132584,8 @@
                               "status",
                               "content"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -132527,7 +132618,8 @@
                               "name",
                               "arguments"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -132565,7 +132657,8 @@
                         "output_tokens",
                         "total_tokens"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                     }
                   },
                   "required": [
@@ -132576,7 +132669,8 @@
                     "output",
                     "status"
                   ],
-                  "additionalProperties": {}
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }
@@ -134730,7 +134824,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       }
                     ]
@@ -134798,7 +134893,8 @@
                             "type",
                             "name"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         {
                           "type": "object",
@@ -134810,7 +134906,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       ]
                     }
@@ -134827,11 +134924,11 @@
                   "model"
                 ],
                 "additionalProperties": {},
-                "description": "https://developers.openai.com/api-reference/responses/create"
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
               }
             }
           },
-          "description": "https://developers.openai.com/api-reference/responses/create"
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
         },
         "parameters": [
           {
@@ -134855,7 +134952,7 @@
         ],
         "responses": {
           "200": {
-            "description": "https://developers.openai.com/api-reference/responses/object",
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
             "content": {
               "application/json": {
                 "schema": {
@@ -134922,7 +135019,8 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                     },
                                     {
                                       "type": "object",
@@ -134941,7 +135039,8 @@
                                         "type",
                                         "refusal"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                     }
                                   ]
                                 }
@@ -134954,7 +135053,8 @@
                               "status",
                               "content"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -134987,7 +135087,8 @@
                               "name",
                               "arguments"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -135025,7 +135126,8 @@
                         "output_tokens",
                         "total_tokens"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                     }
                   },
                   "required": [
@@ -135037,7 +135139,7 @@
                     "status"
                   ],
                   "additionalProperties": {},
-                  "description": "https://developers.openai.com/api-reference/responses/object"
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }
@@ -135307,7 +135409,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       }
                     ]
@@ -135375,7 +135478,8 @@
                             "type",
                             "name"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         },
                         {
                           "type": "object",
@@ -135387,7 +135491,8 @@
                           "required": [
                             "type"
                           ],
-                          "additionalProperties": {}
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
                       ]
                     }
@@ -135404,11 +135509,11 @@
                   "model"
                 ],
                 "additionalProperties": {},
-                "description": "https://developers.openai.com/api-reference/responses/create"
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
               }
             }
           },
-          "description": "https://developers.openai.com/api-reference/responses/create"
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
         },
         "parameters": [
           {
@@ -135442,7 +135547,7 @@
         ],
         "responses": {
           "200": {
-            "description": "https://developers.openai.com/api-reference/responses/object",
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
             "content": {
               "application/json": {
                 "schema": {
@@ -135509,7 +135614,8 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                     },
                                     {
                                       "type": "object",
@@ -135528,7 +135634,8 @@
                                         "type",
                                         "refusal"
                                       ],
-                                      "additionalProperties": {}
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                     }
                                   ]
                                 }
@@ -135541,7 +135648,8 @@
                               "status",
                               "content"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -135574,7 +135682,8 @@
                               "name",
                               "arguments"
                             ],
-                            "additionalProperties": {}
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                           },
                           {
                             "type": "object",
@@ -135612,7 +135721,8 @@
                         "output_tokens",
                         "total_tokens"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                     }
                   },
                   "required": [
@@ -135624,7 +135734,7 @@
                     "status"
                   ],
                   "additionalProperties": {},
-                  "description": "https://developers.openai.com/api-reference/responses/object"
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }

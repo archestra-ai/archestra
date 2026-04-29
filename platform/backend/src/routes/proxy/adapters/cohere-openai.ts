@@ -38,33 +38,42 @@ class CohereOpenaiResponseAdapter
   getId(): string {
     return this.inner.getId();
   }
+
   getModel(): string {
     return this.ctx.requestedModel;
   }
+
   getText(): string {
     return this.inner.getText();
   }
+
   getToolCalls(): CommonToolCall[] {
     return this.inner.getToolCalls();
   }
+
   hasToolCalls(): boolean {
     return this.inner.hasToolCalls();
   }
+
   getUsage(): UsageView {
     return this.inner.getUsage();
   }
+
   getOriginalResponse(): CohereResponse {
     return cohereResponseToOpenai(
       this.inner.getOriginalResponse(),
       this.ctx,
     ) as unknown as CohereResponse;
   }
+
   getLoggedResponse(): CohereResponse {
     return this.inner.getOriginalResponse();
   }
+
   getFinishReasons(): string[] {
     return this.inner.getFinishReasons();
   }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -113,6 +122,7 @@ class CohereOpenaiStreamAdapter
     const innerResult = this.inner.processChunk(chunk);
     return { ...innerResult, sseData: this.toOpenaiSse(chunk) };
   }
+
   getSSEHeaders(): Record<string, string> {
     return {
       "Content-Type": "text/event-stream",
@@ -120,12 +130,15 @@ class CohereOpenaiStreamAdapter
       Connection: "keep-alive",
     };
   }
+
   formatTextDeltaSSE(text: string): string {
     return this.formatChunk({ delta: { content: text }, finishReason: null });
   }
+
   getRawToolCallEvents(): string[] {
     return [];
   }
+
   formatCompleteTextSSE(text: string): string[] {
     return [
       this.formatChunk({
@@ -134,12 +147,14 @@ class CohereOpenaiStreamAdapter
       }),
     ];
   }
+
   formatEndSSE(): string {
     return `${this.formatChunk({
       delta: {},
       finishReason: mapCohereFinishReason(this.inner.state.stopReason),
     })}data: [DONE]\n\n`;
   }
+
   toProviderResponse(): CohereResponse {
     return this.inner.toProviderResponse();
   }

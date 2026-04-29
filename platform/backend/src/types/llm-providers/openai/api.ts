@@ -100,7 +100,10 @@ const ResponsesInputItemSchema = z
   .object({
     type: z.string(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses/methods/create",
+  );
 
 const ResponsesFunctionToolSchema = z
   .object({
@@ -110,13 +113,19 @@ const ResponsesFunctionToolSchema = z
     parameters: z.record(z.string(), z.unknown()).nullable().optional(),
     strict: z.boolean().nullable().optional(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses/methods/create",
+  );
 
 const ResponsesToolSchema = z
   .object({
     type: z.string(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses/methods/create",
+  );
 
 export const ResponsesRequestSchema = z
   .object({
@@ -137,7 +146,9 @@ export const ResponsesRequestSchema = z
     user: z.string().optional(),
   })
   .passthrough()
-  .describe("https://developers.openai.com/api-reference/responses/create");
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses/methods/create",
+  );
 
 export const ResponsesUsageSchema = z
   .object({
@@ -145,21 +156,30 @@ export const ResponsesUsageSchema = z
     output_tokens: z.number(),
     total_tokens: z.number(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)",
+  );
 
 const ResponsesOutputTextSchema = z
   .object({
     type: z.literal("output_text"),
     text: z.string(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)",
+  );
 
 const ResponsesOutputRefusalSchema = z
   .object({
     type: z.literal("refusal"),
     refusal: z.string(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)",
+  );
 
 const ResponsesOutputMessageSchema = z
   .object({
@@ -171,7 +191,10 @@ const ResponsesOutputMessageSchema = z
       z.union([ResponsesOutputTextSchema, ResponsesOutputRefusalSchema]),
     ),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)",
+  );
 
 const ResponsesFunctionCallSchema = z
   .object({
@@ -182,7 +205,10 @@ const ResponsesFunctionCallSchema = z
     arguments: z.string(),
     status: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
+  );
 
 export const ResponsesResponseSchema = z
   .object({
@@ -201,7 +227,9 @@ export const ResponsesResponseSchema = z
     usage: ResponsesUsageSchema.optional(),
   })
   .passthrough()
-  .describe("https://developers.openai.com/api-reference/responses/object");
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
+  );
 
 // ===== Embeddings API =====
 

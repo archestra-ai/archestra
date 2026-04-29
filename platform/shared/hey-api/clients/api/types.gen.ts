@@ -15525,6 +15525,9 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
 export type AzureChatCompletionsWithDefaultAgentResponse = AzureChatCompletionsWithDefaultAgentResponses[keyof AzureChatCompletionsWithDefaultAgentResponses];
 
 export type AzureResponsesWithDefaultAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
     body: {
         model: string;
         input?: string | Array<{
@@ -15640,7 +15643,7 @@ export type AzureResponsesWithDefaultAgentError = AzureResponsesWithDefaultAgent
 
 export type AzureResponsesWithDefaultAgentResponses = {
     /**
-     * Default Response
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
      */
     200: {
         id: string;
@@ -15675,6 +15678,9 @@ export type AzureResponsesWithDefaultAgentResponses = {
             [key: string]: unknown;
         }>;
         status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
         usage?: {
             input_tokens: number;
             output_tokens: number;
@@ -15688,6 +15694,9 @@ export type AzureResponsesWithDefaultAgentResponses = {
 export type AzureResponsesWithDefaultAgentResponse = AzureResponsesWithDefaultAgentResponses[keyof AzureResponsesWithDefaultAgentResponses];
 
 export type AzureResponsesWithAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
     body: {
         model: string;
         input?: string | Array<{
@@ -15805,7 +15814,7 @@ export type AzureResponsesWithAgentError = AzureResponsesWithAgentErrors[keyof A
 
 export type AzureResponsesWithAgentResponses = {
     /**
-     * Default Response
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
      */
     200: {
         id: string;
@@ -15840,6 +15849,9 @@ export type AzureResponsesWithAgentResponses = {
             [key: string]: unknown;
         }>;
         status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
         usage?: {
             input_tokens: number;
             output_tokens: number;
@@ -22609,7 +22621,7 @@ export type GetInteractionsResponses = {
             sessionSource: string | null;
             source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             /**
-             * https://developers.openai.com/api-reference/responses/create
+             * https://developers.openai.com/api/reference/resources/responses/methods/create
              */
             request: {
                 model: string;
@@ -22645,7 +22657,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             };
             /**
-             * https://developers.openai.com/api-reference/responses/create
+             * https://developers.openai.com/api/reference/resources/responses/methods/create
              */
             processedRequest?: {
                 model: string;
@@ -22681,7 +22693,7 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | null;
             /**
-             * https://developers.openai.com/api-reference/responses/object
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
              */
             response: {
                 id: string;
@@ -22716,6 +22728,9 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 }>;
                 status: string;
+                /**
+                 * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+                 */
                 usage?: {
                     input_tokens: number;
                     output_tokens: number;
@@ -23952,6 +23967,9 @@ export type GetInteractionsResponses = {
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            /**
+             * https://developers.openai.com/api/reference/resources/responses/methods/create
+             */
             request: {
                 model: string;
                 input?: string | Array<{
@@ -23985,6 +24003,9 @@ export type GetInteractionsResponses = {
                 user?: string;
                 [key: string]: unknown;
             };
+            /**
+             * https://developers.openai.com/api/reference/resources/responses/methods/create
+             */
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
@@ -24018,6 +24039,9 @@ export type GetInteractionsResponses = {
                 user?: string;
                 [key: string]: unknown;
             } | null;
+            /**
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
+             */
             response: {
                 id: string;
                 object: 'response';
@@ -24051,6 +24075,9 @@ export type GetInteractionsResponses = {
                     [key: string]: unknown;
                 }>;
                 status: string;
+                /**
+                 * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+                 */
                 usage?: {
                     input_tokens: number;
                     output_tokens: number;
@@ -24554,7 +24581,7 @@ export type GetInteractionResponses = {
         sessionSource: string | null;
         source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         /**
-         * https://developers.openai.com/api-reference/responses/create
+         * https://developers.openai.com/api/reference/resources/responses/methods/create
          */
         request: {
             model: string;
@@ -24590,7 +24617,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         };
         /**
-         * https://developers.openai.com/api-reference/responses/create
+         * https://developers.openai.com/api/reference/resources/responses/methods/create
          */
         processedRequest?: {
             model: string;
@@ -24626,7 +24653,7 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | null;
         /**
-         * https://developers.openai.com/api-reference/responses/object
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
          */
         response: {
             id: string;
@@ -24661,6 +24688,9 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             }>;
             status: string;
+            /**
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+             */
             usage?: {
                 input_tokens: number;
                 output_tokens: number;
@@ -25897,6 +25927,9 @@ export type GetInteractionResponses = {
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'chat' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        /**
+         * https://developers.openai.com/api/reference/resources/responses/methods/create
+         */
         request: {
             model: string;
             input?: string | Array<{
@@ -25930,6 +25963,9 @@ export type GetInteractionResponses = {
             user?: string;
             [key: string]: unknown;
         };
+        /**
+         * https://developers.openai.com/api/reference/resources/responses/methods/create
+         */
         processedRequest?: {
             model: string;
             input?: string | Array<{
@@ -25963,6 +25999,9 @@ export type GetInteractionResponses = {
             user?: string;
             [key: string]: unknown;
         } | null;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
+         */
         response: {
             id: string;
             object: 'response';
@@ -25996,6 +26035,9 @@ export type GetInteractionResponses = {
                 [key: string]: unknown;
             }>;
             status: string;
+            /**
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+             */
             usage?: {
                 input_tokens: number;
                 output_tokens: number;
@@ -35350,6 +35392,9 @@ export type ModelRouterListModelsWithAgentResponses = {
 export type ModelRouterListModelsWithAgentResponse = ModelRouterListModelsWithAgentResponses[keyof ModelRouterListModelsWithAgentResponses];
 
 export type ModelRouterResponsesWithDefaultAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
     body: {
         model: string;
         input?: string | Array<{
@@ -35465,7 +35510,7 @@ export type ModelRouterResponsesWithDefaultAgentError = ModelRouterResponsesWith
 
 export type ModelRouterResponsesWithDefaultAgentResponses = {
     /**
-     * Default Response
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
      */
     200: {
         id: string;
@@ -35500,6 +35545,9 @@ export type ModelRouterResponsesWithDefaultAgentResponses = {
             [key: string]: unknown;
         }>;
         status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
         usage?: {
             input_tokens: number;
             output_tokens: number;
@@ -35513,6 +35561,9 @@ export type ModelRouterResponsesWithDefaultAgentResponses = {
 export type ModelRouterResponsesWithDefaultAgentResponse = ModelRouterResponsesWithDefaultAgentResponses[keyof ModelRouterResponsesWithDefaultAgentResponses];
 
 export type ModelRouterResponsesWithAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
     body: {
         model: string;
         input?: string | Array<{
@@ -35630,7 +35681,7 @@ export type ModelRouterResponsesWithAgentError = ModelRouterResponsesWithAgentEr
 
 export type ModelRouterResponsesWithAgentResponses = {
     /**
-     * Default Response
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
      */
     200: {
         id: string;
@@ -35665,6 +35716,9 @@ export type ModelRouterResponsesWithAgentResponses = {
             [key: string]: unknown;
         }>;
         status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
         usage?: {
             input_tokens: number;
             output_tokens: number;
@@ -36277,7 +36331,7 @@ export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAg
 
 export type OpenAiResponsesWithDefaultAgentData = {
     /**
-     * https://developers.openai.com/api-reference/responses/create
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
      */
     body: {
         model: string;
@@ -36394,7 +36448,7 @@ export type OpenAiResponsesWithDefaultAgentError = OpenAiResponsesWithDefaultAge
 
 export type OpenAiResponsesWithDefaultAgentResponses = {
     /**
-     * https://developers.openai.com/api-reference/responses/object
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
      */
     200: {
         id: string;
@@ -36429,6 +36483,9 @@ export type OpenAiResponsesWithDefaultAgentResponses = {
             [key: string]: unknown;
         }>;
         status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
         usage?: {
             input_tokens: number;
             output_tokens: number;
@@ -36443,7 +36500,7 @@ export type OpenAiResponsesWithDefaultAgentResponse = OpenAiResponsesWithDefault
 
 export type OpenAiResponsesWithAgentData = {
     /**
-     * https://developers.openai.com/api-reference/responses/create
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
      */
     body: {
         model: string;
@@ -36562,7 +36619,7 @@ export type OpenAiResponsesWithAgentError = OpenAiResponsesWithAgentErrors[keyof
 
 export type OpenAiResponsesWithAgentResponses = {
     /**
-     * https://developers.openai.com/api-reference/responses/object
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
      */
     200: {
         id: string;
@@ -36597,6 +36654,9 @@ export type OpenAiResponsesWithAgentResponses = {
             [key: string]: unknown;
         }>;
         status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
         usage?: {
             input_tokens: number;
             output_tokens: number;

@@ -42,7 +42,7 @@ import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
 import { openaiToGemini } from "../adapters/gemini-openai-translator";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
-import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { virtualKeyRateLimiter } from "../llm-proxy-auth";
 import {
   handleLLMProxy,
@@ -52,7 +52,7 @@ import {
   buildRoutableModelId,
   resolveModelRoute,
   sortRoutableModels,
-} from "../model-router/resolver";
+} from "../model-router-resolver";
 
 type OpenAiWireProvider = LLMProvider<
   OpenAi.Types.ChatCompletionsRequest,
@@ -79,7 +79,6 @@ type ModelRouterVirtualKeyAuth = {
 
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
-const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
 
 const openAiWireProviders: Partial<
   Record<SupportedProvider, OpenAiWireProvider>

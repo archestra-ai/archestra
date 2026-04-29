@@ -102,17 +102,21 @@ export function openaiToAnthropic(req: OpenAiRequest): {
   if (system.length > 0) {
     anthropicBody.system = system.join("\n\n");
   }
+
   if (req.temperature !== undefined && req.temperature !== null) {
     anthropicBody.temperature = req.temperature;
   }
+
   if (loose.top_p !== undefined && loose.top_p !== null) {
     anthropicBody.top_p = loose.top_p;
   }
+
   if (loose.stop !== undefined && loose.stop !== null) {
     anthropicBody.stop_sequences = Array.isArray(loose.stop)
       ? loose.stop
       : [loose.stop];
   }
+
   if (req.tools) {
     anthropicBody.tools = req.tools
       .filter((tool) => tool.type === "function")
@@ -122,6 +126,7 @@ export function openaiToAnthropic(req: OpenAiRequest): {
         input_schema: tool.function.parameters ?? { type: "object" },
       }));
   }
+
   if (req.tool_choice) {
     anthropicBody.tool_choice = toAnthropicToolChoice(req.tool_choice);
   }

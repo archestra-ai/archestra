@@ -43,9 +43,11 @@ export function responsesToOpenaiChat(req: ResponsesRequest): {
   if (req.temperature !== undefined) {
     chatBody.temperature = req.temperature;
   }
+
   if (req.max_output_tokens !== undefined) {
     chatBody.max_tokens = req.max_output_tokens;
   }
+
   if (req.tools) {
     chatBody.tools = req.tools.flatMap((tool) => {
       if (tool.type !== "function" || !("name" in tool)) {
@@ -69,6 +71,7 @@ export function responsesToOpenaiChat(req: ResponsesRequest): {
       ];
     });
   }
+
   if (typeof req.tool_choice === "string") {
     chatBody.tool_choice = responseToolChoiceToChatToolChoice(req.tool_choice);
   }

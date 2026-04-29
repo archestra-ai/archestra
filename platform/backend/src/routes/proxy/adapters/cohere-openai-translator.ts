@@ -79,26 +79,32 @@ export function openaiToCohere(req: OpenAiRequest): {
   if (req.temperature !== undefined && req.temperature !== null) {
     cohereBody.temperature = req.temperature;
   }
+
   if (req.max_tokens !== undefined && req.max_tokens !== null) {
     cohereBody.max_tokens = req.max_tokens;
   }
+
   if (loose.top_p !== undefined && loose.top_p !== null) {
     cohereBody.p = loose.top_p;
   }
+
   if (
     loose.frequency_penalty !== undefined &&
     loose.frequency_penalty !== null
   ) {
     cohereBody.frequency_penalty = loose.frequency_penalty;
   }
+
   if (loose.presence_penalty !== undefined && loose.presence_penalty !== null) {
     cohereBody.presence_penalty = loose.presence_penalty;
   }
+
   if (loose.stop !== undefined && loose.stop !== null) {
     cohereBody.stop_sequences = Array.isArray(loose.stop)
       ? loose.stop
       : [loose.stop];
   }
+
   if (req.tools) {
     cohereBody.tools = req.tools
       .filter((tool) => tool.type === "function")
@@ -113,6 +119,7 @@ export function openaiToCohere(req: OpenAiRequest): {
         },
       }));
   }
+
   if (req.tool_choice === "required") {
     cohereBody.tool_choice = "REQUIRED";
   } else if (req.tool_choice === "none") {

@@ -101,6 +101,7 @@ export function openaiToGemini(req: OpenAiRequest): {
   if (systemParts.length > 0) {
     geminiBody.systemInstruction = { parts: systemParts };
   }
+
   if (
     req.temperature !== undefined ||
     req.max_tokens !== undefined ||
@@ -123,6 +124,7 @@ export function openaiToGemini(req: OpenAiRequest): {
         : [loose.stop];
     }
   }
+
   if (req.tools) {
     geminiBody.tools = [
       {
@@ -136,6 +138,7 @@ export function openaiToGemini(req: OpenAiRequest): {
       },
     ];
   }
+
   if (req.tool_choice) {
     geminiBody.toolConfig = {
       functionCallingConfig: {
@@ -228,6 +231,7 @@ export function mapGeminiFinishReason(
   ) {
     return "tool_calls";
   }
+
   if (reason && reason !== "STOP") return "content_filter";
   return "stop";
 }

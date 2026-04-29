@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Gemini, OpenAi } from "@/types";
+import {
+  parseJsonObject,
+  stringifyTextContent,
+} from "./openai-translator-utils";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -42,21 +46,21 @@ export function openaiToGemini(req: OpenAiRequest): {
 
   for (const message of req.messages as LooseMessage[]) {
     if (message.role === "system" || message.role === "developer") {
-      systemParts.push({ text: stringifyContent(message.content) });
+      systemParts.push({ text: stringifyTextContent(message.content) });
       continue;
     }
 
     if (message.role === "user") {
       contents.push({
         role: "user",
-        parts: [{ text: stringifyContent(message.content) }],
+        parts: [{ text: stringifyTextContent(message.content) }],
       });
       continue;
     }
 
     if (message.role === "assistant") {
       const parts: Gemini.Types.MessagePart[] = [];
-      const text = stringifyContent(message.content);
+      const text = stringifyTextContent(message.content);
       if (text) {
         parts.push({ text });
       }
@@ -84,7 +88,7 @@ export function openaiToGemini(req: OpenAiRequest): {
             functionResponse: {
               id: message.tool_call_id,
               name: "tool_result",
-              response: { content: stringifyContent(message.content) },
+              response: { content: stringifyTextContent(message.content) },
             },
           },
         ],
@@ -234,40 +238,6 @@ export function mapGeminiFinishReason(
 
   if (reason && reason !== "STOP") return "content_filter";
   return "stop";
-}
-
-function stringifyContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .map((part) => {
-      if (
-        typeof part === "object" &&
-        part !== null &&
-        "type" in part &&
-        part.type === "text" &&
-        "text" in part &&
-        typeof part.text === "string"
-      ) {
-        return part.text;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch {
-    return {};
-  }
-  return {};
 }
 
 function toGeminiToolChoice(

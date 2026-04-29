@@ -305,6 +305,67 @@ describe("virtualApiKeysRoutes", () => {
     });
   });
 
+  test("POST /api/llm-virtual-keys creates a model router key without a parent provider key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(
+      organizationId,
+      openaiSecret.id,
+      { provider: "openai", name: "OpenAI Router Key" },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "parentless-router-key",
+        chatApiKeyId: null,
+        modelRouterEnabled: true,
+        modelRouterProviderApiKeys: [
+          { provider: "openai", chatApiKeyId: openaiKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "parentless-router-key",
+      chatApiKeyId: null,
+      organizationId,
+      modelRouterEnabled: true,
+      modelRouterProviderApiKeys: [
+        {
+          provider: "openai",
+          chatApiKeyId: openaiKey.id,
+          chatApiKeyName: "OpenAI Router Key",
+        },
+      ],
+    });
+  });
+
+  test("POST /api/llm-virtual-keys rejects parentless non-router keys", async () => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "missing-parent",
+        chatApiKeyId: null,
+        modelRouterEnabled: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "Provider API key is required unless Model Router is enabled",
+    );
+  });
+
   test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects duplicate model router provider mappings", async ({
     makeLlmProviderApiKey,
     makeSecret,
@@ -490,6 +551,50 @@ describe("virtualApiKeysRoutes", () => {
       expect(key.parentKeyProvider).toBe("openai");
       expect(key.parentKeyBaseUrl).toBeNull();
     }
+  });
+
+  test("GET /api/llm-virtual-keys lists model router keys without parent metadata", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      name: "OpenAI Router Key",
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "router-only-list-key",
+        chatApiKeyId: null,
+        modelRouterEnabled: true,
+        modelRouterProviderApiKeys: [
+          { provider: "openai", chatApiKeyId: openaiKey.id },
+        ],
+      },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?limit=50&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "router-only-list-key",
+          chatApiKeyId: null,
+          parentKeyName: null,
+          parentKeyProvider: null,
+          modelRouterEnabled: true,
+        }),
+      ]),
+    );
   });
 
   test("DELETE /api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id removes the key", async ({

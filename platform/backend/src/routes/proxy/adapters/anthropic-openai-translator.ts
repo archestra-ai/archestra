@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Anthropic, OpenAi } from "@/types";
+import {
+  parseJsonObject,
+  stringifyTextContent,
+} from "./openai-translator-utils";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -41,21 +45,21 @@ export function openaiToAnthropic(req: OpenAiRequest): {
 
   for (const message of req.messages as LooseMessage[]) {
     if (message.role === "system" || message.role === "developer") {
-      system.push(stringifyContent(message.content));
+      system.push(stringifyTextContent(message.content));
       continue;
     }
 
     if (message.role === "user") {
       messages.push({
         role: "user",
-        content: stringifyContent(message.content),
+        content: stringifyTextContent(message.content),
       });
       continue;
     }
 
     if (message.role === "assistant") {
       const content: Array<Record<string, unknown>> = [];
-      const text = stringifyContent(message.content);
+      const text = stringifyTextContent(message.content);
       if (text) {
         content.push({ type: "text", text });
       }
@@ -85,7 +89,7 @@ export function openaiToAnthropic(req: OpenAiRequest): {
           {
             type: "tool_result",
             tool_use_id: message.tool_call_id ?? "",
-            content: stringifyContent(message.content),
+            content: stringifyTextContent(message.content),
           },
         ],
       });
@@ -205,40 +209,6 @@ export function mapStopReason(
   if (reason === "tool_use") return "tool_calls";
   if (reason === "stop_sequence" || reason === "end_turn") return "stop";
   return "stop";
-}
-
-function stringifyContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .map((part) => {
-      if (
-        typeof part === "object" &&
-        part !== null &&
-        "type" in part &&
-        part.type === "text" &&
-        "text" in part &&
-        typeof part.text === "string"
-      ) {
-        return part.text;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch {
-    return {};
-  }
-  return {};
 }
 
 function toAnthropicToolChoice(

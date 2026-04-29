@@ -751,6 +751,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteVirtualApiKey]: {
     llmVirtualKey: ["delete"],
   },
+  [RouteId.CreateProviderVirtualApiKey]: {
+    llmVirtualKey: ["create"],
+  },
+  [RouteId.UpdateProviderVirtualApiKey]: {
+    llmVirtualKey: ["update"],
+  },
+  [RouteId.DeleteProviderVirtualApiKey]: {
+    llmVirtualKey: ["delete"],
+  },
   [RouteId.GetModelsWithApiKeys]: {
     llmModel: ["read"],
   },

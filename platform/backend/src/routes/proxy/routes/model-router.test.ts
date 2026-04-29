@@ -88,6 +88,7 @@ async function createModelRouterVirtualKey(params: {
     overrides?: { provider?: SupportedProvider },
   ) => Promise<{ id: string }>;
   apiKeyValue?: string;
+  expiresAt?: Date | null;
 }) {
   const secret = await params.makeSecret({
     secret: { apiKey: params.apiKeyValue ?? `test-${params.provider}-key` },
@@ -102,6 +103,7 @@ async function createModelRouterVirtualKey(params: {
   return VirtualApiKeyModel.create({
     chatApiKeyId: chatApiKey.id,
     name: `${params.provider} model router virtual key`,
+    expiresAt: params.expiresAt,
     modelRouterEnabled: true,
     modelRouterProviderApiKeys: [
       {
@@ -191,12 +193,58 @@ function createBedrockTestClient() {
       },
     }),
     converseStream: async () => ({
-      stream: [],
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          messageStart: { role: "assistant" },
+        };
+        yield {
+          contentBlockDelta: {
+            delta: { text: "Hello from Bedrock" },
+          },
+        };
+        yield {
+          messageStop: { stopReason: "end_turn" },
+        };
+        yield {
+          metadata: {
+            usage: {
+              inputTokens: 12,
+              outputTokens: 10,
+            },
+          },
+        };
+      },
     }),
   };
 }
 
 function createMinimaxTestClient() {
+  const streamChunk = {
+    id: "minimax-test",
+    object: "chat.completion.chunk",
+    created: 1,
+    model: "MiniMax-M1",
+    choices: [
+      {
+        index: 0,
+        delta: {
+          role: "assistant",
+          content: "Hello from MiniMax",
+        },
+        finish_reason: null,
+      },
+    ],
+  };
+  const finalChunk = {
+    ...streamChunk,
+    choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    usage: {
+      prompt_tokens: 12,
+      completion_tokens: 10,
+      total_tokens: 22,
+    },
+  };
+
   return {
     chatCompletions: async () => ({
       id: "minimax-test",
@@ -219,10 +267,42 @@ function createMinimaxTestClient() {
         total_tokens: 22,
       },
     }),
+    chatCompletionsStream: async () => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield streamChunk;
+        yield finalChunk;
+      },
+    }),
   };
 }
 
 function createZhipuaiTestClient() {
+  const streamChunk = {
+    id: "zhipuai-test",
+    object: "chat.completion.chunk",
+    created: 1,
+    model: "glm-4.5",
+    choices: [
+      {
+        index: 0,
+        delta: {
+          role: "assistant",
+          content: "Hello from ZhipuAI",
+        },
+        finish_reason: null,
+      },
+    ],
+  };
+  const finalChunk = {
+    ...streamChunk,
+    choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    usage: {
+      prompt_tokens: 12,
+      completion_tokens: 10,
+      total_tokens: 22,
+    },
+  };
+
   return {
     chatCompletions: async () => ({
       id: "zhipuai-test",
@@ -243,6 +323,12 @@ function createZhipuaiTestClient() {
         prompt_tokens: 12,
         completion_tokens: 10,
         total_tokens: 22,
+      },
+    }),
+    chatCompletionsStream: async () => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield streamChunk;
+        yield finalChunk;
       },
     }),
   };
@@ -380,6 +466,73 @@ describe("model router proxy routes", () => {
         model: `${provider}:${modelId}`,
       });
     });
+
+    test(`streams ${provider} models through chat completions and responses`, async ({
+      makeAgent,
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const app = createFastifyApp();
+      await app.register(modelRouterProxyRoutes);
+      await upsertModel({ provider, modelId });
+      const organization = await makeOrganization();
+      const { value } = await createModelRouterVirtualKey({
+        organizationId: organization.id,
+        provider,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        name: `${provider} Streaming Model Router Agent`,
+        agentType: "llm_proxy",
+      });
+
+      const chatResponse = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: `${provider}:${modelId}`,
+          stream: true,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      const responsesResponse = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: `${provider}:${modelId}`,
+          stream: true,
+          input: "Hello",
+        },
+      });
+
+      expect(chatResponse.statusCode, chatResponse.body).toBe(200);
+      expect(chatResponse.headers["content-type"]).toContain(
+        "text/event-stream",
+      );
+      expect(chatResponse.body).toContain("data: [DONE]");
+
+      expect(responsesResponse.statusCode, responsesResponse.body).toBe(200);
+      expect(responsesResponse.headers["content-type"]).toContain(
+        "text/event-stream",
+      );
+      expect(responsesResponse.body).toContain("data: [DONE]");
+      expect(responsesResponse.body).not.toContain(
+        "Streaming is not yet available",
+      );
+    });
   }
 
   test("rejects raw provider keys on model router routes", async ({
@@ -411,6 +564,47 @@ describe("model router proxy routes", () => {
     expect(response.json().error.message).toContain(
       "Model Router-enabled virtual API key",
     );
+  });
+
+  test("rejects expired virtual keys on model router routes", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "openai",
+      makeSecret,
+      makeLlmProviderApiKey,
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Expired Model Router Virtual Key Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "openai:gpt-5.4",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toBe("Virtual API key expired");
   });
 
   test("resolves virtual keys and scopes model router access to the key provider", async ({

@@ -300,6 +300,9 @@ export const RouteId = {
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
+  CreateProviderVirtualApiKey: "createProviderVirtualApiKey",
+  UpdateProviderVirtualApiKey: "updateProviderVirtualApiKey",
+  DeleteProviderVirtualApiKey: "deleteProviderVirtualApiKey",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",

@@ -228,21 +228,19 @@ export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
-    domain: z
-      .string()
-      .refine(
-        (value) => {
-          const domains = parseAllowedIdentityProviderDomains(value);
-          return (
-            domains.length === 0 ||
-            domains.every((domain) => DOMAIN_VALIDATION_REGEX.test(domain))
-          );
-        },
-        {
-          message:
-            "Enter valid comma-separated domains, for example company.com, subsidiary.com",
-        },
-      ),
+    domain: z.string().refine(
+      (value) => {
+        const domains = parseAllowedIdentityProviderDomains(value);
+        return (
+          domains.length === 0 ||
+          domains.every((domain) => DOMAIN_VALIDATION_REGEX.test(domain))
+        );
+      },
+      {
+        message:
+          "Enter valid comma-separated domains, for example company.com, subsidiary.com",
+      },
+    ),
     providerType: z.enum(["oidc", "saml"]),
     oidcConfig: IdentityProviderOidcConfigSchema.optional(),
     samlConfig: IdentityProviderSamlConfigSchema.optional(),

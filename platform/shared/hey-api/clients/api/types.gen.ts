@@ -44219,7 +44219,8 @@ export type GetAllVirtualApiKeysResponses = {
     200: {
         data: Array<{
             id: string;
-            chatApiKeyId: string;
+            organizationId: string;
+            chatApiKeyId: string | null;
             name: string;
             secretId: string;
             tokenStart: string;
@@ -44229,8 +44230,8 @@ export type GetAllVirtualApiKeysResponses = {
             modelRouterEnabled: boolean;
             createdAt: string;
             lastUsedAt: string | null;
-            parentKeyName: string;
-            parentKeyProvider: string;
+            parentKeyName: string | null;
+            parentKeyProvider: string | null;
             parentKeyBaseUrl: string | null;
             teams: Array<{
                 id: string;
@@ -44255,6 +44256,122 @@ export type GetAllVirtualApiKeysResponses = {
 };
 
 export type GetAllVirtualApiKeysResponse = GetAllVirtualApiKeysResponses[keyof GetAllVirtualApiKeysResponses];
+
+export type CreateVirtualApiKeyData = {
+    body: {
+        name: string;
+        expiresAt?: unknown;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
+        modelRouterEnabled?: boolean;
+        modelRouterProviderApiKeys?: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
+        chatApiKeyId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/llm-virtual-keys';
+};
+
+export type CreateVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateVirtualApiKeyError = CreateVirtualApiKeyErrors[keyof CreateVirtualApiKeyErrors];
+
+export type CreateVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        chatApiKeyId: string | null;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        expiresAt: string | null;
+        modelRouterEnabled: boolean;
+        createdAt: string;
+        lastUsedAt: string | null;
+        value: string;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+    };
+};
+
+export type CreateVirtualApiKeyResponse = CreateVirtualApiKeyResponses[keyof CreateVirtualApiKeyResponses];
 
 export type GetVirtualApiKeysData = {
     body?: never;
@@ -44336,7 +44453,8 @@ export type GetVirtualApiKeysResponses = {
      */
     200: Array<{
         id: string;
-        chatApiKeyId: string;
+        organizationId: string;
+        chatApiKeyId: string | null;
         name: string;
         secretId: string;
         tokenStart: string;
@@ -44351,7 +44469,7 @@ export type GetVirtualApiKeysResponses = {
 
 export type GetVirtualApiKeysResponse = GetVirtualApiKeysResponses[keyof GetVirtualApiKeysResponses];
 
-export type CreateVirtualApiKeyData = {
+export type CreateProviderVirtualApiKeyData = {
     body: {
         name: string;
         expiresAt?: unknown;
@@ -44370,7 +44488,7 @@ export type CreateVirtualApiKeyData = {
     url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys';
 };
 
-export type CreateVirtualApiKeyErrors = {
+export type CreateProviderVirtualApiKeyErrors = {
     /**
      * Default Response
      */
@@ -44433,15 +44551,16 @@ export type CreateVirtualApiKeyErrors = {
     };
 };
 
-export type CreateVirtualApiKeyError = CreateVirtualApiKeyErrors[keyof CreateVirtualApiKeyErrors];
+export type CreateProviderVirtualApiKeyError = CreateProviderVirtualApiKeyErrors[keyof CreateProviderVirtualApiKeyErrors];
 
-export type CreateVirtualApiKeyResponses = {
+export type CreateProviderVirtualApiKeyResponses = {
     /**
      * Default Response
      */
     200: {
         id: string;
-        chatApiKeyId: string;
+        organizationId: string;
+        chatApiKeyId: string | null;
         name: string;
         secretId: string;
         tokenStart: string;
@@ -44465,16 +44584,15 @@ export type CreateVirtualApiKeyResponses = {
     };
 };
 
-export type CreateVirtualApiKeyResponse = CreateVirtualApiKeyResponses[keyof CreateVirtualApiKeyResponses];
+export type CreateProviderVirtualApiKeyResponse = CreateProviderVirtualApiKeyResponses[keyof CreateProviderVirtualApiKeyResponses];
 
 export type DeleteVirtualApiKeyData = {
     body?: never;
     path: {
-        chatApiKeyId: string;
         id: string;
     };
     query?: never;
-    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+    url: '/api/llm-virtual-keys/{id}';
 };
 
 export type DeleteVirtualApiKeyErrors = {
@@ -44566,11 +44684,10 @@ export type UpdateVirtualApiKeyData = {
         }>;
     };
     path: {
-        chatApiKeyId: string;
         id: string;
     };
     query?: never;
-    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+    url: '/api/llm-virtual-keys/{id}';
 };
 
 export type UpdateVirtualApiKeyErrors = {
@@ -44644,7 +44761,8 @@ export type UpdateVirtualApiKeyResponses = {
      */
     200: {
         id: string;
-        chatApiKeyId: string;
+        organizationId: string;
+        chatApiKeyId: string | null;
         name: string;
         secretId: string;
         tokenStart: string;
@@ -44668,6 +44786,209 @@ export type UpdateVirtualApiKeyResponses = {
 };
 
 export type UpdateVirtualApiKeyResponse = UpdateVirtualApiKeyResponses[keyof UpdateVirtualApiKeyResponses];
+
+export type DeleteProviderVirtualApiKeyData = {
+    body?: never;
+    path: {
+        chatApiKeyId: string;
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+};
+
+export type DeleteProviderVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteProviderVirtualApiKeyError = DeleteProviderVirtualApiKeyErrors[keyof DeleteProviderVirtualApiKeyErrors];
+
+export type DeleteProviderVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteProviderVirtualApiKeyResponse = DeleteProviderVirtualApiKeyResponses[keyof DeleteProviderVirtualApiKeyResponses];
+
+export type UpdateProviderVirtualApiKeyData = {
+    body: {
+        name: string;
+        expiresAt?: unknown;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
+        modelRouterEnabled?: boolean;
+        modelRouterProviderApiKeys?: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
+    };
+    path: {
+        chatApiKeyId: string;
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-provider-api-keys/{chatApiKeyId}/virtual-keys/{id}';
+};
+
+export type UpdateProviderVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateProviderVirtualApiKeyError = UpdateProviderVirtualApiKeyErrors[keyof UpdateProviderVirtualApiKeyErrors];
+
+export type UpdateProviderVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        chatApiKeyId: string | null;
+        name: string;
+        secretId: string;
+        tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        expiresAt: string | null;
+        modelRouterEnabled: boolean;
+        createdAt: string;
+        lastUsedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+    };
+};
+
+export type UpdateProviderVirtualApiKeyResponse = UpdateProviderVirtualApiKeyResponses[keyof UpdateProviderVirtualApiKeyResponses];
 
 export type VllmChatCompletionsWithDefaultAgentData = {
     body: VllmChatCompletionRequestInput;

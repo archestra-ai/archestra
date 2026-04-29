@@ -7,7 +7,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
-import { AgentModel, ModelModel } from "@/models";
+import { AgentModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { LLMProvider } from "@/types";
 import {
@@ -43,7 +43,10 @@ import { openaiToGemini } from "../adapters/gemini-openai-translator";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
 import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import { virtualKeyRateLimiter } from "../llm-proxy-auth";
+import {
+  validateVirtualApiKeyToken,
+  virtualKeyRateLimiter,
+} from "../llm-proxy-auth";
 import {
   handleLLMProxy,
   type LLMProxyAuthOverride,
@@ -302,13 +305,6 @@ async function routeChatCompletion(
 
 async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const body = request.body as Azure.Types.ResponsesRequest;
-  if (body.stream === true) {
-    throw new ApiError(
-      501,
-      "Streaming is not yet available through the model router Responses API.",
-    );
-  }
-
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
   if (params.agentId) {
@@ -459,11 +455,7 @@ async function getModelRouterVirtualKeyAuth(
 
   await virtualKeyRateLimiter.check(request.ip);
   try {
-    const { VirtualApiKeyModel } = await import("@/models");
-    const resolved = await VirtualApiKeyModel.validateToken(bearerToken);
-    if (!resolved) {
-      throw new ApiError(401, "Invalid virtual API key");
-    }
+    const resolved = await validateVirtualApiKeyToken(bearerToken);
     if (!resolved.virtualKey.modelRouterEnabled) {
       throw new ApiError(
         401,
@@ -489,7 +481,19 @@ async function getModelRouterVirtualKeyAuth(
     };
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
-      await virtualKeyRateLimiter.recordFailure(request.ip);
+      try {
+        await virtualKeyRateLimiter.recordFailure(request.ip);
+      } catch (rateLimitError) {
+        logger.warn(
+          {
+            error:
+              rateLimitError instanceof Error
+                ? rateLimitError.message
+                : String(rateLimitError),
+          },
+          "[ModelRouterProxy] Failed to record virtual key auth failure",
+        );
+      }
     }
     throw error;
   }

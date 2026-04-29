@@ -1,5 +1,5 @@
 {
-  "id": "6f0dc257-bffd-434e-aa93-d095f015be3e",
+  "id": "5e741486-1c13-4cc5-97c2-2278c7b9ea78",
   "prevId": "3962e239-e49a-4648-bd19-17f62c295695",
   "version": "7",
   "dialect": "postgresql",
@@ -8514,11 +8514,17 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "chat_api_key_id": {
           "name": "chat_api_key_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",
@@ -8584,6 +8590,21 @@
           "columns": [
             {
               "expression": "chat_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_virtual_api_key_organization_id": {
+          "name": "idx_virtual_api_key_organization_id",
+          "columns": [
+            {
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

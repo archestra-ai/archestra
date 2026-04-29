@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Cohere, OpenAi } from "@/types";
+import { stringifyTextContent } from "./openai-translator-utils";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -42,21 +43,21 @@ export function openaiToCohere(req: OpenAiRequest): {
     if (message.role === "system" || message.role === "developer") {
       messages.push({
         role: "system",
-        content: stringifyContent(message.content),
+        content: stringifyTextContent(message.content),
       });
       continue;
     }
     if (message.role === "user") {
       messages.push({
         role: "user",
-        content: stringifyContent(message.content),
+        content: stringifyTextContent(message.content),
       });
       continue;
     }
     if (message.role === "assistant") {
       messages.push({
         role: "assistant",
-        content: stringifyContent(message.content),
+        content: stringifyTextContent(message.content),
         ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}),
       });
       continue;
@@ -65,7 +66,7 @@ export function openaiToCohere(req: OpenAiRequest): {
       messages.push({
         role: "tool",
         tool_call_id: message.tool_call_id ?? "",
-        content: stringifyContent(message.content),
+        content: stringifyTextContent(message.content),
       });
     }
   }
@@ -188,26 +189,4 @@ export function mapCohereFinishReason(
   if (reason === "TOOL_CALL") return "tool_calls";
   if (reason === "ERROR") return "content_filter";
   return "stop";
-}
-
-function stringifyContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .map((part) => {
-      if (
-        typeof part === "object" &&
-        part !== null &&
-        "type" in part &&
-        part.type === "text" &&
-        "text" in part &&
-        typeof part.text === "string"
-      ) {
-        return part.text;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
 }

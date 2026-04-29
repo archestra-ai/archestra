@@ -44,8 +44,8 @@ export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
 /** Schema for virtual key with parent API key info (for org-wide listing) */
 export const VirtualApiKeyWithParentInfoSchema =
   SelectVirtualApiKeySchema.extend({
-    parentKeyName: z.string(),
-    parentKeyProvider: z.string(),
+    parentKeyName: z.string().nullable(),
+    parentKeyProvider: z.string().nullable(),
     parentKeyBaseUrl: z.string().nullable(),
     teams: z.array(VirtualApiKeyTeamSchema),
     authorName: z.string().nullable(),

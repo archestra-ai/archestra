@@ -41,7 +41,7 @@ type ModelRouterProviderApiKeyRoutingInfo = ModelRouterProviderApiKeyInfo & {
 
 type VirtualApiKeyAccessContext = {
   id: string;
-  chatApiKeyId: string;
+  chatApiKeyId: string | null;
   organizationId: string;
   scope: ResourceVisibilityScope;
   authorId: string | null;
@@ -54,7 +54,8 @@ class VirtualApiKeyModel {
    * Returns the full token value once at creation (never returned again).
    */
   static async create(params: {
-    chatApiKeyId: string;
+    organizationId?: string;
+    chatApiKeyId?: string | null;
     name: string;
     expiresAt?: Date | null;
     scope?: ResourceVisibilityScope;
@@ -70,6 +71,7 @@ class VirtualApiKeyModel {
     modelRouterProviderApiKeys: ModelRouterProviderApiKeyInfo[];
   }> {
     const {
+      organizationId: providedOrganizationId,
       chatApiKeyId,
       name,
       expiresAt,
@@ -82,8 +84,16 @@ class VirtualApiKeyModel {
 
     const tokenValue = generateToken();
     const tokenStart = getTokenStart(tokenValue);
+    const organizationId =
+      providedOrganizationId ??
+      (await getOrganizationIdForParentKey(chatApiKeyId));
+    if (!organizationId) {
+      throw new Error(
+        "VirtualApiKeyModel.create requires organizationId when no parent API key is provided",
+      );
+    }
 
-    const secretName = `virtual-api-key-${chatApiKeyId}-${Date.now()}`;
+    const secretName = `virtual-api-key-${chatApiKeyId ?? "model-router"}-${Date.now()}`;
     const secret = await secretManager().createSecret(
       { token: tokenValue },
       secretName,
@@ -94,7 +104,8 @@ class VirtualApiKeyModel {
       const [createdVirtualKey] = await tx
         .insert(schema.virtualApiKeysTable)
         .values({
-          chatApiKeyId,
+          organizationId,
+          chatApiKeyId: chatApiKeyId ?? null,
           name,
           secretId: secret.id,
           tokenStart,
@@ -121,7 +132,7 @@ class VirtualApiKeyModel {
     });
 
     logger.info(
-      { chatApiKeyId, virtualKeyId: virtualKey.id, scope },
+      { chatApiKeyId, organizationId, virtualKeyId: virtualKey.id, scope },
       "VirtualApiKeyModel.create: virtual key created",
     );
 
@@ -269,18 +280,11 @@ class VirtualApiKeyModel {
       .select({
         id: schema.virtualApiKeysTable.id,
         chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
-        organizationId: schema.llmProviderApiKeysTable.organizationId,
+        organizationId: schema.virtualApiKeysTable.organizationId,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
       })
       .from(schema.virtualApiKeysTable)
-      .innerJoin(
-        schema.llmProviderApiKeysTable,
-        eq(
-          schema.virtualApiKeysTable.chatApiKeyId,
-          schema.llmProviderApiKeysTable.id,
-        ),
-      )
       .where(eq(schema.virtualApiKeysTable.id, id))
       .limit(1);
 
@@ -376,7 +380,7 @@ class VirtualApiKeyModel {
     }
 
     const whereConditions = [
-      eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+      eq(schema.virtualApiKeysTable.organizationId, organizationId),
     ];
 
     if (!isAdmin) {
@@ -406,6 +410,7 @@ class VirtualApiKeyModel {
       db
         .select({
           id: schema.virtualApiKeysTable.id,
+          organizationId: schema.virtualApiKeysTable.organizationId,
           chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
           name: schema.virtualApiKeysTable.name,
           secretId: schema.virtualApiKeysTable.secretId,
@@ -421,7 +426,7 @@ class VirtualApiKeyModel {
           parentKeyBaseUrl: schema.llmProviderApiKeysTable.baseUrl,
         })
         .from(schema.virtualApiKeysTable)
-        .innerJoin(
+        .leftJoin(
           schema.llmProviderApiKeysTable,
           eq(
             schema.virtualApiKeysTable.chatApiKeyId,
@@ -435,7 +440,7 @@ class VirtualApiKeyModel {
       db
         .select({ total: count() })
         .from(schema.virtualApiKeysTable)
-        .innerJoin(
+        .leftJoin(
           schema.llmProviderApiKeysTable,
           eq(
             schema.virtualApiKeysTable.chatApiKeyId,
@@ -477,7 +482,7 @@ class VirtualApiKeyModel {
    */
   static async validateToken(tokenValue: string): Promise<{
     virtualKey: SelectVirtualApiKey;
-    chatApiKey: LlmProviderApiKey;
+    chatApiKey: LlmProviderApiKey | null;
   } | null> {
     const tokenStart = getTokenStart(tokenValue);
     const candidates = await db
@@ -500,21 +505,27 @@ class VirtualApiKeyModel {
 
       const storedToken = (secret.secret as { token?: string })?.token;
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
-        const [chatApiKey] = await db
-          .select()
-          .from(schema.llmProviderApiKeysTable)
-          .where(eq(schema.llmProviderApiKeysTable.id, virtualKey.chatApiKeyId))
-          .limit(1);
+        let chatApiKey: LlmProviderApiKey | null = null;
+        if (virtualKey.chatApiKeyId) {
+          const [parentKey] = await db
+            .select()
+            .from(schema.llmProviderApiKeysTable)
+            .where(
+              eq(schema.llmProviderApiKeysTable.id, virtualKey.chatApiKeyId),
+            )
+            .limit(1);
 
-        if (!chatApiKey) {
-          logger.warn(
-            {
-              virtualKeyId: virtualKey.id,
-              chatApiKeyId: virtualKey.chatApiKeyId,
-            },
-            "Virtual key references non-existent chat API key",
-          );
-          return null;
+          if (!parentKey) {
+            logger.warn(
+              {
+                virtualKeyId: virtualKey.id,
+                chatApiKeyId: virtualKey.chatApiKeyId,
+              },
+              "Virtual key references non-existent chat API key",
+            );
+            return null;
+          }
+          chatApiKey = parentKey;
         }
 
         VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
@@ -652,7 +663,7 @@ class VirtualApiKeyModel {
       const conditions = [];
       if (organizationId) {
         conditions.push(
-          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.virtualApiKeysTable.organizationId, organizationId),
         );
       }
       if (chatApiKeyId) {
@@ -664,13 +675,6 @@ class VirtualApiKeyModel {
       const rows = await db
         .select({ id: schema.virtualApiKeysTable.id })
         .from(schema.virtualApiKeysTable)
-        .innerJoin(
-          schema.llmProviderApiKeysTable,
-          eq(
-            schema.virtualApiKeysTable.chatApiKeyId,
-            schema.llmProviderApiKeysTable.id,
-          ),
-        )
         .where(conditions.length > 0 ? and(...conditions) : undefined);
 
       return rows.map((row) => row.id);
@@ -682,13 +686,12 @@ class VirtualApiKeyModel {
             SELECT DISTINCT vat.virtual_api_key_id AS id
             FROM virtual_api_key_team vat
             INNER JOIN virtual_api_keys vak ON vat.virtual_api_key_id = vak.id
-            INNER JOIN chat_api_keys cak ON vak.chat_api_key_id = cak.id
             WHERE vak.scope = 'team'
               AND vat.team_id IN (${sql.join(
                 userTeamIds.map((id) => sql`${id}`),
                 sql`, `,
               )})
-              ${organizationId ? sql`AND cak.organization_id = ${organizationId}` : sql``}
+              ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
               ${chatApiKeyId ? sql`AND vak.chat_api_key_id = ${chatApiKeyId}` : sql``}
           `
         : null;
@@ -696,17 +699,15 @@ class VirtualApiKeyModel {
     const result = await db.execute<{ id: string }>(sql`
       SELECT vak.id
       FROM virtual_api_keys vak
-      INNER JOIN chat_api_keys cak ON vak.chat_api_key_id = cak.id
       WHERE vak.scope = 'org'
-        ${organizationId ? sql`AND cak.organization_id = ${organizationId}` : sql``}
+        ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
         ${chatApiKeyId ? sql`AND vak.chat_api_key_id = ${chatApiKeyId}` : sql``}
       UNION
       SELECT vak.id
       FROM virtual_api_keys vak
-      INNER JOIN chat_api_keys cak ON vak.chat_api_key_id = cak.id
       WHERE vak.scope = 'personal'
         AND vak.author_id = ${userId}
-        ${organizationId ? sql`AND cak.organization_id = ${organizationId}` : sql``}
+        ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
         ${chatApiKeyId ? sql`AND vak.chat_api_key_id = ${chatApiKeyId}` : sql``}
       ${teamAccessCondition ? sql`UNION ${teamAccessCondition}` : sql``}
     `);
@@ -804,6 +805,22 @@ function constantTimeEqual(a: string, b: string): boolean {
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
   return timingSafeEqual(bufA, bufB);
+}
+
+async function getOrganizationIdForParentKey(
+  chatApiKeyId: string | null | undefined,
+): Promise<string | null> {
+  if (!chatApiKeyId) {
+    return null;
+  }
+
+  const [parentKey] = await db
+    .select({ organizationId: schema.llmProviderApiKeysTable.organizationId })
+    .from(schema.llmProviderApiKeysTable)
+    .where(eq(schema.llmProviderApiKeysTable.id, chatApiKeyId))
+    .limit(1);
+
+  return parentKey?.organizationId ?? null;
 }
 
 async function syncVirtualApiKeyTeams(params: {

@@ -16,6 +16,7 @@ import {
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
+import Link from "next/link";
 import {
   Fragment,
   memo,
@@ -892,7 +893,13 @@ export function ChatMessages({
                                 </video>
                               )}
                               {isPdf && (
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                <Link
+                                  href={filePart.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={filePart.filename}
+                                  className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                                >
                                   <svg
                                     className="h-6 w-6 text-red-500"
                                     fill="currentColor"
@@ -904,10 +911,16 @@ export function ChatMessages({
                                   <span className="font-medium truncate">
                                     {filePart.filename || "PDF Document"}
                                   </span>
-                                </div>
+                                </Link>
                               )}
                               {!isImage && !isVideo && !isPdf && (
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                <a
+                                  href={filePart.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={filePart.filename}
+                                  className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                                >
                                   <svg
                                     className="h-5 w-5 text-muted-foreground"
                                     fill="none"
@@ -925,7 +938,7 @@ export function ChatMessages({
                                   <span className="truncate">
                                     {filePart.filename || "Attached file"}
                                   </span>
-                                </div>
+                                </a>
                               )}
                             </div>
                           </div>

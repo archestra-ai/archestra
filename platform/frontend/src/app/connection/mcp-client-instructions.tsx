@@ -40,6 +40,7 @@ interface McpClientInstructionsProps {
   client: ConnectClient;
   gatewayId: string;
   gatewaySlug: string;
+  gatewayName: string;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
   baseUrl: string;
 }
@@ -56,6 +57,7 @@ export function McpClientInstructions({
   client,
   gatewayId,
   gatewaySlug,
+  gatewayName,
   baseUrl,
 }: McpClientInstructionsProps) {
   const supportedAuth =
@@ -74,7 +76,9 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = toMcpServerSlug(appName);
+  const serverName = gatewayName.trim()
+    ? gatewayName.trim().toLowerCase().replace(/\s+/g, "_")
+    : toMcpServerSlug(appName);
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   return (
@@ -211,11 +215,7 @@ function McpBody({
                   )}
                 </div>
                 {s.buildCommand && (
-                  <TerminalBlock
-                    title={s.terminalTitle ?? mcp.configFile}
-                    language={s.language ?? mcp.language}
-                    code={s.buildCommand(ctaParams)}
-                  />
+                  <TerminalBlock code={s.buildCommand(ctaParams)} />
                 )}
               </div>
             </li>
@@ -254,11 +254,7 @@ function McpBody({
           ))}
         </ol>
 
-        <TerminalBlock
-          title={mcp.configFile}
-          language={mcp.language}
-          code={configCode}
-        />
+        <TerminalBlock code={configCode} />
       </div>
     </div>
   );

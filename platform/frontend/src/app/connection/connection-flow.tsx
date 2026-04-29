@@ -222,7 +222,7 @@ export function ConnectionFlow({
         metadata={connectionBaseUrls}
         value={baseUrl}
         onChange={setUserBaseUrl}
-        hideWhenSingleAndUnannotated
+        disabled={!clientId}
       />
 
       {/* Step 2 — MCP Gateway */}
@@ -255,6 +255,7 @@ export function ConnectionFlow({
               client={client}
               gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
+              gatewayName={selectedMcp.name}
               baseUrl={baseUrl}
             />
           )}

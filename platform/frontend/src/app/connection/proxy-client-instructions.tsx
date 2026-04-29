@@ -222,11 +222,7 @@ export function ProxyClientInstructions({
       ) : isCompatible && instruction ? (
         instruction.kind === "snippet" ? (
           <div className="space-y-2">
-            <TerminalBlock
-              title={`${client.label} · ${providerLabel}`}
-              language={instruction.language}
-              code={instruction.code}
-            />
+            <TerminalBlock code={instruction.code} />
             {instruction.note && <ProxyNote note={instruction.note} />}
           </div>
         ) : (

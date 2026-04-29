@@ -168,13 +168,6 @@ export const AgentDetailOutputSchema = z.object({
   suggestedPrompts: z
     .array(AgentSuggestedPromptOutputSchema)
     .describe("Configured suggested prompts."),
-  modelRouterAllowedModelIds: z
-    .array(z.string())
-    .nullable()
-    .optional()
-    .describe(
-      "Provider-qualified model IDs exposed by the model router, or null to expose all available models.",
-    ),
 });
 
 export const KnowledgeSourceOutputSchema = z.object({
@@ -206,7 +199,6 @@ export async function handleCreateResource<
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
     toolAssignmentMode?: ToolAssignmentMode;
-    modelRouterAllowedModelIds?: string[] | null;
   },
 >(params: {
   args: TArgs;
@@ -285,12 +277,6 @@ export async function handleCreateResource<
     }
     if (args.toolAssignmentMode !== undefined) {
       createParams.toolAssignmentMode = args.toolAssignmentMode;
-    }
-    if (
-      targetAgentType === "llm_proxy" &&
-      args.modelRouterAllowedModelIds !== undefined
-    ) {
-      createParams.modelRouterAllowedModelIds = args.modelRouterAllowedModelIds;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -462,7 +448,6 @@ export async function handleEditResource<
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
     toolAssignmentMode?: ToolAssignmentMode;
-    modelRouterAllowedModelIds?: string[] | null;
   },
 >(params: {
   args: TArgs;
@@ -522,12 +507,6 @@ export async function handleEditResource<
     }
     if (args.toolAssignmentMode !== undefined) {
       updateData.toolAssignmentMode = args.toolAssignmentMode;
-    }
-    if (
-      expectedType === "llm_proxy" &&
-      args.modelRouterAllowedModelIds !== undefined
-    ) {
-      updateData.modelRouterAllowedModelIds = args.modelRouterAllowedModelIds;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

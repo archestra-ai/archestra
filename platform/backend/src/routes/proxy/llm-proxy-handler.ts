@@ -118,6 +118,12 @@ export interface LLMProxyContext<TRequest> {
   teamIds?: string[];
 }
 
+export type LLMProxyAuthOverride = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  authenticated: boolean;
+};
+
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
     return messages.length;
@@ -248,25 +254,34 @@ export async function handleLLMProxy<
   let perKeyBaseUrl: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  const authOverride = (
+    request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
+  ).llmProxyAuthOverride;
 
   // 1. Try JWKS auth if the agent has an external identity provider configured
-  const jwksResult = await attemptJwksAuth(
-    request,
-    resolvedAgent,
-    providerName,
-  );
-  if (jwksResult) {
-    wasJwksAuthenticated = true;
-    apiKey = jwksResult.apiKey;
-    perKeyBaseUrl = jwksResult.baseUrl;
-    if (jwksResult.userId) {
-      userId = jwksResult.userId;
-      resolvedUser = await UserModel.getById(userId);
+  if (authOverride) {
+    apiKey = authOverride.apiKey;
+    perKeyBaseUrl = authOverride.baseUrl;
+    wasVirtualKeyResolved = authOverride.authenticated;
+  } else {
+    const jwksResult = await attemptJwksAuth(
+      request,
+      resolvedAgent,
+      providerName,
+    );
+    if (jwksResult) {
+      wasJwksAuthenticated = true;
+      apiKey = jwksResult.apiKey;
+      perKeyBaseUrl = jwksResult.baseUrl;
+      if (jwksResult.userId) {
+        userId = jwksResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
     }
   }
 
   // 2. Extract API key from headers if not already resolved via JWKS
-  if (!wasJwksAuthenticated) {
+  if (!authOverride && !wasJwksAuthenticated) {
     apiKey = provider.extractApiKey(headers);
   }
 
@@ -277,6 +292,7 @@ export async function handleLLMProxy<
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
   if (
     !wasJwksAuthenticated &&
+    !authOverride &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {

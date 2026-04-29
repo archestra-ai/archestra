@@ -14,8 +14,7 @@ export type ModelRouterResolution = {
 
 export async function resolveModelRoute(params: {
   requestedModel: string;
-  allowedProvider?: SupportedProvider;
-  allowedModelIds?: string[] | null;
+  allowedProviders?: Set<SupportedProvider>;
 }): Promise<ModelRouterResolution> {
   const requestedModel = params.requestedModel.trim();
   if (!requestedModel) {
@@ -25,12 +24,12 @@ export async function resolveModelRoute(params: {
   const explicit = parseProviderQualifiedModel(requestedModel);
   if (explicit) {
     if (
-      params.allowedProvider &&
-      explicit.provider !== params.allowedProvider
+      params.allowedProviders &&
+      !params.allowedProviders.has(explicit.provider)
     ) {
       throw new ApiError(
         400,
-        `Model "${requestedModel}" is scoped to provider "${explicit.provider}", but the authenticated key is scoped to "${params.allowedProvider}".`,
+        `Model "${requestedModel}" is scoped to provider "${explicit.provider}", but the Model Router virtual key is not mapped to that provider.`,
       );
     }
 
@@ -40,7 +39,6 @@ export async function resolveModelRoute(params: {
     });
 
     if (providerMatches.length === 1) {
-      assertModelAllowed(providerMatches[0], params.allowedModelIds);
       return toResolution(providerMatches[0], requestedModel);
     }
   }
@@ -97,23 +95,4 @@ export function sortRoutableModels(models: Model[]): Model[] {
     if (providerCompare !== 0) return providerCompare;
     return a.modelId.localeCompare(b.modelId);
   });
-}
-
-function assertModelAllowed(
-  model: Model,
-  allowedModelIds: string[] | null | undefined,
-): void {
-  if (allowedModelIds == null) {
-    return;
-  }
-
-  const routableModelId = buildRoutableModelId(model);
-  if (allowedModelIds.includes(routableModelId)) {
-    return;
-  }
-
-  throw new ApiError(
-    404,
-    `Model "${routableModelId}" is not enabled for this LLM proxy.`,
-  );
 }

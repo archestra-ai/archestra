@@ -8,6 +8,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { LLMProvider } from "@/types";
 import {
   ApiError,
@@ -42,11 +43,11 @@ import { openaiToGemini } from "../adapters/gemini-openai-translator";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { virtualKeyRateLimiter } from "../llm-proxy-auth";
 import {
-  validateVirtualApiKey,
-  virtualKeyRateLimiter,
-} from "../llm-proxy-auth";
-import { handleLLMProxy } from "../llm-proxy-handler";
+  handleLLMProxy,
+  type LLMProxyAuthOverride,
+} from "../llm-proxy-handler";
 import {
   buildRoutableModelId,
   resolveModelRoute,
@@ -60,6 +61,21 @@ type OpenAiWireProvider = LLMProvider<
   unknown,
   OpenAi.Types.ChatCompletionsHeaders
 >;
+
+type ModelRouterMappedProviderKey = {
+  provider: SupportedProvider;
+  chatApiKeyId: string;
+  chatApiKeyName: string;
+  secretId: string | null;
+  baseUrl: string | null;
+};
+
+type ModelRouterVirtualKeyAuth = {
+  providerApiKeysByProvider: Map<
+    SupportedProvider,
+    ModelRouterMappedProviderKey
+  >;
+};
 
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
@@ -118,12 +134,11 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const allowedProvider = await getVirtualKeyProviderScope(request);
-      const agent = await AgentModel.getDefaultProfile();
+      const auth = await getModelRouterVirtualKeyAuth(request);
+      await AgentModel.getDefaultProfile();
       return reply.send(
         await listModels({
-          allowedProvider,
-          allowedModelIds: agent?.modelRouterAllowedModelIds,
+          providers: getMappedProviders(auth),
         }),
       );
     },
@@ -144,12 +159,11 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const allowedProvider = await getVirtualKeyProviderScope(request);
-      const agent = await getModelRouterAgent(request.params.agentId);
+      const auth = await getModelRouterVirtualKeyAuth(request);
+      await getModelRouterAgent(request.params.agentId);
       return reply.send(
         await listModels({
-          allowedProvider,
-          allowedModelIds: agent.modelRouterAllowedModelIds,
+          providers: getMappedProviders(auth),
         }),
       );
     },
@@ -250,14 +264,15 @@ async function routeChatCompletion(
 ) {
   const body = request.body as OpenAi.Types.ChatCompletionsRequest;
   const params = request.params as { agentId?: string };
-  const agent = params.agentId
-    ? await getModelRouterAgent(params.agentId)
-    : await AgentModel.getDefaultProfile();
-  const allowedProvider = await getVirtualKeyProviderScope(request);
+  if (params.agentId) {
+    await getModelRouterAgent(params.agentId);
+  } else {
+    await AgentModel.getDefaultProfile();
+  }
+  const auth = await getModelRouterVirtualKeyAuth(request);
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
-    allowedProvider,
-    allowedModelIds: agent?.modelRouterAllowedModelIds,
+    allowedProviders: getMappedProviders(auth),
   });
   const routedBody = {
     ...body,
@@ -277,6 +292,11 @@ async function routeChatCompletion(
     provider: resolution.provider,
     body: routedBody,
   });
+  await applyModelRouterAuthOverride({
+    request,
+    auth,
+    provider: resolution.provider,
+  });
 
   return handleLLMProxy(provider.body, request, reply, provider.adapter);
 }
@@ -292,14 +312,15 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
 
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
-  const agent = params.agentId
-    ? await getModelRouterAgent(params.agentId)
-    : await AgentModel.getDefaultProfile();
-  const allowedProvider = await getVirtualKeyProviderScope(request);
+  if (params.agentId) {
+    await getModelRouterAgent(params.agentId);
+  } else {
+    await AgentModel.getDefaultProfile();
+  }
+  const auth = await getModelRouterVirtualKeyAuth(request);
   const resolution = await resolveModelRoute({
     requestedModel: chatBody.model,
-    allowedProvider,
-    allowedModelIds: agent?.modelRouterAllowedModelIds,
+    allowedProviders: getMappedProviders(auth),
   });
   const routedChatBody = {
     ...chatBody,
@@ -309,6 +330,11 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const provider = getOpenAiChatProviderForResolution({
     provider: resolution.provider,
     body: routedChatBody,
+  });
+  await applyModelRouterAuthOverride({
+    request,
+    auth,
+    provider: resolution.provider,
   });
 
   return handleLLMProxy(
@@ -380,27 +406,20 @@ function getOpenAiChatProviderForResolution(params: {
   );
 }
 
-async function listModels(params: {
-  allowedProvider: SupportedProvider | undefined;
-  allowedModelIds: string[] | null | undefined;
-}) {
-  const allModels = await ModelModel.findAll({
-    provider: params.allowedProvider,
-  });
-  const allowedSet =
-    params.allowedModelIds == null ? null : new Set(params.allowedModelIds);
+async function listModels(params: { providers: Set<SupportedProvider> }) {
+  const allModels = await ModelModel.findAll({});
   const chatModels = sortRoutableModels(
     allModels.filter((model) => {
+      if (!params.providers.has(model.provider)) {
+        return false;
+      }
       if (!ModelModel.supportsTextChat(model)) {
         return false;
       }
       if (!modelRouterSupportedProviders.has(model.provider)) {
         return false;
       }
-      if (!allowedSet) {
-        return true;
-      }
-      return allowedSet.has(buildRoutableModelId(model));
+      return true;
     }),
   );
 
@@ -426,21 +445,49 @@ async function getModelRouterAgent(agentId: string) {
   return agent;
 }
 
-async function getVirtualKeyProviderScope(
+async function getModelRouterVirtualKeyAuth(
   request: FastifyRequest,
-): Promise<SupportedProvider | undefined> {
+): Promise<ModelRouterVirtualKeyAuth> {
   const rawAuthHeader = request.raw.headers.authorization;
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1];
   if (!bearerToken || !hasArchestraTokenPrefix(bearerToken)) {
-    return undefined;
+    throw new ApiError(
+      401,
+      "Model router requests require a Model Router-enabled virtual API key.",
+    );
   }
 
   await virtualKeyRateLimiter.check(request.ip);
   try {
-    const provider = await inferProviderForVirtualKey(bearerToken);
-    await validateVirtualApiKey(bearerToken, provider);
-    return provider;
+    const { VirtualApiKeyModel } = await import("@/models");
+    const resolved = await VirtualApiKeyModel.validateToken(bearerToken);
+    if (!resolved) {
+      throw new ApiError(401, "Invalid virtual API key");
+    }
+    if (!resolved.virtualKey.modelRouterEnabled) {
+      throw new ApiError(
+        401,
+        "Model router requests require a Model Router-enabled virtual API key.",
+      );
+    }
+
+    const mappings =
+      await VirtualApiKeyModel.getModelRouterProviderApiKeysForRouting(
+        resolved.virtualKey.id,
+      );
+    if (mappings.length === 0) {
+      throw new ApiError(
+        401,
+        "Model Router virtual key has no provider API keys configured.",
+      );
+    }
+
+    return {
+      providerApiKeysByProvider: new Map(
+        mappings.map((mapping) => [mapping.provider, mapping]),
+      ),
+    };
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
       await virtualKeyRateLimiter.recordFailure(request.ip);
@@ -449,14 +496,39 @@ async function getVirtualKeyProviderScope(
   }
 }
 
-async function inferProviderForVirtualKey(
-  tokenValue: string,
-): Promise<SupportedProvider> {
-  // Load lazily to keep this proxy route independent from model index cycles.
-  const { VirtualApiKeyModel } = await import("@/models");
-  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
-  if (!resolved) {
-    throw new ApiError(401, "Invalid virtual API key");
+function getMappedProviders(
+  auth: ModelRouterVirtualKeyAuth,
+): Set<SupportedProvider> {
+  return new Set(auth.providerApiKeysByProvider.keys());
+}
+
+async function applyModelRouterAuthOverride(params: {
+  request: FastifyRequest;
+  auth: ModelRouterVirtualKeyAuth;
+  provider: SupportedProvider;
+}): Promise<void> {
+  const mappedApiKey = params.auth.providerApiKeysByProvider.get(
+    params.provider,
+  );
+  if (!mappedApiKey) {
+    throw new ApiError(
+      400,
+      `Model Router virtual key is not mapped to provider "${params.provider}".`,
+    );
   }
-  return resolved.chatApiKey.provider;
+
+  const apiKey = mappedApiKey.secretId
+    ? ((await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)) as
+        | string
+        | undefined)
+    : undefined;
+  (
+    params.request as FastifyRequest & {
+      llmProxyAuthOverride?: LLMProxyAuthOverride;
+    }
+  ).llmProxyAuthOverride = {
+    apiKey,
+    baseUrl: mappedApiKey.baseUrl ?? undefined,
+    authenticated: true,
+  };
 }

@@ -60,7 +60,6 @@ function makeBuiltInAgent(params: {
     incomingEmailAllowedDomain: null,
     llmApiKeyId: null,
     llmModel: null,
-    modelRouterAllowedModelIds: null,
     passthroughHeaders: null,
     toolAssignmentMode: "manual",
     identityProviderId: null,

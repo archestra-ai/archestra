@@ -253,6 +253,126 @@ describe("virtualApiKeysRoutes", () => {
     expect(body.lastUsedAt).toBeNull();
   });
 
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys stores model router provider mappings", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const anthropicSecret = await makeSecret({
+      secret: { apiKey: "sk-anthropic" },
+    });
+    const openaiKey = await makeLlmProviderApiKey(
+      organizationId,
+      openaiSecret.id,
+      { provider: "openai", name: "OpenAI Parent" },
+    );
+    const anthropicKey = await makeLlmProviderApiKey(
+      organizationId,
+      anthropicSecret.id,
+      { provider: "anthropic", name: "Anthropic Parent" },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${openaiKey.id}/virtual-keys`,
+      payload: {
+        name: "router-key",
+        modelRouterEnabled: true,
+        modelRouterProviderApiKeys: [
+          { provider: "openai", chatApiKeyId: openaiKey.id },
+          { provider: "anthropic", chatApiKeyId: anthropicKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      modelRouterEnabled: true,
+      modelRouterProviderApiKeys: expect.arrayContaining([
+        {
+          provider: "openai",
+          chatApiKeyId: openaiKey.id,
+          chatApiKeyName: "OpenAI Parent",
+        },
+        {
+          provider: "anthropic",
+          chatApiKeyId: anthropicKey.id,
+          chatApiKeyName: "Anthropic Parent",
+        },
+      ]),
+    });
+  });
+
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects duplicate model router provider mappings", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const firstSecret = await makeSecret({ secret: { apiKey: "sk-first" } });
+    const secondSecret = await makeSecret({ secret: { apiKey: "sk-second" } });
+    const firstKey = await makeLlmProviderApiKey(
+      organizationId,
+      firstSecret.id,
+      { provider: "openai", name: "First OpenAI" },
+    );
+    const secondKey = await makeLlmProviderApiKey(
+      organizationId,
+      secondSecret.id,
+      { provider: "openai", name: "Second OpenAI" },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${firstKey.id}/virtual-keys`,
+      payload: {
+        name: "router-key",
+        modelRouterEnabled: true,
+        modelRouterProviderApiKeys: [
+          { provider: "openai", chatApiKeyId: firstKey.id },
+          { provider: "openai", chatApiKeyId: secondKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      'Only one provider API key can be mapped for provider "openai"',
+    );
+  });
+
+  test("POST /api/llm-provider-api-keys/:id/virtual-keys rejects provider mismatches in model router mappings", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const openaiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      name: "OpenAI Parent",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${openaiKey.id}/virtual-keys`,
+      payload: {
+        name: "router-key",
+        modelRouterEnabled: true,
+        modelRouterProviderApiKeys: [
+          { provider: "anthropic", chatApiKeyId: openaiKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      'is for provider "openai", not "anthropic"',
+    );
+  });
+
   test("GET /api/llm-provider-api-keys/:id/virtual-keys lists keys without exposing token values", async ({
     makeLlmProviderApiKey,
     makeSecret,

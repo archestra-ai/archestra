@@ -29,7 +29,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 ### Model Router Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/model-router/{llm-proxy-id}`
-- **Authentication**: Pass a provider API key or an Archestra virtual API key in the `Authorization` header as `Bearer <key>`
+- **Authentication**: Pass a Model Router-enabled virtual API key in the `Authorization` header as `Bearer <key>`. See [Model Router Virtual Keys](/docs/platform-llm-proxy-authentication#model-router-virtual-keys).
 
 ### Model Resolution
 
@@ -37,7 +37,7 @@ Use provider-qualified model IDs from `/models` for deterministic routing, for e
 
 The prefix before `:` is the provider. The value after `:` is the provider's native model ID, so provider model IDs can still contain slashes or colons.
 
-Each LLM Proxy exposes all model-router-compatible text models by default, including providers that use native request formats such as Anthropic, Bedrock, Gemini, and Cohere. Archestra translates between OpenAI request/response formats and the provider-native formats before forwarding the request. To constrain a proxy, edit it and turn off **Expose all available models** in the Model Router section, then choose the allowed models. The `/models`, `/responses`, and `/chat/completions` routes all enforce that list.
+The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
 ## OpenAI
 

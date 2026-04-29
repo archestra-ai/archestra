@@ -1,5 +1,5 @@
 {
-  "id": "04384ab5-9081-4096-861e-0f7c90915987",
+  "id": "6f0dc257-bffd-434e-aa93-d095f015be3e",
   "prevId": "3962e239-e49a-4648-bd19-17f62c295695",
   "version": "7",
   "dialect": "postgresql",
@@ -773,12 +773,6 @@
         "llm_model": {
           "name": "llm_model",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model_router_allowed_model_ids": {
-          "name": "model_router_allowed_model_ids",
-          "type": "text[]",
           "primaryKey": false,
           "notNull": false
         },
@@ -8337,6 +8331,95 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.virtual_api_key_model_router_api_key": {
+      "name": "virtual_api_key_model_router_api_key",
+      "schema": "",
+      "columns": {
+        "virtual_api_key_id": {
+          "name": "virtual_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_api_key_id": {
+          "name": "chat_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_virtual_api_key_model_router_api_key_id": {
+          "name": "idx_virtual_api_key_model_router_api_key_id",
+          "columns": [
+            {
+              "expression": "chat_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "virtual_api_key_model_router_api_key_virtual_api_key_id_virtual_api_keys_id_fk": {
+          "name": "virtual_api_key_model_router_api_key_virtual_api_key_id_virtual_api_keys_id_fk",
+          "tableFrom": "virtual_api_key_model_router_api_key",
+          "tableTo": "virtual_api_keys",
+          "columnsFrom": [
+            "virtual_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "virtual_api_key_model_router_api_key_chat_api_key_id_chat_api_keys_id_fk": {
+          "name": "virtual_api_key_model_router_api_key_chat_api_key_id_chat_api_keys_id_fk",
+          "tableFrom": "virtual_api_key_model_router_api_key",
+          "tableTo": "chat_api_keys",
+          "columnsFrom": [
+            "chat_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "virtual_api_key_model_router_api_key_virtual_api_key_id_provider_pk": {
+          "name": "virtual_api_key_model_router_api_key_virtual_api_key_id_provider_pk",
+          "columns": [
+            "virtual_api_key_id",
+            "provider"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.virtual_api_key_team": {
       "name": "virtual_api_key_team",
       "schema": "",
@@ -8473,6 +8556,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "model_router_enabled": {
+          "name": "model_router_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

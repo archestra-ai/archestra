@@ -1,1 +1,0 @@
-ALTER TABLE "agents" ADD COLUMN "model_router_allowed_model_ids" text[];

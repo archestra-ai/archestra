@@ -21,19 +21,7 @@ import {
 } from "./agent-resources";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
-const ModelRouterAllowedModelIdsSchema = z
-  .array(z.string())
-  .nullable()
-  .describe(
-    "Provider-qualified model IDs exposed by the model router, such as openai:gpt-5.4 or anthropic:claude-opus-4-6-20250918. Use null or omit to expose all available models.",
-  );
-
-const CreateLlmProxyToolArgsSchema = CreateBaseToolArgsSchema.extend({
-  modelRouterAllowedModelIds:
-    ModelRouterAllowedModelIdsSchema.optional().describe(
-      "Limit the OpenAI-compatible model router /models list for this LLM proxy. Omit or set null to expose all available models.",
-    ),
-});
+const CreateLlmProxyToolArgsSchema = CreateBaseToolArgsSchema;
 
 const GetLlmProxyToolArgsSchema = GetResourceToolArgsSchema.extend({
   id: GetResourceToolArgsSchema.shape.id.describe(
@@ -74,10 +62,6 @@ const EditLlmProxyToolArgsSchema = z
       .array(UuidIdSchema)
       .optional()
       .describe("Replace the teams attached to a team-scoped LLM proxy."),
-    modelRouterAllowedModelIds:
-      ModelRouterAllowedModelIdsSchema.optional().describe(
-        "Replace the set of model router models exposed by this LLM proxy. Set null to expose all available models.",
-      ),
   })
   .strict();
 

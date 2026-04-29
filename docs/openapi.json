@@ -35004,13 +35004,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "modelRouterAllowedModelIds": {
-                            "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
                           "identityProviderId": {
                             "nullable": true,
                             "type": "string"
@@ -35341,7 +35334,6 @@
                           "incomingEmailAllowedDomain",
                           "llmApiKeyId",
                           "llmModel",
-                          "modelRouterAllowedModelIds",
                           "identityProviderId",
                           "passthroughHeaders",
                           "toolExposureMode",
@@ -35724,13 +35716,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "modelRouterAllowedModelIds": {
-                    "nullable": true,
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
@@ -35989,13 +35974,6 @@
                     "llmModel": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "modelRouterAllowedModelIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -36327,7 +36305,6 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
-                    "modelRouterAllowedModelIds",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -36742,13 +36719,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "modelRouterAllowedModelIds": {
-                        "nullable": true,
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
                       "identityProviderId": {
                         "nullable": true,
                         "type": "string"
@@ -37079,7 +37049,6 @@
                       "incomingEmailAllowedDomain",
                       "llmApiKeyId",
                       "llmModel",
-                      "modelRouterAllowedModelIds",
                       "identityProviderId",
                       "passthroughHeaders",
                       "toolExposureMode",
@@ -37434,13 +37403,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterAllowedModelIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -37771,7 +37733,6 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
-                    "modelRouterAllowedModelIds",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -38126,13 +38087,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterAllowedModelIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -38463,7 +38417,6 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
-                    "modelRouterAllowedModelIds",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -38830,13 +38783,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterAllowedModelIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -39167,7 +39113,6 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
-                    "modelRouterAllowedModelIds",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -39502,13 +39447,6 @@
                     "nullable": true,
                     "type": "string"
                   },
-                  "modelRouterAllowedModelIds": {
-                    "nullable": true,
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
@@ -39772,13 +39710,6 @@
                     "llmModel": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "modelRouterAllowedModelIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -40110,7 +40041,6 @@
                     "incomingEmailAllowedDomain",
                     "llmApiKeyId",
                     "llmModel",
-                    "modelRouterAllowedModelIds",
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
@@ -163480,6 +163410,9 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "modelRouterEnabled": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -163521,6 +163454,50 @@
                           "authorName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "modelRouterProviderApiKeys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "provider": {
+                                  "type": "string",
+                                  "enum": [
+                                    "openai",
+                                    "gemini",
+                                    "anthropic",
+                                    "bedrock",
+                                    "cohere",
+                                    "cerebras",
+                                    "mistral",
+                                    "perplexity",
+                                    "groq",
+                                    "xai",
+                                    "openrouter",
+                                    "vllm",
+                                    "ollama",
+                                    "zhipuai",
+                                    "deepseek",
+                                    "minimax",
+                                    "azure"
+                                  ]
+                                },
+                                "chatApiKeyId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "chatApiKeyName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "provider",
+                                "chatApiKeyId",
+                                "chatApiKeyName"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -163532,13 +163509,15 @@
                           "scope",
                           "authorId",
                           "expiresAt",
+                          "modelRouterEnabled",
                           "createdAt",
                           "lastUsedAt",
                           "parentKeyName",
                           "parentKeyProvider",
                           "parentKeyBaseUrl",
                           "teams",
-                          "authorName"
+                          "authorName",
+                          "modelRouterProviderApiKeys"
                         ],
                         "additionalProperties": false
                       }
@@ -163899,6 +163878,9 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "modelRouterEnabled": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -163918,6 +163900,7 @@
                       "scope",
                       "authorId",
                       "expiresAt",
+                      "modelRouterEnabled",
                       "createdAt",
                       "lastUsedAt"
                     ],
@@ -164199,6 +164182,50 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "modelRouterEnabled": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "modelRouterProviderApiKeys": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "azure"
+                          ]
+                        },
+                        "chatApiKeyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "chatApiKeyId"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -164268,6 +164295,9 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "modelRouterEnabled": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -164302,6 +164332,50 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "modelRouterProviderApiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "chatApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "chatApiKeyName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "chatApiKeyId",
+                          "chatApiKeyName"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -164313,11 +164387,13 @@
                     "scope",
                     "authorId",
                     "expiresAt",
+                    "modelRouterEnabled",
                     "createdAt",
                     "lastUsedAt",
                     "value",
                     "teams",
-                    "authorName"
+                    "authorName",
+                    "modelRouterProviderApiKeys"
                   ],
                   "additionalProperties": false
                 }
@@ -164598,6 +164674,50 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "modelRouterEnabled": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "modelRouterProviderApiKeys": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "azure"
+                          ]
+                        },
+                        "chatApiKeyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "chatApiKeyId"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -164677,6 +164797,9 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "modelRouterEnabled": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -164708,6 +164831,50 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "modelRouterProviderApiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "chatApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "chatApiKeyName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "chatApiKeyId",
+                          "chatApiKeyName"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -164719,10 +164886,12 @@
                     "scope",
                     "authorId",
                     "expiresAt",
+                    "modelRouterEnabled",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
-                    "authorName"
+                    "authorName",
+                    "modelRouterProviderApiKeys"
                   ],
                   "additionalProperties": false
                 }

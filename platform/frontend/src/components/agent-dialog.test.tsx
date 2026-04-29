@@ -366,7 +366,6 @@ describe.skip("AgentDialog", () => {
           suggestedPrompts: [],
           llmApiKeyId: null,
           llmModel: null,
-          modelRouterAllowedModelIds: null,
           considerContextUntrusted: false,
           identityProviderId: null,
           builtInAgentConfig: null,

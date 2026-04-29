@@ -2,6 +2,8 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
+  type SupportedProvider,
+  SupportedProvidersSchema,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -31,6 +33,15 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
   expiresAt: z.coerce.date().nullable().optional(),
   scope: ResourceVisibilityScopeSchema.default("org"),
   teams: z.array(z.string()).default([]),
+  modelRouterEnabled: z.boolean().default(false),
+  modelRouterProviderApiKeys: z
+    .array(
+      z.object({
+        provider: SupportedProvidersSchema,
+        chatApiKeyId: z.string().uuid(),
+      }),
+    )
+    .default([]),
 });
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -149,6 +160,11 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         isAdmin: isVirtualKeyAdmin,
       });
+      await validateModelRouterProviderApiKeys({
+        enabled: body.modelRouterEnabled,
+        mappings: body.modelRouterProviderApiKeys,
+        organizationId,
+      });
 
       const count = await VirtualApiKeyModel.countByChatApiKeyId(
         params.chatApiKeyId,
@@ -161,17 +177,30 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const { virtualKey, value, teams, authorName } =
-        await VirtualApiKeyModel.create({
-          chatApiKeyId: params.chatApiKeyId,
-          name: body.name,
-          expiresAt: body.expiresAt ?? null,
-          scope: body.scope,
-          authorId: user.id,
-          teamIds: body.teams,
-        });
+      const {
+        virtualKey,
+        value,
+        teams,
+        authorName,
+        modelRouterProviderApiKeys,
+      } = await VirtualApiKeyModel.create({
+        chatApiKeyId: params.chatApiKeyId,
+        name: body.name,
+        expiresAt: body.expiresAt ?? null,
+        scope: body.scope,
+        authorId: user.id,
+        teamIds: body.teams,
+        modelRouterEnabled: body.modelRouterEnabled,
+        modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
+      });
 
-      return reply.send({ ...virtualKey, value, teams, authorName });
+      return reply.send({
+        ...virtualKey,
+        value,
+        teams,
+        authorName,
+        modelRouterProviderApiKeys,
+      });
     },
   );
 
@@ -225,6 +254,11 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         isAdmin: isVirtualKeyAdmin,
       });
+      await validateModelRouterProviderApiKeys({
+        enabled: body.modelRouterEnabled,
+        mappings: body.modelRouterProviderApiKeys,
+        organizationId,
+      });
 
       const updatedVirtualKey = await VirtualApiKeyModel.update({
         id: params.id,
@@ -233,6 +267,8 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scope: body.scope,
         authorId: user.id,
         teamIds: body.teams,
+        modelRouterEnabled: body.modelRouterEnabled,
+        modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
       });
 
       if (!updatedVirtualKey) {
@@ -241,11 +277,14 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const visibilityMetadata =
         await VirtualApiKeyModel.getVisibilityForVirtualApiKeyIds([params.id]);
+      const modelRouterProviderApiKeys =
+        await VirtualApiKeyModel.getModelRouterProviderApiKeys(params.id);
 
       return reply.send({
         ...updatedVirtualKey,
         teams: visibilityMetadata.teams.get(params.id) ?? [],
         authorName: visibilityMetadata.authorName.get(params.id) ?? null,
+        modelRouterProviderApiKeys,
       });
     },
   );
@@ -340,6 +379,45 @@ async function validateVirtualKeyScope(params: {
       throw new ApiError(
         403,
         "You can only assign virtual keys to teams you are a member of",
+      );
+    }
+  }
+}
+
+async function validateModelRouterProviderApiKeys(params: {
+  enabled: boolean;
+  mappings: Array<{ provider: SupportedProvider; chatApiKeyId: string }>;
+  organizationId: string;
+}): Promise<void> {
+  const { enabled, mappings, organizationId } = params;
+  if (!enabled) {
+    return;
+  }
+  if (mappings.length === 0) {
+    throw new ApiError(
+      400,
+      "Select at least one provider API key for Model Router use.",
+    );
+  }
+
+  const providers = new Set<SupportedProvider>();
+  for (const mapping of mappings) {
+    if (providers.has(mapping.provider)) {
+      throw new ApiError(
+        400,
+        `Only one provider API key can be mapped for provider "${mapping.provider}".`,
+      );
+    }
+    providers.add(mapping.provider);
+
+    const apiKey = await LlmProviderApiKeyModel.findById(mapping.chatApiKeyId);
+    if (!apiKey || apiKey.organizationId !== organizationId) {
+      throw new ApiError(404, "LLM provider API key not found");
+    }
+    if (apiKey.provider !== mapping.provider) {
+      throw new ApiError(
+        400,
+        `Provider API key "${apiKey.name}" is for provider "${apiKey.provider}", not "${mapping.provider}".`,
       );
     }
   }

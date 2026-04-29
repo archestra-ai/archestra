@@ -10738,7 +10738,6 @@ export type GetAgentsResponses = {
             incomingEmailAllowedDomain: string | null;
             llmApiKeyId: string | null;
             llmModel: string | null;
-            modelRouterAllowedModelIds: Array<string> | null;
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
@@ -10834,7 +10833,6 @@ export type CreateAgentData = {
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
-        modelRouterAllowedModelIds?: Array<string> | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
@@ -10955,7 +10953,6 @@ export type CreateAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
-        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11138,7 +11135,6 @@ export type GetAllAgentsResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
-        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11304,7 +11300,6 @@ export type GetDefaultMcpGatewayResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
-        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11470,7 +11465,6 @@ export type GetDefaultLlmProxyResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
-        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11723,7 +11717,6 @@ export type GetAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
-        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -11810,7 +11803,6 @@ export type UpdateAgentData = {
         incomingEmailAllowedDomain?: string | null;
         llmApiKeyId?: string | null;
         llmModel?: string | null;
-        modelRouterAllowedModelIds?: Array<string> | null;
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
@@ -11933,7 +11925,6 @@ export type UpdateAgentResponses = {
         incomingEmailAllowedDomain: string | null;
         llmApiKeyId: string | null;
         llmModel: string | null;
-        modelRouterAllowedModelIds: Array<string> | null;
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -44175,6 +44166,7 @@ export type GetAllVirtualApiKeysResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             expiresAt: string | null;
+            modelRouterEnabled: boolean;
             createdAt: string;
             lastUsedAt: string | null;
             parentKeyName: string;
@@ -44185,6 +44177,11 @@ export type GetAllVirtualApiKeysResponses = {
                 name: string;
             }>;
             authorName: string | null;
+            modelRouterProviderApiKeys: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+                chatApiKeyId: string;
+                chatApiKeyName: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -44286,6 +44283,7 @@ export type GetVirtualApiKeysResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
     }>;
@@ -44299,6 +44297,11 @@ export type CreateVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
+        modelRouterEnabled?: boolean;
+        modelRouterProviderApiKeys?: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
     };
     path: {
         chatApiKeyId: string;
@@ -44385,6 +44388,7 @@ export type CreateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
@@ -44393,6 +44397,11 @@ export type CreateVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
     };
 };
 
@@ -44490,6 +44499,11 @@ export type UpdateVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
+        modelRouterEnabled?: boolean;
+        modelRouterProviderApiKeys?: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
     };
     path: {
         chatApiKeyId: string;
@@ -44577,6 +44591,7 @@ export type UpdateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        modelRouterEnabled: boolean;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -44584,6 +44599,11 @@ export type UpdateVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
     };
 };
 

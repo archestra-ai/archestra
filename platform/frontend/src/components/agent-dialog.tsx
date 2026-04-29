@@ -618,11 +618,6 @@ export function AgentDialog({
     useState(false);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
-  const [modelRouterExposeAllModels, setModelRouterExposeAllModels] =
-    useState(true);
-  const [modelRouterAllowedModelIds, setModelRouterAllowedModelIds] = useState<
-    string[]
-  >([]);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   const [identityProviderId, setIdentityProviderId] = useState<
@@ -704,12 +699,6 @@ export function AgentDialog({
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(agentData.llmApiKeyId);
         setLlmModel(agentData.llmModel);
-        setModelRouterExposeAllModels(
-          agentData.modelRouterAllowedModelIds == null,
-        );
-        setModelRouterAllowedModelIds(
-          agentData.modelRouterAllowedModelIds ?? [],
-        );
         // Reset delegation targets - will be populated by the next useEffect when data loads
         setSelectedDelegationTargetIds([]);
         setAssignedTeamIds(agentData.teams.map((t) => t.id));
@@ -744,8 +733,6 @@ export function AgentDialog({
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(null);
         setLlmModel(null);
-        setModelRouterExposeAllModels(true);
-        setModelRouterAllowedModelIds([]);
         setSelectedDelegationTargetIds([]);
         setAssignedTeamIds([]);
         setLabels([]);
@@ -804,20 +791,6 @@ export function AgentDialog({
     }
     return null;
   }, [llmModel, modelsByProvider]);
-
-  const modelRouterModelOptions = useMemo(() => {
-    return Object.entries(modelsByProvider)
-      .flatMap(([provider, models = []]) => {
-        const supportedProvider = provider as SupportedProvider;
-        return models.map((model) => ({
-          value: `${supportedProvider}:${model.id}`,
-          label: `${
-            providerDisplayNames[supportedProvider] ?? supportedProvider
-          }: ${model.id}`,
-        }));
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [modelsByProvider]);
 
   // Track the provider that was active when auto-selection last ran,
   // so we only auto-select when the provider actually changes (not when the user clears the key).
@@ -919,15 +892,6 @@ export function AgentDialog({
       return;
     }
 
-    if (
-      agentType === "llm_proxy" &&
-      !modelRouterExposeAllModels &&
-      modelRouterAllowedModelIds.length === 0
-    ) {
-      toast.error("Select at least one model or expose all models");
-      return;
-    }
-
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
@@ -1016,11 +980,6 @@ export function AgentDialog({
               passthroughHeaders:
                 passthroughHeaders.length > 0 ? passthroughHeaders : null,
             }),
-            ...(agentType === "llm_proxy" && {
-              modelRouterAllowedModelIds: modelRouterExposeAllModels
-                ? null
-                : modelRouterAllowedModelIds,
-            }),
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -1060,11 +1019,6 @@ export function AgentDialog({
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
-          }),
-          ...(agentType === "llm_proxy" && {
-            modelRouterAllowedModelIds: modelRouterExposeAllModels
-              ? null
-              : modelRouterAllowedModelIds,
           }),
         });
         if (!created) return;
@@ -1160,8 +1114,6 @@ export function AgentDialog({
     supportsAutomaticToolAssignment,
     deleteAgent,
     toolExposureMode,
-    modelRouterExposeAllModels,
-    modelRouterAllowedModelIds,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1823,70 +1775,6 @@ export function AgentDialog({
                       hasNoAvailableTeams={hasNoAvailableTeams}
                       showTeamRequired={!isAdmin}
                     />
-                  )}
-
-                  {agentType === "llm_proxy" && (
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className="text-sm font-semibold">Model Router</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Choose which models this LLM Proxy exposes through its
-                          OpenAI-compatible <code>/models</code> endpoint.
-                        </p>
-                      </div>
-                      <div className="flex items-start gap-3 rounded-md border p-3">
-                        <Checkbox
-                          id="model-router-expose-all-models"
-                          checked={modelRouterExposeAllModels}
-                          disabled={
-                            !canReadLlmModels && modelRouterExposeAllModels
-                          }
-                          onCheckedChange={(checked) =>
-                            setModelRouterExposeAllModels(checked === true)
-                          }
-                          className="mt-0.5"
-                        />
-                        <div className="space-y-1">
-                          <Label
-                            htmlFor="model-router-expose-all-models"
-                            className="font-medium"
-                          >
-                            Expose all available models
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            Existing and newly synced chat models are included.
-                          </p>
-                        </div>
-                      </div>
-                      {!modelRouterExposeAllModels && (
-                        <div className="space-y-2">
-                          <Label>Allowed Models *</Label>
-                          <MultiSelectCombobox
-                            options={modelRouterModelOptions}
-                            value={modelRouterAllowedModelIds}
-                            onChange={setModelRouterAllowedModelIds}
-                            placeholder={
-                              canReadLlmModels
-                                ? "Search models..."
-                                : "Models unavailable"
-                            }
-                            emptyMessage="No models found."
-                            disabled={
-                              !canReadLlmModels ||
-                              modelRouterModelOptions.length === 0
-                            }
-                          />
-                          {!canReadLlmModels && (
-                            <PermissionRequirementHint
-                              message="Model selection is unavailable without"
-                              permissions={[
-                                { resource: "llmModel", action: "read" },
-                              ]}
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
                   )}
 
                   {/* LLM Configuration (Agent and Built-in) */}

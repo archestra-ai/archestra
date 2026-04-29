@@ -14,6 +14,7 @@ import type {
   AgentScope,
   AgentType,
   BuiltInAgentConfig,
+  ToolAssignmentMode,
   ToolExposureMode,
 } from "@/types/agent";
 import identityProvidersTable from "./identity-provider";
@@ -51,6 +52,7 @@ const agentsTable = pgTable(
     name: text("name").notNull(),
     slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
+    isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
@@ -106,6 +108,12 @@ const agentsTable = pgTable(
       .notNull()
       .default("full"),
 
+    /** Whether tools are assigned manually by an admin or automatically derived from catalog labels for MCP gateways */
+    toolAssignmentMode: text("tool_assignment_mode")
+      .$type<ToolAssignmentMode>()
+      .notNull()
+      .default("manual"),
+
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(
       "built_in_agent_config",
@@ -131,6 +139,11 @@ const agentsTable = pgTable(
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    uniqueIndex("agents_personal_gateway_per_member_idx")
+      .on(table.organizationId, table.authorId)
+      .where(
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+      ),
   ],
 );
 

@@ -863,6 +863,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetImpersonableUsers]: { member: ["update"] }, // Role debugger picker — admin-only (better-auth still gates the actual impersonate-user call)
 
   // Member default agent routes - available to all authenticated users (manages their own default agent)
   [RouteId.GetMemberDefaultAgent]: {},

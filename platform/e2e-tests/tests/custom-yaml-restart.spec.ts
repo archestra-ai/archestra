@@ -54,6 +54,7 @@ test.describe("Custom YAML Spec - Server Restart on YAML Edit", () => {
     const installResponse = await installMcpServer(request, {
       name: serverName,
       catalogId: catalog.id,
+      scope: "team",
       teamId: defaultTeam.id,
     });
     const server = await installResponse.json();

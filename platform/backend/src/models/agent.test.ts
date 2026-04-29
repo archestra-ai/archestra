@@ -8,6 +8,9 @@ import {
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import AgentLabelModel from "./agent-label";
+import AgentToolModel from "./agent-tool";
+import McpCatalogLabelModel from "./mcp-catalog-label";
 import MemberModel from "./member";
 import TeamModel from "./team";
 
@@ -1823,74 +1826,6 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("getMCPGatewayOrCreateDefault Junction Table", () => {
-    test("getMCPGatewayOrCreateDefault returns tools from junction table", async ({
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Get the default MCP gateway
-      const defaultAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      // Add tools to the default agent via junction table
-      const tool1 = await makeTool({
-        name: "default_agent_tool_1",
-        description: "Tool 1",
-        parameters: {},
-      });
-      const tool2 = await makeTool({
-        name: "default_agent_tool_2",
-        description: "Tool 2",
-        parameters: {},
-      });
-
-      await makeAgentTool(defaultAgent.id, tool1.id);
-      await makeAgentTool(defaultAgent.id, tool2.id);
-
-      // Get the default MCP gateway again - should include the tools
-      const foundAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      expect(foundAgent).not.toBeNull();
-      expect(foundAgent.tools.length).toBeGreaterThanOrEqual(2);
-
-      const toolNames = foundAgent.tools.map((t) => t.name);
-      expect(toolNames).toContain("default_agent_tool_1");
-      expect(toolNames).toContain("default_agent_tool_2");
-    });
-
-    test("getMCPGatewayOrCreateDefault includes Archestra MCP tools", async ({
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Get the default MCP gateway
-      const defaultAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      // Add regular tools
-      const regularTool = await makeTool({
-        name: "default_regular_tool",
-        description: "Regular tool",
-        parameters: {},
-      });
-
-      // Add Archestra tools
-      const archestraTool = await makeTool({
-        name: "archestra__default_tool",
-        description: "Archestra tool",
-        parameters: {},
-      });
-
-      await makeAgentTool(defaultAgent.id, regularTool.id);
-      await makeAgentTool(defaultAgent.id, archestraTool.id);
-
-      // Get the default MCP gateway again
-      const foundAgent = await AgentModel.getMCPGatewayOrCreateDefault();
-
-      // Verify both regular and Archestra tools are included
-      const toolNames = foundAgent.tools.map((t) => t.name);
-      expect(toolNames).toContain("default_regular_tool");
-      expect(toolNames).toContain("archestra__default_tool");
-    });
-  });
-
   describe("getBuiltInAgent", () => {
     test("returns null when no built-in agent exists", async () => {
       const result = await AgentModel.getBuiltInAgent(
@@ -2338,6 +2273,97 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("ensurePersonalMcpGateway", () => {
+    test("creates a personal mcp_gateway with the expected fields when none exists", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(gateway.name).toBe("My Gateway");
+      expect(gateway.agentType).toBe("mcp_gateway");
+      expect(gateway.scope).toBe("personal");
+      expect(gateway.isPersonalGateway).toBe(true);
+      expect(gateway.authorId).toBe(user.id);
+      expect(gateway.organizationId).toBe(org.id);
+    });
+
+    test("is idempotent within the same (user, org) - second call returns the same row", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const first = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const second = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(first.id).toBe(second.id);
+
+      const allAgents = await AgentModel.findAll(user.id, true);
+      const personalGateways = allAgents.filter(
+        (a) =>
+          a.agentType === "mcp_gateway" &&
+          a.isPersonalGateway === true &&
+          a.authorId === user.id,
+      );
+      expect(personalGateways).toHaveLength(1);
+    });
+  });
+
+  describe("bulkBackfillPersonalMcpGateways", () => {
+    test("creates rows for members who lack a personal gateway and is idempotent on a second call", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const userA = await makeUser();
+      const userB = await makeUser();
+      await makeMember(userA.id, org.id);
+      await makeMember(userB.id, org.id);
+
+      const firstCount = await AgentModel.bulkBackfillPersonalMcpGateways();
+      expect(firstCount).toBeGreaterThanOrEqual(2);
+
+      const gatewayA = await AgentModel.getPersonalMcpGateway(userA.id, org.id);
+      const gatewayB = await AgentModel.getPersonalMcpGateway(userB.id, org.id);
+      expect(gatewayA?.isPersonalGateway).toBe(true);
+      expect(gatewayB?.isPersonalGateway).toBe(true);
+      expect(gatewayA?.id).not.toBe(gatewayB?.id);
+
+      const secondCount = await AgentModel.bulkBackfillPersonalMcpGateways();
+      expect(secondCount).toBe(0);
+
+      const stillGatewayA = await AgentModel.getPersonalMcpGateway(
+        userA.id,
+        org.id,
+      );
+      const stillGatewayB = await AgentModel.getPersonalMcpGateway(
+        userB.id,
+        org.id,
+      );
+      expect(stillGatewayA?.id).toBe(gatewayA?.id);
+      expect(stillGatewayB?.id).toBe(gatewayB?.id);
+    });
+  });
+
   describe("isAgentDefault / deletion guard", () => {
     test("isAgentDefault returns true for a default agent", async ({
       makeUser,
@@ -2659,6 +2685,203 @@ describe("AgentModel", () => {
 
       const fetched = await AgentModel.findById(agent.id);
       expect(fetched?.passthroughHeaders).toEqual(["x-request-id"]);
+    });
+  });
+
+  describe("findByLabels", () => {
+    test("returns an empty array when no pairs are provided", async () => {
+      const result = await AgentModel.findByLabels([]);
+      expect(result).toEqual([]);
+    });
+
+    test("returns agents matching a single (key, value) pair", async ({
+      makeAgent,
+    }) => {
+      const matching = await makeAgent({
+        name: "Matching",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      await makeAgent({
+        name: "Non-matching",
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      const labels = await AgentLabelModel.getLabelsForAgent(matching.id);
+      const result = await AgentModel.findByLabels([
+        { keyId: labels[0].keyId, valueId: labels[0].valueId },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        id: matching.id,
+        name: matching.name,
+        agentType: matching.agentType,
+        toolAssignmentMode: matching.toolAssignmentMode,
+      });
+    });
+
+    test("returns agents matching any pair (OR) without duplicates", async ({
+      makeAgent,
+    }) => {
+      const matchesFirst = await makeAgent({
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      const matchesSecond = await makeAgent({
+        labels: [{ key: "region", value: "emea" }],
+      });
+      const matchesBoth = await makeAgent({
+        labels: [
+          { key: "team", value: "alpha" },
+          { key: "region", value: "emea" },
+        ],
+      });
+      await makeAgent({
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      const labelsA = await AgentLabelModel.getLabelsForAgent(matchesFirst.id);
+      const labelsB = await AgentLabelModel.getLabelsForAgent(matchesSecond.id);
+
+      const result = await AgentModel.findByLabels([
+        { keyId: labelsA[0].keyId, valueId: labelsA[0].valueId },
+        { keyId: labelsB[0].keyId, valueId: labelsB[0].valueId },
+      ]);
+
+      expect(result).toHaveLength(3);
+      expect(new Set(result.map((a) => a.id))).toEqual(
+        new Set([matchesFirst.id, matchesSecond.id, matchesBoth.id]),
+      );
+    });
+  });
+
+  describe("toolAssignmentMode transitions", () => {
+    test("automatic to manual wipes all materialized tools", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeTool({ catalogId: catalog.id });
+      await makeTool({ catalogId: catalog.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
+        { key: "team", value: "alpha" },
+      ]);
+
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "automatic",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toHaveLength(
+        2,
+      );
+
+      await AgentModel.update(gateway.id, { toolAssignmentMode: "manual" });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([]);
+    });
+
+    test("manual to automatic wipes manual assignments and materializes from labels", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const matchingCatalog = await makeInternalMcpCatalog();
+      const toolA1 = await makeTool({ catalogId: matchingCatalog.id });
+      const toolA2 = await makeTool({ catalogId: matchingCatalog.id });
+      await McpCatalogLabelModel.syncCatalogLabels(matchingCatalog.id, [
+        { key: "team", value: "alpha" },
+      ]);
+
+      const otherCatalog = await makeInternalMcpCatalog();
+      const manualTool = await makeTool({ catalogId: otherCatalog.id });
+
+      // Create the gateway in manual mode so create-time reconcile is a no-op,
+      // then manually assign a tool from a non-matching catalog.
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "manual",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      await makeAgentTool(gateway.id, manualTool.id);
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
+        manualTool.id,
+      ]);
+
+      await AgentModel.update(gateway.id, { toolAssignmentMode: "automatic" });
+
+      const toolIds = await AgentToolModel.findToolIdsByAgent(gateway.id);
+      expect(new Set(toolIds)).toEqual(new Set([toolA1.id, toolA2.id]));
+    });
+
+    test("label change while automatic reconciles to the new label set", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalogA = await makeInternalMcpCatalog();
+      const toolA = await makeTool({ catalogId: catalogA.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalogA.id, [
+        { key: "team", value: "alpha" },
+      ]);
+
+      const catalogB = await makeInternalMcpCatalog();
+      const toolB = await makeTool({ catalogId: catalogB.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalogB.id, [
+        { key: "team", value: "beta" },
+      ]);
+
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "automatic",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
+        toolA.id,
+      ]);
+
+      await AgentModel.update(gateway.id, {
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
+        toolB.id,
+      ]);
+    });
+
+    test("label change while manual does not reconcile", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      await makeTool({ catalogId: catalog.id });
+      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
+        { key: "team", value: "beta" },
+      ]);
+
+      const otherCatalog = await makeInternalMcpCatalog();
+      const manualTool = await makeTool({ catalogId: otherCatalog.id });
+
+      const gateway = await makeAgent({
+        agentType: "mcp_gateway",
+        toolAssignmentMode: "manual",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      await makeAgentTool(gateway.id, manualTool.id);
+
+      // Switch labels so they would match the catalog if reconcile were to fire.
+      await AgentModel.update(gateway.id, {
+        labels: [{ key: "team", value: "beta" }],
+      });
+
+      const toolIds = await AgentToolModel.findToolIdsByAgent(gateway.id);
+      expect(toolIds).toEqual([manualTool.id]);
     });
   });
 });

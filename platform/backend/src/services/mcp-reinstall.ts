@@ -130,6 +130,7 @@ export async function autoReinstallServer(
   const reconstructedName = McpServerModel.constructServerName({
     baseName: catalogItem.name,
     serverType: server.serverType,
+    scope: server.scope,
     ownerId: server.ownerId,
     teamId: server.teamId,
   });

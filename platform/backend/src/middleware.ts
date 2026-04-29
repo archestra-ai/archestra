@@ -12,6 +12,7 @@ const ENTERPRISE_CONTACT_MESSAGE =
 
 /**
  * Check if a URL is an enterprise-only route that requires license activation.
+ * @public — exported for testability
  */
 export function isEnterpriseOnlyRoute(url: string): boolean {
   // Identity provider routes

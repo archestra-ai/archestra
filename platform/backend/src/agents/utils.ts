@@ -2,6 +2,7 @@ import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 
 /**
  * Rate limit entry stored in cache
+ * @public — exported for testability
  */
 export interface RateLimitEntry {
   count: number;
@@ -11,7 +12,7 @@ export interface RateLimitEntry {
 /**
  * Rate limit configuration
  */
-export interface RateLimitConfig {
+interface RateLimitConfig {
   /** Rate limit window in milliseconds */
   windowMs: number;
   /** Maximum requests allowed per window */

@@ -1,4 +1,5 @@
 import {
+  IDENTITY_PROVIDER_ID,
   type IdentityProviderFormValues,
   isEntraHostname,
   isOktaHostname,
@@ -8,18 +9,22 @@ export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
 ): IdentityProviderFormValues {
   if (data.providerType !== "oidc" || !data.oidcConfig) {
-    return data;
+    return normalizeAllowedEmailDomains(data);
   }
 
-  const enterpriseManagedCredentials =
-    data.oidcConfig.enterpriseManagedCredentials;
+  const normalizedData = normalizeAllowedEmailDomains(data);
+  const oidcConfig = normalizeOidcIssuerFields(normalizedData);
+  const enterpriseManagedCredentials = oidcConfig.enterpriseManagedCredentials;
   if (!enterpriseManagedCredentials) {
-    return data;
+    return {
+      ...normalizedData,
+      oidcConfig,
+    };
   }
 
   const inferredExchangeType = inferEnterpriseExchangeType({
-    issuer: data.issuer,
-    providerId: data.providerId,
+    issuer: normalizedData.issuer,
+    providerId: normalizedData.providerId,
   });
 
   const hasConfiguredEnterpriseManagedFields = Object.values(
@@ -33,13 +38,16 @@ export function normalizeIdentityProviderFormValues(
   });
 
   if (!hasConfiguredEnterpriseManagedFields) {
-    return data;
+    return {
+      ...normalizedData,
+      oidcConfig,
+    };
   }
 
   return {
-    ...data,
+    ...normalizedData,
     oidcConfig: {
-      ...data.oidcConfig,
+      ...oidcConfig,
       enterpriseManagedCredentials: {
         exchangeStrategy: enterpriseManagedCredentials.exchangeStrategy
           ? enterpriseManagedCredentials.exchangeStrategy
@@ -53,6 +61,45 @@ export function normalizeIdentityProviderFormValues(
           getDefaultSubjectTokenType(inferredExchangeType),
       },
     },
+  };
+}
+
+export function normalizeAllowedEmailDomains(
+  data: IdentityProviderFormValues,
+): IdentityProviderFormValues {
+  if (data.providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
+    return data;
+  }
+
+  return {
+    ...data,
+    domain: "",
+  };
+}
+
+export function normalizeOidcIssuerFields(
+  data: IdentityProviderFormValues,
+): NonNullable<IdentityProviderFormValues["oidcConfig"]> {
+  const oidcConfig = data.oidcConfig;
+  if (!oidcConfig) {
+    throw new Error("OIDC configuration is required");
+  }
+
+  const issuer = data.issuer.trim();
+  const previousIssuer = oidcConfig.issuer?.trim() ?? "";
+  const discoveryEndpoint = oidcConfig.discoveryEndpoint?.trim() ?? "";
+  const defaultPreviousDiscoveryEndpoint = previousIssuer
+    ? getDefaultDiscoveryEndpoint(previousIssuer)
+    : "";
+
+  return {
+    ...oidcConfig,
+    issuer,
+    discoveryEndpoint:
+      !discoveryEndpoint ||
+      discoveryEndpoint === defaultPreviousDiscoveryEndpoint
+        ? getDefaultDiscoveryEndpoint(issuer)
+        : discoveryEndpoint,
   };
 }
 
@@ -92,6 +139,10 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function getDefaultDiscoveryEndpoint(issuer: string): string {
+  return `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
 }
 
 export function getDefaultTokenEndpointAuthentication(

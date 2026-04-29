@@ -8,7 +8,7 @@ import {
 } from "@shared";
 import { allAvailableActions } from "@shared/access-control";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -38,6 +38,7 @@ import {
   useRolesPaginated,
   useUpdateRole,
 } from "@/lib/role.query";
+import { downloadRoleAsJson } from "./role-export";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
@@ -191,6 +192,22 @@ export function RolesList() {
     setEditDialogOpen(true);
   }, []);
 
+  const openDuplicateDialog = useCallback((role: Role) => {
+    // Role names must be lowercase letters, numbers, and underscores only
+    // (validated by better-auth at create time). Make sure the suggested
+    // copy name follows the same rule.
+    const sanitized = role.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    setRoleName(`${sanitized}_copy`);
+    setRoleDescription(
+      role.description ??
+        (role.predefined
+          ? (roleDescriptions[role.name as PredefinedRoleName] ?? "")
+          : ""),
+    );
+    setPermission(role.permission);
+    setCreateDialogOpen(true);
+  }, []);
+
   // Sort: predefined first, then custom
   const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {
     if (a.predefined && !b.predefined) return -1;
@@ -250,6 +267,17 @@ export function RolesList() {
                 setViewPermissionsDialogOpen(true);
               },
             },
+            {
+              icon: <Download className="h-4 w-4" />,
+              label: "Export role",
+              onClick: () => downloadRoleAsJson(role),
+            },
+            {
+              icon: <Copy className="h-4 w-4" />,
+              label: "Duplicate as custom role",
+              permissions: { ac: ["create"] },
+              onClick: () => openDuplicateDialog(role),
+            },
           ];
           return <TableRowActions actions={actions} />;
         }
@@ -260,6 +288,17 @@ export function RolesList() {
             label: "Edit role",
             permissions: { ac: ["update"] },
             onClick: () => openEditDialog(role),
+          },
+          {
+            icon: <Download className="h-4 w-4" />,
+            label: "Export role",
+            onClick: () => downloadRoleAsJson(role),
+          },
+          {
+            icon: <Copy className="h-4 w-4" />,
+            label: "Duplicate role",
+            permissions: { ac: ["create"] },
+            onClick: () => openDuplicateDialog(role),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,

@@ -36,10 +36,12 @@ export const ApiErrorTypeSchema = z.enum([
 export class ApiError extends Error {
   type: z.infer<typeof ApiErrorTypeSchema>;
   statusCode: number;
+  internalCode?: string;
 
-  constructor(statusCode: number, message: string) {
+  constructor(statusCode: number, message: string, internalCode?: string) {
     super(message);
     this.statusCode = statusCode;
+    this.internalCode = internalCode;
 
     switch (statusCode) {
       case 500:

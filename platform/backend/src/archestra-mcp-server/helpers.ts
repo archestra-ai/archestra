@@ -30,7 +30,7 @@ export function isAbortLikeError(error: unknown): boolean {
   return /\baborted?\b/i.test(error.message);
 }
 
-export type SubAgentResult = { id: string; status: string };
+type SubAgentResult = { id: string; status: string };
 export interface ToolAssignmentInput {
   /** Exact tool ID to assign to the target agent. */
   toolId: string;
@@ -42,18 +42,18 @@ export interface ToolAssignmentInput {
   /** Static assignments pin the tool to one installed MCP server. */
   mcpServerId?: string | null;
 }
-export type ToolAssignmentResult = {
+type ToolAssignmentResult = {
   toolId: string;
   status: string;
   error?: string;
 };
-export type ArchestraToolHandler<TSchema extends ZodType = ZodType> = (params: {
+type ArchestraToolHandler<TSchema extends ZodType = ZodType> = (params: {
   args: z.infer<TSchema>;
   context: ArchestraContext;
   toolName: string;
 }) => Promise<CallToolResult>;
 
-export type ArchestraToolDefinition<
+type ArchestraToolDefinition<
   ShortName extends ArchestraToolShortName = ArchestraToolShortName,
   TSchema extends ZodType = ZodType,
 > = {
@@ -214,7 +214,7 @@ export function structuredSuccessResult(
   };
 }
 
-export function createToolDefinition(params: {
+function createToolDefinition(params: {
   name: string;
   title: string;
   description: string;

@@ -11,7 +11,7 @@ import {
 import config from "@/config";
 import type { Organization } from "@/types";
 
-export type ArchestraBrandingState = {
+type ArchestraBrandingState = {
   appName: string | null;
   iconLogo: string | null;
 };

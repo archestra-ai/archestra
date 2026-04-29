@@ -165,6 +165,7 @@ test.describe("Image Pull Secrets", () => {
     const installResponse = await installMcpServer(request, {
       name: `e2e-ips-server-${Date.now()}`,
       catalogId,
+      scope: "team",
       teamId: defaultTeam.id,
     });
     const server = await installResponse.json();

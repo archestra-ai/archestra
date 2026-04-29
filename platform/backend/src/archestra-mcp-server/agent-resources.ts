@@ -12,7 +12,12 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import type { Agent, AgentScope, ToolExposureMode } from "@/types";
+import type {
+  Agent,
+  AgentScope,
+  ToolAssignmentMode,
+  ToolExposureMode,
+} from "@/types";
 import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
@@ -110,7 +115,7 @@ export const GetResourceToolArgsSchema = z
   })
   .strict();
 
-export const AgentToolOutputSchema = z.object({
+const AgentToolOutputSchema = z.object({
   id: z.string().describe("The assigned tool ID."),
   name: z.string().describe("The tool name."),
   description: z.string().nullable().describe("The tool description, if any."),
@@ -130,7 +135,7 @@ export const AgentLabelOutputSchema = z.object({
   value: z.string().describe("The label value."),
 });
 
-export const AgentSuggestedPromptOutputSchema = z.object({
+const AgentSuggestedPromptOutputSchema = z.object({
   summaryTitle: z.string().describe("The short title shown in the chat UI."),
   prompt: z.string().describe("The suggested prompt text."),
 });
@@ -193,6 +198,7 @@ export async function handleCreateResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    toolAssignmentMode?: ToolAssignmentMode;
   },
 >(params: {
   args: TArgs;
@@ -268,6 +274,9 @@ export async function handleCreateResource<
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.toolAssignmentMode !== undefined) {
+      createParams.toolAssignmentMode = args.toolAssignmentMode;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -438,6 +447,7 @@ export async function handleEditResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    toolAssignmentMode?: ToolAssignmentMode;
   },
 >(params: {
   args: TArgs;
@@ -494,6 +504,9 @@ export async function handleEditResource<
     if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.toolAssignmentMode !== undefined) {
+      updateData.toolAssignmentMode = args.toolAssignmentMode;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);
@@ -562,7 +575,7 @@ export async function handleEditResource<
   }
 }
 
-export async function validateKnowledgeAssignments(params: {
+async function validateKnowledgeAssignments(params: {
   organizationId?: string;
   knowledgeBaseIds?: string[];
   connectorIds?: string[];

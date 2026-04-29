@@ -103,7 +103,7 @@ export async function discoverOidcTokenEndpoint(
   return metadata?.token_endpoint ?? null;
 }
 
-export function parseJsonField<T>(value: unknown): T | null {
+function parseJsonField<T>(value: unknown): T | null {
   if (!value) return null;
   if (typeof value === "object") return value as T;
   if (typeof value === "string") {

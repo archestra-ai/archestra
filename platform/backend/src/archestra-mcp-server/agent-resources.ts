@@ -115,7 +115,7 @@ export const GetResourceToolArgsSchema = z
   })
   .strict();
 
-export const AgentToolOutputSchema = z.object({
+const AgentToolOutputSchema = z.object({
   id: z.string().describe("The assigned tool ID."),
   name: z.string().describe("The tool name."),
   description: z.string().nullable().describe("The tool description, if any."),
@@ -135,7 +135,7 @@ export const AgentLabelOutputSchema = z.object({
   value: z.string().describe("The label value."),
 });
 
-export const AgentSuggestedPromptOutputSchema = z.object({
+const AgentSuggestedPromptOutputSchema = z.object({
   summaryTitle: z.string().describe("The short title shown in the chat UI."),
   prompt: z.string().describe("The suggested prompt text."),
 });
@@ -575,7 +575,7 @@ export async function handleEditResource<
   }
 }
 
-export async function validateKnowledgeAssignments(params: {
+async function validateKnowledgeAssignments(params: {
   organizationId?: string;
   knowledgeBaseIds?: string[];
   connectorIds?: string[];

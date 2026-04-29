@@ -618,6 +618,7 @@ function unwrapSingle<T>(result: unknown): T | undefined {
  * <code>, <pre>, <a>, <ul>, <ol>, <li>, <h1>, <h2>, <blockquote>.
  * @-mentions appear as `<a data-asana-gid="...">` often with EMPTY text;
  * we preserve a marker `[@asana:gid]` so the reference is not silently lost.
+ * @public — exported for testability
  */
 export function extractAsanaHtml(html: string): string {
   if (!html) return "";

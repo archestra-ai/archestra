@@ -63,6 +63,7 @@ export async function seedDefaultUserAndOrg(
   return user;
 }
 
+/** @public — exported for testability */
 export async function syncBuiltInAgents(): Promise<void> {
   const organizations = await getOrganizationsForBuiltInAgentSync();
 

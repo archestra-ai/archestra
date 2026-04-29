@@ -38,6 +38,7 @@ import { errorMessage, isSlackDmChannel } from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
+ * @public — exported for testability
  */
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
@@ -1474,6 +1475,7 @@ async function getDefaultOrganizationId(): Promise<string> {
  * MS Teams DM channel IDs can be 100+ chars. Long session IDs overflow the
  * 128-char Prometheus exemplar label budget, so we hash identifiers that
  * would push the total past a safe length.
+ * @public — exported for testability
  */
 export function buildChatOpsSessionId(
   providerId: string,
@@ -1513,7 +1515,7 @@ function stripBotFooter(text: string): string {
  * Tolerant matching: case-insensitive, ignores spaces.
  * E.g., "AgentPeter", "agent peter", "agentpeter" all match "Agent Peter".
  *
- * @internal Exported for testing
+ * @public — exported for testability
  */
 export function matchesAgentName(input: string, agentName: string): boolean {
   const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
@@ -1526,7 +1528,7 @@ export function matchesAgentName(input: string, agentName: string): boolean {
  * Handles "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
  * Returns matched length or null if no match.
  *
- * @internal Exported for testing
+ * @public — exported for testability
  */
 export function findTolerantMatchLength(
   text: string,

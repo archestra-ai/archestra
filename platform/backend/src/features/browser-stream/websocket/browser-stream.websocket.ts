@@ -10,7 +10,7 @@ import { AgentModel, ConversationModel } from "@/models";
 
 const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
 
-export type BrowserStreamSubscription = {
+type BrowserStreamSubscription = {
   conversationId: string;
   agentId: string;
   userContext: BrowserUserContext;

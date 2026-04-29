@@ -107,7 +107,7 @@ async function fetchPlatformPodSpec(
   }
 }
 
-export function resetPlatformPodSpecCache(): void {
+function resetPlatformPodSpecCache(): void {
   platformPodSpecCache = { fetched: false, spec: null };
 }
 
@@ -178,11 +178,14 @@ const tolerationsFetcher = createPlatformPodSpecFetcher<k8s.V1Toleration[]>({
 });
 
 export const fetchPlatformPodNodeSelector = nodeSelectorFetcher.fetch;
+/** @public — exported for testability */
 export const getCachedPlatformNodeSelector = nodeSelectorFetcher.getCached;
+/** @public — exported for testability */
 export const resetPlatformNodeSelectorCache = nodeSelectorFetcher.resetCache;
 
 export const fetchPlatformPodTolerations = tolerationsFetcher.fetch;
-export const getCachedPlatformTolerations = tolerationsFetcher.getCached;
+const getCachedPlatformTolerations = tolerationsFetcher.getCached;
+/** @public — exported for testability */
 export const resetPlatformTolerationsCache = tolerationsFetcher.resetCache;
 
 interface K8sDeploymentOptions {

@@ -152,7 +152,7 @@ const uiResourceCache = new LRUCacheManager<ToolUiResourceData | null>({
   defaultTtl: UI_RESOURCE_CACHE_TTL_MS,
 });
 
-/** Exported for test cleanup only. */
+/** @public — exported for testability (test cleanup) */
 export function clearUiResourceCache(): void {
   uiResourceCache.clear();
 }
@@ -188,6 +188,7 @@ function getToolCacheKey(
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
+/** @public — exported for testability */
 export const __test = {
   setCachedClient(cacheKey: string, client: Client, ttl?: number) {
     clientCache.set(cacheKey, client, ttl);
@@ -447,6 +448,7 @@ export function closeChatMcpClient(
  * @param organizationId - The organization ID for token creation
  * @param conversationId - Optional conversation ID for per-conversation browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
+ * @public — exported for testability
  */
 export async function getChatMcpClient(
   agentId: string,
@@ -1215,6 +1217,7 @@ export async function getChatMcpTools({
  * Converts the rich output of `executeMcpTool` into a plain text model output.
  * Strips UI-only fields (structuredContent, rawContent, _meta) so the LLM
  * only receives the plain-text `content` summary (SEP-1865).
+ * @public — exported for testability
  */
 export function mcpToolToModelOutput({
   output,

@@ -230,12 +230,11 @@ export const IdentityProviderFormSchema = z
     issuer: z.string().min(1, "Issuer is required"),
     domain: z
       .string()
-      .min(1, "Allowed email domains are required")
       .refine(
         (value) => {
           const domains = parseAllowedIdentityProviderDomains(value);
           return (
-            domains.length > 0 &&
+            domains.length === 0 ||
             domains.every((domain) => DOMAIN_VALIDATION_REGEX.test(domain))
           );
         },

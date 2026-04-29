@@ -92,7 +92,7 @@ async function expandQuery(params: {
   return deduped;
 }
 
-export { expandQuery, type ExpandedQuery };
+export { expandQuery };
 
 // ===== Internal constants =====
 

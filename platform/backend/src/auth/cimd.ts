@@ -33,6 +33,7 @@ export function isCimdClientId(clientId: string): boolean {
 
 /**
  * Fetch and validate a CIMD metadata document from the client_id URL.
+ * @public — exported for testability
  */
 export async function fetchAndValidateCimdDocument(
   clientIdUrl: string,
@@ -139,6 +140,7 @@ export async function ensureCimdClientRegistered(
 
 // ===  Internal helpers ===
 
+/** @public — exported for testability */
 export class CimdError extends Error {
   constructor(message: string) {
     super(message);
@@ -160,6 +162,7 @@ const cimdCache = new LRUCacheManager<boolean>({
   defaultTtl: CACHE_TTL_MS,
 });
 
+/** @public — exported for testability */
 export function validateCimdDocument(
   clientIdUrl: string,
   document: unknown,

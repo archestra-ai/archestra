@@ -127,7 +127,8 @@ export function ensureEncryptionKeyAvailable(): void {
 }
 
 /**
- * Reset the cached encryption key (for testing only).
+ * Reset the cached encryption key.
+ * @public — exported for testability
  */
 export function _resetCachedKey(): void {
   cachedKey = null;

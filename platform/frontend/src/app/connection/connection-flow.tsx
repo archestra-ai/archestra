@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { ClientGrid } from "./client-grid";
+import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import {
   resolveEffectiveId,
@@ -51,10 +51,16 @@ export function ConnectionFlow({
   const updateUrlParams = useUpdateUrlParams();
 
   const { data: mcpGateways } = useProfiles({
-    filters: { agentTypes: ["profile", "mcp_gateway"] },
+    filters: {
+      agentTypes: ["profile", "mcp_gateway"],
+      excludeOtherPersonalAgents: true,
+    },
   });
   const { data: llmProxies } = useProfiles({
-    filters: { agentTypes: ["profile", "llm_proxy"] },
+    filters: {
+      agentTypes: ["profile", "llm_proxy"],
+      excludeOtherPersonalAgents: true,
+    },
   });
 
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -154,7 +160,6 @@ export function ConnectionFlow({
 
   const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
 
-  const clientState: StepState = "active";
   const mcpState: StepState = !clientId
     ? "todo"
     : isOpen("mcp")
@@ -169,19 +174,11 @@ export function ConnectionFlow({
   return (
     <div className="grid gap-3.5">
       {/* Step 1 — Client */}
-      <StepCard
-        title="Select your client"
-        state={clientState}
-        expanded
-        pinned
-        hideStatus
-      >
-        <ClientGrid
-          clients={visibleClients}
-          selected={clientId}
-          onSelect={selectClient}
-        />
-      </StepCard>
+      <ClientPicker
+        clients={visibleClients}
+        selected={clientId}
+        onSelect={selectClient}
+      />
 
       {/* Step 2 — MCP Gateway */}
       {canReadMcpGateway && (

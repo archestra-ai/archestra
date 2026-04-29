@@ -20,17 +20,18 @@ import { jwksValidator } from "@/services/jwks-validator";
 
 export const JWT_BEARER_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:jwt-bearer";
+/** @public — exported for testability */
 export const OAUTH_ID_JAG_TYP = "oauth-id-jag+jwt";
 export const MCP_RESOURCE_REFERENCE_PREFIX = "mcp-resource:";
 
-export interface EnterpriseManagedTokenResponse {
+interface EnterpriseManagedTokenResponse {
   access_token: string;
   token_type: "Bearer";
   expires_in: number;
   scope: string;
 }
 
-export interface OAuthTokenErrorResponse {
+interface OAuthTokenErrorResponse {
   error:
     | "invalid_client"
     | "invalid_grant"
@@ -186,9 +187,7 @@ export function buildOAuthIssuer(): string {
     : `${config.frontendBaseUrl}/`;
 }
 
-export function extractProfileIdFromMcpResource(
-  resource: string,
-): string | null {
+function extractProfileIdFromMcpResource(resource: string): string | null {
   try {
     const resourceUrl = new URL(resource);
     const issuerUrl = new URL(buildOAuthIssuer());

@@ -344,8 +344,7 @@ async function findCustomRole(
 async function ensureBasicUserRole(
   request: APIRequestContext,
 ): Promise<string> {
-  const description =
-    "Slim role used by chat-permissions e2e regression test";
+  const description = "Slim role used by chat-permissions e2e regression test";
   const existing = await findCustomRole(request, BASIC_USER_ROLE_NAME);
 
   if (existing) {

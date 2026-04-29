@@ -1,4 +1,4 @@
-export type LengthEstimate = {
+type LengthEstimate = {
   length: number;
   isEstimated: boolean;
 };

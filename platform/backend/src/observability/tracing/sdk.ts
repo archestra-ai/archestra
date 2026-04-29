@@ -230,5 +230,3 @@ process.on("SIGTERM", () => {
     .catch((error) => logger.error("Error terminating tracing", error))
     .finally(() => process.exit(0));
 });
-
-export default sdk;

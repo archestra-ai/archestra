@@ -68,6 +68,7 @@ export const CHATOPS_COMMANDS = {
 export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
   "socket" as const;
 
+/** @public — re-exported for testability */
 export { SLACK_SLASH_COMMANDS } from "@shared";
 
 /**

@@ -21,6 +21,7 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/sign-in") ||
     pathname?.startsWith("/auth/sign-up") ||
+    pathname?.startsWith("/auth/sso") ||
     pathname?.startsWith("/auth/sign-out")
   );
 };
@@ -35,6 +36,7 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
 const isSpecialAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/two-factor") ||
+    pathname?.startsWith("/auth/sso") ||
     pathname?.startsWith("/auth/sign-out")
   );
 };

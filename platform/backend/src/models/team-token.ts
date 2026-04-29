@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { ARCHESTRA_TOKEN_PREFIX, hasArchestraTokenPrefix } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import SecretModel from "@/models/secret";
@@ -51,13 +51,6 @@ function generateToken(): string {
  */
 function getTokenStart(token: string): string {
   return token.substring(0, TOKEN_START_LENGTH);
-}
-
-/**
- * Check if a value looks like a platform-managed team token.
- */
-export function isArchestraPrefixedToken(value: string): boolean {
-  return hasArchestraTokenPrefix(value);
 }
 
 class TeamTokenModel {

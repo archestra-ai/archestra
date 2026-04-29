@@ -66,6 +66,7 @@
       "rollup": ">=4.59.0",
       "undici": "7.24.5",
       "@xmldom/xmldom": ">=0.9.10",
+      "mammoth>@xmldom/xmldom": "0.8.13",
       "path-to-regexp": ">=8.4.0",
       "picomatch@>=4": ">=4.0.4",
       "picomatch@<4": ">=2.3.2",

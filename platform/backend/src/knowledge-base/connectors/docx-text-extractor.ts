@@ -1,15 +1,6 @@
-import WordExtractor from "word-extractor";
+import mammoth from "mammoth";
 
 export async function extractTextFromDocx(buffer: Buffer): Promise<string> {
-  try {
-    const extractor = new WordExtractor();
-    const doc = await extractor.extract(buffer);
-
-    const body = doc.getBody();
-    return body;
-  } catch (error) {
-    throw new Error(
-      `Extraction failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+	const { value } = await mammoth.extractRawText({ buffer });
+	return value;
 }

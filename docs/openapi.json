@@ -36625,6 +36625,15 @@
             "name": "scope",
             "required": false,
             "description": "Filter by scope: personal, team, org, or built_in."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeOtherPersonalAgents",
+            "required": false,
+            "description": "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them)."
           }
         ],
         "responses": {
@@ -140752,6 +140761,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -140796,7 +140839,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -141514,6 +141558,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -141558,7 +141636,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -142544,6 +142623,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -142588,7 +142701,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -143176,6 +143290,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -143220,7 +143368,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -143826,6 +143975,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -143870,7 +144053,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -144177,6 +144361,37 @@
                         "deepseek",
                         "minimax",
                         "azure"
+                      ]
+                    }
+                  },
+                  "connectionBaseUrls": {
+                    "nullable": true,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "description": {
+                          "default": "",
+                          "type": "string",
+                          "maxLength": 500
+                        },
+                        "isDefault": {
+                          "default": false,
+                          "type": "boolean"
+                        },
+                        "visible": {
+                          "default": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "url"
                       ]
                     }
                   }
@@ -144489,6 +144704,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -144533,7 +144782,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -145105,6 +145355,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -145149,7 +145433,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -145737,6 +146022,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -145781,7 +146100,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -146336,6 +146656,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -146380,7 +146734,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }
@@ -147248,6 +147603,40 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "connectionBaseUrls": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "description": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 500
+                          },
+                          "isDefault": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "visible": {
+                            "default": true,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "description",
+                          "isDefault",
+                          "visible"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -147292,7 +147681,8 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
-                    "connectionShownProviders"
+                    "connectionShownProviders",
+                    "connectionBaseUrls"
                   ],
                   "additionalProperties": false
                 }

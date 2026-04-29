@@ -11043,6 +11043,10 @@ export type GetAllAgentsData = {
          * Filter by scope: personal, team, org, or built_in.
          */
         scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).
+         */
+        excludeOtherPersonalAgents?: boolean;
     };
     url: '/api/agents/all';
 };
@@ -38061,6 +38065,12 @@ export type GetOrganizationResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -38325,6 +38335,12 @@ export type UpdateAppearanceSettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -38461,6 +38477,12 @@ export type UpdateSecuritySettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -38598,6 +38620,12 @@ export type UpdateLlmSettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -38736,6 +38764,12 @@ export type UpdateAgentSettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -38748,6 +38782,12 @@ export type UpdateConnectionSettingsData = {
         connectionDefaultClientId?: string | null;
         connectionShownClientIds?: Array<string> | null;
         connectionShownProviders?: Array<'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure'> | null;
+        connectionBaseUrls?: Array<{
+            url: string;
+            description?: string;
+            isDefault?: boolean;
+            visible?: boolean;
+        }> | null;
     };
     path?: never;
     query?: never;
@@ -38875,6 +38915,12 @@ export type UpdateConnectionSettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -39010,6 +39056,12 @@ export type UpdateMcpSettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -39148,6 +39200,12 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -39281,6 +39339,12 @@ export type DropEmbeddingConfigResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 
@@ -39503,6 +39567,12 @@ export type CompleteOnboardingResponses = {
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
         connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
     };
 };
 

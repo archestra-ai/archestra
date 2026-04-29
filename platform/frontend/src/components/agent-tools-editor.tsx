@@ -89,6 +89,8 @@ interface AgentToolsEditorProps {
   onSelectedCountChange?: (count: number) => void;
   /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
   layout?: "pills" | "cards";
+  /** When true, the "Add MCP server" combobox starts open. */
+  openComboboxOnMount?: boolean;
 }
 
 export const AgentToolsEditor = forwardRef<
@@ -101,6 +103,7 @@ export const AgentToolsEditor = forwardRef<
     assignmentTeamIds,
     onSelectedCountChange,
     layout = "pills",
+    openComboboxOnMount,
   },
   ref,
 ) {
@@ -111,6 +114,7 @@ export const AgentToolsEditor = forwardRef<
       assignmentTeamIds={assignmentTeamIds}
       onSelectedCountChange={onSelectedCountChange}
       layout={layout}
+      openComboboxOnMount={openComboboxOnMount}
       ref={ref}
     />
   );
@@ -126,6 +130,7 @@ const AgentToolsEditorContent = forwardRef<
     assignmentTeamIds,
     onSelectedCountChange,
     layout = "pills",
+    openComboboxOnMount,
   },
   ref,
 ) {
@@ -589,6 +594,7 @@ const AgentToolsEditorContent = forwardRef<
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
         testId={E2eTestId.AgentToolsAddButton}
+        defaultOpen={openComboboxOnMount}
         createAction={{
           label: "Install New MCP Server",
           href: "/mcp/registry",

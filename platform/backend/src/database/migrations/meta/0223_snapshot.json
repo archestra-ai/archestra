@@ -1,5 +1,5 @@
 {
-  "id": "3a170676-b857-403f-83c5-22f2dd86347d",
+  "id": "d94c9a82-6822-4182-b2b5-f6c9c2c7a18c",
   "prevId": "3962e239-e49a-4648-bd19-17f62c295695",
   "version": "7",
   "dialect": "postgresql",
@@ -6537,6 +6537,12 @@
           "type": "text[]",
           "primaryKey": false,
           "notNull": false
+        },
+        "connection_base_urls": {
+          "name": "connection_base_urls",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -8331,95 +8337,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.virtual_api_key_model_router_api_key": {
-      "name": "virtual_api_key_model_router_api_key",
-      "schema": "",
-      "columns": {
-        "virtual_api_key_id": {
-          "name": "virtual_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "chat_api_key_id": {
-          "name": "chat_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_virtual_api_key_model_router_api_key_id": {
-          "name": "idx_virtual_api_key_model_router_api_key_id",
-          "columns": [
-            {
-              "expression": "chat_api_key_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "virtual_api_key_model_router_api_key_virtual_api_key_id_virtual_api_keys_id_fk": {
-          "name": "virtual_api_key_model_router_api_key_virtual_api_key_id_virtual_api_keys_id_fk",
-          "tableFrom": "virtual_api_key_model_router_api_key",
-          "tableTo": "virtual_api_keys",
-          "columnsFrom": [
-            "virtual_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "virtual_api_key_model_router_api_key_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "virtual_api_key_model_router_api_key_chat_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "virtual_api_key_model_router_api_key",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "chat_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "virtual_api_key_model_router_api_key_virtual_api_key_id_provider_pk": {
-          "name": "virtual_api_key_model_router_api_key_virtual_api_key_id_provider_pk",
-          "columns": [
-            "virtual_api_key_id",
-            "provider"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.virtual_api_key_team": {
       "name": "virtual_api_key_team",
       "schema": "",
@@ -8514,17 +8431,11 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "chat_api_key_id": {
           "name": "chat_api_key_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "name": {
           "name": "name",
@@ -8583,21 +8494,6 @@
           "columns": [
             {
               "expression": "chat_api_key_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_virtual_api_key_organization_id": {
-          "name": "idx_virtual_api_key_organization_id",
-          "columns": [
-            {
-              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

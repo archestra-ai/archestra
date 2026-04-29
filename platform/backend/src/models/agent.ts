@@ -268,6 +268,7 @@ class AgentModel {
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
       scope?: AgentScope;
+      excludeOtherPersonalAgents?: boolean;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -305,6 +306,17 @@ class AgentModel {
     // Filter by scope if specified
     if (options?.scope) {
       whereConditions.push(eq(schema.agentsTable.scope, options.scope));
+    }
+
+    // Exclude other users' personal agents (show non-personal + own personal)
+    if (options?.excludeOtherPersonalAgents && userId) {
+      const condition = or(
+        ne(schema.agentsTable.scope, "personal"),
+        eq(schema.agentsTable.authorId, userId),
+      );
+      if (condition) {
+        whereConditions.push(condition);
+      }
     }
 
     // Apply access control filtering for non-agent admins

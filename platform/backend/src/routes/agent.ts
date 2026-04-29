@@ -232,13 +232,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope: AgentScopeFilterSchema.optional().describe(
             "Filter by scope: personal, team, org, or built_in.",
           ),
+          excludeOtherPersonalAgents: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val === "true" : val),
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
+            ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (
       {
-        query: { agentType, agentTypes, excludeBuiltIn, scope },
+        query: {
+          agentType,
+          agentTypes,
+          excludeBuiltIn,
+          scope,
+          excludeOtherPersonalAgents,
+        },
         user,
         organizationId,
       },
@@ -278,6 +293,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeBuiltIn,
           scope:
             scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
+          excludeOtherPersonalAgents: isAdmin
+            ? excludeOtherPersonalAgents
+            : undefined,
         }),
       );
     },

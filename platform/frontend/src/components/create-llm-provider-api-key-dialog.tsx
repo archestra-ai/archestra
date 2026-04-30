@@ -157,10 +157,11 @@ function getIsCreateFormValid(params: {
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-    values.name &&
-    (values.scope !== "team" || values.teamId) &&
-    (byosEnabled
-      ? values.vaultSecretPath && values.vaultSecretKey
-      : PROVIDERS_WITH_OPTIONAL_API_KEY.has(values.provider) || values.apiKey),
+      values.name &&
+      (values.scope !== "team" || values.teamId) &&
+      (byosEnabled
+        ? values.vaultSecretPath && values.vaultSecretKey
+        : PROVIDERS_WITH_OPTIONAL_API_KEY.has(values.provider) ||
+          values.apiKey),
   );
 }

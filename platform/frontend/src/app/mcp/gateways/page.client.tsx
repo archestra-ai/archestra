@@ -484,11 +484,11 @@ function McpGateways({
                 onPaginationChange={handlePaginationChange}
                 hasActiveFilters={Boolean(
                   nameFilter ||
-                  scopeFromUrl ||
-                  teamIdsFromUrl ||
-                  authorIdsFromUrl ||
-                  excludeAuthorIdsFromUrl ||
-                  labelsFromUrl,
+                    scopeFromUrl ||
+                    teamIdsFromUrl ||
+                    authorIdsFromUrl ||
+                    excludeAuthorIdsFromUrl ||
+                    labelsFromUrl,
                 )}
                 onClearFilters={() =>
                   updateQueryParams({

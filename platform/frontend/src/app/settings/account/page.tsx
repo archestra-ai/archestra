@@ -16,7 +16,6 @@ import { RolePermissionsCard } from "@/components/settings/role-permissions-card
 import { SettingsSectionStack } from "@/components/settings/settings-block";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useOrgTheme } from "@/lib/theme.hook";
 import { cn } from "@/lib/utils";
 
 function AccountSettingsContent() {
@@ -24,8 +23,6 @@ function AccountSettingsContent() {
   const highlight = searchParams.get("highlight");
   const changePasswordRef = useRef<HTMLDivElement>(null);
   const [isPulsing, setIsPulsing] = useState(false);
-  const orgTheme = useOrgTheme();
-  const currentUITheme = orgTheme?.currentUITheme;
   const { data: organization } = useOrganization();
   const { data: publicConfig, isLoading: isLoadingPublicConfig } =
     usePublicConfig();

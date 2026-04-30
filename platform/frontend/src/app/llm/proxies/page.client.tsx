@@ -406,11 +406,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 onPaginationChange={handlePaginationChange}
                 hasActiveFilters={Boolean(
                   nameFilter ||
-                  scopeFromUrl ||
-                  teamIdsFromUrl ||
-                  authorIdsFromUrl ||
-                  excludeAuthorIdsFromUrl ||
-                  labelsFromUrl,
+                    scopeFromUrl ||
+                    teamIdsFromUrl ||
+                    authorIdsFromUrl ||
+                    excludeAuthorIdsFromUrl ||
+                    labelsFromUrl,
                 )}
                 onClearFilters={() =>
                   updateQueryParams({

@@ -1994,9 +1994,9 @@ export function ChatPageContent({
                       inputModalities={selectedModelInputModalities}
                       agentLlmApiKeyId={
                         (
-                          internalAgents.find(
-                            (a) => a.id === initialAgentId,
-                          ) as Record<string, unknown> | undefined
+                          internalAgents.find((a) => a.id === initialAgentId) as
+                            | Record<string, unknown>
+                            | undefined
                         )?.llmApiKeyId as string | null
                       }
                       submitDisabled={isPlaywrightSetupVisible}

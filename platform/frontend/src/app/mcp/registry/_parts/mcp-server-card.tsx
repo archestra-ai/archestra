@@ -304,10 +304,10 @@ export function McpServerCard({
 
   const isInstalling = Boolean(
     !isDeploymentFailed &&
-    (installingItemId === item.id ||
-      (variant === "local" &&
-        (installationStatus === "pending" ||
-          (installationStatus === "discovering-tools" && installedServer)))),
+      (installingItemId === item.id ||
+        (variant === "local" &&
+          (installationStatus === "pending" ||
+            (installationStatus === "discovering-tools" && installedServer)))),
   );
 
   const isCurrentUserAuthenticated =

@@ -523,31 +523,33 @@ function ProviderGrid({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <Eyebrow>Select a provider</Eyebrow>
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
+        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+          Select a provider
+        </h3>
         {canCollapse && (
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
-                className="h-7 w-36 pl-7 text-[11px]"
-              />
-            </div>
+          <div className="flex items-center gap-3">
             {!searching && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[11px]"
+                className="h-9 text-xs"
                 onClick={() => setShowAll((v) => !v)}
               >
                 {showAll ? "Show fewer" : `Show all (${providers.length})`}
               </Button>
             )}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search"
+                className="h-9 w-56 rounded-full pl-8"
+              />
+            </div>
           </div>
         )}
       </div>
@@ -556,7 +558,7 @@ function ProviderGrid({
           No providers match "{query}".
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
         {visible.map((p) => {
           const isSupported = supported.includes(p);
           const isSel = selected === p;
@@ -567,15 +569,13 @@ function ProviderGrid({
               type="button"
               onClick={() => onSelect(p)}
               className={cn(
-                "flex min-h-[82px] flex-col items-start gap-2 rounded-lg border bg-card px-3 py-3 text-left shadow-sm transition-all",
-                isSel
-                  ? "border-primary ring-4 ring-primary/5"
-                  : "hover:border-muted-foreground/40",
+                "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
+                isSel && "border-primary ring-4 ring-primary/5",
                 !isSupported && "opacity-50",
               )}
             >
               <div
-                className="flex size-7 items-center justify-center rounded-md font-mono text-[13px] font-bold"
+                className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
                 style={{ background: icon.bg, color: icon.fg }}
               >
                 {icon.glyph === "aws" ? (
@@ -586,16 +586,21 @@ function ProviderGrid({
                   icon.glyph
                 )}
               </div>
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold tracking-tight text-foreground">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold tracking-tight text-foreground">
                   {providerDisplayNames[p]}
                 </div>
                 {!isSupported && (
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
                     Not compatible
                   </div>
                 )}
               </div>
+              {isSel && (
+                <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="size-2.5" strokeWidth={3} />
+                </div>
+              )}
             </button>
           );
         })}

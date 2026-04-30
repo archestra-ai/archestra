@@ -2,9 +2,13 @@
 
 import {
   type archestraApiTypes,
+  DocsPage,
   E2eTestId,
   getDeleteVirtualKeyButtonTestId,
+  getDocsUrl,
   getVirtualKeyRowTestId,
+  providerDisplayNames,
+  type SupportedProvider,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -29,12 +33,14 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import {
   LlmProviderApiKeyFilterSelect,
+  LlmProviderApiKeyOptionLabel,
   LlmProviderApiKeySelectItems,
 } from "@/components/llm-provider-options";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   DialogBody,
@@ -47,6 +53,7 @@ import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -74,6 +81,7 @@ type VirtualKeyWithParent =
 type VirtualKeyScope = NonNullable<
   archestraApiTypes.CreateVirtualApiKeyData["body"]["scope"]
 >;
+type ModelRouterProviderApiKeyMap = Partial<Record<SupportedProvider, string>>;
 
 export default function VirtualKeysPage() {
   const {
@@ -156,9 +164,10 @@ export default function VirtualKeysPage() {
         accessorKey: "parentKeyName",
         header: "Provider API Key",
         cell: ({ row }) => {
-          const provider = row.original
-            .parentKeyProvider as LlmProviderApiKeyResponse["provider"];
-          const config = PROVIDER_CONFIG[provider];
+          const provider = row.original.parentKeyProvider as
+            | LlmProviderApiKeyResponse["provider"]
+            | null;
+          const config = provider ? PROVIDER_CONFIG[provider] : null;
           return (
             <div className="flex items-center gap-2">
               {config && (
@@ -170,7 +179,10 @@ export default function VirtualKeysPage() {
                   className="rounded dark:invert"
                 />
               )}
-              <span className="text-sm">{row.original.parentKeyName}</span>
+              {!config && <Key className="h-4 w-4 text-muted-foreground" />}
+              <span className="text-sm">
+                {row.original.parentKeyName ?? "Model Router"}
+              </span>
             </div>
           );
         },
@@ -326,6 +338,7 @@ export default function VirtualKeysPage() {
         open={!!editingKey}
         onOpenChange={(open) => !open && setEditingKey(null)}
         virtualKey={editingKey}
+        providerApiKeys={parentableKeys}
         visibilityOptions={visibilityOptions}
         teams={teams}
         canReadTeams={!!canReadTeams}
@@ -366,6 +379,9 @@ function CreateVirtualKeyDialog({
     getDefaultVirtualKeyScope(visibilityOptions),
   );
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
+  const [modelRouterProviderApiKeyIds, setModelRouterProviderApiKeyIds] =
+    useState<ModelRouterProviderApiKeyMap>({});
   const [createdKeyValue, setCreatedKeyValue] = useState<string | null>(null);
   const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<Date | null>(
     null,
@@ -385,19 +401,30 @@ function CreateVirtualKeyDialog({
       setExpiresAt(computeDefaultExpiresAt(defaultExpirationSeconds));
       setScope(getDefaultVirtualKeyScope(visibilityOptions));
       setTeamIds([]);
+      setShowModelRouterFields(false);
+      setModelRouterProviderApiKeyIds({});
     }
   }, [open, defaultParentKeyId, defaultExpirationSeconds, visibilityOptions]);
 
   const handleCreate = useCallback(async () => {
-    if (!newKeyName.trim() || !selectedParentKeyId) return;
+    if (!newKeyName.trim()) return;
+    const modelRouterProviderApiKeys = toModelRouterProviderApiKeys(
+      modelRouterProviderApiKeyIds,
+    );
+    if (showModelRouterFields && modelRouterProviderApiKeys.length === 0)
+      return;
+    if (!showModelRouterFields && !selectedParentKeyId) return;
     try {
       const result = await createMutation.mutateAsync({
-        chatApiKeyId: selectedParentKeyId,
+        chatApiKeyId: showModelRouterFields ? null : selectedParentKeyId,
         data: {
           name: newKeyName.trim(),
           expiresAt: expiresAt ?? undefined,
           scope,
           teams: scope === "team" ? teamIds : [],
+          modelRouterProviderApiKeys: showModelRouterFields
+            ? modelRouterProviderApiKeys
+            : [],
         },
       });
       setNewKeyName("");
@@ -411,6 +438,8 @@ function CreateVirtualKeyDialog({
   }, [
     createMutation,
     expiresAt,
+    showModelRouterFields,
+    modelRouterProviderApiKeyIds,
     newKeyName,
     scope,
     selectedParentKeyId,
@@ -427,9 +456,9 @@ function CreateVirtualKeyDialog({
       description={
         createdKeyValue
           ? undefined
-          : "Create a virtual key linked to one of your provider API keys"
+          : "Create a virtual key for a provider API key or the Model Router."
       }
-      size="small"
+      size="medium"
     >
       <DialogForm onSubmit={handleCreate}>
         <DialogBody
@@ -452,34 +481,13 @@ function CreateVirtualKeyDialog({
             </div>
           ) : (
             <>
-              <div className="space-y-2">
-                <Label>Provider API Key</Label>
-                <Select
+              {!showModelRouterFields && (
+                <ProviderApiKeyField
                   value={selectedParentKeyId}
                   onValueChange={setSelectedParentKeyId}
-                >
-                  <SelectTrigger
-                    className="w-full"
-                    data-testid={E2eTestId.VirtualKeyParentKeySelect}
-                  >
-                    <SelectValue placeholder="Select an API key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <LlmProviderApiKeySelectItems
-                      options={parentableKeys.map((key) => {
-                        const config = PROVIDER_CONFIG[key.provider];
-                        return {
-                          value: key.id,
-                          icon: config.icon,
-                          providerName: config.name,
-                          keyName: key.name,
-                          secondaryLabel: config.name,
-                        };
-                      })}
-                    />
-                  </SelectContent>
-                </Select>
-              </div>
+                  providerApiKeys={parentableKeys}
+                />
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="virtual-key-name">Name</Label>
@@ -514,6 +522,14 @@ function CreateVirtualKeyDialog({
                   formatExpiration={formatExpiration}
                 />
               </div>
+
+              <ModelRouterVirtualKeyFields
+                enabled={showModelRouterFields}
+                onEnabledChange={setShowModelRouterFields}
+                providerApiKeyIds={modelRouterProviderApiKeyIds}
+                onProviderApiKeyIdsChange={setModelRouterProviderApiKeyIds}
+                providerApiKeys={parentableKeys}
+              />
             </>
           )}
         </DialogBody>
@@ -530,8 +546,11 @@ function CreateVirtualKeyDialog({
               type="submit"
               disabled={
                 !newKeyName.trim() ||
-                !selectedParentKeyId ||
+                (!showModelRouterFields && !selectedParentKeyId) ||
                 (scope === "team" && teamIds.length === 0) ||
+                (showModelRouterFields &&
+                  toModelRouterProviderApiKeys(modelRouterProviderApiKeyIds)
+                    .length === 0) ||
                 createMutation.isPending
               }
             >
@@ -551,6 +570,7 @@ function EditVirtualKeyDialog({
   open,
   onOpenChange,
   virtualKey,
+  providerApiKeys,
   visibilityOptions,
   teams,
   canReadTeams,
@@ -558,6 +578,7 @@ function EditVirtualKeyDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   virtualKey: VirtualKeyWithParent | null;
+  providerApiKeys: LlmProviderApiKeyResponse[];
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
   canReadTeams: boolean;
@@ -569,6 +590,9 @@ function EditVirtualKeyDialog({
     getDefaultVirtualKeyScope(visibilityOptions),
   );
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
+  const [modelRouterProviderApiKeyIds, setModelRouterProviderApiKeyIds] =
+    useState<ModelRouterProviderApiKeyMap>({});
 
   useEffect(() => {
     if (!open || !virtualKey) {
@@ -579,10 +603,25 @@ function EditVirtualKeyDialog({
     setExpiresAt(virtualKey.expiresAt ? new Date(virtualKey.expiresAt) : null);
     setScope((virtualKey.scope as VirtualKeyScope) ?? "personal");
     setTeamIds(virtualKey.teams.map((team) => team.id));
+    setShowModelRouterFields(virtualKey.modelRouterProviderApiKeys.length > 0);
+    setModelRouterProviderApiKeyIds(
+      Object.fromEntries(
+        virtualKey.modelRouterProviderApiKeys.map((mapping) => [
+          mapping.provider,
+          mapping.chatApiKeyId,
+        ]),
+      ),
+    );
   }, [open, virtualKey]);
 
   const handleUpdate = useCallback(async () => {
     if (!virtualKey || !name.trim()) {
+      return;
+    }
+    const modelRouterProviderApiKeys = toModelRouterProviderApiKeys(
+      modelRouterProviderApiKeyIds,
+    );
+    if (showModelRouterFields && modelRouterProviderApiKeys.length === 0) {
       return;
     }
 
@@ -595,6 +634,9 @@ function EditVirtualKeyDialog({
           expiresAt: expiresAt ?? undefined,
           scope,
           teams: scope === "team" ? teamIds : [],
+          modelRouterProviderApiKeys: showModelRouterFields
+            ? modelRouterProviderApiKeys
+            : [],
         },
       });
 
@@ -606,6 +648,8 @@ function EditVirtualKeyDialog({
     }
   }, [
     expiresAt,
+    showModelRouterFields,
+    modelRouterProviderApiKeyIds,
     name,
     onOpenChange,
     scope,
@@ -618,10 +662,11 @@ function EditVirtualKeyDialog({
     return null;
   }
 
-  const providerConfig =
-    PROVIDER_CONFIG[
-      virtualKey.parentKeyProvider as LlmProviderApiKeyResponse["provider"]
-    ];
+  const providerConfig = virtualKey.parentKeyProvider
+    ? PROVIDER_CONFIG[
+        virtualKey.parentKeyProvider as LlmProviderApiKeyResponse["provider"]
+      ]
+    : null;
 
   return (
     <FormDialog
@@ -629,25 +674,27 @@ function EditVirtualKeyDialog({
       onOpenChange={onOpenChange}
       title="Edit Virtual API Key"
       description="Update the virtual key name, visibility, and expiration."
-      size="small"
+      size="medium"
     >
       <DialogForm onSubmit={handleUpdate}>
         <DialogBody className="space-y-4">
-          <div className="space-y-2">
-            <Label>Provider API Key</Label>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {providerConfig && (
-                <Image
-                  src={providerConfig.icon}
-                  alt={providerConfig.name}
-                  width={16}
-                  height={16}
-                  className="rounded dark:invert"
-                />
-              )}
-              <span>{virtualKey.parentKeyName}</span>
+          {!showModelRouterFields && (
+            <div className="space-y-2">
+              <Label>Provider API Key</Label>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {providerConfig && (
+                  <Image
+                    src={providerConfig.icon}
+                    alt={providerConfig.name}
+                    width={16}
+                    height={16}
+                    className="rounded dark:invert"
+                  />
+                )}
+                <span>{virtualKey.parentKeyName ?? "Provider key"}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="edit-virtual-key-name">Name</Label>
@@ -682,6 +729,14 @@ function EditVirtualKeyDialog({
               formatExpiration={formatExpiration}
             />
           </div>
+
+          <ModelRouterVirtualKeyFields
+            enabled={showModelRouterFields}
+            onEnabledChange={setShowModelRouterFields}
+            providerApiKeyIds={modelRouterProviderApiKeyIds}
+            onProviderApiKeyIdsChange={setModelRouterProviderApiKeyIds}
+            providerApiKeys={providerApiKeys}
+          />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           <Button
@@ -696,6 +751,9 @@ function EditVirtualKeyDialog({
             disabled={
               !name.trim() ||
               (scope === "team" && teamIds.length === 0) ||
+              (showModelRouterFields &&
+                toModelRouterProviderApiKeys(modelRouterProviderApiKeyIds)
+                  .length === 0) ||
               updateMutation.isPending
             }
           >
@@ -750,6 +808,280 @@ function DeleteVirtualKeyDialog({
         );
       }}
     />
+  );
+}
+
+function ModelRouterVirtualKeyFields({
+  enabled,
+  onEnabledChange,
+  providerApiKeyIds,
+  onProviderApiKeyIdsChange,
+  providerApiKeys,
+}: {
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+  providerApiKeyIds: ModelRouterProviderApiKeyMap;
+  onProviderApiKeyIdsChange: (value: ModelRouterProviderApiKeyMap) => void;
+  providerApiKeys: LlmProviderApiKeyResponse[];
+}) {
+  const [selectedProvider, setSelectedProvider] = useState<
+    SupportedProvider | ""
+  >("");
+  const [selectedApiKeyId, setSelectedApiKeyId] = useState("");
+  const docsUrl = getDocsUrl(
+    DocsPage.PlatformLlmProxyAuthentication,
+    "model-router-virtual-keys",
+  );
+  const providerGroups = useMemo(
+    () => groupProviderApiKeys(providerApiKeys),
+    [providerApiKeys],
+  );
+  const configuredMappings = useMemo(() => {
+    return Object.entries(providerApiKeyIds)
+      .filter((entry): entry is [SupportedProvider, string] =>
+        Boolean(entry[1]),
+      )
+      .map(([provider, chatApiKeyId]) => {
+        const key = providerApiKeys.find(
+          (apiKey) => apiKey.id === chatApiKeyId,
+        );
+        return { provider, chatApiKeyId, key };
+      })
+      .sort((a, b) =>
+        getProviderName(a.provider).localeCompare(getProviderName(b.provider)),
+      );
+  }, [providerApiKeyIds, providerApiKeys]);
+  const availableProviderGroups = providerGroups.filter(
+    ([provider]) => !providerApiKeyIds[provider],
+  );
+  const selectedProviderKeys = selectedProvider
+    ? (providerGroups.find(
+        ([provider]) => provider === selectedProvider,
+      )?.[1] ?? [])
+    : [];
+
+  const handleAddProviderKey = () => {
+    if (!selectedProvider || !selectedApiKeyId) {
+      return;
+    }
+
+    onProviderApiKeyIdsChange({
+      ...providerApiKeyIds,
+      [selectedProvider]: selectedApiKeyId,
+    });
+    setSelectedProvider("");
+    setSelectedApiKeyId("");
+  };
+
+  const handleRemoveProviderKey = (provider: SupportedProvider) => {
+    const nextMappings = { ...providerApiKeyIds };
+    delete nextMappings[provider];
+    onProviderApiKeyIdsChange(nextMappings);
+  };
+
+  return (
+    <div className="space-y-4 rounded-md border p-4">
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id="model-router-virtual-key"
+          checked={enabled}
+          onCheckedChange={(checked) => onEnabledChange(checked === true)}
+          className="mt-0.5"
+        />
+        <div className="space-y-1">
+          <Label htmlFor="model-router-virtual-key" className="font-medium">
+            Use for Model Router
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            Map provider API keys for OpenAI-compatible Model Router requests.{" "}
+            <a
+              href={docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2"
+            >
+              View docs
+            </a>
+          </p>
+        </div>
+      </div>
+
+      {enabled && (
+        <div className="space-y-4 border-t pt-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+            <div className="space-y-2">
+              <Label>Provider</Label>
+              <Select
+                value={selectedProvider}
+                onValueChange={(value) => {
+                  setSelectedProvider(value as SupportedProvider);
+                  setSelectedApiKeyId("");
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableProviderGroups.map(([provider]) => {
+                    const config = PROVIDER_CONFIG[provider];
+                    return (
+                      <SelectItem key={provider} value={provider}>
+                        <LlmProviderApiKeyOptionLabel
+                          icon={config.icon}
+                          providerName={config.name}
+                          keyName={config.name}
+                        />
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Provider API Key</Label>
+              <Select
+                value={selectedApiKeyId}
+                onValueChange={setSelectedApiKeyId}
+                disabled={!selectedProvider}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select key" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedProviderKeys.map((key) => {
+                    const config = PROVIDER_CONFIG[key.provider];
+                    return (
+                      <SelectItem key={key.id} value={key.id}>
+                        <LlmProviderApiKeyOptionLabel
+                          icon={config.icon}
+                          providerName={config.name}
+                          keyName={key.name}
+                          secondaryLabel={config.name}
+                        />
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="invisible">Add provider key</Label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAddProviderKey}
+                disabled={!selectedProvider || !selectedApiKeyId}
+                className="w-full md:w-auto"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Configured Provider Keys</Label>
+            {configuredMappings.length === 0 ? (
+              <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                No provider keys configured.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {configuredMappings.map(({ provider, chatApiKeyId, key }) => {
+                  const config = PROVIDER_CONFIG[provider];
+                  return (
+                    <div
+                      key={provider}
+                      className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Image
+                          src={config.icon}
+                          alt={config.name}
+                          width={20}
+                          height={20}
+                          className="rounded dark:invert"
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {key?.name ?? chatApiKeyId}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {config.name}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveProviderKey(provider)}
+                        aria-label={`Remove ${config.name} key`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProviderApiKeyField({
+  value,
+  onValueChange,
+  providerApiKeys,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  providerApiKeys: LlmProviderApiKeyResponse[];
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Provider API Key</Label>
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger
+          className="w-full"
+          data-testid={E2eTestId.VirtualKeyParentKeySelect}
+        >
+          <SelectValue placeholder="Select an API key" />
+        </SelectTrigger>
+        <SelectContent>
+          <LlmProviderApiKeySelectItems
+            options={providerApiKeys.map((key) => {
+              const config = PROVIDER_CONFIG[key.provider];
+              return {
+                value: key.id,
+                icon: config.icon,
+                providerName: config.name,
+                keyName: key.name,
+                secondaryLabel: config.name,
+              };
+            })}
+          />
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function groupProviderApiKeys(providerApiKeys: LlmProviderApiKeyResponse[]) {
+  const groups = new Map<SupportedProvider, LlmProviderApiKeyResponse[]>();
+  for (const key of providerApiKeys) {
+    const provider = key.provider as SupportedProvider;
+    const existing = groups.get(provider) ?? [];
+    existing.push(key);
+    groups.set(provider, existing);
+  }
+  return Array.from(groups.entries()).sort(([a], [b]) =>
+    getProviderName(a).localeCompare(getProviderName(b)),
   );
 }
 
@@ -812,6 +1144,18 @@ function getDefaultVirtualKeyScope(
   return (
     visibilityOptions.find((option) => !option.disabled)?.value ?? "personal"
   );
+}
+
+function toModelRouterProviderApiKeys(
+  providerApiKeyIds: ModelRouterProviderApiKeyMap,
+) {
+  return Object.entries(providerApiKeyIds)
+    .filter((entry): entry is [SupportedProvider, string] => Boolean(entry[1]))
+    .map(([provider, chatApiKeyId]) => ({ provider, chatApiKeyId }));
+}
+
+function getProviderName(provider: SupportedProvider): string {
+  return providerDisplayNames[provider] ?? provider;
 }
 
 function getVirtualKeyVisibilityOptions(params: {

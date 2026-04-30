@@ -510,9 +510,8 @@ function McpGateways({
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
               defaultIconType="mcp_gateway"
-              onCreated={(gateway) => {
+              onCreated={() => {
                 setIsCreateDialogOpen(false);
-                navigateToConnection(gateway.id);
               }}
             />
 

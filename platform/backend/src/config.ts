@@ -501,6 +501,8 @@ const config = {
     endpoint: "/v1/a2a",
   },
   agents: {
+    advancedToolFeaturesEnabled:
+      process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {

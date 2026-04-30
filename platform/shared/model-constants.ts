@@ -25,6 +25,7 @@ export const SupportedProvidersSchema = z.enum([
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:chatCompletions",
+  "openai:responses",
   "openai:embeddings",
   "gemini:generateContent",
   "gemini:embeddings",

@@ -74,4 +74,5 @@ export { default as usersTable } from "./user";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";
 export { default as virtualApiKeysTable } from "./virtual-api-key";
+export { default as virtualApiKeyModelRouterApiKeysTable } from "./virtual-api-key-model-router-api-key";
 export { default as virtualApiKeyTeamsTable } from "./virtual-api-key-team";

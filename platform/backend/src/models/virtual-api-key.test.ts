@@ -259,7 +259,11 @@ describe("VirtualApiKeyModel", () => {
     const result = await VirtualApiKeyModel.validateToken(value);
     expect(result).not.toBeNull();
     expect(result?.virtualKey.name).toBe("Validate Me");
-    expect(result?.chatApiKey.id).toBe(chatApiKey.id);
+    expect(result?.chatApiKey).not.toBeNull();
+    if (!result?.chatApiKey) {
+      throw new Error("Expected parent chat API key");
+    }
+    expect(result.chatApiKey.id).toBe(chatApiKey.id);
   });
 
   test("validateToken: returns null for invalid token", async () => {
@@ -526,6 +530,7 @@ describe("VirtualApiKeyModel", () => {
       scope: "team",
       authorId: user.id,
       teamIds: [team.id],
+      modelRouterProviderApiKeys: [],
     });
 
     expect(updated?.name).toBe("After");

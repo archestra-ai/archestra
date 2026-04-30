@@ -45,7 +45,7 @@ export function ClientPicker({
   const pageItems = filtered.slice(start, start + CLIENT_PICKER_PAGE_SIZE);
 
   return (
-    <section className="border-b pb-5">
+    <section className="pb-5">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
         <h3 className="text-[17px] font-bold tracking-tight text-foreground">
           Select your client

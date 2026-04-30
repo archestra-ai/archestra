@@ -432,9 +432,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
               defaultIconType="llm_proxy"
-              onCreated={(proxy) => {
+              onCreated={() => {
                 setIsCreateDialogOpen(false);
-                navigateToConnection(proxy.id);
               }}
             />
 

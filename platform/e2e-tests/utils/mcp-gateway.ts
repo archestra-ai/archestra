@@ -21,7 +21,6 @@ export async function verifyToolCallResultViaApi({
   expectedResult,
   tokenToUse,
   toolName,
-  cookieHeaders,
   profileId,
 }: {
   request: APIRequestContext;
@@ -38,7 +37,6 @@ export async function verifyToolCallResultViaApi({
     | "marketing-team"
     | "org-token";
   toolName: string;
-  cookieHeaders: string;
   profileId: string;
 }) {
   const effectiveProfileId = profileId;

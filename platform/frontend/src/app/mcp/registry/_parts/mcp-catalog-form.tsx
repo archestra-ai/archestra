@@ -150,6 +150,8 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const advancedToolFeaturesEnabled =
+    useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
@@ -1786,16 +1788,18 @@ export function McpCatalogForm({
                     className={`h-4 w-4 transition-transform ${labelsOpen ? "rotate-90" : ""}`}
                   />
                   Labels
-                  <span className="text-xs font-normal text-muted-foreground ml-1">
-                    Organize servers and drive automatic tool assignment
-                  </span>
+                  {advancedToolFeaturesEnabled && (
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      Organize servers and drive automatic tool assignment
+                    </span>
+                  )}
                   {labels.length > 0 && (
                     <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
                       {labels.length}
                     </span>
                   )}
                 </CollapsibleTrigger>
-                {gatewayLabelsDocsUrl && (
+                {advancedToolFeaturesEnabled && gatewayLabelsDocsUrl && (
                   <ExternalDocsLink
                     href={gatewayLabelsDocsUrl}
                     className="text-xs text-muted-foreground underline shrink-0"

@@ -118,6 +118,13 @@ export interface LLMProxyContext<TRequest> {
   teamIds?: string[];
 }
 
+export type LLMProxyAuthOverride = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  authenticated: boolean;
+  source?: InteractionSource;
+};
+
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
     return messages.length;
@@ -161,6 +168,9 @@ export async function handleLLMProxy<
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
+  const authOverride = (
+    request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
+  ).llmProxyAuthOverride;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
@@ -182,8 +192,13 @@ export async function handleLLMProxy<
     headersForExtraction,
     SOURCE_HEADER,
   );
+  const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
+  // `model_router` is assigned by the route auth override, not accepted from
+  // the public source header.
   const source: InteractionSource =
-    InteractionSourceSchema.safeParse(rawSource).data ?? "api";
+    authOverride?.source ??
+    (parsedSource === "model_router" ? "api" : parsedSource) ??
+    "api";
   const inheritedContextUntrusted =
     utils.headers.metaHeader.getHeaderValue(
       headersForExtraction,
@@ -248,25 +263,30 @@ export async function handleLLMProxy<
   let perKeyBaseUrl: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
-
   // 1. Try JWKS auth if the agent has an external identity provider configured
-  const jwksResult = await attemptJwksAuth(
-    request,
-    resolvedAgent,
-    providerName,
-  );
-  if (jwksResult) {
-    wasJwksAuthenticated = true;
-    apiKey = jwksResult.apiKey;
-    perKeyBaseUrl = jwksResult.baseUrl;
-    if (jwksResult.userId) {
-      userId = jwksResult.userId;
-      resolvedUser = await UserModel.getById(userId);
+  if (authOverride) {
+    apiKey = authOverride.apiKey;
+    perKeyBaseUrl = authOverride.baseUrl;
+    wasVirtualKeyResolved = authOverride.authenticated;
+  } else {
+    const jwksResult = await attemptJwksAuth(
+      request,
+      resolvedAgent,
+      providerName,
+    );
+    if (jwksResult) {
+      wasJwksAuthenticated = true;
+      apiKey = jwksResult.apiKey;
+      perKeyBaseUrl = jwksResult.baseUrl;
+      if (jwksResult.userId) {
+        userId = jwksResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
     }
   }
 
   // 2. Extract API key from headers if not already resolved via JWKS
-  if (!wasJwksAuthenticated) {
+  if (!authOverride && !wasJwksAuthenticated) {
     apiKey = provider.extractApiKey(headers);
   }
 
@@ -277,6 +297,7 @@ export async function handleLLMProxy<
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
   if (
     !wasJwksAuthenticated &&
+    !authOverride &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -725,6 +746,7 @@ async function handleStreaming<
       sessionId,
       executionId,
       externalAgentId,
+      source,
       serverAddress: provider.getBaseUrl(),
       promptMessages: provider
         .createRequestAdapter(originalRequest)
@@ -1097,6 +1119,7 @@ async function handleNonStreaming<
     sessionId,
     executionId,
     externalAgentId,
+    source,
     serverAddress: provider.getBaseUrl(),
     promptMessages: provider
       .createRequestAdapter(originalRequest)

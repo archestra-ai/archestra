@@ -50,6 +50,28 @@ export interface VirtualKeyValidationResult {
   baseUrl: string | undefined;
 }
 
+type ResolvedVirtualApiKey = NonNullable<
+  Awaited<ReturnType<typeof VirtualApiKeyModel.validateToken>>
+>;
+
+export async function validateVirtualApiKeyToken(
+  tokenValue: string,
+): Promise<ResolvedVirtualApiKey> {
+  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
+  if (!resolved) {
+    throw new ApiError(401, "Invalid virtual API key");
+  }
+
+  if (
+    resolved.virtualKey.expiresAt &&
+    resolved.virtualKey.expiresAt < new Date()
+  ) {
+    throw new ApiError(401, "Virtual API key expired");
+  }
+
+  return resolved;
+}
+
 /**
  * Validate a platform-managed virtual API key.
  * Checks: token validity, expiration, provider match, parent key health.
@@ -61,16 +83,12 @@ export async function validateVirtualApiKey(
   tokenValue: string,
   expectedProvider: string,
 ): Promise<VirtualKeyValidationResult> {
-  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
-  if (!resolved) {
-    throw new ApiError(401, "Invalid virtual API key");
-  }
-
-  if (
-    resolved.virtualKey.expiresAt &&
-    resolved.virtualKey.expiresAt < new Date()
-  ) {
-    throw new ApiError(401, "Virtual API key expired");
+  const resolved = await validateVirtualApiKeyToken(tokenValue);
+  if (!resolved.chatApiKey) {
+    throw new ApiError(
+      400,
+      "Model Router virtual API keys cannot be used with provider-specific proxy routes",
+    );
   }
 
   if (resolved.chatApiKey.provider !== expectedProvider) {

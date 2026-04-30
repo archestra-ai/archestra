@@ -55,7 +55,9 @@ describe("KnowledgePageLayout", () => {
       renderLayout();
 
       expect(
-        screen.getByText("Connect your docs, drives, and repos so your agents answer from your knowledge"),
+        screen.getByText(
+          "Connect your docs, drives, and repos so your agents answer from your knowledge",
+        ),
       ).toBeInTheDocument();
     });
 
@@ -101,7 +103,9 @@ describe("KnowledgePageLayout", () => {
       renderLayout();
 
       expect(
-        screen.queryByText("Connect your docs, drives, and repos so your agents answer from your knowledge"),
+        screen.queryByText(
+          "Connect your docs, drives, and repos so your agents answer from your knowledge",
+        ),
       ).not.toBeInTheDocument();
     });
 

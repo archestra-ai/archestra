@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { E2eTestId, MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { WIREMOCK_BASE_URL, WIREMOCK_INTERNAL_URL } from "../consts";
 import { expect, goToPage, test } from "../fixtures";
@@ -33,6 +34,7 @@ test.describe("Chat - Approval flow survives reload", () => {
   ];
 
   let catalogItemId: string | null = null;
+  let catalogItemCreatedHere = false;
   let serverId: string | null = null;
   let agentId: string | null = null;
   let policyId: string | null = null;
@@ -95,6 +97,7 @@ test.describe("Chat - Approval flow survives reload", () => {
       });
       const catalog = await catalogResponse.json();
       catalogItemId = catalog.id;
+      catalogItemCreatedHere = true;
     }
 
     // 3. Install the MCP server (admin, personal scope).
@@ -177,29 +180,54 @@ test.describe("Chat - Approval flow survives reload", () => {
   });
 
   test.beforeEach(async ({ request }) => {
-    // Both approval tests reuse the same stateful WireMock scenarios;
-    // reset to `Started` so each test gets a fresh tool_use response
-    // instead of the follow-up text from the previous run. Surface
-    // non-2xx loudly — a silent reset failure manifests as a 60s
-    // "Approval required" timeout downstream, which is exactly the
-    // confusing failure mode this beforeEach exists to prevent.
+    // Both approval tests reuse the same stateful WireMock scenarios. Reset
+    // each one to "Started" via PUT /__admin/scenarios/{name}/state (the only
+    // shape that exists in WireMock 3.13.1 — POST /state with a body returns
+    // 404, and there is no per-scenario GET endpoint). Throw on non-2xx, then
+    // verify the state actually flipped by reading the list endpoint, so a
+    // misconfigured admin API fails fast here instead of manifesting as a 60s
+    // "Approval required" timeout downstream. Addresses #4164 review feedback.
+    const targets = new Set(APPROVAL_SCENARIOS);
     await Promise.all(
       APPROVAL_SCENARIOS.map(async (name) => {
-        const url = `${WIREMOCK_BASE_URL}/__admin/scenarios/${name}/state`;
-        try {
-          const resp = await request.put(url);
-          if (!resp.ok()) {
-            console.warn(
-              `[chat-approval] WireMock reset for scenario '${name}' returned ${resp.status()}`,
-            );
-          }
-        } catch (err) {
-          console.warn(
-            `[chat-approval] WireMock reset for scenario '${name}' failed: ${err instanceof Error ? err.message : String(err)}`,
+        const stateUrl = `${WIREMOCK_BASE_URL}/__admin/scenarios/${name}/state`;
+        const resetResp = await request.put(stateUrl);
+        if (!resetResp.ok()) {
+          throw new Error(
+            `[chat-approval] WireMock reset for scenario '${name}' returned ${resetResp.status()} ${resetResp.statusText()}`,
           );
         }
       }),
     );
+
+    const listResp = await request.get(`${WIREMOCK_BASE_URL}/__admin/scenarios`);
+    if (!listResp.ok()) {
+      throw new Error(
+        `[chat-approval] WireMock GET /scenarios returned ${listResp.status()} ${listResp.statusText()}`,
+      );
+    }
+    const listJson = (await listResp.json()) as {
+      scenarios?: Array<{ name?: string; state?: string }>;
+    };
+    const seen = new Map<string, string>();
+    for (const s of listJson.scenarios ?? []) {
+      if (s.name && targets.has(s.name)) {
+        seen.set(s.name, s.state ?? "");
+      }
+    }
+    for (const name of APPROVAL_SCENARIOS) {
+      const state = seen.get(name);
+      if (state === undefined) {
+        throw new Error(
+          `[chat-approval] WireMock scenario '${name}' is not registered — check helm/e2e-tests/mappings/*-approval-e2e-*.json are loaded`,
+        );
+      }
+      if (state !== "Started") {
+        throw new Error(
+          `[chat-approval] WireMock scenario '${name}' did not reset — current state '${state}'`,
+        );
+      }
+    }
   });
 
   test.afterAll(async ({ request }) => {
@@ -227,7 +255,7 @@ test.describe("Chat - Approval flow survives reload", () => {
         ignoreStatusCheck: true,
       }).catch(() => {});
     }
-    if (catalogItemId) {
+    if (catalogItemId && catalogItemCreatedHere) {
       await makeApiRequest({
         request,
         method: "delete",
@@ -273,6 +301,53 @@ test.describe("Chat - Approval flow survives reload", () => {
     return page.url();
   }
 
+  /**
+   * Wait for the backend persistence sweep to finish before reloading.
+   *
+   * The frontend banner clears the moment the SDK transitions the tool
+   * part locally — milliseconds after Approve/Decline. Backend `onFinish`
+   * runs `persistNewMessages` async and only finishes ~2s later (sweep +
+   * new assistant insert). Reloading before the sweep completes captures
+   * the stale `approval-requested` row and re-renders the banner. Poll the
+   * conversation API until the persisted tool part is in a terminal state
+   * so the spec actually exercises the post-sweep DB state.
+   *
+   * Decline can transition through `output-denied`, but in some flows the
+   * sweep deletes the row outright and the next assistant message has no
+   * tool part. Treat "no tool part present" as terminal too so the helper
+   * doesn't time out on that branch.
+   */
+  async function waitForToolPartTerminalState(page: Page): Promise<void> {
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const url = window.location.pathname.replace(
+              /^\/chat\//,
+              "/api/chat/conversations/",
+            );
+            const r = await fetch(url, { credentials: "include" });
+            if (!r.ok) return null;
+            const body = (await r.json()) as {
+              messages?: Array<{
+                role?: string;
+                parts?: Array<{ type?: string; state?: string }>;
+              }>;
+            };
+            const toolPart = (body.messages ?? [])
+              .flatMap((m) => m.parts ?? [])
+              .find(
+                (p) =>
+                  typeof p?.type === "string" && p.type.startsWith("tool-"),
+              );
+            if (toolPart === undefined) return "removed";
+            return toolPart.state ?? null;
+          }),
+        { timeout: 30_000 },
+      )
+      .toMatch(/^(output-available|output-error|output-denied|removed)$/);
+  }
+
   test("Approve survives reload — banner does not reappear", async ({
     page,
   }) => {
@@ -284,10 +359,12 @@ test.describe("Chat - Approval flow survives reload", () => {
     await expect(approveButton).toBeVisible({ timeout: 10_000 });
     await approveButton.click();
 
-    // After approve the approval banner must disappear.
+    // After approve the approval banner must disappear in-memory.
     await expect(page.getByText(/Approval required/i)).toHaveCount(0, {
       timeout: 30_000,
     });
+
+    await waitForToolPartTerminalState(page);
 
     // Reload and confirm the persistence sweep removed the stale row.
     await page.goto(conversationUrl);
@@ -316,6 +393,8 @@ test.describe("Chat - Approval flow survives reload", () => {
     await expect(page.getByText(/Approval required/i)).toHaveCount(0, {
       timeout: 30_000,
     });
+
+    await waitForToolPartTerminalState(page);
 
     await page.goto(conversationUrl);
     await page.waitForLoadState("networkidle");

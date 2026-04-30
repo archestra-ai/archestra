@@ -51,6 +51,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   log: ["read"],
+  auditLog: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -103,6 +104,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   log: ["read"],
+  auditLog: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -155,6 +157,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   log: [],
+  auditLog: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
@@ -295,6 +298,7 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
   "log:read": "View LLM proxy and MCP tool call logs",
+  "auditLog:read": "View the audit trail of administrative actions",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -642,6 +646,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetMcpToolCall]: {
     log: ["read"],
+  },
+  [RouteId.GetAuditEvents]: {
+    auditLog: ["read"],
+  },
+  [RouteId.StreamAuditEvents]: {
+    auditLog: ["read"],
   },
   [RouteId.StreamChat]: {
     chat: ["read"],
@@ -1063,6 +1073,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
+  "/settings/audit-log": { auditLog: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },

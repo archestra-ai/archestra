@@ -142,6 +142,10 @@ export const RouteId = {
   GetMcpToolCalls: "getMcpToolCalls",
   GetMcpToolCall: "getMcpToolCall",
 
+  // Audit Routes
+  GetAuditEvents: "getAuditEvents",
+  StreamAuditEvents: "streamAuditEvents",
+
   // Autonomy Policy Routes
   GetOperators: "getOperators",
   GetToolInvocationPolicies: "getToolInvocationPolicies",

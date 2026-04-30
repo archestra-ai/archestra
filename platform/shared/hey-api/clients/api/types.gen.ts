@@ -34649,6 +34649,113 @@ export type GetMcpToolCallsResponses = {
 
 export type GetMcpToolCallsResponse = GetMcpToolCallsResponses[keyof GetMcpToolCallsResponses];
 
+export type GetAuditEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        actorUserId?: string;
+        action?: string;
+        resourceType?: string;
+        from?: string;
+        to?: string;
+        search?: string;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/audit-events';
+};
+
+export type GetAuditEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetAuditEventsError = GetAuditEventsErrors[keyof GetAuditEventsErrors];
+
+export type GetAuditEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            actorUserId: string | null;
+            action: string;
+            resourceType: string;
+            resourceId: string | null;
+            ipAddress: string | null;
+            userAgent: string | null;
+            metadata: {
+                [key: string]: unknown;
+            } | null;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAuditEventsResponse = GetAuditEventsResponses[keyof GetAuditEventsResponses];
+
 export type GetMcpToolCallData = {
     body?: never;
     path: {

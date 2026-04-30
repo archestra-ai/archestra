@@ -7,6 +7,7 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as auditEventsTable } from "./audit-event";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";

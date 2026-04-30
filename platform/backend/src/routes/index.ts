@@ -3,6 +3,8 @@ export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
+export { default as auditEventRoutes } from "./audit-event";
+export { default as auditEventStreamRoutes } from "./audit-event-stream";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatRoutes } from "./chat/routes";

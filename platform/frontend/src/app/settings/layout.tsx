@@ -29,6 +29,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Configure embedding, reranking, and knowledge system defaults.",
   },
+  "/settings/audit-log": {
+    title: "Audit Log",
+    description: "View an audit trail of administrative actions and changes.",
+  },
   "/settings/llm": {
     title: "LLM",
     description: "Configure platform-wide LLM defaults and behavior.",

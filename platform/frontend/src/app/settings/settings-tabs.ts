@@ -27,6 +27,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
       : []),
+    ...(permissionMap?.["/settings/audit-log"]
+      ? [{ label: "Audit Log", href: "/settings/audit-log" }]
+      : []),
     ...(permissionMap?.["/settings/users"]
       ? [{ label: "Users", href: "/settings/users" }]
       : []),

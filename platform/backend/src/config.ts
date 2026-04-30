@@ -542,6 +542,17 @@ const config = {
   database: {
     url: getDatabaseUrl(),
   },
+  audit: {
+    retentionDays: Number.parseInt(
+      process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS || "90",
+      10,
+    ),
+    cleanupIntervalMs: Number.parseInt(
+      process.env.ARCHESTRA_AUDIT_LOG_CLEANUP_INTERVAL_MS ||
+        String(6 * 60 * 60 * 1000),
+      10,
+    ),
+  },
   llm: {
     openai: {
       baseUrl:

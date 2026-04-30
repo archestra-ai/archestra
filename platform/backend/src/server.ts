@@ -44,6 +44,7 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { auditLogMiddleware } from "@/audit/audit-log-middleware";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
@@ -52,6 +53,7 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
+import { AuditEventModel } from "@/models";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
@@ -732,6 +734,9 @@ const startWebServer = async () => {
    */
   fastify.register(fastifyAuthPlugin);
 
+  // Global audit logger for all mutating /api requests (post-auth so request.user/org exist)
+  fastify.register(auditLogMiddleware);
+
   /**
    * Enterprise license middleware to enforce license requirements on certain routes.
    * This should be registered before routes to ensure enterprise-only features are checked properly.
@@ -816,6 +821,24 @@ const startWebServer = async () => {
         );
       });
     }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
+
+    // Background job to enforce audit log retention.
+    const auditRetentionIntervalId = setInterval(() => {
+      const retentionDays = Number.isFinite(config.audit.retentionDays)
+        ? config.audit.retentionDays
+        : 90;
+      if (retentionDays <= 0) return;
+
+      const olderThan = new Date(
+        Date.now() - retentionDays * 24 * 60 * 60 * 1000,
+      );
+      AuditEventModel.deleteOlderThan({ olderThan }).catch((error) => {
+        logger.warn(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Failed to run audit log retention cleanup",
+        );
+      });
+    }, config.audit.cleanupIntervalMs);
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -907,6 +930,7 @@ const startWebServer = async () => {
         // Clear email subscription renewal interval
         clearInterval(emailRenewalIntervalId);
         clearInterval(processedEmailCleanupIntervalId);
+        clearInterval(auditRetentionIntervalId);
         fastify.log.info("Email background job intervals cleared");
 
         // Stop cache manager's background cleanup

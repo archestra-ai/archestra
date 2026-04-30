@@ -27,12 +27,9 @@ export const A2AArchestraTaskOpsSchema = z.object({
 export type A2AArchestraTaskOps = z.infer<typeof A2AArchestraTaskOpsSchema>;
 
 // --- A2A Message
-export const A2AArchestraMessageMetadataSchema = z.object({
+const A2AArchestraMessageMetadataSchema = z.object({
   taskOps: A2AArchestraTaskOpsSchema.optional(),
 });
-export type A2AArchestraMessageMetadata = z.infer<
-  typeof A2AArchestraMessageMetadataSchema
->;
 
 const Uint8ArraySchema: z.ZodType<Uint8Array<ArrayBufferLike>> =
   z.instanceof(Uint8Array);
@@ -73,17 +70,13 @@ export type A2AArchestraApprovalRequest = z.infer<
   typeof A2AArchestraApprovalRequestSchema
 >;
 
-export const A2AArchestraTaskMetadataSchema = z.object({
+const A2AArchestraTaskMetadataSchema = z.object({
   approvalRequests: z.array(A2AArchestraApprovalRequestSchema).optional(),
 });
-export type A2AArchestraTaskMetadata = z.infer<
-  typeof A2AArchestraTaskMetadataSchema
->;
 
 // --- A2A Task ---
 
-export const A2AProtocolArtifactSchema = z.object({});
-export type A2AProtocolArtifact = z.infer<typeof A2AProtocolArtifactSchema>;
+const A2AProtocolArtifactSchema = z.object({});
 
 export enum A2AProtocolTaskState {
   Unspecified = "TASK_STATE_UNSPECIFIED",
@@ -97,12 +90,11 @@ export enum A2AProtocolTaskState {
   AuthRequired = "TASK_STATE_AUTH_REQUIRED",
 }
 
-export const A2AProtocolTaskStatusSchema = z.object({
+const A2AProtocolTaskStatusSchema = z.object({
   state: z.enum(A2AProtocolTaskState),
   message: A2AProtocolMessageSchema.optional(),
   timestamp: z.number().optional(),
 });
-export type A2AProtocolTaskStatus = z.infer<typeof A2AProtocolTaskStatusSchema>;
 
 export const A2AProtocolTaskSchema = z.object({
   id: z.string(),
@@ -125,15 +117,12 @@ export type A2AProtocolGetTaskRequest = z.infer<
 
 // --- A2A Send Message ---
 
-export const A2AProtocolSendMessageConfigurationSchema = z.object({});
-export type A2AProtocolSendMessageConfiguration = z.infer<
-  typeof A2AProtocolSendMessageConfigurationSchema
->;
+const A2AProtocolSendMessageConfigurationSchema = z.object({});
 
 export const A2AProtocolSendMessageRequestSchema = z.object({
   tenant: z.string().optional(),
   message: A2AProtocolMessageSchema,
-  configuration: z.any().optional(),
+  configuration: A2AProtocolSendMessageConfigurationSchema.optional(),
   metadata: z.any().optional(),
 });
 export type A2AProtocolSendMessageRequest = z.infer<

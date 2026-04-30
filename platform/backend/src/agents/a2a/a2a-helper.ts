@@ -2,7 +2,6 @@ import { type A2AAttachment, buildUserContent } from "../a2a-executor";
 import type {
   A2AArchestraApprovalRequest,
   A2AArchestraTaskApprovalDecision,
-  A2AProtocolGetTaskRequest,
   A2AProtocolMessage,
   A2AProtocolPart,
   A2AProtocolSendMessageRequest,
@@ -82,7 +81,7 @@ export function extractApprovalRequestsFromSendMessageResult(
   return extractApprovalRequestsFromTask(result.task);
 }
 
-export function extractApprovalRequestsFromTask(
+function extractApprovalRequestsFromTask(
   task: A2AProtocolTask,
 ): A2AArchestraApprovalRequest[] {
   return task.metadata?.approvalRequests || [];
@@ -103,13 +102,5 @@ export function extractMessageFromSendMessageResult(
     messageId: crypto.randomUUID(),
     role: A2AProtocolRole.Agent,
     parts: [],
-  };
-}
-
-export function buildGetTaskRequest(params: {
-  taskId: string;
-}): A2AProtocolGetTaskRequest {
-  return {
-    id: params.taskId,
   };
 }

@@ -257,7 +257,7 @@ export function getApprovalRequestsMap(
   return map;
 }
 
-export function getA2AProtocolMessageByA2AModelMessage(
+function getA2AProtocolMessageByA2AModelMessage(
   message: A2AMessage,
 ): A2AProtocolMessage {
   return {

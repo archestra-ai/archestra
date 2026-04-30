@@ -587,8 +587,8 @@ function KnowledgeSettingsContent() {
             <CardDescription className="leading-relaxed">
               Choose the API key and embedding model used for knowledge base
               documents. Only keys with synced models that have configured
-              embedding dimensions appear here. Supported dimensions: 768,
-              1536, 3072.
+              embedding dimensions appear here. Supported dimensions: 768, 1536,
+              3072.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -678,8 +678,8 @@ function KnowledgeSettingsContent() {
                 <p className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Lock className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
-                    To change the embedding model, drop the existing index —
-                    all documents will need to be re-embedded.
+                    To change the embedding model, drop the existing index — all
+                    documents will need to be re-embedded.
                   </span>
                 </p>
               ) : (
@@ -735,8 +735,8 @@ function KnowledgeSettingsContent() {
           <CardHeader>
             <CardTitle>Reranking Configuration</CardTitle>
             <CardDescription>
-              Configure the LLM used to rerank knowledge base search results
-              for improved relevance. Any LLM provider and model can be used.
+              Configure the LLM used to rerank knowledge base search results for
+              improved relevance. Any LLM provider and model can be used.
             </CardDescription>
           </CardHeader>
           <CardContent>

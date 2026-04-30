@@ -1,8 +1,8 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import { ArrowUpRight, Database, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { DocsPage, getDocsUrl } from "@shared";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 

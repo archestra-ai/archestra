@@ -687,12 +687,13 @@ function KnowledgeSettingsContent() {
                         variant="outline"
                         size="sm"
                         disabled={!hasPermission || testConnection.isPending}
-                        onClick={() =>
+                        onClick={() => {
+                          if (!embeddingChatApiKeyId || !embeddingModel) return;
                           testConnection.mutate({
-                            embeddingChatApiKeyId: embeddingChatApiKeyId!,
-                            embeddingModel: embeddingModel!,
-                          })
-                        }
+                            embeddingChatApiKeyId,
+                            embeddingModel,
+                          });
+                        }}
                       >
                         {testConnection.isPending ? (
                           <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />

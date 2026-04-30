@@ -6,7 +6,6 @@ import {
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
-import { archestraMcpBranding } from "./branding";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
@@ -38,6 +37,7 @@ import {
   SuggestedPromptToolInputSchema,
   ToolAssignmentToolInputSchema,
 } from "./agent-resources";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   defineArchestraTool,

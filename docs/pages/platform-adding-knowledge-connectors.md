@@ -2,7 +2,7 @@
 title: Adding Knowledge Connectors
 category: Development
 order: 3
-description: Developer guide for implementing new knowledge base connectors in Archestra Platform
+description: Developer guide for implementing new Knowledge Base connectors in Archestra Platform
 lastUpdated: 2026-04-15
 ---
 
@@ -14,7 +14,7 @@ This is a development guide for adding new knowledge base connectors to Archestr
 
 ## Overview
 
-This guide covers how to add a new knowledge connector to Archestra Platform. Connectors pull data from external tools (Jira, Confluence, GitHub, GitLab, etc.) into knowledge bases on a schedule. Each connector requires:
+This guide covers how to add a new knowledge connector to Archestra Platform. Connectors pull data from external tools (Jira, Confluence, GitHub, GitLab, etc.) into Knowledge Bases on a schedule. Each connector requires:
 
 1. **Zod schemas** for config, checkpoint, and the `type` literal
 2. **Connector class** extending `BaseConnector` with `validateConfig`, `testConnection`, and `sync`

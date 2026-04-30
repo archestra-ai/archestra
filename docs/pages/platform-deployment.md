@@ -1065,11 +1065,9 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 ### Knowledge Base Configuration
 
-> **Enterprise feature:** Requires `ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED=true`. See [Enterprise Licensing](#enterprise-licensing) below.
+These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
-These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
-
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**. No environment variable is needed — select an existing LLM Provider Key (OpenAI only for embeddings, any provider for the reranker). Both must be configured before knowledge bases and connectors can be used.
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge-bases#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge-bases#reranking-configuration) for how to pick the key and model.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.
   - Default: `3300` (55 minutes)
@@ -1088,7 +1086,7 @@ To learn more about enterprise licensing, please reach out to [sales@archestra.a
   - Set to `true` to enable the enterprise license
   - Required as a prerequisite for all other enterprise feature flags
 
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, knowledge bases connectors are limited to org-wide visibility.
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, Knowledge Base connectors are limited to org-wide visibility.
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).

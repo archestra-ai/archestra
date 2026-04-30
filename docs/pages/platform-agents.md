@@ -60,7 +60,7 @@ Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming 
 
 ## Knowledge Sources
 
-Agents can be assigned one or more knowledge bases or knowledge connectors. This gives the agent retrieval access to your internal docs and connected systems without hardcoding those sources into the prompt.
+Agents can be assigned one or more Knowledge Bases or knowledge connectors. This gives the agent retrieval access to your internal docs and connected systems without hardcoding those sources into the prompt.
 
 When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
 

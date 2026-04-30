@@ -17,17 +17,11 @@ export async function seedChatPreviewConversations(params: {
   messageCount: number;
   chatErrorCount: number;
 }> {
-  const agent = await AgentModel.create(
-    {
-      organizationId: params.organizationId,
-      name: CHAT_PREVIEW_AGENT_NAME,
-      agentType: "agent",
-      scope: "personal",
-      description: "Seeded chat scenarios for previewing conversation UI",
-      systemPrompt: "You are a seeded chat preview agent.",
-    },
-    params.userId,
-  );
+  const agent = await AgentModel.getDefaultProfile();
+
+  if (!agent) {
+    throw "No default profile agent";
+  }
 
   let messageCount = 0;
   let chatErrorCount = 0;

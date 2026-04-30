@@ -35,6 +35,7 @@ import {
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
+import { emitAuditEvent } from "@/audit/emit-audit-event";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -348,7 +349,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, organizationId } = request;
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
 
@@ -442,6 +444,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
 
+      await emitAuditEvent(request, {
+        action: "agent.create",
+        resourceType: "agent",
+        resourceId: agent.id,
+        metadata: {
+          name: agent.name,
+          agentType: agent.agentType,
+          scope: agent.scope,
+        },
+      });
+
       return reply.send(agent);
     },
   );
@@ -508,7 +521,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        body,
+        user,
+        organizationId,
+      } = request;
       // Fetch agent to determine its type for permission check
       const existingAgent = await AgentModel.findById(id, user.id, true);
       if (!existingAgent) {
@@ -685,6 +704,22 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await initializeObservabilityMetrics();
       }
 
+      await emitAuditEvent(request, {
+        action: "agent.update",
+        resourceType: "agent",
+        resourceId: agent.id,
+        metadata: {
+          before: {
+            name: existingAgent.name,
+            scope: existingAgent.scope,
+          },
+          after: {
+            name: agent.name,
+            scope: agent.scope,
+          },
+        },
+      });
+
       return reply.send(agent);
     },
   );
@@ -702,7 +737,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        user,
+        organizationId,
+      } = request;
       // Fetch agent to determine its type for permission check
       const agent = await AgentModel.findById(id, user.id, true);
       if (!agent) {
@@ -758,6 +798,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Agent not found");
       }
+
+      await emitAuditEvent(request, {
+        action: "agent.delete",
+        resourceType: "agent",
+        resourceId: id,
+        metadata: {
+          name: agent.name,
+          agentType: agent.agentType,
+          scope: agent.scope,
+        },
+      });
 
       return reply.send({ success: true });
     },

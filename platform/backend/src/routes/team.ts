@@ -7,6 +7,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { EXPLICIT_AUDIT_EVENT_LOGGED } from "@/audit/audit-log-middleware";
 import config from "@/config";
 import { AgentToolModel, AuditEventModel, TeamModel } from "@/models";
 import {
@@ -93,6 +94,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         createdBy: request.user.id,
       });
 
+      (request as unknown as Record<symbol, unknown>)[EXPLICIT_AUDIT_EVENT_LOGGED] =
+        true;
       await AuditEventModel.create({
         organizationId: request.organizationId,
         actorUserId: request.user.id,
@@ -164,10 +167,15 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (
-      { params: { id }, body, organizationId, user, headers, ip },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        body,
+        organizationId,
+        user,
+        headers,
+        ip,
+      } = request;
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
@@ -196,6 +204,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      (request as unknown as Record<symbol, unknown>)[EXPLICIT_AUDIT_EVENT_LOGGED] =
+        true;
       await AuditEventModel.create({
         organizationId,
         actorUserId: user.id,
@@ -204,7 +214,16 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resourceId: team.id,
         ipAddress: ip,
         userAgent: headers["user-agent"] ?? null,
-        metadata: body,
+        metadata: {
+          before: {
+            name: existingTeam.name,
+            description: existingTeam.description,
+          },
+          after: {
+            name: body.name ?? existingTeam.name,
+            description: body.description ?? existingTeam.description,
+          },
+        },
       });
 
       return reply.send(team);
@@ -224,7 +243,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId, user, headers, ip }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+        user,
+        headers,
+        ip,
+      } = request;
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
@@ -253,6 +279,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      (request as unknown as Record<symbol, unknown>)[EXPLICIT_AUDIT_EVENT_LOGGED] =
+        true;
       await AuditEventModel.create({
         organizationId,
         actorUserId: user.id,

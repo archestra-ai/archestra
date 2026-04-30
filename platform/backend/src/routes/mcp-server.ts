@@ -9,6 +9,7 @@ import mcpClient, {
 } from "@/clients/mcp-client";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
+import { emitAuditEvent } from "@/audit/emit-audit-event";
 import {
   AccountModel,
   AgentModel,
@@ -149,7 +150,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user, headers, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, headers, organizationId } = request;
       let {
         agentIds,
         secretId,
@@ -607,6 +609,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const mcpServer = await McpServerModel.create({
         ...serverData,
         ...(secretId && { secretId }),
+      });
+
+      await emitAuditEvent(request, {
+        action: "mcpServer.install",
+        resourceType: "mcpServer",
+        resourceId: mcpServer.id,
+        metadata: {
+          name: mcpServer.name,
+          catalogId: mcpServer.catalogId,
+          serverType: mcpServer.serverType,
+          scope: mcpServer.scope,
+          teamId: mcpServer.teamId,
+        },
       });
 
       try {
@@ -1156,7 +1171,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id: mcpServerId }, user, headers }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id: mcpServerId },
+        user,
+        headers,
+      } = request;
       // Fetch the MCP server first to get secretId and serverType
       const mcpServer = await McpServerModel.findById(mcpServerId);
 
@@ -1213,6 +1233,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Delete the MCP server record
       const success = await McpServerModel.delete(mcpServerId);
+
+      if (success) {
+        await emitAuditEvent(request, {
+          action: "mcpServer.uninstall",
+          resourceType: "mcpServer",
+          resourceId: mcpServerId,
+          metadata: {
+            name: mcpServer.name,
+            catalogId: mcpServer.catalogId,
+            serverType: mcpServer.serverType,
+            scope: mcpServer.scope,
+            teamId: mcpServer.teamId,
+          },
+        });
+      }
 
       return reply.send({ success });
     },
@@ -1418,13 +1453,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
+    async (request, reply) => {
       const {
-        environmentValues,
-        userConfigValues,
-        isByosVault,
-        serviceAccount,
-      } = body;
+        params: { id },
+        body,
+        user,
+        headers,
+      } = request;
+      const { environmentValues, userConfigValues, isByosVault, serviceAccount } =
+        body;
 
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id);
@@ -1600,6 +1637,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updatedServer) {
         throw new ApiError(500, "Server not found after update");
       }
+
+      await emitAuditEvent(request, {
+        action: "mcpServer.reinstall",
+        resourceType: "mcpServer",
+        resourceId: updatedServer.id,
+        metadata: {
+          name: updatedServer.name,
+          catalogId: updatedServer.catalogId,
+          serverType: updatedServer.serverType,
+          scope: updatedServer.scope,
+          teamId: updatedServer.teamId,
+        },
+      });
 
       // Perform the reinstall asynchronously (don't block the response)
       // Use setImmediate to fully detach from the request lifecycle

@@ -364,7 +364,7 @@ export type GeminiGenerateContentRequestInput = {
     /**
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
-    contents: Array<{
+    contents?: Array<{
         /**
          * The role of the author of this content.
          */
@@ -864,9 +864,9 @@ export type GeminiGenerateContentRequestInput = {
 
 export type GeminiGenerateContentResponseInput = {
     /**
-     * Candidate responses from the model
+     * Candidate responses from the model. Optional because Gemini omits this field when the response is blocked by safety filters (only promptFeedback is returned).
      */
-    candidates: Array<{
+    candidates?: Array<{
         /**
          *
          * The base structured datatype containing multi-part content of a message.
@@ -5618,7 +5618,7 @@ export type GeminiGenerateContentRequest = {
     /**
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
-    contents: Array<{
+    contents?: Array<{
         /**
          * The role of the author of this content.
          */
@@ -6118,9 +6118,9 @@ export type GeminiGenerateContentRequest = {
 
 export type GeminiGenerateContentResponse = {
     /**
-     * Candidate responses from the model
+     * Candidate responses from the model. Optional because Gemini omits this field when the response is blocked by safety filters (only promptFeedback is returned).
      */
-    candidates: Array<{
+    candidates?: Array<{
         /**
          *
          * The base structured datatype containing multi-part content of a message.

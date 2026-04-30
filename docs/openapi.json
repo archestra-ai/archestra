@@ -1159,6 +1159,7 @@
         "type": "object",
         "properties": {
           "contents": {
+            "description": "The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request",
             "type": "array",
             "items": {
               "type": "object",
@@ -1578,8 +1579,7 @@
                 "parts"
               ],
               "description": "\nThe base structured datatype containing multi-part content of a message.\n\nA Content includes a role field designating the producer of the Content and a parts field containing multi-part data that contains the content of the message turn.\n\nhttps://ai.google.dev/api/caching#Content\n"
-            },
-            "description": "The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request"
+            }
           },
           "tools": {
             "description": "A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.",
@@ -2119,15 +2119,13 @@
               }
             }
           }
-        },
-        "required": [
-          "contents"
-        ]
+        }
       },
       "GeminiGenerateContentResponseInput": {
         "type": "object",
         "properties": {
           "candidates": {
+            "description": "Candidate responses from the model. Optional because Gemini omits this field when the response is blocked by safety filters (only promptFeedback is returned).",
             "type": "array",
             "items": {
               "type": "object",
@@ -2678,8 +2676,7 @@
                 "index"
               ],
               "description": "https://ai.google.dev/api/generate-content#candidate"
-            },
-            "description": "Candidate responses from the model"
+            }
           },
           "promptFeedback": {
             "description": "Returns the prompt's feedback related to the content filters",
@@ -2888,10 +2885,7 @@
             "description": "The unique response ID.",
             "type": "string"
           }
-        },
-        "required": [
-          "candidates"
-        ]
+        }
       },
       "AnthropicMessagesRequestInput": {
         "type": "object",
@@ -18029,6 +18023,7 @@
         "type": "object",
         "properties": {
           "contents": {
+            "description": "The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request",
             "type": "array",
             "items": {
               "type": "object",
@@ -18469,8 +18464,7 @@
               ],
               "additionalProperties": false,
               "description": "\nThe base structured datatype containing multi-part content of a message.\n\nA Content includes a role field designating the producer of the Content and a parts field containing multi-part data that contains the content of the message turn.\n\nhttps://ai.google.dev/api/caching#Content\n"
-            },
-            "description": "The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request"
+            }
           },
           "tools": {
             "description": "A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.",
@@ -19036,15 +19030,13 @@
             "additionalProperties": false
           }
         },
-        "required": [
-          "contents"
-        ],
         "additionalProperties": false
       },
       "GeminiGenerateContentResponse": {
         "type": "object",
         "properties": {
           "candidates": {
+            "description": "Candidate responses from the model. Optional because Gemini omits this field when the response is blocked by safety filters (only promptFeedback is returned).",
             "type": "array",
             "items": {
               "type": "object",
@@ -19620,8 +19612,7 @@
               ],
               "additionalProperties": false,
               "description": "https://ai.google.dev/api/generate-content#candidate"
-            },
-            "description": "Candidate responses from the model"
+            }
           },
           "promptFeedback": {
             "description": "Returns the prompt's feedback related to the content filters",
@@ -19838,9 +19829,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "candidates"
-        ],
         "additionalProperties": false
       },
       "AnthropicMessagesRequest": {

@@ -33,7 +33,6 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -191,15 +190,6 @@ function AddApiKeyDialog({
         className="flex min-h-0 flex-1 flex-col"
       >
         <DialogBody className="space-y-4">
-          {forEmbedding && (
-            <Alert variant="default">
-              <Info className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                After adding the key, sync models and mark an embedding model
-                via the model catalog (LLM Providers &gt; Models).
-              </AlertDescription>
-            </Alert>
-          )}
           <LlmProviderApiKeyForm
             mode="full"
             showConsoleLink={false}

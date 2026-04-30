@@ -40579,6 +40579,503 @@
         }
       }
     },
+    "/api/agents/{id}/export": {
+      "get": {
+        "operationId": "exportAgent",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Export an agent configuration as a portable JSON payload for cross-instance transfer\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "enum": [
+                        "1"
+                      ],
+                      "description": "Schema version for forward compatibility"
+                    },
+                    "exportedAt": {
+                      "type": "string",
+                      "description": "ISO 8601 timestamp"
+                    },
+                    "sourceInstance": {
+                      "description": "Informational: hostname of the source instance",
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agent": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "agentType": {
+                          "type": "string",
+                          "enum": [
+                            "agent"
+                          ],
+                          "description": "Only internal agents are exportable"
+                        },
+                        "description": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "systemPrompt": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "icon": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string",
+                          "description": "Original scope; imports always default to personal"
+                        },
+                        "considerContextUntrusted": {
+                          "type": "boolean"
+                        },
+                        "toolAssignmentMode": {
+                          "type": "string"
+                        },
+                        "toolExposureMode": {
+                          "type": "string"
+                        },
+                        "llmModel": {
+                          "nullable": true,
+                          "description": "Informational; not auto-configured on import",
+                          "type": "string"
+                        },
+                        "incomingEmailEnabled": {
+                          "type": "boolean"
+                        },
+                        "incomingEmailSecurityMode": {
+                          "type": "string"
+                        },
+                        "incomingEmailAllowedDomain": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "passthroughHeaders": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "agentType",
+                        "description",
+                        "systemPrompt",
+                        "icon",
+                        "scope",
+                        "considerContextUntrusted",
+                        "toolAssignmentMode",
+                        "toolExposureMode",
+                        "llmModel",
+                        "incomingEmailEnabled",
+                        "incomingEmailSecurityMode",
+                        "incomingEmailAllowedDomain",
+                        "passthroughHeaders"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "suggestedPrompts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "toolName": {
+                            "type": "string",
+                            "description": "Tool name as registered in the MCP catalog"
+                          },
+                          "catalogName": {
+                            "nullable": true,
+                            "description": "MCP catalog item name (null for proxy-sniffed tools)",
+                            "type": "string"
+                          },
+                          "credentialResolutionMode": {
+                            "description": "How credentials are resolved for this tool assignment",
+                            "type": "string",
+                            "enum": [
+                              "static",
+                              "dynamic",
+                              "enterprise_managed"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "toolName",
+                          "catalogName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "delegations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "targetAgentName": {
+                            "type": "string",
+                            "description": "Name of the target agent for delegation"
+                          }
+                        },
+                        "required": [
+                          "targetAgentName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "knowledgeBases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Knowledge base name"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "connectors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Connector name"
+                          },
+                          "connectorType": {
+                            "type": "string",
+                            "description": "Connector type (e.g. confluence, github)"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "connectorType"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "exportedAt",
+                    "agent",
+                    "labels",
+                    "suggestedPrompts",
+                    "tools",
+                    "delegations",
+                    "knowledgeBases",
+                    "connectors"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/agents/labels/keys": {
       "get": {
         "operationId": "getLabelKeys",

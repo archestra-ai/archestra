@@ -11999,6 +11999,171 @@ export type UpdateAgentResponses = {
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
 
+export type ExportAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/export';
+};
+
+export type ExportAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ExportAgentError = ExportAgentErrors[keyof ExportAgentErrors];
+
+export type ExportAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Schema version for forward compatibility
+         */
+        version: '1';
+        /**
+         * ISO 8601 timestamp
+         */
+        exportedAt: string;
+        /**
+         * Informational: hostname of the source instance
+         */
+        sourceInstance?: string | null;
+        agent: {
+            name: string;
+            /**
+             * Only internal agents are exportable
+             */
+            agentType: 'agent';
+            description: string | null;
+            systemPrompt: string | null;
+            icon: string | null;
+            /**
+             * Original scope; imports always default to personal
+             */
+            scope: string;
+            considerContextUntrusted: boolean;
+            toolAssignmentMode: string;
+            toolExposureMode: string;
+            /**
+             * Informational; not auto-configured on import
+             */
+            llmModel: string | null;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: string;
+            incomingEmailAllowedDomain: string | null;
+            passthroughHeaders: Array<string> | null;
+        };
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        tools: Array<{
+            /**
+             * Tool name as registered in the MCP catalog
+             */
+            toolName: string;
+            /**
+             * MCP catalog item name (null for proxy-sniffed tools)
+             */
+            catalogName: string | null;
+            /**
+             * How credentials are resolved for this tool assignment
+             */
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+        }>;
+        delegations: Array<{
+            /**
+             * Name of the target agent for delegation
+             */
+            targetAgentName: string;
+        }>;
+        knowledgeBases: Array<{
+            /**
+             * Knowledge base name
+             */
+            name: string;
+        }>;
+        connectors: Array<{
+            /**
+             * Connector name
+             */
+            name: string;
+            /**
+             * Connector type (e.g. confluence, github)
+             */
+            connectorType: string;
+        }>;
+    };
+};
+
+export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
+
 export type GetLabelKeysData = {
     body?: never;
     path?: never;

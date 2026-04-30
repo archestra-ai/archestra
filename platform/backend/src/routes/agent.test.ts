@@ -811,4 +811,75 @@ describe("agent routes", () => {
       "x-tenant-id",
     ]);
   });
+
+  describe("GET /api/agents/:id/export", () => {
+    test("should export a valid portable JSON configuration", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Export Test Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(data.version).toBe("1");
+      expect(data.agent.name).toBe(created.name);
+      expect(data.agent.agentType).toBe("agent");
+    });
+
+    test("should return 400 for built-in agents", async ({ makeAgent }) => {
+      const created = await makeAgent({
+        name: "Policy Configuration Subagent",
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+        agentType: "agent",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: true,
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Built-in agents cannot be exported",
+      );
+    });
+
+    test("should return 400 if trying to export an MCP gateway", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Proxy Export Test`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "mcp_gateway",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Only internal agents can be exported",
+      );
+    });
+  });
 });

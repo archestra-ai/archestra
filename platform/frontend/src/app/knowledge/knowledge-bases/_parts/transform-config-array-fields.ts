@@ -20,6 +20,7 @@ export function transformConfigArrayFields(
     "channelIds",
     "projectGids",
     "tagsToSkip",
+    "objects",
     "collectionIds",
   ];
   for (const key of stringArrayFields) {

@@ -652,6 +652,7 @@ export async function handleLLMProxy<
       reply,
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
+      provider.extractInternalCode.bind(provider),
     );
   }
 }
@@ -946,7 +947,13 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
-    return handleError(error, reply, provider.extractErrorMessage, true);
+    return handleError(
+      error,
+      reply,
+      provider.extractErrorMessage,
+      true,
+      provider.extractInternalCode.bind(provider),
+    );
   } finally {
     // Always record interaction (whether stream completed or was aborted)
     if (!streamCompleted) {

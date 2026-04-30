@@ -21,6 +21,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   Avatar,
   AvatarFallback,
@@ -89,8 +90,10 @@ export type McpServerCardProps = {
   onCancelInstallation?: (serverId: string) => void;
   /** Called when user wants to add a personal connection from manage dialog */
   onAddPersonalConnection?: () => void;
-  /** Called when user wants to add a shared connection for a specific team */
+  /** Called when user wants to add a team connection for a specific team */
   onAddSharedConnection?: (teamId: string) => void;
+  /** Called when user wants to add an organization-wide connection */
+  onAddOrgConnection?: () => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };
@@ -117,6 +120,7 @@ export function McpServerCard({
   onCancelInstallation,
   onAddPersonalConnection,
   onAddSharedConnection,
+  onAddOrgConnection,
   isBuiltInPlaywright = false,
 }: McpServerCardBaseProps) {
   const isBuiltin = variant === "builtin";
@@ -358,7 +362,15 @@ export function McpServerCard({
     serverIds: string[];
   }> = [];
   const seenKeys = new Set<string>();
+  const hasOrgConnection = (mcpServerOfCurrentCatalogItem ?? []).some(
+    (server) =>
+      (server.scope ?? (server.teamId ? "team" : "personal")) === "org",
+  );
   for (const server of mcpServerOfCurrentCatalogItem ?? []) {
+    const serverScope = server.scope ?? (server.teamId ? "team" : "personal");
+    if (serverScope === "org") {
+      continue;
+    }
     if (server.teamDetails?.name) {
       const key = `team-${server.teamDetails.teamId}`;
       if (!seenKeys.has(key)) {
@@ -394,7 +406,7 @@ export function McpServerCard({
   const hasCompactInfoContent =
     toolsCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
-    (!isBuiltinVariant && connectionAvatars.length > 0);
+    (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
 
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
@@ -430,6 +442,30 @@ export function McpServerCard({
           )}
           <div className="h-4 w-px bg-border" />
         </>
+      )}
+      {!isBuiltinVariant && hasOrgConnection && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => openSettingsPage("connections")}
+                className="inline-flex items-center rounded-full"
+              >
+                <ResourceVisibilityBadge
+                  scope="org"
+                  teams={undefined}
+                  authorId={undefined}
+                  authorName={undefined}
+                  currentUserId={undefined}
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Installed organization-wide. Manage connections to review.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       {!isBuiltinVariant && connectionAvatars.length > 0 && (
         <div className="flex items-center gap-2">
@@ -716,6 +752,7 @@ export function McpServerCard({
         showYaml={variant === "local"}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}
+        onAddOrgConnection={onAddOrgConnection}
         installs={allInstalls}
         deploymentStatuses={deploymentStatuses}
         deploymentServerIds={deploymentServerIds}

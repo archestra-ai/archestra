@@ -597,6 +597,7 @@ describe("mcp-reinstall", () => {
         ownerId: "user-123",
         catalogId: "catalog-123",
         serverType: "local",
+        scope: "personal",
         ...overrides,
       }) as McpServer;
 
@@ -831,6 +832,7 @@ describe("mcp-reinstall", () => {
         name: "old-name-team-456",
         ownerId: "user-123",
         teamId: "team-456",
+        scope: "team",
       });
       const catalog = createCatalog({
         serverType: "local",

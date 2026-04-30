@@ -1,6 +1,6 @@
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 
-export type MessageSizeEstimate = {
+type MessageSizeEstimate = {
   length: number;
   isEstimated: boolean;
 };

@@ -69,6 +69,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
 
 /**
  * Cost information for a model (prices per million tokens in USD)
+ * @public — exported for testability
  */
 export type ModelsDevCost = {
   input?: number;
@@ -82,6 +83,7 @@ export type ModelsDevCost = {
 
 /**
  * Token limits for a model
+ * @public — exported for testability
  */
 export type ModelsDevLimit = {
   context?: number;
@@ -91,6 +93,7 @@ export type ModelsDevLimit = {
 
 /**
  * Input/output modalities for a model
+ * @public — exported for testability
  */
 export type ModelsDevModalities = {
   input?: string[];
@@ -99,11 +102,13 @@ export type ModelsDevModalities = {
 
 /**
  * Model status indicator
+ * @public — exported for testability
  */
 export type ModelsDevStatus = "alpha" | "beta" | "deprecated";
 
 /**
  * A single model from the models.dev API
+ * @public — exported for testability
  */
 export type ModelsDevModel = {
   id: string;

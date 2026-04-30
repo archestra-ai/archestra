@@ -9,7 +9,7 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type WebSocket from "ws";
 import logger from "@/logging";
 
-export interface K8sAttachTransportParams {
+interface K8sAttachTransportParams {
   k8sAttach: Attach;
   namespace: string;
   podName: string;

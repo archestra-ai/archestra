@@ -8,6 +8,7 @@
 import { context as otelContext } from "@opentelemetry/api";
 import {
   ApiError,
+  type ArchestraInternalErrorCode,
   type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
@@ -202,6 +203,9 @@ export function handleError(
   reply: FastifyReply,
   extractErrorMessage: (error: unknown) => string,
   isStreaming: boolean,
+  extractInternalCode: (
+    error: unknown,
+  ) => ArchestraInternalErrorCode | undefined,
 ): FastifyReply | never {
   logger.error(error);
 
@@ -221,6 +225,7 @@ export function handleError(
   }
 
   const errorMessage = extractErrorMessage(error);
+  const internalCode = extractInternalCode(error);
 
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
@@ -250,5 +255,5 @@ export function handleError(
 
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
-  throw new ApiError(statusCode, errorMessage);
+  throw new ApiError(statusCode, errorMessage, internalCode);
 }

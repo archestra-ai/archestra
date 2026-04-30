@@ -2,6 +2,7 @@
 
 import {
   type AgentScope,
+  type AgentToolAssignmentMode,
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
@@ -19,6 +20,8 @@ import {
   MAX_SUGGESTED_PROMPTS,
   providerDisplayNames,
   type SupportedProvider,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -66,6 +69,7 @@ import {
 } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -154,6 +158,7 @@ const { useIdentityProviders } = config.enterpriseFeatures.core
     };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type ToolExposureMode = Agent["toolExposureMode"];
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
@@ -622,6 +627,10 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [toolAssignmentMode, setToolAssignmentMode] =
+    useState<AgentToolAssignmentMode>("manual");
+  const [toolExposureMode, setToolExposureMode] =
+    useState<ToolExposureMode>("full");
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
@@ -637,7 +646,23 @@ export function AgentDialog({
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
+  const supportsAutomaticToolAssignment =
+    agentType === "agent" || agentType === "mcp_gateway";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
+  const toolExposureDocsUrl = getDocsUrl(
+    agentType === "mcp_gateway"
+      ? DocsPage.PlatformMcpGateway
+      : DocsPage.PlatformAgents,
+    "search-and-run-tool-mode",
+  );
+  const toolAssignmentDocsUrl = supportsAutomaticToolAssignment
+    ? getDocsUrl(
+        agentType === "mcp_gateway"
+          ? DocsPage.PlatformMcpGateway
+          : DocsPage.PlatformAgents,
+        "tool-assignment-mode",
+      )
+    : null;
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -680,6 +705,8 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
+        setToolAssignmentMode(agentData.toolAssignmentMode);
+        setToolExposureMode(agentData.toolExposureMode ?? "full");
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -712,6 +739,8 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
+        setToolAssignmentMode("manual");
+        setToolExposureMode("full");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -935,11 +964,15 @@ export function AgentDialog({
             ...(agentType !== "llm_proxy" && {
               knowledgeBaseIds: knowledgeBaseIds,
               connectorIds: connectorIds,
+              toolExposureMode,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
+            ...(supportsAutomaticToolAssignment && {
+              toolAssignmentMode,
+            }),
             ...(agentType === "mcp_gateway" && {
               passthroughHeaders:
                 passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -971,11 +1004,15 @@ export function AgentDialog({
           ...(agentType !== "llm_proxy" && {
             knowledgeBaseIds: knowledgeBaseIds,
             connectorIds: connectorIds,
+            toolExposureMode,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
+          ...(supportsAutomaticToolAssignment && {
+            toolAssignmentMode,
+          }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -1070,7 +1107,10 @@ export function AgentDialog({
     onOpenChange,
     supportsIdentityProvider,
     passthroughHeaders,
+    toolAssignmentMode,
+    supportsAutomaticToolAssignment,
     deleteAgent,
+    toolExposureMode,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1435,20 +1475,62 @@ export function AgentDialog({
 
                   {/* Tools */}
                   <div className="space-y-2">
-                    <Label>Tools ({selectedToolsCount})</Label>
-                    {!agent && selectedToolsCount > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Some recommended {appName} MCP tools are pre-selected
-                        for you
-                      </p>
-                    )}
-                    <AgentToolsEditor
-                      ref={agentToolsEditorRef}
-                      agentId={agent?.id}
-                      assignmentScope={scope}
-                      assignmentTeamIds={assignedTeamIds}
-                      onSelectedCountChange={setSelectedToolsCount}
-                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>
+                        Tools
+                        {(!supportsAutomaticToolAssignment ||
+                          toolAssignmentMode === "manual") &&
+                          ` (${selectedToolsCount})`}
+                      </Label>
+                      {supportsAutomaticToolAssignment && (
+                        <Select
+                          value={toolAssignmentMode}
+                          onValueChange={(value) =>
+                            setToolAssignmentMode(
+                              value as AgentToolAssignmentMode,
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-auto gap-2 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="automatic">
+                              Automatic (by labels)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                    {supportsAutomaticToolAssignment &&
+                      toolAssignmentMode === "automatic" && (
+                        <p className="text-xs text-muted-foreground">
+                          Tools are auto-assigned from catalog entries that
+                          match this {agentTypeDisplayName[agentType]}'s labels.
+                          Switch to Manual to edit directly.
+                        </p>
+                      )}
+                    {!supportsAutomaticToolAssignment ||
+                    toolAssignmentMode === "manual" ? (
+                      <>
+                        {!agent && selectedToolsCount > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Some recommended {appName} MCP tools are
+                            pre-selected for you
+                          </p>
+                        )}
+                        <AgentToolsEditor
+                          ref={agentToolsEditorRef}
+                          agentId={agent?.id}
+                          assignmentScope={scope}
+                          assignmentTeamIds={assignedTeamIds}
+                          onSelectedCountChange={setSelectedToolsCount}
+                        />
+                      </>
+                    ) : agent ? (
+                      <AgentToolsList agentId={agent.id} />
+                    ) : null}
                   </div>
 
                   {/* Subagents */}
@@ -1462,6 +1544,43 @@ export function AgentDialog({
                       onSelectionChange={setSelectedDelegationTargetIds}
                       currentAgentId={agent?.id}
                     />
+                  </div>
+
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="search-and-run-tool-mode"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="search-and-run-tool-mode"
+                          className="font-medium"
+                        >
+                          Search-and-run tool mode
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Expose only{" "}
+                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                          <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
+                          <code>tools/list</code>; assigned tools stay
+                          searchable and runnable.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Knowledge Sources */}
@@ -1854,11 +1973,33 @@ export function AgentDialog({
                     <CollapsibleContent>
                       <div className="border-t p-4 space-y-4">
                         {/* Labels */}
-                        <ProfileLabels
-                          ref={agentLabelsRef}
-                          labels={labels}
-                          onLabelsChange={setLabels}
-                        />
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Label>Labels</Label>
+                              {supportsAutomaticToolAssignment && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  Organize and drive automatic tool assignment
+                                </span>
+                              )}
+                            </div>
+                            {toolAssignmentDocsUrl && (
+                              <ExternalDocsLink
+                                href={toolAssignmentDocsUrl}
+                                className="text-xs text-muted-foreground underline shrink-0"
+                                showIcon={false}
+                              >
+                                Learn more
+                              </ExternalDocsLink>
+                            )}
+                          </div>
+                          <ProfileLabels
+                            ref={agentLabelsRef}
+                            labels={labels}
+                            onLabelsChange={setLabels}
+                            showLabel={false}
+                          />
+                        </div>
 
                         {/* Security (LLM Proxy and Agent only) */}
                         {showSecurity && (
@@ -2022,11 +2163,33 @@ export function AgentDialog({
               {/* Labels for built-in agents (outside advanced section since advanced is hidden) */}
               {isBuiltIn && (
                 <div className="rounded-lg border bg-card p-4 space-y-4">
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                  />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Label>Labels</Label>
+                        {supportsAutomaticToolAssignment && (
+                          <span className="text-xs font-normal text-muted-foreground">
+                            Organize and drive automatic tool assignment
+                          </span>
+                        )}
+                      </div>
+                      {toolAssignmentDocsUrl && (
+                        <ExternalDocsLink
+                          href={toolAssignmentDocsUrl}
+                          className="text-xs text-muted-foreground underline shrink-0"
+                          showIcon={false}
+                        >
+                          Learn more
+                        </ExternalDocsLink>
+                      )}
+                    </div>
+                    <ProfileLabels
+                      ref={agentLabelsRef}
+                      labels={labels}
+                      onLabelsChange={setLabels}
+                      showLabel={false}
+                    />
+                  </div>
                 </div>
               )}
             </div>

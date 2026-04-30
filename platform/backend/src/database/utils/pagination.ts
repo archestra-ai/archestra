@@ -4,35 +4,12 @@ import {
   type PaginationQuery,
 } from "@shared";
 
-import type { PgSelect } from "drizzle-orm/pg-core";
-
 /**
  * Pagination result containing data and metadata
  */
 export interface PaginatedResult<T> {
   data: T[];
   pagination: PaginationMeta;
-}
-
-/**
- * Apply pagination to a Drizzle query builder
- *
- * @param queryBuilder - The Drizzle query builder to paginate
- * @param params - Pagination parameters (limit and offset)
- * @returns The query builder with limit and offset applied
- *
- * @example
- * ```typescript
- * const query = db.select().from(table);
- * const paginatedQuery = applyPagination(query, { limit: 20, offset: 0 });
- * const results = await paginatedQuery;
- * ```
- */
-export function applyPagination<T extends PgSelect>(
-  queryBuilder: T,
-  params: PaginationQuery,
-): T {
-  return queryBuilder.limit(params.limit).offset(params.offset) as T;
 }
 
 /**

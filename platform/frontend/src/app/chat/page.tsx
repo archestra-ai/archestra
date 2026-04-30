@@ -209,9 +209,6 @@ export function ChatPageContent({
   const { data: canReadLlmModels } = useHasPermissions({
     llmModel: ["read"],
   });
-  const { data: canSeeProviderSettings } = useHasPermissions({
-    chatProviderSettings: ["enable"],
-  });
   const { data: canReadTeams } = useHasPermissions({
     team: ["read"],
   });
@@ -236,9 +233,7 @@ export function ChatPageContent({
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
-    canSeeProviderSettings === true &&
-    canReadLlmProvider === true &&
-    canReadLlmModels === true;
+    canReadLlmProvider === true && canReadLlmModels === true;
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =

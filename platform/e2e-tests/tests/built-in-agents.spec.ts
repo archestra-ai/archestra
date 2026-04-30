@@ -55,6 +55,7 @@ test.describe("Built-In Agents API", () => {
     const serverResponse = await installMcpServer(request, {
       name: catalogItem.name,
       catalogId: catalogItem.id,
+      scope: "team",
       teamId: defaultTeam?.id,
     });
     const server = await serverResponse.json();
@@ -195,6 +196,7 @@ test.describe("Built-In Agents API", () => {
       const serverResponse = await installMcpServer(request, {
         name: catalogItem.name,
         catalogId: catalogItem.id,
+        scope: "team",
         teamId: defaultTeam?.id,
       });
       const server = await serverResponse.json();

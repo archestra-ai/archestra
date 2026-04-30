@@ -7,6 +7,7 @@ import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export type { EmbeddingApiResponse, EmbeddingInput };
+/** @public — re-exported for testability */
 export { GeminiEmbeddingError, OpenAIEmbeddingError };
 
 const RETRYABLE_NETWORK_ERROR_CODES = new Set([

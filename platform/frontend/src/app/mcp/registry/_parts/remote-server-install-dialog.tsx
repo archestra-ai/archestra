@@ -20,7 +20,10 @@ import {
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
-import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
+import {
+  type McpServerInstallScope,
+  SelectMcpServerCredentialTypeAndTeams,
+} from "./select-mcp-server-credential-type-and-teams";
 
 const InlineVaultSecretSelector = lazy(
   // biome-ignore lint/style/noRestrictedImports: lazy loading
@@ -48,7 +51,9 @@ type UserConfigType = Record<
 
 export interface RemoteServerInstallResult {
   metadata: Record<string, unknown>;
-  /** Team ID to assign the MCP server to (null for personal) */
+  /** Installation scope (personal, team, org) */
+  scope: McpServerInstallScope;
+  /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
   /** Whether metadata contains BYOS vault references in path#key format */
   isByosVault?: boolean;
@@ -69,6 +74,8 @@ interface RemoteServerInstallDialogProps {
   preselectedTeamId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
+  /** When true, only organization-wide installation is allowed */
+  orgOnly?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -80,13 +87,14 @@ export function RemoteServerInstallDialog({
   isReauth = false,
   preselectedTeamId,
   personalOnly = false,
+  orgOnly = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
   // Team selection state
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [credentialType, setCredentialType] = useState<"personal" | "team">(
-    "personal",
+  const [scope, setScope] = useState<McpServerInstallScope>(
+    orgOnly ? "org" : "personal",
   );
   const [canInstall, setCanInstall] = useState(true);
 
@@ -124,15 +132,15 @@ export function RemoteServerInstallDialog({
     }));
   };
 
-  // Sync vaultTeamId from selectedTeamId when in team mode, reset when switching to personal
+  // Sync vaultTeamId from selectedTeamId when in team mode, reset otherwise
   useEffect(() => {
-    if (credentialType === "team") {
+    if (scope === "team") {
       setVaultTeamId(selectedTeamId);
     } else {
       setVaultTeamId(null);
     }
     setVaultSecrets({});
-  }, [credentialType, selectedTeamId]);
+  }, [scope, selectedTeamId]);
 
   const handleVaultTeamChange = (teamId: string) => {
     setVaultTeamId(teamId);
@@ -182,6 +190,7 @@ export function RemoteServerInstallDialog({
 
       await onConfirm(catalogItem, {
         metadata,
+        scope,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
       });
@@ -195,7 +204,7 @@ export function RemoteServerInstallDialog({
   const resetForm = () => {
     setConfigValues({});
     setSelectedTeamId(null);
-    setCredentialType("personal");
+    setScope(orgOnly ? "org" : "personal");
     setVaultTeamId(null);
     setVaultSecrets({});
   };
@@ -310,13 +319,14 @@ export function RemoteServerInstallDialog({
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={catalogItem?.id}
-        onCredentialTypeChange={setCredentialType}
+        onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
+        orgOnly={orgOnly}
       />
 
-      {useVaultSecrets && credentialType === "personal" && (
+      {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">
           <Label>Pull Vault secrets from:</Label>
           <p className="text-xs text-muted-foreground">
@@ -422,7 +432,7 @@ export function RemoteServerInstallDialog({
                       }
                       disabled={isInstalling}
                       noTeamMessage={
-                        credentialType === "personal"
+                        scope !== "team"
                           ? "Select a vault folder to pull secrets from"
                           : undefined
                       }

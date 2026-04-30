@@ -1,5 +1,13 @@
 import { E2eTestId } from "@shared";
-import { Clock, Eye, MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import {
+  Clock,
+  Download,
+  Eye,
+  MessageSquare,
+  Pencil,
+  Plug,
+  Trash2,
+} from "lucide-react";
 import {
   type TableRowAction,
   TableRowActions,
@@ -17,6 +25,7 @@ type AgentActionsProps = {
   onEdit: (agent: Agent) => void;
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
+  onExport: (agent: Agent) => void;
 };
 
 export function AgentActions({
@@ -26,6 +35,7 @@ export function AgentActions({
   onEdit,
   onView,
   onDelete,
+  onExport,
 }: AgentActionsProps) {
   const isBuiltIn = Boolean(agent.builtIn);
 
@@ -69,6 +79,14 @@ export function AgentActions({
       disabledTooltip: "Built-in agents cannot be scheduled",
       permissions: { scheduledTask: ["read"] },
       href: `/scheduled-tasks?agentId=${agent.id}`,
+    },
+    {
+      icon: <Download className="h-4 w-4" />,
+      label: "Export",
+      permissions: { agent: ["read"] },
+      disabled: isBuiltIn,
+      disabledTooltip: "Built-in agents cannot be exported",
+      onClick: () => onExport(agent),
     },
     editOrViewAction,
     {

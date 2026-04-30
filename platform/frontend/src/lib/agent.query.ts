@@ -11,11 +11,13 @@ import { handleApiError } from "@/lib/utils";
 const {
   createAgent,
   deleteAgent,
+  exportAgent,
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
   getDefaultLlmProxy,
   getAgent,
+  importAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
@@ -300,6 +302,37 @@ export function useOrgScopedAgents() {
         query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
       });
       return response.data ?? [];
+    },
+  });
+}
+
+export function useExportAgent() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await exportAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function useImportAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: archestraApiTypes.ImportAgentData["body"]) => {
+      const { data, error } = await importAgent({ body: payload });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

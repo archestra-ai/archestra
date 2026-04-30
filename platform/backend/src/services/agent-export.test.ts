@@ -18,8 +18,9 @@ describe("serializeAgentForExport", () => {
 
     const fullAgent = await AgentModel.findById(agent.id, user.id, true);
     expect(fullAgent).not.toBeNull();
+    if (!fullAgent) throw new Error("fullAgent should not be null");
 
-    const serialized = await serializeAgentForExport(fullAgent!);
+    const serialized = await serializeAgentForExport(fullAgent);
 
     expect(serialized.version).toBe("1");
     expect(serialized.agent.name).toBe("Basic Export Agent");
@@ -40,7 +41,6 @@ describe("serializeAgentForExport", () => {
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
     makeOrganization,
-    seedAndAssignArchestraTools,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -73,8 +73,8 @@ describe("serializeAgentForExport", () => {
       })
       .returning();
 
-    // Create the main agent
-    const mainAgent = await makeAgent({
+    // Create an agent that uses the KB and connector (exercises association paths)
+    await makeAgent({
       name: "Support Agent",
       organizationId: org.id,
       authorId: user.id,
@@ -116,8 +116,9 @@ describe("serializeAgentForExport", () => {
       true,
     );
     expect(fullAgent).not.toBeNull();
+    if (!fullAgent) throw new Error("fullAgent should not be null");
 
-    const serialized = await serializeAgentForExport(fullAgent!);
+    const serialized = await serializeAgentForExport(fullAgent);
 
     // Verify Agent fields
     expect(serialized.agent.name).toBe("Complex Support Agent");

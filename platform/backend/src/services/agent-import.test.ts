@@ -240,7 +240,8 @@ describe("importAgentFromPayload", () => {
     // Export it
     const fullOriginal = await AgentModel.findById(original.id, user.id, true);
     expect(fullOriginal).not.toBeNull();
-    const exportedPayload = await serializeAgentForExport(fullOriginal!);
+    if (!fullOriginal) throw new Error("fullOriginal should not be null");
+    const exportedPayload = await serializeAgentForExport(fullOriginal);
 
     // Import it
     const importResult = await importAgentFromPayload(

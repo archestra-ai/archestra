@@ -344,6 +344,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/agents/import",
     {
+      // Limit import payloads to 1 MiB — agent configs are small JSON files;
+      // rejecting oversized payloads protects against accidental or malicious abuse.
+      bodyLimit: 1 * 1024 * 1024,
       schema: {
         operationId: RouteId.ImportAgent,
         description:

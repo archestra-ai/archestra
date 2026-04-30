@@ -17,6 +17,7 @@
 7. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
+10. **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
 
 ## Docs
 

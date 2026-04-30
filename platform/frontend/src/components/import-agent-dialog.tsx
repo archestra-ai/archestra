@@ -244,10 +244,10 @@ export function ImportAgentDialog({
 
               {/* File picker with drag-and-drop */}
               {inputMode === "file" && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: drag and drop zone
-                <div
+                <label
+                  htmlFor="agent-import-file-input"
                   className={cn(
-                    "relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+                    "relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
                     dragActive
                       ? "border-primary bg-primary/5"
                       : "border-muted-foreground/25 hover:border-muted-foreground/50",
@@ -260,15 +260,12 @@ export function ImportAgentDialog({
                   <Upload className="h-8 w-8 text-muted-foreground/50" />
                   <p className="text-sm text-muted-foreground">
                     Drag and drop a <code>.json</code> file here, or{" "}
-                    <button
-                      type="button"
-                      className="font-medium text-primary underline-offset-4 hover:underline"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
+                    <span className="font-medium text-primary underline-offset-4 hover:underline">
                       browse
-                    </button>
+                    </span>
                   </p>
                   <input
+                    id="agent-import-file-input"
                     ref={fileInputRef}
                     type="file"
                     accept=".json"
@@ -276,7 +273,7 @@ export function ImportAgentDialog({
                     onChange={handleFileChange}
                     aria-label="Choose agent configuration file"
                   />
-                </div>
+                </label>
               )}
 
               {/* JSON paste mode */}

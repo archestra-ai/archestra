@@ -160,12 +160,10 @@ async function resolveAgentName(
     return requestedName;
   }
 
-  // Try with (imported) suffix
+  // Try with (imported) suffix, then (imported 2), (imported 3), etc.
   let candidate = `${requestedName} (imported)`;
-  let counter = 2;
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  for (let counter = 2; counter <= 100; counter++) {
     const dup = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
@@ -182,13 +180,10 @@ async function resolveAgentName(
     }
 
     candidate = `${requestedName} (imported ${counter})`;
-    counter++;
-
-    // Safety valve
-    if (counter > 100) {
-      return `${requestedName} (imported ${Date.now()})`;
-    }
   }
+
+  // Safety valve — extremely unlikely to reach 100 collisions
+  return `${requestedName} (imported ${Date.now()})`;
 }
 
 /**

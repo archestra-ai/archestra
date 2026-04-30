@@ -33,86 +33,106 @@ const auditEventStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       (reply.raw as any).flushHeaders?.();
 
       const organizationId = request.organizationId;
-      const lastEventIdHeader = request.headers["last-event-id"];
-      const lastEventId =
-        typeof lastEventIdHeader === "string" && lastEventIdHeader.length > 0
-          ? lastEventIdHeader
-          : null;
 
-      const afterFromQueryMs = request.query.after
-        ? Date.parse(request.query.after)
-        : Number.NaN;
+      // IMPORTANT: after we flush headers / start writing, we must never throw.
+      // If an exception escapes, Fastify will try to send an error response and
+      // we'll crash with ERR_HTTP_HEADERS_SENT.
+      try {
+        const lastEventIdHeader = request.headers["last-event-id"];
+        const lastEventId =
+          typeof lastEventIdHeader === "string" && lastEventIdHeader.length > 0
+            ? lastEventIdHeader
+            : null;
 
-      const afterMs = await resolveAfterMs({
-        organizationId,
-        lastEventId,
-        afterFromQueryMs,
-      });
+        const afterFromQueryMs = request.query.after
+          ? Date.parse(request.query.after)
+          : Number.NaN;
 
-      // Initial “connected” event
-      writeSseEvent(reply.raw, {
-        event: "connected",
-        data: { now: new Date().toISOString() },
-      });
-
-      let backlogSent = false;
-      const buffer: Array<
-        ReturnType<typeof serializeAuditEvent> & { id: string }
-      > = [];
-
-      const unsubscribe = auditEventPubsub.subscribeCreated((event) => {
-        // Enforce org scoping server-side
-        if (event.organizationId !== organizationId) return;
-
-        // Optional "after" filter
-        if (!Number.isNaN(afterMs) && event.createdAt.getTime() <= afterMs)
-          return;
-
-        const data = serializeAuditEvent(event);
-        if (!backlogSent) {
-          buffer.push({ ...data, id: event.id });
-          return;
-        }
-
-        writeSseEvent(reply.raw, { id: event.id, event: "auditEvent", data });
-      });
-
-      // Backfill any events that happened while the client was disconnected.
-      // Subscribe first, then query, then flush buffer to minimize race window.
-      if (!Number.isNaN(afterMs)) {
-        const missed = await AuditEventModel.getCreatedAfter({
+        const afterMs = await resolveAfterMs({
           organizationId,
-          after: new Date(afterMs),
-          limit: 250,
+          lastEventId,
+          afterFromQueryMs,
         });
 
-        for (const event of missed) {
+        // Initial “connected” event
+        writeSseEvent(reply.raw, {
+          event: "connected",
+          data: { now: new Date().toISOString() },
+        });
+
+        let backlogSent = false;
+        const buffer: Array<
+          ReturnType<typeof serializeAuditEvent> & { id: string }
+        > = [];
+
+        const unsubscribe = auditEventPubsub.subscribeCreated((event) => {
+          // Enforce org scoping server-side
+          if (event.organizationId !== organizationId) return;
+
+          // Optional "after" filter
+          if (!Number.isNaN(afterMs) && event.createdAt.getTime() <= afterMs)
+            return;
+
+          const data = serializeAuditEvent(event);
+          if (!backlogSent) {
+            buffer.push({ ...data, id: event.id });
+            return;
+          }
+
+          writeSseEvent(reply.raw, { id: event.id, event: "auditEvent", data });
+        });
+
+        // Backfill any events that happened while the client was disconnected.
+        // Subscribe first, then query, then flush buffer to minimize race window.
+        if (!Number.isNaN(afterMs)) {
+          const missed = await AuditEventModel.getCreatedAfter({
+            organizationId,
+            after: new Date(afterMs),
+            limit: 250,
+          });
+
+          for (const event of missed) {
+            writeSseEvent(reply.raw, {
+              id: event.id,
+              event: "auditEvent",
+              data: serializeAuditEvent(event),
+            });
+          }
+        }
+
+        backlogSent = true;
+        for (const buffered of buffer) {
           writeSseEvent(reply.raw, {
-            id: event.id,
+            id: buffered.id,
             event: "auditEvent",
-            data: serializeAuditEvent(event),
+            data: buffered,
           });
         }
-      }
 
-      backlogSent = true;
-      for (const buffered of buffer) {
-        writeSseEvent(reply.raw, {
-          id: buffered.id,
-          event: "auditEvent",
-          data: buffered,
+        // Keepalive ping to prevent proxies from closing idle connections
+        const keepalive = setInterval(() => {
+          writeSseEvent(reply.raw, { event: "ping", data: { t: Date.now() } });
+        }, 15000);
+
+        request.raw.on("close", () => {
+          clearInterval(keepalive);
+          unsubscribe();
         });
+      } catch (error) {
+        fastify.log.error(
+          { error },
+          "Audit event SSE stream failed; closing connection",
+        );
+        try {
+          writeSseEvent(reply.raw, {
+            event: "error",
+            data: { message: "Audit event stream failed" },
+          });
+        } catch {
+          // ignore
+        }
+        reply.raw.end();
       }
-
-      // Keepalive ping to prevent proxies from closing idle connections
-      const keepalive = setInterval(() => {
-        writeSseEvent(reply.raw, { event: "ping", data: { t: Date.now() } });
-      }, 15000);
-
-      request.raw.on("close", () => {
-        clearInterval(keepalive);
-        unsubscribe();
-      });
 
       return reply;
     },

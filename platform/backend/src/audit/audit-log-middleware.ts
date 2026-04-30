@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { AuditEventModel } from "@/models";
 
+export const EXPLICIT_AUDIT_EVENT_LOGGED = Symbol("explicit_audit_event_logged");
+
 /**
  * Global audit logger for "everything audited":
  * records every mutating /api request (POST/PUT/PATCH/DELETE) that returns 2xx.
@@ -21,6 +23,12 @@ const auditLogMiddlewarePlugin: FastifyPluginAsync = async (fastify) => {
 
     // Only log successful mutations
     if (reply.statusCode < 200 || reply.statusCode >= 300) return;
+
+    // If a route already emitted a domain-specific audit event for this request,
+    // skip the generic http.mutation to avoid noisy duplicates.
+    if ((request as unknown as Record<symbol, unknown>)[EXPLICIT_AUDIT_EVENT_LOGGED]) {
+      return;
+    }
 
     const organizationId = request.organizationId;
     const actorUserId = request.user?.id;

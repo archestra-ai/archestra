@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   gt,
   gte,
   ilike,
@@ -90,16 +91,33 @@ export default class AuditEventModel {
       ...(conditions as NonNullable<(typeof conditions)[number]>[]),
     );
 
-    const [data, totalResult] = await Promise.all([
+    const [rows, totalResult] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.auditEventsTable),
+          actor: {
+            id: schema.usersTable.id,
+            name: schema.usersTable.name,
+            email: schema.usersTable.email,
+            image: schema.usersTable.image,
+          },
+        })
         .from(schema.auditEventsTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.auditEventsTable.actorUserId, schema.usersTable.id),
+        )
         .where(where)
         .orderBy(desc(schema.auditEventsTable.createdAt))
         .limit(limit)
         .offset(offset),
       db.select({ count: count() }).from(schema.auditEventsTable).where(where),
     ]);
+
+    const data = rows.map((row) => ({
+      ...row,
+      actor: row.actor?.id ? row.actor : null,
+    })) satisfies AuditEvent[];
 
     return { data, total: totalResult[0]?.count ?? 0 };
   }
@@ -109,9 +127,21 @@ export default class AuditEventModel {
     after: Date;
     limit: number;
   }): Promise<AuditEvent[]> {
-    return await db
-      .select()
+    const rows = await db
+      .select({
+        ...getTableColumns(schema.auditEventsTable),
+        actor: {
+          id: schema.usersTable.id,
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+          image: schema.usersTable.image,
+        },
+      })
       .from(schema.auditEventsTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.auditEventsTable.actorUserId, schema.usersTable.id),
+      )
       .where(
         and(
           eq(schema.auditEventsTable.organizationId, params.organizationId),
@@ -120,6 +150,11 @@ export default class AuditEventModel {
       )
       .orderBy(asc(schema.auditEventsTable.createdAt))
       .limit(params.limit);
+
+    return rows.map((row) => ({
+      ...row,
+      actor: row.actor?.id ? row.actor : null,
+    })) satisfies AuditEvent[];
   }
 
   static async deleteOlderThan(params: { olderThan: Date }): Promise<number> {

@@ -23,6 +23,7 @@ import {
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
+import { importAgentFromPayload } from "@/services/agent-import";
 import {
   AgentExportPayloadSchema,
   type AgentScope,
@@ -32,6 +33,7 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
+  ImportAgentResponseSchema,
   InsertAgentSchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
@@ -336,6 +338,44 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
       );
+    },
+  );
+
+  fastify.post(
+    "/api/agents/import",
+    {
+      schema: {
+        operationId: RouteId.ImportAgent,
+        description:
+          "Import an agent from a portable JSON payload. Creates a new agent with all resolvable associations and returns soft warnings for any references that could not be found.",
+        tags: ["Agents"],
+        body: AgentExportPayloadSchema,
+        response: constructResponseSchema(ImportAgentResponseSchema),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      // Only agent type is supported for import
+      if (body.agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Only internal agents can be imported. MCP gateways and LLM proxies are not supported.",
+        );
+      }
+
+      // Check create permission for agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      checker.require("agent", "create");
+
+      const result = await importAgentFromPayload(
+        body,
+        user.id,
+        organizationId,
+      );
+
+      return reply.send(result);
     },
   );
 

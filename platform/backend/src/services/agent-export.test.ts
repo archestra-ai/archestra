@@ -1,7 +1,7 @@
+import db, { schema } from "@/database";
+import { AgentModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { serializeAgentForExport } from "./agent-export";
-import { AgentModel } from "@/models";
-import db, { schema } from "@/database";
 
 describe("serializeAgentForExport", () => {
   test("serializes a basic agent without associations correctly", async ({
@@ -44,25 +44,34 @@ describe("serializeAgentForExport", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    
+
     // Create dependencies
     const catalog = await makeInternalMcpCatalog({ name: "Jira Catalog" });
-    const tool = await makeTool({ name: "jira_get_issue", catalogId: catalog.id });
+    const tool = await makeTool({
+      name: "jira_get_issue",
+      catalogId: catalog.id,
+    });
     const kb = await makeKnowledgeBase(org.id, { name: "Company Wiki" });
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Confluence", connectorType: "confluence" });
-    
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      name: "Confluence",
+      connectorType: "confluence",
+    });
+
     // Create target agent for delegation
     const targetAgent = await makeAgent({
       name: "Database Expert",
       organizationId: org.id,
       authorId: user.id,
     });
-    
+
     // Create the delegation tool manually, since makeTool doesn't support delegateToAgentId in its override type
-    const [delegationTool] = await db.insert(schema.toolsTable).values({
-      name: "ask_database_expert",
-      delegateToAgentId: targetAgent.id,
-    }).returning();
+    const [delegationTool] = await db
+      .insert(schema.toolsTable)
+      .values({
+        name: "ask_database_expert",
+        delegateToAgentId: targetAgent.id,
+      })
+      .returning();
 
     // Create the main agent
     const mainAgent = await makeAgent({
@@ -85,22 +94,34 @@ describe("serializeAgentForExport", () => {
       knowledgeBaseIds: [kb.id],
       connectorIds: [connector.id],
       teams: [],
-      labels: [{ key: "env", value: "prod" }]
+      labels: [{ key: "env", value: "prod" }],
     });
 
     await db.insert(schema.agentToolsTable).values([
-      { agentId: createdFullAgent.id, toolId: tool.id, credentialResolutionMode: "dynamic" as const },
-      { agentId: createdFullAgent.id, toolId: delegationTool.id, credentialResolutionMode: "static" as const }
+      {
+        agentId: createdFullAgent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "dynamic" as const,
+      },
+      {
+        agentId: createdFullAgent.id,
+        toolId: delegationTool.id,
+        credentialResolutionMode: "static" as const,
+      },
     ]);
 
-    const fullAgent = await AgentModel.findById(createdFullAgent.id, user.id, true);
+    const fullAgent = await AgentModel.findById(
+      createdFullAgent.id,
+      user.id,
+      true,
+    );
     expect(fullAgent).not.toBeNull();
 
     const serialized = await serializeAgentForExport(fullAgent!);
 
     // Verify Agent fields
     expect(serialized.agent.name).toBe("Complex Support Agent");
-    
+
     // Verify Labels
     expect(serialized.labels).toEqual([{ key: "env", value: "prod" }]);
 

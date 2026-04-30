@@ -882,4 +882,82 @@ describe("agent routes", () => {
       );
     });
   });
+
+  describe("POST /api/agents/import", () => {
+    const makeMinimalPayload = (name = "Imported Test Agent") => ({
+      version: "1" as const,
+      exportedAt: new Date().toISOString(),
+      sourceInstance: null,
+      agent: {
+        name,
+        agentType: "agent" as const,
+        description: null,
+        systemPrompt: "Hello",
+        icon: null,
+        scope: "personal",
+        considerContextUntrusted: false,
+        toolAssignmentMode: "manual",
+        toolExposureMode: "full",
+        llmModel: null,
+        incomingEmailEnabled: false,
+        incomingEmailSecurityMode: "private",
+        incomingEmailAllowedDomain: null,
+        passthroughHeaders: null,
+      },
+      labels: [],
+      suggestedPrompts: [],
+      tools: [],
+      delegations: [],
+      knowledgeBases: [],
+      connectors: [],
+    });
+
+    test("should import a valid agent and return 200", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload: makeMinimalPayload(),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json();
+      expect(data.agent.name).toBe("Imported Test Agent");
+      expect(data.agent.agentType).toBe("agent");
+      expect(data.agent.scope).toBe("personal");
+      expect(data.warnings).toEqual([]);
+    });
+
+    test("should return warnings for unresolvable tools", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload: makeMinimalPayload("Agent With Missing Tools"),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("should return 400 for invalid payload (missing version)", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload: { agent: { name: "Bad" } },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("should return 400 for non-agent type", async () => {
+      const payload = makeMinimalPayload("Gateway Import");
+      (payload.agent as { agentType: string }).agentType = "mcp_gateway";
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/import",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
 });

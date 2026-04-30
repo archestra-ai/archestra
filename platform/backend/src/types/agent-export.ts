@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SelectAgentSchema } from "./agent";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
 
 /**
@@ -104,3 +105,12 @@ export const ImportWarningSchema = z.object({
 });
 
 export type ImportWarning = z.infer<typeof ImportWarningSchema>;
+
+// -- Import response schema (agent + warnings) --
+
+export const ImportAgentResponseSchema = z.object({
+  agent: SelectAgentSchema,
+  warnings: z.array(ImportWarningSchema),
+});
+
+export type ImportAgentResponse = z.infer<typeof ImportAgentResponseSchema>;

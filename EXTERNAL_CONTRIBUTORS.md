@@ -165,3 +165,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @apoorva-01
 - @dscode-dev
 - @jovanaradovanovic
+- @sergey-zakharov

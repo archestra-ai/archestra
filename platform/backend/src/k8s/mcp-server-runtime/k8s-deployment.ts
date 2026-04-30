@@ -1123,13 +1123,13 @@ export default class K8sDeployment {
         container.command = [localConfig.command];
       }
 
-      if (localConfig.arguments && localConfig.arguments.length > 0) {
-        // Process arguments with placeholder replacement
-        const processedArgs = this.resolveArgs(localConfig.arguments, envVars);
+      const sourceArgs =
+        container.args && container.args.length > 0
+          ? container.args
+          : localConfig.arguments;
 
-        if (!container.args || container.args.length === 0) {
-          container.args = processedArgs;
-        }
+      if (sourceArgs && sourceArgs.length > 0) {
+        container.args = this.resolveArgs(sourceArgs, envVars);
       }
     }
 

@@ -3057,6 +3057,132 @@ spec:
     const container = spec.spec?.template.spec?.containers[0];
     expect(container?.args).toEqual(["--key", "$API_KEY"]);
   });
+
+  test("substitutes $VAR refs in args hardcoded directly in deploymentSpecYaml", () => {
+    const yamlWithHardcodedArgs = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: ["--token", "$FOO", "--keep=$UNKNOWN"]
+`;
+
+    const catalogItem = {
+      deploymentSpecYaml: yamlWithHardcodedArgs,
+      localConfig: {
+        command: "node",
+        arguments: [],
+        environment: [
+          {
+            key: "FOO",
+            type: "plain_text" as const,
+            value: "hello-world",
+            required: false,
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    } as unknown as import("@/types").InternalMcpCatalog;
+
+    const mcpServer = {
+      id: "yaml-args-hardcoded-id",
+      name: "yaml-args-hardcoded-server",
+      catalogId: "catalog-yaml-args-hardcoded",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: catalogItem,
+    });
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: [] },
+      false,
+      8080,
+    );
+
+    const container = spec.spec?.template.spec?.containers[0];
+    expect(container?.args).toEqual([
+      "--token",
+      "hello-world",
+      "--keep=$UNKNOWN",
+    ]);
+  });
+
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: Test name documents the syntax under test
+  test("substitutes $VAR refs in args injected via ${archestra.arguments} placeholder", () => {
+    const yamlWithArgumentsPlaceholder = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: \${archestra.arguments}
+`;
+
+    const catalogItem = {
+      deploymentSpecYaml: yamlWithArgumentsPlaceholder,
+      localConfig: {
+        command: "node",
+        arguments: [],
+        environment: [
+          {
+            key: "FOO",
+            type: "plain_text" as const,
+            value: "hello-world",
+            required: false,
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    } as unknown as import("@/types").InternalMcpCatalog;
+
+    const mcpServer = {
+      id: "yaml-args-placeholder-id",
+      name: "yaml-args-placeholder-server",
+      catalogId: "catalog-yaml-args-placeholder",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: catalogItem,
+    });
+
+    const spec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      {
+        command: "node",
+        arguments: ["--token", "$FOO", "$UNKNOWN"],
+      },
+      false,
+      8080,
+    );
+
+    const container = spec.spec?.template.spec?.containers[0];
+    expect(container?.args).toEqual(["--token", "hello-world", "$UNKNOWN"]);
+  });
 });
 
 describe("K8sDeployment.createK8sSecret", () => {

@@ -1765,6 +1765,13 @@
       "when": 1779690347135,
       "tag": "0251_closed_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1779702527846,
+      "tag": "0252_common_ultragirl",
+      "breakpoints": true
     }
   ]
 }

@@ -122,8 +122,19 @@ describe("POST /api/chat slim error payload", () => {
           callback(),
       );
       mockCreateUIMessageStream.mockImplementation(
-        ({ onError }: { onError: (error: Error) => string }) =>
-          onError(new Error("Failed to fetch")),
+        ({ onError }: { onError: (error: Error) => string }) => {
+          const errorPayload = onError(new Error("Failed to fetch"));
+          return {
+            tee: () => [
+              errorPayload,
+              new ReadableStream({
+                start(controller) {
+                  controller.close();
+                },
+              }),
+            ],
+          };
+        },
       );
       mockCreateUIMessageStreamResponse.mockImplementation(
         ({ stream }: { stream: string }) =>
@@ -276,12 +287,16 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
             merge: vi.fn(),
           };
           executionPromise = execute({ writer }).catch(() => undefined);
-          return "mock-stream";
+          return new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          });
         },
       );
 
       mockCreateUIMessageStreamResponse.mockImplementation(
-        ({ stream }: { stream: string }) =>
+        ({ stream }: { stream: ReadableStream }) =>
           new Response(stream, {
             status: 200,
             headers: { "content-type": "text/plain" },
@@ -332,6 +347,10 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
     expect(capturedInnerOnError).toBeDefined();
+    const innerOnError = capturedInnerOnError;
+    if (!innerOnError) {
+      throw new Error("Expected inner onError to be captured");
+    }
 
     const stage1Error = new Error("Upstream provider error");
     const payload1 = capturedInnerOnError?.(stage1Error);

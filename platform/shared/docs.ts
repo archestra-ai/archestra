@@ -27,6 +27,7 @@ export const DocsPage = {
   PlatformAiToolGuardrails: "platform-ai-tool-guardrails",
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",
+  PlatformKnowledgeBases: "platform-knowledge-bases",
   PlatformKnowledgeConnectors: "platform-knowledge-connectors",
   PlatformKnowledgeGraphs: "platform-knowledge-graphs",
   PlatformLethalTrifecta: "platform-lethal-trifecta",

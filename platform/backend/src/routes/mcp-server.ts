@@ -177,13 +177,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       serverData.userId = user.id;
 
       // Validate k8sClusterId belongs to the organization
+      let k8sCluster = null;
       if (serverData.k8sClusterId) {
         const { K8sClusterModel } = await import("@/models");
-        const cluster = await K8sClusterModel.findById(
+        k8sCluster = await K8sClusterModel.findById(
           serverData.k8sClusterId,
           organizationId,
         );
-        if (!cluster) {
+        if (!k8sCluster) {
           throw new ApiError(
             400,
             "K8s cluster not found or does not belong to this organization",
@@ -236,7 +237,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         if (catalogItem.serverType === "local" && k8sNamespace) {
-          await validateK8sNamespace(k8sNamespace);
+          await validateK8sNamespace(k8sNamespace, k8sCluster);
         }
 
         // Validate no duplicate installations for this catalog item

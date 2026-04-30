@@ -622,6 +622,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const installedServers = await McpServerModel.findByCatalogId(id);
 
       if (installedServers.length > 0) {
+        // Check if new user input is required for reinstall
         if (
           requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
         ) {

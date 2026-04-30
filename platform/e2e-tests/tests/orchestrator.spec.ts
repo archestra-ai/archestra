@@ -495,6 +495,7 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
         const installRes = await installMcpServer(request, {
           name: `${catalogItem.name} - custom cluster`,
           catalogId: catalogItem.id,
+          scope: "team",
           teamId,
           k8sClusterId: clusterId,
           k8sNamespace: MCP_SERVER_NAMESPACE,
@@ -547,6 +548,32 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
       const server = await serverResponse.json();
       expect(server.k8sClusterId).toBe(clusterId);
       expect(server.k8sNamespace).toBe(MCP_SERVER_NAMESPACE);
+    });
+
+    test("should reject installation into custom cluster with non-existent namespace", async ({
+      request,
+      installMcpServer,
+    }) => {
+      const catalogItem = await findCatalogItem(request, TEST_CATALOG_ITEM_NAME);
+      if (!catalogItem) {
+        throw new Error(`Catalog item '${TEST_CATALOG_ITEM_NAME}' not found`);
+      }
+
+      const res = await installMcpServer(
+        request,
+        {
+          name: `${catalogItem.name} - bad-namespace`,
+          catalogId: catalogItem.id,
+          scope: "team",
+          teamId,
+          k8sClusterId: clusterId,
+          k8sNamespace: "this-namespace-does-not-exist",
+        },
+        { ignoreStatusCheck: true },
+      );
+      expect(res.status()).toBe(400);
+      const body = await res.json();
+      expect(body.error.message).toContain("does not exist in the cluster");
     });
   });
 });

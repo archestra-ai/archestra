@@ -114,6 +114,17 @@ vi.mock("@/lib/llm-models.query", () => ({
     data: mockEmbeddingModels,
     isPending: false,
   }),
+  useModelsWithApiKeys: () => ({
+    data: mockEmbeddingModels.map((m) => ({
+      id: m.id,
+      provider: m.provider,
+      embeddingDimensions: m.embeddingDimensions,
+      apiKeys: mockApiKeys
+        .filter((k) => k.provider === m.provider)
+        .map((k) => ({ id: k.id })),
+    })),
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/config/config.query", () => ({
@@ -188,97 +199,6 @@ beforeEach(() => {
 });
 
 describe("KnowledgeSettingsPage", () => {
-  describe("warning alert", () => {
-    it("shows warning alert when no embedding API key is configured", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: null,
-        embeddingModel: null,
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
-      };
-      renderPage();
-
-      expect(
-        screen.getByText(
-          /An embedding and reranking API key and model must be configured before knowledge bases and connectors can be used/,
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("shows warning alert when embedding key is set but model is not", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: "key-1",
-        embeddingModel: null,
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
-      };
-      mockApiKeys = [
-        {
-          id: "key-1",
-          name: "OpenAI Key",
-          provider: "openai",
-          scope: "org",
-        },
-      ];
-      renderPage();
-
-      expect(
-        screen.getByText(
-          /An embedding and reranking API key and model must be configured/,
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("shows warning alert when only embedding is configured but reranker is not", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: "key-1",
-        embeddingModel: "text-embedding-3-small",
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
-      };
-      mockApiKeys = [
-        {
-          id: "key-1",
-          name: "OpenAI Key",
-          provider: "openai",
-          scope: "org",
-        },
-      ];
-      renderPage();
-
-      expect(
-        screen.getByText(
-          /An embedding and reranking API key and model must be configured/,
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("hides warning alert when both embedding and reranker are configured", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: "key-1",
-        embeddingModel: "text-embedding-3-small",
-        embeddingDimensions: 1536,
-        rerankerChatApiKeyId: "key-1",
-        rerankerModel: "gpt-4o",
-      };
-      mockApiKeys = [
-        {
-          id: "key-1",
-          name: "OpenAI Key",
-          provider: "openai",
-          scope: "org",
-        },
-      ];
-      renderPage();
-
-      expect(
-        screen.queryByText(
-          /An embedding and reranking API key and model must be configured/,
-        ),
-      ).not.toBeInTheDocument();
-    });
-  });
-
   describe("embedding model placeholder", () => {
     it("shows placeholder text when no embedding key is configured (not the database default)", () => {
       mockOrganization = {
@@ -315,7 +235,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.getByText("text-embedding-3-large")).toBeInTheDocument();
     });
 
-    it("shows the configured embedding dimensions from model metadata", () => {
+    it("shows the configured embedding dimensions as a chip on the selected model", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "gemini-embedding-001",
@@ -340,9 +260,7 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      expect(
-        screen.getByText(/Uses 1536-dimensional vectors/),
-      ).toBeInTheDocument();
+      expect(screen.getByText("1536 dims")).toBeInTheDocument();
     });
 
     it("shows embedding model descriptions in the dropdown", async () => {
@@ -417,10 +335,11 @@ describe("KnowledgeSettingsPage", () => {
       expect(
         screen.getByText('No embedding models detected for "Vertex AI".'),
       ).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "here" })).toHaveAttribute(
-        "href",
-        "/llm/providers/models",
-      );
+      expect(
+        screen.getByRole("link", {
+          name: /Sync models and configure embedding dimensions/,
+        }),
+      ).toHaveAttribute("href", "/llm/providers/models");
     });
   });
 
@@ -444,7 +363,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(
         screen.getByText(
-          /Locked — changing the embedding model requires re-embedding all documents/,
+          /To change the embedding model, drop the existing index/,
         ),
       ).toBeInTheDocument();
     });
@@ -468,7 +387,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(
         screen.getByText(
-          /Locked — changing the embedding model requires re-embedding all documents/,
+          /To change the embedding model, drop the existing index/,
         ),
       ).toBeInTheDocument();
     });
@@ -484,7 +403,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(
         screen.queryByText(
-          /Locked — changing the embedding model requires re-embedding all documents/,
+          /To change the embedding model, drop the existing index/,
         ),
       ).not.toBeInTheDocument();
     });
@@ -510,22 +429,6 @@ describe("KnowledgeSettingsPage", () => {
       const triggers = screen.getAllByRole("combobox");
       const embeddingKeyTrigger = triggers[0];
       expect(embeddingKeyTrigger).toBeDisabled();
-    });
-  });
-
-  describe("embedding model disabled state", () => {
-    it("shows 'Select an embedding API key first' when no key is selected", () => {
-      mockOrganization = {
-        embeddingChatApiKeyId: null,
-        embeddingModel: null,
-        rerankerChatApiKeyId: null,
-        rerankerModel: null,
-      };
-      renderPage();
-
-      expect(
-        screen.getByText("Select an embedding API key first."),
-      ).toBeInTheDocument();
     });
   });
 

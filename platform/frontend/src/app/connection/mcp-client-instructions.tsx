@@ -22,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -30,6 +29,7 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
+import { cn } from "@/lib/utils";
 import { ClientIcon } from "./client-icon";
 import type {
   ConnectClient,
@@ -551,10 +551,7 @@ function TokenOption({
   return (
     <DropdownMenuItem
       onSelect={onSelect}
-      className={cn(
-        "flex flex-col items-start gap-0.5",
-        active && "bg-accent",
-      )}
+      className={cn("flex flex-col items-start gap-0.5", active && "bg-accent")}
     >
       <span>{label}</span>
       <span className="text-xs text-muted-foreground">{description}</span>

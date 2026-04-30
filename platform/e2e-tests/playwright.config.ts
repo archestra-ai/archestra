@@ -90,6 +90,7 @@ const browserTestIgnore = [
   testPatterns.identityProviders,
   testPatterns.quickstart,
   testPatterns.llmProxy,
+  "**/chat-scenarios.spec.ts",
 ];
 
 /**
@@ -185,19 +186,6 @@ export default defineConfig({
         storageState: adminAuthFile,
       },
       dependencies: dependencies.testProjects,
-    },
-    // Main UI tests on Chrome
-    {
-      name: projectNames.chatScenarios,
-      testDir: "./tests",
-      testMatch: "**/chat-scenarios.spec.ts",
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: adminAuthFile,
-      },
-      dependencies: dependencies.testProjects,
-      fullyParallel: false,
-      workers: 1,
     },
     {
       name: projectNames.chromium,

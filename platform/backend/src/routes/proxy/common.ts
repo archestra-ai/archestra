@@ -1,6 +1,7 @@
 import config from "@/config";
 
 export const PROXY_API_PREFIX = "/v1";
+export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
 
 /**
  * Body size limit for LLM proxy routes.

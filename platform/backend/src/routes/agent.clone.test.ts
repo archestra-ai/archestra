@@ -752,4 +752,56 @@ describe("clone agent route", () => {
     );
     expect(clonedKeyValues).toEqual(expectedKeyValues);
   });
+
+  test("returns 404 when source agent belongs to a different organization", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    // Create an agent in a different organization
+    const otherOrg = await makeOrganization();
+    const otherOrgAgent = await makeInternalAgent({
+      organizationId: otherOrg.id,
+      name: "Other Org Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${otherOrgAgent.id}/clone`,
+    });
+
+    // Should be 404 (not 403) to avoid leaking existence
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("preserves toolExposureMode and toolAssignmentMode in clone", async ({
+    makeInternalAgent,
+  }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Search-Only Agent",
+      scope: "org",
+      teams: [],
+      labels: [{ key: "env", value: "prod" }],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      toolExposureMode: "search_and_run_only",
+      toolAssignmentMode: "automatic",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.toolExposureMode).toBe("search_and_run_only");
+    expect(cloned.toolAssignmentMode).toBe("automatic");
+  });
 });

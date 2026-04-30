@@ -1817,6 +1817,8 @@ class AgentModel {
           systemPrompt: sourceAgent.systemPrompt,
           description: sourceAgent.description,
           icon: sourceAgent.icon,
+          toolExposureMode: sourceAgent.toolExposureMode,
+          toolAssignmentMode: sourceAgent.toolAssignmentMode,
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,

@@ -514,6 +514,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Prevent cross-organization cloning: the permission checker is scoped
+      // to the caller's org, so an agent from a different org would bypass
+      // those checks. Return 404 to avoid leaking existence.
+      if (sourceAgent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
       // Disallow cloning built-in agents (Phase 1 policy)
       if (sourceAgent.builtInAgentConfig) {
         throw new ApiError(403, "Built-in agents cannot be cloned");

@@ -48,7 +48,9 @@ import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 type GeminiRequest = Gemini.Types.GenerateContentRequest;
 type GeminiResponse = Gemini.Types.GenerateContentResponse;
-type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
+type GeminiContents = NonNullable<
+  Gemini.Types.GenerateContentRequest["contents"]
+>;
 type GeminiHeaders = Gemini.Types.GenerateContentHeaders;
 type GeminiStreamChunk = GenerateContentResponse;
 type GeminiFunctionResponse = Record<string, unknown> & {

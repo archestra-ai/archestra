@@ -34,7 +34,7 @@ type ProviderMessages = {
   anthropic: Anthropic.Types.MessagesRequest["messages"];
   cerebras: Cerebras.Types.ChatCompletionsRequest["messages"];
   cohere: Cohere.Types.ChatRequest["messages"];
-  gemini: Gemini.Types.GenerateContentRequest["contents"];
+  gemini: NonNullable<Gemini.Types.GenerateContentRequest["contents"]>;
   groq: Groq.Types.ChatCompletionsRequest["messages"];
   openrouter: Openrouter.Types.ChatCompletionsRequest["messages"];
   mistral: Mistral.Types.ChatCompletionsRequest["messages"];

@@ -16,7 +16,7 @@ export type ProviderMessage =
   | OpenAi.Types.ChatCompletionsRequest["messages"][number]
   | Anthropic.Types.MessagesRequest["messages"][number]
   | Cohere.Types.ChatRequest["messages"][number]
-  | Gemini.Types.GenerateContentRequest["contents"][number]
+  | NonNullable<Gemini.Types.GenerateContentRequest["contents"]>[number]
   | Groq.Types.ChatCompletionsRequest["messages"][number]
   | Openrouter.Types.ChatCompletionsRequest["messages"][number]
   | Vllm.Types.ChatCompletionsRequest["messages"][number]

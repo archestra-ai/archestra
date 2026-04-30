@@ -54,6 +54,7 @@ export default function ConnectionPage() {
         adminDefaultClientId={adminDefaultClientId}
         shownClientIds={organization?.connectionShownClientIds ?? null}
         shownProviders={getShownProviders(organization)}
+        connectionBaseUrls={organization?.connectionBaseUrls ?? null}
       />
     </div>
   );

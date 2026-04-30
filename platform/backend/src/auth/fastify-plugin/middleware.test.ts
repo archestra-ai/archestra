@@ -146,6 +146,35 @@ describe("Authnz", () => {
       }
     });
 
+    test("should skip auth for model router proxy routes", async () => {
+      const modelRouterPaths = [
+        "/v1/model-router/models",
+        "/v1/model-router/chat/completions",
+        "/v1/model-router/responses",
+        "/v1/model-router/some-agent-id/models",
+        "/v1/model-router/some-agent-id/chat/completions",
+        "/v1/model-router/some-agent-id/responses",
+      ];
+
+      for (const url of modelRouterPaths) {
+        const mockRequest = {
+          url,
+          method: "POST",
+          headers: {},
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        await authnz.handle(mockRequest, mockReply);
+
+        expect(mockReply.status).not.toHaveBeenCalled();
+        expect(mockReply.send).not.toHaveBeenCalled();
+      }
+    });
+
     test("should skip auth for GET requests to public SSO providers endpoint only", async () => {
       const publicSsoProviderUrl = "/api/identity-providers/public";
 

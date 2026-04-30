@@ -45,6 +45,17 @@ class LlmProviderApiKeyModel {
     return apiKey ?? null;
   }
 
+  static async findByIds(ids: string[]): Promise<LlmProviderApiKey[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(inArray(schema.llmProviderApiKeysTable.id, ids));
+  }
+
   /**
    * Find all LLM provider API keys for an organization.
    */

@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, FileText, Paperclip } from "lucide-react";
+import Link from "next/link";
 import {
   type KeyboardEventHandler,
   useEffect,
@@ -220,9 +221,13 @@ export function EditableUserMessage({
         {otherAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
             {otherAttachments.map((attachment) => (
-              <div
+              <Link
                 key={attachment.url}
-                className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2"
+                href={attachment.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={attachment.filename}
+                className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
               >
                 {isCsvAttachment(attachment.mediaType, attachment.filename) ||
                 isPlainTextAttachment(
@@ -240,7 +245,7 @@ export function EditableUserMessage({
                       filename: attachment.filename,
                     })}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

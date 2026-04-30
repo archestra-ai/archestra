@@ -367,6 +367,7 @@ export const parseContentMaxLength = (
   return parsed;
 };
 
+/** @public — exported for testability */
 export const parseMetricsPort = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
   if (!value) {

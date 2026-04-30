@@ -187,7 +187,6 @@ curl -X GET "${agentCardUrl}" \\
         metadata={connectionBaseUrls}
         value={connectionUrl}
         onChange={setUserBaseUrl}
-        hideWhenSingleAndUnannotated
       />
       {/* A2A Endpoint URL */}
       <div className="space-y-2">

@@ -113,5 +113,5 @@ You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsj
 
 ## See also
 
-- [Team Synchronization](/docs/platform-sso-team-sync) — automatically add or remove users from Archestra teams based on IdP group membership
+- [Team Sync](/docs/platform-sso-team-sync) — automatically add or remove users from Archestra teams based on IdP group membership
 - [Identity Providers](/docs/platform-identity-providers) — provider list and SSO setup

@@ -173,4 +173,4 @@ The SAML response signature couldn't be verified.
 
 - [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth) — SSO's counterpart for downstream MCP tool calls (OBO, ID-JAG, RFC 8693)
 - [Role Mapping](/docs/platform-sso-role-mapping) — map IdP claims to Archestra roles
-- [Team Synchronization](/docs/platform-sso-team-sync) — sync IdP groups to Archestra teams
+- [Team Sync](/docs/platform-sso-team-sync) — sync IdP groups to Archestra teams

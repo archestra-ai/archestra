@@ -68,70 +68,72 @@ The first three sections get sign-in working. If that is all you need today, you
 
 ## 1. Register Okta App for SSO
 
-[screenshot: platform-okta-setup_app-integration-overview.webp — Okta app integration general settings]
+[screenshot: platform-okta-setup_oin-tile.webp — Archestra app tile in the Okta Integration Network]
 
 ### Prerequisites
 
-- An Okta admin account with permission to create app integrations
+- An Okta admin account with permission to add app integrations from the OIN
 - An Archestra admin account
-- Your Archestra external URL (for example `https://your-archestra-domain.com`)
-- Your Okta org issuer (for example `https://your-org.okta.com`)
+- Your Archestra hostname **without protocol**, for example `your-archestra-domain.com`
 
-### Create the app integration
+### Recommended: install from the Okta Integration Network (OIN)
 
-If you are installing Archestra from the **Okta Integration Network (OIN)**, enter your Archestra hostname without the protocol (for example `your-archestra-domain.com`) and skip ahead to Section 2. Otherwise, follow the manual steps below.
+Archestra is published as an app integration in the [Okta Integration Network](https://help.okta.com/oie/en-us/Content/Topics/Apps/apps-add-applications.htm). The OIN flow is the recommended path — it pre-configures redirect URIs, scopes, and grant types for you.
 
 1. In the Okta Admin Console, go to **Applications > Applications**
-2. Click **Create App Integration**
-3. Select **OIDC - OpenID Connect** and **Web Application**
-4. Set **Sign-in redirect URIs** to:
+2. Click **Browse App Catalog** and search for **Archestra**
+3. Open the Archestra app integration and click **Add**
+4. In **General Settings**, enter an application label and your Archestra hostname **without protocol**.
+
+   For example, if your Archestra URL is:
 
    ```
-   https://your-archestra-domain.com/api/auth/sso/callback/Okta
+   https://your-archestra-domain.com
    ```
 
-   The `Okta` segment is case-sensitive.
-5. Set **Sign-out redirect URIs** to:
+   enter:
 
    ```
-   https://your-archestra-domain.com/auth/sign-in
+   your-archestra-domain.com
    ```
 
+5. Complete the Okta app setup
 6. Assign the users or groups that should access Archestra
-7. Save the integration
+7. On the app's **Sign On** tab, copy the **Client ID** and **Client Secret** — you'll paste them into Archestra
+8. Find your Okta org issuer in the upper-right profile menu of the Admin Console, or in the browser URL (it usually looks like `https://your-org.okta.com`)
 
 > Archestra does not support Okta DPoP for SSO clients. In the app's **General > Client Credentials** settings, disable **Require Demonstrating Proof of Possession (DPoP) header in token requests**.
 
-### Copy the credentials
+### Alternative: manual app integration
 
-On the app's **Sign On** tab, copy the **Client ID** and **Client Secret** — you'll paste them into Archestra. Keep the Client Secret private.
+If your tenant does not have access to the OIN tile, create the app manually:
 
-Find your Okta org issuer in the upper-right profile menu of the Admin Console, or in the browser URL. It usually looks like `https://your-org.okta.com`.
+1. In the Okta Admin Console, go to **Applications > Applications** > **Create App Integration**
+2. Select **OIDC - OpenID Connect** and **Web Application**
+3. Set **Sign-in redirect URIs** to `https://your-archestra-domain.com/api/auth/sso/callback/Okta` (the `Okta` segment is case-sensitive)
+4. Set **Sign-out redirect URIs** to `https://your-archestra-domain.com/auth/sign-in`
+5. Assign the users or groups that should access Archestra
+6. Save the integration and copy the Client ID and Client Secret from the **Sign On** tab
 
 ## 2. Configure SSO in Archestra
 
 [screenshot: platform-okta-setup_sso-card.webp — Okta provider card on Settings > Identity Providers]
 
-Go to **Settings > Identity Providers** and click **Enable** on the **Okta** card. The card sets the provider ID to `Okta` (case-sensitive — this is what makes the redirect URI from Section 1 work).
+Go to **Settings > Identity Providers** and click **Enable** on the **Okta** card.
 
 Fill in:
 
 - **Issuer:** your Okta org issuer, for example `https://your-org.okta.com`
 - **Client ID:** from Okta's **Sign On** tab
 - **Client Secret:** from Okta's **Sign On** tab
-- **Discovery Endpoint:** leave empty. Archestra derives it from the issuer as `https://your-org.okta.com/.well-known/openid-configuration`
+- **Discovery Endpoint:** leave empty — Archestra derives it from the issuer as `https://your-org.okta.com/.well-known/openid-configuration`
 
-Click **Create Provider**. The **Sign in with Okta** button now appears on the sign-in page. Test it in a private browser window with a user who is assigned to the Okta app.
+Click **Create Provider**. Users can now sign in:
 
-### IdP-initiated SSO
+- **From the Archestra sign-in page** by clicking **Sign in with Okta**
+- **From the Archestra tile on their Okta End-User Dashboard** (OIN install only) — Okta redirects to Archestra and Archestra completes the SSO flow
 
-If users launch Archestra from the Okta dashboard tile, point the tile at:
-
-```
-https://your-archestra-domain.com/auth/sso/Okta
-```
-
-This route starts the Okta SSO flow immediately and redirects back with the required authorization request.
+Test in a private browser window with a user who is assigned to the Okta app.
 
 At this point SSO is working. If you also want token exchange for downstream MCP tool calls, continue with Section 4.
 
@@ -140,7 +142,7 @@ At this point SSO is working. If you also want token exchange for downstream MCP
 Role mapping and team sync are provider-agnostic and fully documented on dedicated pages:
 
 - [Role Mapping](/docs/platform-sso-role-mapping)
-- [Team Synchronization](/docs/platform-sso-team-sync)
+- [Team Sync](/docs/platform-sso-team-sync)
 
 For Okta, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in your Okta authorization server (or for the app integration). Then in Archestra, leave the default group extraction or use:
 
@@ -201,10 +203,12 @@ Save the catalog item. When you assign tools from this server to an Agent or Gat
 
 ## Troubleshooting
 
+- **App tile opens the wrong place** (OIN install). The Archestra hostname in Okta must not include `https://` or a path — only the bare hostname.
+- **User cannot sign in.** Verify the user is assigned to the Archestra app integration in Okta.
+- **User denied after successful Okta authentication.** Verify the user matches any configured Archestra role mapping rules.
 - **Issuer mismatch on setup.** Verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.
-- **Login fails after redirect.** The Okta **Sign-in redirect URI** must exactly match the Archestra callback URL, including the case-sensitive `Okta` segment.
+- **Login fails after redirect** (manual install). The Okta **Sign-in redirect URI** must exactly match the Archestra callback URL, including the case-sensitive `Okta` segment.
 - **`invalid_dpop_proof` error.** DPoP is enabled on the Okta application. Disable it in the app's security settings.
 - **Sign-out returns an Okta error.** Set the Okta **Sign-out redirect URI** to `https://your-archestra-domain.com/auth/sign-in`, or disable **Enable RP-Initiated Logout** in the Archestra provider settings.
-- **User denied after successful Okta authentication.** Verify the user is assigned to the Okta app and matches any configured Archestra role mapping rules.
 
 Reference: [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth), [MCP Authentication — Upstream Identity Provider Token Exchange](/docs/mcp-authentication#upstream-identity-provider-token-exchange).

@@ -118,7 +118,7 @@ At this point SSO is working. If you also want OBO for downstream MCP tool calls
 Role mapping and team sync are provider-agnostic and fully documented on dedicated pages:
 
 - [Role Mapping](/docs/platform-sso-role-mapping)
-- [Team Synchronization](/docs/platform-sso-team-sync)
+- [Team Sync](/docs/platform-sso-team-sync)
 
 For Entra, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in the Entra app's **Token configuration** (set it to `Group ID` for object IDs, or `sAMAccountName` for on-prem-synced names). Then in Archestra:
 

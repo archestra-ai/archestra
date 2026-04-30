@@ -21170,6 +21170,7 @@ export type GetConfigResponses = {
         };
         features: {
             orchestratorK8sRuntime: boolean;
+            advancedToolFeaturesEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             bedrockIamAuthEnabled: boolean;

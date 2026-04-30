@@ -18,6 +18,7 @@ import {
   addCustomSelfHostedCatalogItem,
   assignCatalogCredentialToGateway,
   clickButton,
+  createSharedTestGatewayViaApi,
   expandTablePagination,
   goToMcpRegistry,
   installMcpServer,
@@ -222,11 +223,19 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
     await settleRegistryAfterInstall(adminPage);
 
+    // Provision a shared org-scope gateway with default + engineering teams,
+    // so that org-token tool calls can route through it after credential assignment.
+    const sharedGateway = await createSharedTestGatewayViaApi({
+      cookieHeaders,
+      gatewayName: makeRandomString(10, "shared-gw"),
+    });
+
     // The current prompt-on-install flow creates a personal connection.
     await assignCatalogCredentialToGateway({
       page: adminPage,
       catalogItemName: newCatalogItem.name,
       credentialName: ADMIN_EMAIL,
+      gatewayName: sharedGateway.name,
     });
 
     // Verify tool call result using default team credential
@@ -235,12 +244,16 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       expectedResult: secretValue,
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
-      cookieHeaders,
+      profileId: sharedGateway.id,
     });
 
     // CLEANUP: Delete the catalog item
     await archestraApiSdk.deleteInternalMcpCatalogItem({
       path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
+    });
+    await archestraApiSdk.deleteAgent({
+      path: { id: sharedGateway.id },
       headers: { Cookie: cookieHeaders },
     });
 
@@ -316,6 +329,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       body: {
         name: newCatalogItem.name,
         catalogId: newCatalogItem.id,
+        scope: "team",
         teamId: defaultTeamId,
       },
     });
@@ -329,14 +343,10 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     await waitForMcpServerToolsDiscovered(adminPage, newCatalogItem.name);
     await settleRegistryAfterInstall(adminPage);
 
-    const defaultGatewayResponse = await archestraApiSdk.getDefaultMcpGateway({
-      headers: { Cookie: cookieHeaders },
+    const sharedGateway = await createSharedTestGatewayViaApi({
+      cookieHeaders,
+      gatewayName: makeRandomString(10, "shared-gw"),
     });
-    if (defaultGatewayResponse.error || !defaultGatewayResponse.data) {
-      throw new Error(
-        `Failed to get default MCP gateway: ${JSON.stringify(defaultGatewayResponse.error)}`,
-      );
-    }
 
     const toolsResponse = await archestraApiSdk.getTools({
       headers: { Cookie: cookieHeaders },
@@ -368,7 +378,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       const assignResponse = await archestraApiSdk.assignToolToAgent({
         headers: { Cookie: cookieHeaders },
         path: {
-          agentId: defaultGatewayResponse.data.id,
+          agentId: sharedGateway.id,
           toolId,
         },
         body: { mcpServerId: defaultTeamServer.id },
@@ -386,7 +396,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       expectedResult: secretValue,
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
-      cookieHeaders,
+      profileId: sharedGateway.id,
     });
 
     // CLEANUP: Delete the catalog item

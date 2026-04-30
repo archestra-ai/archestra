@@ -31,7 +31,10 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
-import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
+import {
+  type McpServerInstallScope,
+  SelectMcpServerCredentialTypeAndTeams,
+} from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
 
 const InlineVaultSecretSelector = lazy(
@@ -71,7 +74,9 @@ const markdownComponents: Components = {
 export interface LocalServerInstallResult {
   environmentValues: Record<string, string>;
   userConfigValues?: Record<string, string>;
-  /** Team ID to assign the MCP server to (null for personal) */
+  /** Installation scope (personal, team, org) */
+  scope: McpServerInstallScope;
+  /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
   /** Whether environmentValues contains BYOS vault references in path#key format */
   isByosVault?: boolean;
@@ -87,14 +92,18 @@ interface LocalServerInstallDialogProps {
   isInstalling: boolean;
   /** When true, shows "Reinstall" instead of "Install" in the dialog */
   isReinstall?: boolean;
-  /** The team ID of the existing server being reinstalled (null = personal) */
+  /** The team ID of the existing server being reinstalled (null = personal/org) */
   existingTeamId?: string | null;
+  /** The scope of the existing server being reinstalled */
+  existingScope?: McpServerInstallScope;
   /** When true, shows re-authentication mode (info banner, different title) */
   isReauth?: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
+  /** When true, only organization-wide installation is allowed */
+  orgOnly?: boolean;
 }
 
 export function LocalServerInstallDialog({
@@ -105,13 +114,21 @@ export function LocalServerInstallDialog({
   isInstalling,
   isReinstall = false,
   existingTeamId,
+  existingScope,
   isReauth = false,
   preselectedTeamId,
   personalOnly: personalOnlyProp = false,
+  orgOnly = false,
 }: LocalServerInstallDialogProps) {
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [credentialType, setCredentialType] = useState<"personal" | "team">(
-    "personal",
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
+    isReinstall ? (existingTeamId ?? null) : null,
+  );
+  const [scope, setScope] = useState<McpServerInstallScope>(
+    isReinstall
+      ? (existingScope ?? (existingTeamId ? "team" : "personal"))
+      : orgOnly
+        ? "org"
+        : "personal",
   );
   const [canInstall, setCanInstall] = useState(true);
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
@@ -200,14 +217,14 @@ export function LocalServerInstallDialog({
 
   // Sync vaultTeamId from selectedTeamId when in team mode, reset when switching to personal
   useEffect(() => {
-    if (credentialType === "team") {
+    if (scope === "team") {
       setVaultTeamId(selectedTeamId);
     } else {
       setVaultTeamId(null);
     }
     setVaultSecrets({});
     setUserConfigVaultSecrets({});
-  }, [credentialType, selectedTeamId]);
+  }, [scope, selectedTeamId]);
 
   const handleVaultTeamChange = (teamId: string) => {
     setVaultTeamId(teamId);
@@ -309,6 +326,7 @@ export function LocalServerInstallDialog({
     await onConfirm({
       environmentValues: finalEnvironmentValues,
       userConfigValues: finalUserConfigValues,
+      scope,
       teamId: selectedTeamId,
       isByosVault:
         useVaultSecrets &&
@@ -346,8 +364,14 @@ export function LocalServerInstallDialog({
         {},
       ),
     );
-    setSelectedTeamId(null);
-    setCredentialType("personal");
+    setSelectedTeamId(isReinstall ? (existingTeamId ?? null) : null);
+    setScope(
+      isReinstall
+        ? (existingScope ?? (existingTeamId ? "team" : "personal"))
+        : orgOnly
+          ? "org"
+          : "personal",
+    );
     setVaultTeamId(null);
     setVaultSecrets({});
     setUserConfigVaultSecrets({});
@@ -487,18 +511,20 @@ export function LocalServerInstallDialog({
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={isReinstall ? undefined : catalogItem?.id}
-        onCredentialTypeChange={setCredentialType}
+        onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}
         existingTeamId={existingTeamId}
+        existingScope={existingScope}
         personalOnly={
           personalOnlyProp ||
           (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false)
         }
+        orgOnly={orgOnly}
         preselectedTeamId={preselectedTeamId}
       />
 
-      {useVaultSecrets && credentialType === "personal" && (
+      {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">
           <Label>Pull Vault secrets from:</Label>
           <p className="text-xs text-muted-foreground">
@@ -670,7 +696,7 @@ export function LocalServerInstallDialog({
                               }
                               disabled={isInstalling}
                               noTeamMessage={
-                                credentialType === "personal"
+                                scope !== "team"
                                   ? "Select a vault folder to pull secrets from"
                                   : undefined
                               }
@@ -746,7 +772,7 @@ export function LocalServerInstallDialog({
                               }
                               disabled={isInstalling}
                               noTeamMessage={
-                                credentialType === "personal"
+                                scope !== "team"
                                   ? "Select a vault folder to pull secrets from"
                                   : undefined
                               }
@@ -838,7 +864,7 @@ export function LocalServerInstallDialog({
                             }
                             disabled={isInstalling}
                             noTeamMessage={
-                              credentialType === "personal"
+                              scope !== "team"
                                 ? "Select a vault folder to pull secrets from"
                                 : undefined
                             }

@@ -5,6 +5,7 @@ import logger from "@/logging";
 
 /**
  * Result of a successful JWT validation via JWKS
+ * @public — return type for validateJwt
  */
 export interface JwksValidationResult {
   sub: string;

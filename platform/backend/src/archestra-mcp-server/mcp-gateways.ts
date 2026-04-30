@@ -4,7 +4,13 @@ import {
   TOOL_GET_MCP_GATEWAY_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
-import { AgentScopeSchema, UpdateAgentSchemaBase, UuidIdSchema } from "@/types";
+import {
+  AgentScopeSchema,
+  ToolAssignmentModeSchema,
+  ToolExposureModeSchema,
+  UpdateAgentSchemaBase,
+  UuidIdSchema,
+} from "@/types";
 import {
   AgentDetailOutputSchema,
   ConnectorIdsToolInputSchema,
@@ -21,6 +27,9 @@ import { defineArchestraTool, defineArchestraTools } from "./helpers";
 const CreateMcpGatewayToolArgsSchema = CreateBaseToolArgsSchema.extend({
   knowledgeBaseIds: KnowledgeBaseIdsToolInputSchema.optional(),
   connectorIds: ConnectorIdsToolInputSchema.optional(),
+  toolAssignmentMode: ToolAssignmentModeSchema.optional().describe(
+    "How tools are assigned to this gateway. 'manual' (default) lets an admin pick tools individually. 'automatic' derives the gateway's tools from catalog entries whose labels match the gateway's labels (key-value pairs, OR semantics).",
+  ),
 }).strict();
 
 const GetMcpGatewayToolArgsSchema = GetResourceToolArgsSchema.extend({
@@ -54,6 +63,12 @@ const EditMcpGatewayToolArgsSchema = z
       .describe("New name for the MCP gateway."),
     scope: AgentScopeSchema.optional().describe(
       "Updated visibility scope for the MCP gateway.",
+    ),
+    toolExposureMode: ToolExposureModeSchema.optional().describe(
+      "How tools should be exposed to MCP clients and models.",
+    ),
+    toolAssignmentMode: ToolAssignmentModeSchema.optional().describe(
+      "How tools are assigned to this gateway. 'manual' lets an admin pick tools individually. 'automatic' derives the gateway's tools from catalog entries whose labels match the gateway's labels (key-value pairs, OR semantics).",
     ),
     teams: z
       .array(UuidIdSchema)
@@ -119,8 +134,5 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolShortNames = registry.toolShortNames;
-export const toolArgsSchemas = registry.toolArgsSchemas;
-export const toolOutputSchemas = registry.toolOutputSchemas;
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;

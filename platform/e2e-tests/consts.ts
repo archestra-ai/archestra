@@ -26,6 +26,10 @@ export const memberAuthFile = path.join(
   __dirname,
   "playwright/.auth/member.json",
 );
+export const basicUserAuthFile = path.join(
+  __dirname,
+  "playwright/.auth/basic-user.json",
+);
 
 export const IS_CI = process.env.CI === "true";
 
@@ -87,6 +91,19 @@ export const EDITOR_PASSWORD = "password";
  */
 export const MEMBER_EMAIL = "member@example.com";
 export const MEMBER_PASSWORD = "password";
+
+/**
+ * Basic-user credentials for e2e tests.
+ *
+ * Assigned to a custom role with a deliberately slim permission set
+ * (agent:read, llmProviderApiKey:read, llmModel:read) — used to
+ * regression-test chat access for restricted users (see PR #4142).
+ */
+export const BASIC_USER_EMAIL = "basic-user@example.com";
+export const BASIC_USER_PASSWORD = "password";
+
+/** Display name for the basic-user custom role created during e2e setup */
+export const BASIC_USER_ROLE_NAME = "E2E Basic User";
 
 /**
  * Team names for e2e tests

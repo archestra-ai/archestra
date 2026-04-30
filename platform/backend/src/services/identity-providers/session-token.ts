@@ -4,7 +4,7 @@ import { AccountModel, AgentModel } from "@/models";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 
-export interface SessionExternalIdpToken {
+interface SessionExternalIdpToken {
   identityProviderId: string;
   providerId: string;
   rawToken: string;

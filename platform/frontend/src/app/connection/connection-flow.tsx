@@ -4,20 +4,22 @@ import type { SupportedProvider } from "@shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { ClientGrid } from "./client-grid";
+import config from "@/lib/config/config";
+import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
-import { resolveEffectiveId } from "./connection-flow.utils";
+import {
+  type ConnectionBaseUrl,
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+  resolveEffectiveId,
+  resolveInitialClientId,
+} from "./connection-flow.utils";
+import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
+import { SearchableSelect } from "./searchable-select";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
@@ -28,10 +30,13 @@ interface ConnectionFlowProps {
   defaultLlmProxyId?: string;
   adminDefaultMcpGatewayId?: string | null;
   adminDefaultLlmProxyId?: string | null;
+  adminDefaultClientId?: string | null;
   /** When null/undefined: show all. Otherwise: only these IDs (plus "generic" always). */
   shownClientIds?: readonly string[] | null;
   /** When null/undefined: show all. Otherwise: only these providers. */
   shownProviders?: readonly SupportedProvider[] | null;
+  /** Admin-curated descriptions and default flag for env-configured base URLs. */
+  connectionBaseUrls?: readonly ConnectionBaseUrl[] | null;
 }
 
 export function ConnectionFlow({
@@ -39,8 +44,10 @@ export function ConnectionFlow({
   defaultLlmProxyId,
   adminDefaultMcpGatewayId,
   adminDefaultLlmProxyId,
+  adminDefaultClientId,
   shownClientIds,
   shownProviders,
+  connectionBaseUrls,
 }: ConnectionFlowProps) {
   const searchParams = useSearchParams();
   const urlGatewayId = searchParams.get("gatewayId");
@@ -52,10 +59,16 @@ export function ConnectionFlow({
   const updateUrlParams = useUpdateUrlParams();
 
   const { data: mcpGateways } = useProfiles({
-    filters: { agentTypes: ["profile", "mcp_gateway"] },
+    filters: {
+      agentTypes: ["profile", "mcp_gateway"],
+      excludeOtherPersonalAgents: true,
+    },
   });
   const { data: llmProxies } = useProfiles({
-    filters: { agentTypes: ["profile", "llm_proxy"] },
+    filters: {
+      agentTypes: ["profile", "llm_proxy"],
+      excludeOtherPersonalAgents: true,
+    },
   });
 
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -70,11 +83,14 @@ export function ConnectionFlow({
     return CONNECT_CLIENTS.filter((c) => c.id === "generic" || shown.has(c.id));
   }, [shownClientIds]);
 
-  // Seed the selected client from the URL so the full flow state is bookmarkable.
-  const initialClientId =
-    urlClientId && visibleClients.some((c) => c.id === urlClientId)
-      ? urlClientId
-      : null;
+  // Pre-select a client so the flow never loads blank. URL param wins (for
+  // bookmarkable state), then the admin default, then "Any Client" as the
+  // system fallback.
+  const initialClientId = resolveInitialClientId({
+    urlClientId,
+    adminDefaultClientId,
+    visibleClientIds: visibleClients.map((c) => c.id),
+  });
   const [clientId, setClientId] = useState<string | null>(initialClientId);
   const client = visibleClients.find((c) => c.id === clientId) ?? null;
 
@@ -120,6 +136,34 @@ export function ConnectionFlow({
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
   const [selectedProxyId, setSelectedProxyId] = useState<string | null>(null);
 
+  // Connection base URL — chosen once for the whole page, threaded into each
+  // instruction panel below. Admins can hide individual env URLs from end
+  // users; we filter those out here. Falls back to the admin default, then the
+  // first remaining env URL, then the in-cluster internal URL.
+  const candidateBaseUrls = useMemo(
+    () =>
+      resolveCandidateBaseUrls({
+        externalProxyUrls: config.api.externalProxyUrls,
+        internalProxyUrl: config.api.internalProxyUrl,
+        metadata: connectionBaseUrls,
+      }),
+    [connectionBaseUrls],
+  );
+  const adminDefaultBaseUrl = useMemo(
+    () => resolveAdminDefaultBaseUrl(connectionBaseUrls),
+    [connectionBaseUrls],
+  );
+  // Derived, not stateful: this lets the admin default take effect after the
+  // org data resolves on initial load. Once the user manually picks a URL,
+  // `userBaseUrl` overrides every fallback below.
+  const [userBaseUrl, setUserBaseUrl] = useState<string | null>(null);
+  const baseUrl =
+    (userBaseUrl && candidateBaseUrls.includes(userBaseUrl) && userBaseUrl) ||
+    (adminDefaultBaseUrl &&
+      candidateBaseUrls.includes(adminDefaultBaseUrl) &&
+      adminDefaultBaseUrl) ||
+    candidateBaseUrls[0];
+
   const handleMcpSelect = (id: string) => {
     setSelectedMcpId(id);
     updateUrlParams({ gatewayId: id });
@@ -152,7 +196,6 @@ export function ConnectionFlow({
 
   const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
 
-  const clientState: StepState = "active";
   const mcpState: StepState = !clientId
     ? "todo"
     : isOpen("mcp")
@@ -167,19 +210,20 @@ export function ConnectionFlow({
   return (
     <div className="grid gap-3.5">
       {/* Step 1 — Client */}
-      <StepCard
-        title="Select your client"
-        state={clientState}
-        expanded
-        pinned
-        hideStatus
-      >
-        <ClientGrid
-          clients={visibleClients}
-          selected={clientId}
-          onSelect={selectClient}
-        />
-      </StepCard>
+      <ClientPicker
+        clients={visibleClients}
+        selected={clientId}
+        onSelect={selectClient}
+      />
+
+      {/* Connection URL — picked once, reused by every snippet below. */}
+      <ConnectionUrlStep
+        candidateUrls={candidateBaseUrls}
+        metadata={connectionBaseUrls}
+        value={baseUrl}
+        onChange={setUserBaseUrl}
+        hideWhenSingleAndUnannotated
+      />
 
       {/* Step 2 — MCP Gateway */}
       {canReadMcpGateway && (
@@ -194,21 +238,15 @@ export function ConnectionFlow({
             isOpen("mcp") &&
             client.mcp.kind !== "unsupported" &&
             (mcpGateways?.length ?? 0) > 1 ? (
-              <Select
-                value={effectiveMcpId ?? ""}
+              <SearchableSelect
+                options={(mcpGateways ?? []).map((g) => ({
+                  value: g.id,
+                  label: g.name,
+                }))}
+                value={effectiveMcpId}
                 onValueChange={handleMcpSelect}
-              >
-                <SelectTrigger className="h-8 w-auto gap-2 text-xs">
-                  <SelectValue placeholder="Select gateway" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mcpGateways?.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select gateway"
+              />
             ) : null
           }
         >
@@ -217,6 +255,7 @@ export function ConnectionFlow({
               client={client}
               gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
+              baseUrl={baseUrl}
             />
           )}
           {client && !effectiveMcpId && (
@@ -247,21 +286,15 @@ export function ConnectionFlow({
             isOpen("proxy") &&
             client.proxy.kind !== "unsupported" &&
             (llmProxies?.length ?? 0) > 1 ? (
-              <Select
-                value={effectiveProxyId ?? ""}
+              <SearchableSelect
+                options={(llmProxies ?? []).map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                }))}
+                value={effectiveProxyId}
                 onValueChange={handleProxySelect}
-              >
-                <SelectTrigger className="h-8 w-auto gap-2 text-xs">
-                  <SelectValue placeholder="Select proxy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {llmProxies?.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select proxy"
+              />
             ) : null
           }
         >
@@ -270,6 +303,7 @@ export function ConnectionFlow({
               client={client}
               profileId={effectiveProxyId}
               shownProviders={shownProviders}
+              baseUrl={baseUrl}
             />
           )}
           {client && !effectiveProxyId && (

@@ -2,7 +2,7 @@ export interface FolderTraversalAdapter {
   listDirectSubfolders(parentId: string): Promise<string[]>;
 }
 
-export interface FolderTraversalOptions {
+interface FolderTraversalOptions {
   rootFolderId: string;
   recursive?: boolean;
   maxDepth?: number;

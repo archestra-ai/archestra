@@ -188,7 +188,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
-- `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `api`, `chat`). Useful for filtering traces by origin.
+- `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `model_router`, `api`, `chat`). Useful for filtering traces by origin.
 - `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
 - `archestra.user.id` - The Archestra user ID who made the request (when available)
 - `archestra.user.email` - The Archestra user email (when available)

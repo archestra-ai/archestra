@@ -31,19 +31,19 @@ export interface BrowserUserContext {
   organizationId: string;
 }
 
-export interface AvailabilityResult {
+interface AvailabilityResult {
   available: boolean;
   tools?: string[];
   error?: string;
 }
 
-export interface NavigateResult {
+interface NavigateResult {
   success: boolean;
   url?: string;
   error?: string;
 }
 
-export interface ScreenshotResult {
+interface ScreenshotResult {
   screenshot?: string;
   url?: string;
   error?: string;
@@ -51,7 +51,7 @@ export interface ScreenshotResult {
   viewportHeight?: number;
 }
 
-export interface TabResult {
+interface TabResult {
   success: boolean;
   tabIndex?: number;
   tabs?: Array<{ index: number; title?: string; url?: string }>;
@@ -65,22 +65,22 @@ type BrowserTabsListData = {
 
 type BrowserTabsAction = "list" | "new" | "close" | "select";
 
-export interface ClickResult {
+interface ClickResult {
   success: boolean;
   error?: string;
 }
 
-export interface TypeResult {
+interface TypeResult {
   success: boolean;
   error?: string;
 }
 
-export interface ScrollResult {
+interface ScrollResult {
   success: boolean;
   error?: string;
 }
 
-export interface SnapshotResult {
+interface SnapshotResult {
   snapshot?: string;
   error?: string;
 }

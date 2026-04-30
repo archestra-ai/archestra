@@ -544,6 +544,7 @@ function shouldSkipIssue(issue: any, labelsToSkip?: string[]): boolean {
  * Format an ISO 8601 timestamp with timezone offset (e.g. "2026-03-09T11:05:52.774-0400")
  * by extracting the LOCAL date/time components.  Jira JQL interprets date literals in the
  * authenticating user's timezone, so we must use the local time, not UTC.
+ * @public — exported for testability
  */
 export function formatJiraLocalDate(rawTimestamp: string): string {
   const match = rawTimestamp.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
@@ -657,6 +658,7 @@ function formatComment(comment: unknown, isCloud: boolean): string {
 /**
  * Extract plain text from Atlassian Document Format (ADF).
  * ADF is a nested JSON structure used by Jira Cloud v3.
+ * @public — exported for testability
  */
 export function extractTextFromAdf(adf: unknown): string {
   if (adf == null) return "";

@@ -9,6 +9,7 @@ import { JiraConnector } from "./jira/jira-connector";
 import { LinearConnector } from "./linear/linear-connector";
 import { NotionConnector } from "./notion/notion-connector";
 import { OutlineConnector } from "./outline/outline-connector";
+import { SalesforceConnector } from "./salesforce/salesforce-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
 import { SharePointConnector } from "./sharepoint/sharepoint-connector";
 
@@ -25,6 +26,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   outline: () => new OutlineConnector(),
   asana: () => new AsanaConnector(),
   linear: () => new LinearConnector(),
+  salesforce: () => new SalesforceConnector(),
 };
 
 export function getConnector(type: string): Connector {

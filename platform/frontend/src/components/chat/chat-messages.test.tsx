@@ -13,7 +13,10 @@ vi.mock("@/components/ai-elements/conversation", () => ({
 }));
 
 vi.mock("use-stick-to-bottom", () => ({
-  useStickToBottomContext: () => ({ scrollToBottom: vi.fn() }),
+  useStickToBottomContext: () => ({
+    isAtBottom: true,
+    scrollToBottom: vi.fn(),
+  }),
 }));
 
 vi.mock("@/components/ai-elements/message", () => ({

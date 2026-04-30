@@ -2,6 +2,8 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
+  type SupportedProvider,
+  SupportedProvidersSchema,
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -17,7 +19,7 @@ import {
   constructResponseSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
-  SelectVirtualApiKeySchema,
+  type User,
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
 } from "@/types";
@@ -31,7 +33,20 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
   expiresAt: z.coerce.date().nullable().optional(),
   scope: ResourceVisibilityScopeSchema.default("org"),
   teams: z.array(z.string()).default([]),
+  modelRouterProviderApiKeys: z
+    .array(
+      z.object({
+        provider: SupportedProvidersSchema,
+        chatApiKeyId: z.string().uuid(),
+      }),
+    )
+    .default([]),
 });
+
+const CreateVirtualApiKeyBodySchema =
+  CreateOrUpdateVirtualApiKeyBodySchema.extend({
+    chatApiKeyId: z.string().uuid().nullable().optional(),
+  });
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -73,117 +88,37 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys",
-    {
-      schema: {
-        operationId: RouteId.GetVirtualApiKeys,
-        description: "Get visible virtual API keys for an LLM provider API key",
-        tags: ["Virtual API Keys"],
-        params: z.object({
-          chatApiKeyId: z.string().uuid(),
-        }),
-        response: constructResponseSchema(z.array(SelectVirtualApiKeySchema)),
-      },
-    },
-    async ({ params, organizationId, user }, reply) => {
-      const chatApiKey = await LlmProviderApiKeyModel.findById(
-        params.chatApiKeyId,
-      );
-      if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "LLM provider API key not found");
-      }
-
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
-        TeamModel.getUserTeamIds(user.id),
-        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-      ]);
-
-      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
-        chatApiKeyId: params.chatApiKeyId,
-        organizationId,
-        userId: user.id,
-        userTeamIds,
-        isAdmin: isVirtualKeyAdmin,
-      });
-      return reply.send(virtualKeys);
-    },
-  );
-
   fastify.post(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys",
+    "/api/llm-virtual-keys",
     {
       schema: {
         operationId: RouteId.CreateVirtualApiKey,
         description:
           "Create a new virtual API key. Returns the full token value once.",
         tags: ["Virtual API Keys"],
-        params: z.object({
-          chatApiKeyId: z.string().uuid(),
-        }),
-        body: CreateOrUpdateVirtualApiKeyBodySchema,
+        body: CreateVirtualApiKeyBodySchema,
         response: constructResponseSchema(VirtualApiKeyWithValueSchema),
       },
     },
-    async ({ params, body, organizationId, user }, reply) => {
-      const chatApiKey = await LlmProviderApiKeyModel.findById(
-        params.chatApiKeyId,
-      );
-      if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "LLM provider API key not found");
-      }
-
-      if (body.expiresAt && body.expiresAt <= new Date()) {
-        throw new ApiError(400, "Expiration date must be in the future");
-      }
-
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
-        TeamModel.getUserTeamIds(user.id),
-        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-      ]);
-      await validateVirtualKeyScope({
-        scope: body.scope,
-        teamIds: body.teams,
-        userId: user.id,
+    async ({ body, organizationId, user }, reply) => {
+      const response = await createVirtualApiKey({
+        body,
+        chatApiKeyId: body.chatApiKeyId ?? null,
         organizationId,
-        userTeamIds,
-        isAdmin: isVirtualKeyAdmin,
+        user,
       });
-
-      const count = await VirtualApiKeyModel.countByChatApiKeyId(
-        params.chatApiKeyId,
-      );
-      const maxVirtualKeys = config.llmProxy.maxVirtualKeysPerApiKey;
-      if (count >= maxVirtualKeys) {
-        throw new ApiError(
-          400,
-          `Maximum of ${maxVirtualKeys} virtual keys per API key reached`,
-        );
-      }
-
-      const { virtualKey, value, teams, authorName } =
-        await VirtualApiKeyModel.create({
-          chatApiKeyId: params.chatApiKeyId,
-          name: body.name,
-          expiresAt: body.expiresAt ?? null,
-          scope: body.scope,
-          authorId: user.id,
-          teamIds: body.teams,
-        });
-
-      return reply.send({ ...virtualKey, value, teams, authorName });
+      return reply.send(response);
     },
   );
 
   fastify.patch(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id",
+    "/api/llm-virtual-keys/:id",
     {
       schema: {
         operationId: RouteId.UpdateVirtualApiKey,
         description: "Update a virtual API key",
         tags: ["Virtual API Keys"],
         params: z.object({
-          chatApiKeyId: z.string().uuid(),
           id: z.string().uuid(),
         }),
         body: CreateOrUpdateVirtualApiKeyBodySchema,
@@ -191,107 +126,210 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId, user }, reply) => {
-      const accessContext = await VirtualApiKeyModel.findAccessContextById(
-        params.id,
-      );
-
-      if (
-        !accessContext ||
-        accessContext.chatApiKeyId !== params.chatApiKeyId ||
-        accessContext.organizationId !== organizationId
-      ) {
-        throw new ApiError(404, "Virtual API key not found");
-      }
-
-      if (body.expiresAt && body.expiresAt <= new Date()) {
-        throw new ApiError(400, "Expiration date must be in the future");
-      }
-
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
-        TeamModel.getUserTeamIds(user.id),
-        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
-      ]);
-      await requireVirtualKeyModifyPermission({
-        virtualKey: accessContext,
-        userId: user.id,
-        organizationId,
-        userTeamIds,
-      });
-      await validateVirtualKeyScope({
-        scope: body.scope,
-        teamIds: body.teams,
-        userId: user.id,
-        organizationId,
-        userTeamIds,
-        isAdmin: isVirtualKeyAdmin,
-      });
-
-      const updatedVirtualKey = await VirtualApiKeyModel.update({
+      const response = await updateVirtualApiKey({
         id: params.id,
-        name: body.name,
-        expiresAt: body.expiresAt ?? null,
-        scope: body.scope,
-        authorId: user.id,
-        teamIds: body.teams,
+        body,
+        organizationId,
+        user,
       });
-
-      if (!updatedVirtualKey) {
-        throw new ApiError(404, "Virtual API key not found");
-      }
-
-      const visibilityMetadata =
-        await VirtualApiKeyModel.getVisibilityForVirtualApiKeyIds([params.id]);
-
-      return reply.send({
-        ...updatedVirtualKey,
-        teams: visibilityMetadata.teams.get(params.id) ?? [],
-        authorName: visibilityMetadata.authorName.get(params.id) ?? null,
-      });
+      return reply.send(response);
     },
   );
 
   fastify.delete(
-    "/api/llm-provider-api-keys/:chatApiKeyId/virtual-keys/:id",
+    "/api/llm-virtual-keys/:id",
     {
       schema: {
         operationId: RouteId.DeleteVirtualApiKey,
         description: "Delete a virtual API key",
         tags: ["Virtual API Keys"],
         params: z.object({
-          chatApiKeyId: z.string().uuid(),
           id: z.string().uuid(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params, organizationId, user }, reply) => {
-      const accessContext = await VirtualApiKeyModel.findAccessContextById(
-        params.id,
-      );
-
-      if (
-        !accessContext ||
-        accessContext.chatApiKeyId !== params.chatApiKeyId ||
-        accessContext.organizationId !== organizationId
-      ) {
-        throw new ApiError(404, "Virtual API key not found");
-      }
-
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      await requireVirtualKeyModifyPermission({
-        virtualKey: accessContext,
-        userId: user.id,
+      const response = await deleteVirtualApiKey({
+        id: params.id,
         organizationId,
-        userTeamIds,
+        user,
       });
-
-      await VirtualApiKeyModel.delete(params.id);
-      return reply.send({ success: true });
+      return reply.send(response);
     },
   );
 };
 
 export default virtualApiKeysRoutes;
+
+async function createVirtualApiKey(params: {
+  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  chatApiKeyId: string | null;
+  organizationId: string;
+  user: User;
+}): Promise<z.infer<typeof VirtualApiKeyWithValueSchema>> {
+  const { body, chatApiKeyId, organizationId, user } = params;
+  const isModelRouterKey = body.modelRouterProviderApiKeys.length > 0;
+
+  if (!chatApiKeyId && !isModelRouterKey) {
+    throw new ApiError(
+      400,
+      "Provider API key is required unless Model Router provider keys are configured",
+    );
+  }
+
+  if (chatApiKeyId) {
+    const chatApiKey = await LlmProviderApiKeyModel.findById(chatApiKeyId);
+    if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
+      throw new ApiError(404, "LLM provider API key not found");
+    }
+  }
+
+  if (body.expiresAt && body.expiresAt <= new Date()) {
+    throw new ApiError(400, "Expiration date must be in the future");
+  }
+
+  const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+    TeamModel.getUserTeamIds(user.id),
+    userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+  ]);
+  await validateVirtualKeyScope({
+    scope: body.scope,
+    teamIds: body.teams,
+    userId: user.id,
+    organizationId,
+    userTeamIds,
+    isAdmin: isVirtualKeyAdmin,
+  });
+  await validateModelRouterProviderApiKeys({
+    mappings: body.modelRouterProviderApiKeys,
+    organizationId,
+  });
+
+  if (chatApiKeyId) {
+    const count = await VirtualApiKeyModel.countByChatApiKeyId(chatApiKeyId);
+    const maxVirtualKeys = config.llmProxy.maxVirtualKeysPerApiKey;
+    if (count >= maxVirtualKeys) {
+      throw new ApiError(
+        400,
+        `Maximum of ${maxVirtualKeys} virtual keys per API key reached`,
+      );
+    }
+  }
+
+  const { virtualKey, value, teams, authorName, modelRouterProviderApiKeys } =
+    await VirtualApiKeyModel.create({
+      organizationId,
+      chatApiKeyId,
+      name: body.name,
+      expiresAt: body.expiresAt ?? null,
+      scope: body.scope,
+      authorId: user.id,
+      teamIds: body.teams,
+      modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
+    });
+
+  return {
+    ...virtualKey,
+    value,
+    teams,
+    authorName,
+    modelRouterProviderApiKeys,
+  };
+}
+
+async function updateVirtualApiKey(params: {
+  id: string;
+  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  organizationId: string;
+  user: User;
+}): Promise<z.infer<typeof UpdateVirtualApiKeyResponseSchema>> {
+  const { id, body, organizationId, user } = params;
+
+  const accessContext = await VirtualApiKeyModel.findAccessContextById(id);
+
+  if (!accessContext || accessContext.organizationId !== organizationId) {
+    throw new ApiError(404, "Virtual API key not found");
+  }
+
+  if (body.expiresAt && body.expiresAt <= new Date()) {
+    throw new ApiError(400, "Expiration date must be in the future");
+  }
+
+  const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+    TeamModel.getUserTeamIds(user.id),
+    userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+  ]);
+  await requireVirtualKeyModifyPermission({
+    virtualKey: accessContext,
+    userId: user.id,
+    organizationId,
+    userTeamIds,
+  });
+  await validateVirtualKeyScope({
+    scope: body.scope,
+    teamIds: body.teams,
+    userId: user.id,
+    organizationId,
+    userTeamIds,
+    isAdmin: isVirtualKeyAdmin,
+  });
+  await validateModelRouterProviderApiKeys({
+    mappings: body.modelRouterProviderApiKeys,
+    organizationId,
+  });
+
+  const updatedVirtualKey = await VirtualApiKeyModel.update({
+    id,
+    name: body.name,
+    expiresAt: body.expiresAt ?? null,
+    scope: body.scope,
+    authorId: user.id,
+    teamIds: body.teams,
+    modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
+  });
+
+  if (!updatedVirtualKey) {
+    throw new ApiError(404, "Virtual API key not found");
+  }
+
+  const visibilityMetadata =
+    await VirtualApiKeyModel.getVisibilityForVirtualApiKeyIds([id]);
+  const modelRouterProviderApiKeys =
+    await VirtualApiKeyModel.getModelRouterProviderApiKeys(id);
+
+  return {
+    ...updatedVirtualKey,
+    teams: visibilityMetadata.teams.get(id) ?? [],
+    authorName: visibilityMetadata.authorName.get(id) ?? null,
+    modelRouterProviderApiKeys,
+  };
+}
+
+async function deleteVirtualApiKey(params: {
+  id: string;
+  organizationId: string;
+  user: User;
+}): Promise<{ success: boolean }> {
+  const { id, organizationId, user } = params;
+
+  const accessContext = await VirtualApiKeyModel.findAccessContextById(id);
+
+  if (!accessContext || accessContext.organizationId !== organizationId) {
+    throw new ApiError(404, "Virtual API key not found");
+  }
+
+  const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+  await requireVirtualKeyModifyPermission({
+    virtualKey: accessContext,
+    userId: user.id,
+    organizationId,
+    userTeamIds,
+  });
+
+  await VirtualApiKeyModel.delete(id);
+  return { success: true };
+}
 
 async function validateVirtualKeyScope(params: {
   scope: ResourceVisibilityScope;
@@ -340,6 +378,43 @@ async function validateVirtualKeyScope(params: {
       throw new ApiError(
         403,
         "You can only assign virtual keys to teams you are a member of",
+      );
+    }
+  }
+}
+
+async function validateModelRouterProviderApiKeys(params: {
+  mappings: Array<{ provider: SupportedProvider; chatApiKeyId: string }>;
+  organizationId: string;
+}): Promise<void> {
+  const { mappings, organizationId } = params;
+  if (mappings.length === 0) {
+    return;
+  }
+
+  const providers = new Set<SupportedProvider>();
+  const apiKeys = await LlmProviderApiKeyModel.findByIds(
+    mappings.map((mapping) => mapping.chatApiKeyId),
+  );
+  const apiKeysById = new Map(apiKeys.map((apiKey) => [apiKey.id, apiKey]));
+
+  for (const mapping of mappings) {
+    if (providers.has(mapping.provider)) {
+      throw new ApiError(
+        400,
+        `Only one provider API key can be mapped for provider "${mapping.provider}".`,
+      );
+    }
+    providers.add(mapping.provider);
+
+    const apiKey = apiKeysById.get(mapping.chatApiKeyId);
+    if (!apiKey || apiKey.organizationId !== organizationId) {
+      throw new ApiError(404, "LLM provider API key not found");
+    }
+    if (apiKey.provider !== mapping.provider) {
+      throw new ApiError(
+        400,
+        `Provider API key "${apiKey.name}" is for provider "${apiKey.provider}", not "${mapping.provider}".`,
       );
     }
   }

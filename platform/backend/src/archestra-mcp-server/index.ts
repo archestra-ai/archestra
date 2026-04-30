@@ -44,6 +44,14 @@ import {
 } from "./policies";
 import { checkToolPermission } from "./rbac";
 import {
+  toolEntries as runToolEntries,
+  tools as runToolTools,
+} from "./run-tool";
+import {
+  toolEntries as searchToolEntries,
+  tools as searchToolTools,
+} from "./search-tools";
+import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
@@ -51,7 +59,7 @@ import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
 export { getAgentTools } from "./delegation";
-export { filterToolNamesByPermission, TOOL_PERMISSIONS } from "./rbac";
+export { filterToolNamesByPermission } from "./rbac";
 export type { ArchestraContext } from "./types";
 
 const toolEntries: Partial<
@@ -67,6 +75,8 @@ const toolEntries: Partial<
   ...toolAssignmentToolEntries,
   ...knowledgeManagementToolEntries,
   ...chatToolEntries,
+  ...searchToolEntries,
+  ...runToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -81,6 +91,8 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
+    ...searchToolTools,
+    ...runToolTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -208,6 +220,7 @@ function validateToolResult(
   };
 }
 
+/** @public — exported for testability */
 export const __test = {
   validateToolResult,
 };

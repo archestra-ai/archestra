@@ -6,7 +6,12 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
-import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import type {
+  InsertMcpServer,
+  McpServer,
+  ResourceVisibilityScope,
+  UpdateMcpServer,
+} from "@/types";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpHttpSessionModel from "./mcp-http-session";
@@ -18,25 +23,34 @@ const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 
 class McpServerModel {
   /**
-   * Construct the full server name from a base name + unique suffix.
-   * Local servers get a userId or teamId suffix for unique K8s deployment names.
-   * Remote/other servers use the base name as-is.
+   * Construct the full server name. Local servers append a scope-specific
+   * suffix so distinct installations of the same catalog don't collide on the
+   * K8s deployment name. Remote servers use the base name as-is.
    */
   static constructServerName(params: {
     baseName: string;
     serverType: string;
+    scope: ResourceVisibilityScope;
     ownerId: string | null;
     teamId: string | null;
   }): string {
-    if (params.serverType === "local") {
-      if (params.teamId) {
-        return `${params.baseName}-${params.teamId}`;
-      }
-      if (params.ownerId) {
-        return `${params.baseName}-${params.ownerId}`;
-      }
+    if (params.serverType !== "local") {
+      return params.baseName;
     }
-    return params.baseName;
+    switch (params.scope) {
+      case "team":
+        if (!params.teamId) {
+          throw new Error("teamId required for scope='team' local server");
+        }
+        return `${params.baseName}-${params.teamId}`;
+      case "personal":
+        if (!params.ownerId) {
+          throw new Error("ownerId required for scope='personal' local server");
+        }
+        return `${params.baseName}-${params.ownerId}`;
+      case "org":
+        return params.baseName;
+    }
   }
 
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -45,6 +59,7 @@ class McpServerModel {
     const mcpServerName = McpServerModel.constructServerName({
       baseName: serverData.name,
       serverType: serverData.serverType,
+      scope: serverData.scope ?? "personal",
       ownerId: userId ?? null,
       teamId: serverData.teamId ?? null,
     });
@@ -81,9 +96,46 @@ class McpServerModel {
         schema.teamMembersTable,
         eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
       )
-      .where(eq(schema.teamMembersTable.userId, userId));
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.mcpServersTable.scope, "team"),
+        ),
+      );
 
     return mcpServers.map((s) => s.mcpServerId);
+  }
+
+  /**
+   * Get IDs of org-scoped MCP servers visible to every member of the
+   * organization.
+   */
+  private static async getOrgScopedMcpServerIds(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.scope, "org"));
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Check if a specific MCP server is org-scoped and visible in the given
+   * organization.
+   */
+  private static async hasOrgScopeAccess(
+    mcpServerId: string,
+  ): Promise<boolean> {
+    const result = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, mcpServerId),
+          eq(schema.mcpServersTable.scope, "org"),
+        ),
+      )
+      .limit(1);
+    return result.length > 0;
   }
 
   /**
@@ -105,6 +157,7 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.teamMembersTable.userId, userId),
+          eq(schema.mcpServersTable.scope, "team"),
         ),
       )
       .limit(1);
@@ -162,15 +215,24 @@ class McpServerModel {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
-      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
-        await Promise.all([
-          McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
-          McpServerUserModel.getUserPersonalMcpServerIds(userId),
-        ]);
+      // 3. Org-scoped servers (visible to all org members)
+      const [
+        teamAccessibleMcpServerIds,
+        personalMcpServerIds,
+        orgScopedMcpServerIds,
+      ] = await Promise.all([
+        McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+        McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        McpServerModel.getOrgScopedMcpServerIds(),
+      ]);
 
       // Combine all lists
       const accessibleMcpServerIds = [
-        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
+        ...new Set([
+          ...teamAccessibleMcpServerIds,
+          ...personalMcpServerIds,
+          ...orgScopedMcpServerIds,
+        ]),
       ];
 
       if (accessibleMcpServerIds.length === 0) {
@@ -237,12 +299,14 @@ class McpServerModel {
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
-      const [hasTeamAccess, hasPersonalAccess] = await Promise.all([
-        McpServerModel.userHasMcpServerAccessByTeam(userId, id),
-        McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
-      ]);
+      const [hasTeamAccess, hasPersonalAccess, hasOrgAccess] =
+        await Promise.all([
+          McpServerModel.userHasMcpServerAccessByTeam(userId, id),
+          McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
+          McpServerModel.hasOrgScopeAccess(id),
+        ]);
 
-      if (!hasTeamAccess && !hasPersonalAccess) {
+      if (!hasTeamAccess && !hasPersonalAccess && !hasOrgAccess) {
         return null;
       }
     }
@@ -601,7 +665,6 @@ class McpServerModel {
 
   /**
    * Get a user's personal server for a specific catalog.
-   * Personal servers have no teamId and are owned by the user.
    */
   static async getUserPersonalServerForCatalog(
     userId: string,
@@ -614,7 +677,7 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.catalogId, catalogId),
           eq(schema.mcpServersTable.ownerId, userId),
-          isNull(schema.mcpServersTable.teamId), // Personal = no team
+          eq(schema.mcpServersTable.scope, "personal"),
         ),
       )
       .limit(1);
@@ -641,7 +704,7 @@ class McpServerModel {
         and(
           inArray(schema.mcpServersTable.catalogId, catalogIds),
           eq(schema.mcpServersTable.ownerId, userId),
-          isNull(schema.mcpServersTable.teamId), // Personal = no team
+          eq(schema.mcpServersTable.scope, "personal"),
         ),
       );
 

@@ -103,6 +103,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByText("GitLab")).toBeInTheDocument();
       expect(screen.getByText("Asana")).toBeInTheDocument();
       expect(screen.getByText("Linear")).toBeInTheDocument();
+      expect(screen.getByText("Salesforce")).toBeInTheDocument();
     });
 
     it("renders all required fields after selecting a connector type", async () => {
@@ -407,6 +408,88 @@ describe("CreateConnectorDialog", () => {
         workspaceGid: "1234567890",
         projectGids: ["111", "222"],
         tagsToSkip: ["internal", "draft"],
+      });
+    });
+  });
+
+  describe("Salesforce-specific flow", () => {
+    async function renderSalesforceConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("Salesforce"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("shows login URL and email/token fields for salesforce", async () => {
+      await renderSalesforceConfigureStep();
+
+      expect(screen.getByLabelText(/^Login URL$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Email$/)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Password \+ Security Token$/),
+      ).toBeInTheDocument();
+    });
+
+    it("does not expose batch size in the salesforce UI", async () => {
+      const { user } = await renderSalesforceConfigureStep();
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Objects/)).toBeInTheDocument();
+      });
+      expect(screen.queryByLabelText(/Batch Size/i)).not.toBeInTheDocument();
+    });
+
+    it("submits salesforce payload with transformed objects array", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderSalesforceConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Salesforce Connector" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Login URL$/), {
+        target: { value: "https://login.salesforce.com" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Email$/), {
+        target: { value: "admin@example.com" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Password \+ Security Token$/), {
+        target: { value: "passwordAndToken" },
+      });
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Objects/)).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByLabelText(/Objects/), {
+        target: { value: "Account, Contact, Opportunity" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      expect(call[0]).toMatchObject({
+        name: "Salesforce Connector",
+        connectorType: "salesforce",
+        credentials: {
+          email: "admin@example.com",
+          apiToken: "passwordAndToken",
+        },
+      });
+      expect(call[0].config).toMatchObject({
+        type: "salesforce",
+        loginUrl: "https://login.salesforce.com",
+        objects: ["Account", "Contact", "Opportunity"],
       });
     });
   });

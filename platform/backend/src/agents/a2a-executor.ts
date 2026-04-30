@@ -35,6 +35,7 @@ export interface A2AAttachment {
   name?: string;
 }
 
+/** @public — exported for testability */
 export interface A2AExecuteParams {
   /**
    * Agent ID to execute. Must be an internal agent (agentType='agent').
@@ -64,12 +65,17 @@ export interface A2AExecuteParams {
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
   attachments?: A2AAttachment[];
+  /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
+  chatOpsBindingId?: string;
+  /** ChatOps thread identifier for thread-scoped agent overrides */
+  chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
 }
 
+/** @public — exported for testability */
 export interface A2AExecuteResult {
   messageId: string;
   text: string;
@@ -98,6 +104,8 @@ export async function executeA2AMessage(
     parentDelegationChain,
     abortSignal,
     attachments,
+    chatOpsBindingId,
+    chatOpsThreadId,
     parentContextIsTrusted,
     scheduleTriggerRunId,
   } = params;
@@ -174,6 +182,8 @@ export async function executeA2AMessage(
       agentId: agent.id,
       userId,
       organizationId,
+      chatOpsBindingId,
+      chatOpsThreadId,
       sessionId,
       delegationChain,
       conversationId: isolationKey,
@@ -330,6 +340,7 @@ export async function executeA2AMessage(
  *
  * Only image attachments are currently supported as inline content parts.
  * Non-image attachments are noted so the LLM can inform the user.
+ * @public — exported for testability
  */
 export function buildUserContent(
   message: string,

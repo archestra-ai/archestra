@@ -88,12 +88,7 @@ export function transformFormToApiData(
       .split(",")
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
-    const hasExplicitScopes = parsedScopes.length > 0;
-    const scopesList = hasExplicitScopes
-      ? parsedScopes
-      : isClientCredentials
-        ? []
-        : ["read", "write"];
+    const scopesList = parsedScopes;
 
     // For local servers, use oauthServerUrl; for remote servers, use serverUrl
     const oauthServerUrl =
@@ -125,13 +120,21 @@ export function transformFormToApiData(
       audience: values.oauthConfig.audience || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
-      // Keep fallback scopes aligned with explicit scopes because the backend
-      // skips discovery entirely when scopes are configured.
-      default_scopes: hasExplicitScopes
-        ? scopesList
-        : isClientCredentials
-          ? []
-          : ["read", "write"],
+      // default_scopes is the fallback used by the backend's scope resolution:
+      //   1. If `scopes` is non-empty, discovery is skipped and `scopes` is sent verbatim.
+      //   2. If `scopes` is empty, backend tries .well-known discovery
+      //      (oauth-protected-resource, then oauth-authorization-server).
+      //   3. If discovery yields nothing, backend falls back to `default_scopes`.
+      // When the user configures explicit scopes, mirror them into default_scopes so
+      // the fallback matches intent. When the field is blank, keep the generic
+      // ["read","write"] fallback — some proxy MCP servers (e.g. Atlassian) accept
+      // those literal values and translate them to real provider scopes.
+      default_scopes:
+        scopesList.length > 0
+          ? scopesList
+          : isClientCredentials
+            ? []
+            : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
 
@@ -542,7 +545,7 @@ export function transformExternalCatalogToFormValues(
         (typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`
           : ""),
-      scopes: server.oauth_config.scopes?.join(", ") || "read, write",
+      scopes: server.oauth_config.scopes?.join(", ") ?? "",
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
       grantType:

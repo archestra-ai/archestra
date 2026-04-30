@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-04-16
+lastUpdated: 2026-04-28
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -90,6 +90,8 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Simple View | `enable` |
+| Chat Agent Picker | `enable` |
+| Chat Provider Settings | `enable` |
 | Chat Expand Tool Calls | `enable` |
 
 

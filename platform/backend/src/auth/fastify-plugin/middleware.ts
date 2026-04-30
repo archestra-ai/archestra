@@ -6,6 +6,7 @@ import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { UserModel } from "@/models";
+import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import {
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
@@ -102,11 +103,15 @@ export class Authnz {
     const isLlmProxyRoute = SupportedProviders.some((provider) =>
       url.startsWith(`/v1/${provider}`),
     );
+    // Prefer route consts here instead of hardcoding paths; these checks must
+    // stay in sync with route registration.
+    const isModelRouterRoute = url.startsWith(MODEL_ROUTER_PREFIX);
 
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
+      isModelRouterRoute ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||

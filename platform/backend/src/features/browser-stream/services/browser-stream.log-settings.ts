@@ -3,13 +3,14 @@ type BrowserStreamLogEnv = NodeJS.ProcessEnv & {
   ARCHESTRA_BROWSER_STREAM_LOG_TAB_SYNC?: string;
 };
 
-export type BrowserStreamLogSettings = {
+type BrowserStreamLogSettings = {
   logScreenshots: boolean;
   logTabSync: boolean;
 };
 
 const parseEnvFlag = (value: string | undefined): boolean => value === "true";
 
+/** @public — exported for testability */
 export const parseBrowserStreamLogSettings = (
   env: BrowserStreamLogEnv,
 ): BrowserStreamLogSettings => ({

@@ -3,6 +3,8 @@
 import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { providerDisplayNames, type SupportedProvider } from "@shared";
 import Image from "next/image";
+import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +35,7 @@ export type LlmModelSelectOption = {
   description?: string;
   pricePerMillionInput?: string | null;
   pricePerMillionOutput?: string | null;
+  badge?: ReactNode;
 };
 
 export function LlmModelOptionLabel({
@@ -53,13 +56,20 @@ export function LlmModelOptionLabel({
         height={16}
         className="shrink-0 rounded dark:invert"
       />
-      <div className="min-w-0">
-        <div
-          className={cn(
-            truncateModelName ? "truncate" : "whitespace-normal break-words",
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              truncateModelName ? "truncate" : "whitespace-normal break-words",
+            )}
+          >
+            {option.model}
+          </span>
+          {option.badge && (
+            <Badge variant="outline" className="shrink-0 text-xs">
+              {option.badge}
+            </Badge>
           )}
-        >
-          {option.model}
         </div>
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
@@ -94,6 +104,11 @@ function LlmModelSelectedValue({
           className="shrink-0 rounded dark:invert"
         />
         <span className="truncate">{option.model}</span>
+        {option.badge && (
+          <Badge variant="outline" className="shrink-0 text-xs">
+            {option.badge}
+          </Badge>
+        )}
       </div>
     );
   }
@@ -108,7 +123,14 @@ function LlmModelSelectedValue({
         className="shrink-0 rounded dark:invert"
       />
       <div className="min-w-0">
-        <div className="truncate">{option.model}</div>
+        <div className="flex items-center gap-2">
+          <span className="truncate">{option.model}</span>
+          {option.badge && (
+            <Badge variant="outline" className="shrink-0 text-xs">
+              {option.badge}
+            </Badge>
+          )}
+        </div>
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
             {formatPricing(option)}

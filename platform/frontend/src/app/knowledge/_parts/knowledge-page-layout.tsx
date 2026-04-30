@@ -34,11 +34,6 @@ export function KnowledgePageLayout({
             permissions={{ knowledgeSource: ["create"] }}
             onClick={onCreateClick}
             disabled={!isKnowledgeBaseConfigured}
-            tooltip={
-              !isKnowledgeBaseConfigured
-                ? `Configure embedding and reranking API key and model in Settings > Knowledge before creating ${title.toLowerCase()}.`
-                : undefined
-            }
           >
             <Plus className="mr-2 h-4 w-4" />
             {createLabel}

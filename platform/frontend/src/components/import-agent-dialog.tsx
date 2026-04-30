@@ -285,14 +285,6 @@ export function ImportAgentDialog({
                     value={pasteContent}
                     onChange={(e) => setPasteContent(e.target.value)}
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePasteImport}
-                    disabled={!pasteContent.trim()}
-                  >
-                    Parse JSON
-                  </Button>
                 </div>
               )}
 
@@ -464,6 +456,15 @@ export function ImportAgentDialog({
               >
                 {state.status === "parsed" ? "Back" : "Cancel"}
               </Button>
+              {inputMode === "paste" &&
+                (state.status === "idle" || state.status === "error") && (
+                  <Button
+                    onClick={handlePasteImport}
+                    disabled={!pasteContent.trim()}
+                  >
+                    Parse JSON
+                  </Button>
+                )}
               {state.status === "parsed" && (
                 <Button
                   onClick={handleImport}

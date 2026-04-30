@@ -376,8 +376,8 @@ describe("ImportAgentDialog", () => {
 
     // Type valid JSON into the textarea
     const textarea = screen.getByPlaceholderText(/paste agent json here/i);
-    await user.type(
-      textarea,
+    await user.click(textarea);
+    await user.paste(
       JSON.stringify({
         ...validPayload,
         agent: { ...validPayload.agent, name: "Pasted Agent" },

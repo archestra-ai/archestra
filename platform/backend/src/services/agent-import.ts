@@ -18,7 +18,7 @@ import type { ConnectorType } from "@/types/knowledge-connector";
 /**
  * Result of an agent import operation.
  */
-export type ImportResult = {
+type ImportResult = {
   agent: Agent;
   warnings: ImportWarning[];
 };

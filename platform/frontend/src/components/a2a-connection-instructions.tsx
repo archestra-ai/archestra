@@ -5,11 +5,15 @@ import { Mail } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  resolveAdminDefaultBaseUrl,
+  resolveCandidateBaseUrls,
+} from "@/app/connection/connection-flow.utils";
+import { ConnectionUrlStep } from "@/app/connection/connection-url-step";
+import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { CodeText } from "@/components/code-text";
-import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { Label } from "@/components/ui/label";
@@ -25,6 +29,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   useFetchTeamTokenValue,
   useTokens,
@@ -34,8 +39,6 @@ import {
   AgentEmailDisabledMessage,
   EmailNotConfiguredMessage,
 } from "./email-not-configured-message";
-
-const { externalProxyUrls, internalProxyUrl } = config.api;
 
 type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -59,9 +62,31 @@ export function A2AConnectionInstructions({
 
   const tokens = tokensData?.tokens;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
-  const [connectionUrl, setConnectionUrl] = useState<string>(
-    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
+
+  // Mirror the /connection page's base-URL fallback chain so the A2A panel
+  // honors the same admin curation (descriptions, default flag, hidden URLs).
+  const { data: organization } = useOrganization();
+  const connectionBaseUrls = organization?.connectionBaseUrls ?? null;
+  const candidateBaseUrls = useMemo(
+    () =>
+      resolveCandidateBaseUrls({
+        externalProxyUrls: config.api.externalProxyUrls,
+        internalProxyUrl: config.api.internalProxyUrl,
+        metadata: connectionBaseUrls,
+      }),
+    [connectionBaseUrls],
   );
+  const adminDefaultBaseUrl = useMemo(
+    () => resolveAdminDefaultBaseUrl(connectionBaseUrls),
+    [connectionBaseUrls],
+  );
+  const [userBaseUrl, setUserBaseUrl] = useState<string | null>(null);
+  const connectionUrl =
+    (userBaseUrl && candidateBaseUrls.includes(userBaseUrl) && userBaseUrl) ||
+    (adminDefaultBaseUrl &&
+      candidateBaseUrls.includes(adminDefaultBaseUrl) &&
+      adminDefaultBaseUrl) ||
+    candidateBaseUrls[0];
 
   // Mutations for fetching token values
   const fetchUserTokenMutation = useFetchUserTokenValue();
@@ -157,10 +182,11 @@ curl -X GET "${agentCardUrl}" \\
 
   return (
     <div className="space-y-6">
-      <ConnectionBaseUrlSelect
+      <ConnectionUrlStep
+        candidateUrls={candidateBaseUrls}
+        metadata={connectionBaseUrls}
         value={connectionUrl}
-        onChange={setConnectionUrl}
-        idPrefix="a2a"
+        onChange={setUserBaseUrl}
       />
       {/* A2A Endpoint URL */}
       <div className="space-y-2">

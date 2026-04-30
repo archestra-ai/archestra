@@ -185,7 +185,6 @@ test("Verify tool calling using dynamic credentials", async ({
       expectedResult,
       tokenToUse,
       toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
-      cookieHeaders,
       profileId: sharedGateway.id,
     });
   }

@@ -16,12 +16,41 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 Archestra Platform acts as a security proxy between your AI applications and LLM providers. It currently supports the following LLM providers.
 
+## OpenAI-Compatible Model Router
+
+The model router exposes one OpenAI-compatible interface for models across configured providers.
+
+### Supported Model Router APIs
+
+- **Responses API** (`/responses`) - ✅ Supported for text requests across model-router-compatible providers
+- **Chat Completions API** (`/chat/completions`) - ✅ Supported for text chat requests across model-router-compatible providers
+- **Models API** (`/models`) - ✅ Returns provider-qualified model IDs
+
+### Model Router Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/model-router/{llm-proxy-id}`
+- **Authentication**: Pass a Model Router-enabled virtual API key in the `Authorization` header as `Bearer <key>`. See [Model Router Virtual Keys](/docs/platform-llm-proxy-authentication#model-router-virtual-keys).
+
+### List Models
+
+Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual API key used for the request. See [Model Router Virtual Keys](/docs/platform-llm-proxy-authentication#model-router-virtual-keys) for configuration details.
+
+### Model Resolution
+
+Use provider-qualified model IDs from `/models` for deterministic routing, for example `openai:gpt-5.4`, `anthropic:claude-opus-4-6-20250918`, `groq:llama-3.1-8b-instant`, or `bedrock:amazon.nova-pro-v1:0`.
+
+The prefix before `:` is the provider. The value after `:` is the provider's native model ID, so provider model IDs can still contain slashes or colons.
+
+The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
+
+Model Router translation is text-first. Anthropic, Gemini, and Cohere routes currently drop non-text content parts such as OpenAI `image_url` message parts; Bedrock supports base64 data URL images.
+
 ## OpenAI
 
 ### Supported OpenAI APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
-- **Responses API** (`/responses`) - ⚠️ Not yet supported ([GitHub Issue #720](https://github.com/archestra-ai/archestra/issues/720))
+- **Responses API** (`/responses`) - ✅ Fully supported
 
 ### OpenAI Connection Details
 
@@ -30,7 +59,7 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ### Important Notes
 
-- **Use Chat Completions API**: Ensure your application uses the `/chat/completions` endpoint (not `/responses`). Many frameworks default to this, but some like Vercel AI SDK require explicit configuration (add `.chat` to the provider instance).
+- **Use Responses API for new clients**: OpenAI recommends `/responses` for new integrations. Chat Completions remains supported for existing clients.
 - **Streaming**: OpenAI streaming responses require your cloud provider's load balancer to support long-lived connections. See [Cloud Provider Configuration](/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings) for more details.
 
 ## Anthropic

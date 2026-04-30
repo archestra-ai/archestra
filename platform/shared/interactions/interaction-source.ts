@@ -6,6 +6,7 @@ import { z } from "zod";
  */
 export const InteractionSourceSchema = z.enum([
   "api",
+  "model_router",
   "chat",
   "chatops:slack",
   "chatops:ms-teams",
@@ -28,6 +29,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   { label: string }
 > = {
   api: { label: "API" },
+  model_router: { label: "Model Router" },
   chat: { label: "Chat" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },

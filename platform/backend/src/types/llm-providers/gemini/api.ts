@@ -230,6 +230,7 @@ export const GenerateContentRequestSchema = z
   .object({
     contents: z
       .array(ContentSchema)
+      .optional()
       .describe(
         "The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request",
       ),
@@ -272,7 +273,10 @@ export const GenerateContentResponseSchema = z
   .object({
     candidates: z
       .array(CandidateSchema)
-      .describe("Candidate responses from the model"),
+      .optional()
+      .describe(
+        "Candidate responses from the model. Optional because Gemini omits this field when the response is blocked by safety filters (only promptFeedback is returned).",
+      ),
     promptFeedback: PromptFeedbackSchema.optional().describe(
       "Returns the prompt's feedback related to the content filters",
     ),

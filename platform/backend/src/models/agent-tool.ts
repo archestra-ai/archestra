@@ -69,7 +69,17 @@ class AgentToolModel {
           updatedAt: new Date(),
         })),
       )
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [
+          schema.agentToolsTable.agentId,
+          schema.agentToolsTable.toolId,
+        ],
+        set: {
+          mcpServerId: sql`excluded.mcp_server_id`,
+          credentialResolutionMode: sql`excluded.credential_resolution_mode`,
+          updatedAt: new Date(),
+        },
+      });
   }
 
   /**

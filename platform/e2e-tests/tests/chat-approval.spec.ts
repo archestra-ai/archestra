@@ -200,7 +200,9 @@ test.describe("Chat - Approval flow survives reload", () => {
       }),
     );
 
-    const listResp = await request.get(`${WIREMOCK_BASE_URL}/__admin/scenarios`);
+    const listResp = await request.get(
+      `${WIREMOCK_BASE_URL}/__admin/scenarios`,
+    );
     if (!listResp.ok()) {
       throw new Error(
         `[chat-approval] WireMock GET /scenarios returned ${listResp.status()} ${listResp.statusText()}`,

@@ -1578,17 +1578,10 @@
       "breakpoints": true
     },
     {
-      "idx": 228,
+      "idx": 225,
       "version": "7",
-      "when": 1777330941085,
-      "tag": "0228_remove_k8s_fields_from_internal_mcp_catalog",
-      "breakpoints": true
-    },
-    {
-      "idx": 229,
-      "version": "7",
-      "when": 1777331140220,
-      "tag": "0229_sticky_rhino",
+      "when": 1777538462526,
+      "tag": "0225_tiny_shooting_star",
       "breakpoints": true
     }
   ]

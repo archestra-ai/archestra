@@ -2127,9 +2127,7 @@ function prepareMessagesForProvider(params: {
   return messages;
 }
 
-function normalizeAnthropicMessageFileParts(
-  message: ChatMessage,
-): ChatMessage {
+function normalizeAnthropicMessageFileParts(message: ChatMessage): ChatMessage {
   if (!message.parts?.length) {
     return message;
   }

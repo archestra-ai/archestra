@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { PromptInputProvider, PromptInputTextarea } from "./prompt-input";
+import { PromptInput } from ".";
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
@@ -22,13 +22,13 @@ describe("PromptInputTextarea", () => {
     const textareaRef = { current: null as HTMLTextAreaElement | null };
 
     render(
-      <PromptInputProvider>
-        <PromptInputTextarea
+      <PromptInput.Provider>
+        <PromptInput.Textarea
           data-testid="prompt-textarea"
           placeholder="Type here"
           ref={textareaRef}
         />
-      </PromptInputProvider>,
+      </PromptInput.Provider>,
     );
 
     const textarea = screen.getByTestId("prompt-textarea");

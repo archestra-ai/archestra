@@ -1,10 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 
 interface JsonCodeBlockProps {
   value: unknown;
@@ -30,7 +27,7 @@ export function JsonCodeBlock({
           paddingRight: "3.5rem",
         }}
       >
-        <CodeBlockCopyButton
+        <CodeBlock.CopyButton
           title="Copy JSON"
           onCopy={() => toast.success("JSON copied")}
           onError={() => toast.error("Failed to copy JSON")}

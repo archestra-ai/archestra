@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Message } from "@/components/ai-elements/message";
 import { MessageActions } from "@/components/chat/message-actions";
 import { UserMessageText } from "@/components/chat/user-message-text";
 import { Button } from "@/components/ui/button";
@@ -140,7 +140,7 @@ export function EditableUserMessage({
   if (isEditing) {
     return (
       <Message from="user" className="relative pb-9">
-        <MessageContent
+        <Message.Content
           aria-label="Message content"
           className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-secondary ring-primary/50"
         >
@@ -184,7 +184,7 @@ export function EditableUserMessage({
               </div>
             </div>
           </div>
-        </MessageContent>
+        </Message.Content>
       </Message>
     );
   }
@@ -252,9 +252,9 @@ export function EditableUserMessage({
         )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <MessageContent variant="flat">
+          <Message.Content variant="flat">
             <UserMessageText text={text} />
-          </MessageContent>
+          </Message.Content>
         )}
         {/* Actions below the message - only show edit for messages with text */}
         {text && (

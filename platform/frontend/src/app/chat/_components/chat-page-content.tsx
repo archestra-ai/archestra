@@ -24,7 +24,7 @@ import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-di
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputProps } from "@/components/ai-elements/prompt-input";
-import { Suggestion } from "@/components/ai-elements/suggestion";
+import { Suggestions } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
@@ -1221,7 +1221,7 @@ export function ChatPageContent({
                     return (
                       <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
                         {prompts.map((sp) => (
-                          <Suggestion
+                          <Suggestions.Item
                             key={`${sp.summaryTitle}-${sp.prompt}`}
                             suggestion={sp.summaryTitle}
                             onClick={() =>

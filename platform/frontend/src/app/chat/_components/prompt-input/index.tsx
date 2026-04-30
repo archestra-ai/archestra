@@ -13,20 +13,10 @@ import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
+import { ModelSelector as AiModelSelector } from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
-  PromptInputAttachment,
-  PromptInputAttachments,
-  PromptInputBody,
-  PromptInputButton,
-  PromptInputFooter,
   type PromptInputMessage,
-  PromptInputProvider,
-  PromptInputSpeechButton,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
@@ -385,17 +375,17 @@ const PromptInputContent = ({
       onError={handleFileError}
     >
       {/* File attachments display - shown inline above textarea */}
-      <PromptInputAttachments className="px-3 pt-2 pb-0">
-        {(attachment) => <PromptInputAttachment data={attachment} />}
-      </PromptInputAttachments>
-      <PromptInputBody>
+      <PromptInput.Attachments className="px-3 pt-2 pb-0">
+        {(attachment) => <PromptInput.Attachment data={attachment} />}
+      </PromptInput.Attachments>
+      <PromptInput.Body>
         {isPlaywrightSetupVisible && conversationId ? (
           <PlaywrightInstallInline
             agentId={agentId}
             conversationId={conversationId}
           />
         ) : (
-          <PromptInputTextarea
+          <PromptInput.Textarea
             placeholder={
               conversationId
                 ? "Ask a follow-up..."
@@ -411,9 +401,9 @@ const PromptInputContent = ({
             onKeyDown={handlePromptTextareaKeyDown}
           />
         )}
-      </PromptInputBody>
-      <PromptInputFooter>
-        <PromptInputTools className="gap-0.5">
+      </PromptInput.Body>
+      <PromptInput.Footer>
+        <PromptInput.Tools className="gap-0.5">
           {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
           {isMobile &&
             (showDefaultLogo &&
@@ -426,7 +416,10 @@ const PromptInputContent = ({
                 className="h-8 px-2"
                 onClick={expandModelSelector}
               >
-                <ModelSelectorLogo provider={logoProvider} className="size-4" />
+                <AiModelSelector.Logo
+                  provider={logoProvider}
+                  className="size-4"
+                />
               </Button>
             ) : (
               <Popover>
@@ -566,9 +559,9 @@ const PromptInputContent = ({
                   className="inline-flex cursor-pointer"
                   data-testid={E2eTestId.ChatDisabledFileUploadButton}
                 >
-                  <PromptInputButton disabled>
+                  <PromptInput.Button disabled>
                     <PaperclipIcon className="size-4" />
-                  </PromptInputButton>
+                  </PromptInput.Button>
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
@@ -616,7 +609,7 @@ const PromptInputContent = ({
                   className="h-8 px-2"
                   onClick={expandModelSelector}
                 >
-                  <ModelSelectorLogo
+                  <AiModelSelector.Logo
                     provider={logoProvider}
                     className="size-4"
                   />
@@ -695,23 +688,23 @@ const PromptInputContent = ({
               )}
             </>
           )}
-        </PromptInputTools>
+        </PromptInput.Tools>
         <div className="flex items-center gap-2">
           <KnowledgeBaseUploadIndicator
             attachmentCount={controller.attachments.files.length}
             hasKnowledgeBase={hasKnowledgeSources}
           />
-          <PromptInputSpeechButton
+          <PromptInput.SpeechButton
             textareaRef={textareaRef}
             onTranscriptionChange={handleTranscriptionChange}
           />
-          <PromptInputSubmit
+          <PromptInput.Submit
             className="!h-8"
             status={submitStatus}
             disabled={submitDisabled}
           />
         </div>
-      </PromptInputFooter>
+      </PromptInput.Footer>
     </PromptInput>
   );
 };
@@ -748,7 +741,7 @@ const ArchestraPromptInput = ({
 }: ArchestraPromptInputProps) => {
   return (
     <div className="flex size-full flex-col justify-end">
-      <PromptInputProvider>
+      <PromptInput.Provider>
         <PromptInputContent
           onSubmit={onSubmit}
           status={status}
@@ -779,7 +772,7 @@ const ArchestraPromptInput = ({
           onNavigateToLastMessage={onNavigateToLastMessage}
           userMessageHistory={userMessageHistory}
         />
-      </PromptInputProvider>
+      </PromptInput.Provider>
     </div>
   );
 };

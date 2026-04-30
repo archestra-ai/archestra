@@ -2,12 +2,7 @@
 
 import { ShieldX } from "lucide-react";
 import { useState } from "react";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-} from "@/components/ai-elements/tool";
+import { Tool } from "@/components/ai-elements/tool";
 import type { PolicyDeniedPart } from "@/components/message-thread";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -56,14 +51,14 @@ export function PolicyDeniedTool({
 
   return (
     <>
-      <Tool defaultOpen={true}>
-        <ToolHeader
+      <Tool defaultOpen={true} className="mb-0">
+        <Tool.Header
           type={policyDenied.type as `tool-${string}`}
           state="output-denied"
           isCollapsible={true}
         />
-        <ToolContent>
-          {hasInput ? <ToolInput input={policyDenied.input} /> : null}
+        <Tool.Content>
+          {hasInput ? <Tool.Input input={policyDenied.input} /> : null}
           <ToolStatusRow
             icon={<ShieldX className="size-4 flex-none text-destructive" />}
             title="Rejected"
@@ -81,7 +76,7 @@ export function PolicyDeniedTool({
                 : []
             }
           />
-        </ToolContent>
+        </Tool.Content>
       </Tool>
       {canEditPolicy && (
         <EditPolicyDialog

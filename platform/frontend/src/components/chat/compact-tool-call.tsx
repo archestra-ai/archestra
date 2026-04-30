@@ -4,14 +4,7 @@ import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import { useState } from "react";
-import {
-  Tool,
-  ToolContent,
-  ToolErrorDetails,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "@/components/ai-elements/tool";
+import { Tool } from "@/components/ai-elements/tool";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
@@ -25,6 +18,7 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
+import { ToolPartBlock } from "./chat-part-rendering";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -130,7 +124,7 @@ export function CompactToolGroup({
   const expandedTool = tools.find((t) => t.key === expandedKey);
 
   return (
-    <div className="mb-1">
+    <ToolPartBlock>
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((tool) => {
           const iconInfo = toolIconMap?.get(tool.toolName);
@@ -162,7 +156,7 @@ export function CompactToolGroup({
           />
         </div>
       )}
-    </div>
+    </ToolPartBlock>
   );
 }
 
@@ -198,15 +192,15 @@ function ExpandedToolCard({
   });
 
   return (
-    <Tool defaultOpen={true}>
-      <ToolHeader
+    <Tool defaultOpen={true} className="mb-0">
+      <Tool.Header
         type={`tool-${toolName}`}
         state={headerState}
         isCollapsible={hasContent}
         actionButton={logsButton}
       />
-      <ToolContent>
-        {hasInput ? <ToolInput input={part.input} /> : null}
+      <Tool.Content>
+        {hasInput ? <Tool.Input input={part.input} /> : null}
         {isApprovalRequested &&
           onToolApprovalResponse &&
           "approval" in part &&
@@ -241,22 +235,22 @@ function ExpandedToolCard({
               ]}
             />
           )}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
+        {errorText ? <Tool.ErrorDetails errorText={errorText} /> : null}
         {toolResultPart && (
-          <ToolOutput
+          <Tool.Output
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
-          <ToolOutput
+          <Tool.Output
             label={errorText ? "Error" : "Result"}
             output={part.output}
             errorText={errorText}
           />
         )}
-      </ToolContent>
+      </Tool.Content>
     </Tool>
   );
 }

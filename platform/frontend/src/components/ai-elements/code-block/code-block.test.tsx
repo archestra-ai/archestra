@@ -31,7 +31,7 @@ vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
   oneLight: {},
 }));
 
-import { CodeBlock, CodeBlockCopyButton } from "./code-block";
+import { CodeBlock } from ".";
 
 function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
   Object.defineProperty(navigator, "clipboard", {
@@ -66,7 +66,7 @@ describe("CodeBlock", () => {
 
     render(
       <CodeBlock code={`{"hello":"world"}`} language="json">
-        <CodeBlockCopyButton />
+        <CodeBlock.CopyButton />
       </CodeBlock>,
     );
 

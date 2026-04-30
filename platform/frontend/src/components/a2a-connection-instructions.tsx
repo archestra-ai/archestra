@@ -4,10 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Mail } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 import { CodeText } from "@/components/code-text";
 import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
 import { CopyableCode } from "@/components/copyable-code";
@@ -176,7 +173,7 @@ curl -X GET "${agentCardUrl}" \\
           }}
         >
           <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <CodeBlockCopyButton
+            <CodeBlock.CopyButton
               title="Copy A2A endpoint URL"
               className="rounded-none"
               onCopy={() => toast.success("A2A endpoint URL copied")}
@@ -204,7 +201,7 @@ curl -X GET "${agentCardUrl}" \\
           }}
         >
           <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <CodeBlockCopyButton
+            <CodeBlock.CopyButton
               title="Copy chat deep link"
               className="rounded-none"
               onCopy={() => toast.success("Chat deep link copied")}

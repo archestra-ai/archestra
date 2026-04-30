@@ -44,86 +44,96 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 // Mock all the complex dependencies
-vi.mock("@/components/ai-elements/prompt-input", () => ({
-  PromptInput: ({ children }: { children: React.ReactNode }) => (
-    <form data-testid="prompt-input">{children}</form>
-  ),
-  PromptInputActionAddAttachments: ({ label }: { label: string }) => (
-    <span>{label}</span>
-  ),
-  PromptInputActionMenu: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="action-menu">{children}</div>
-  ),
-  PromptInputActionMenuContent: ({
-    children,
-  }: {
-    children: React.ReactNode;
-  }) => <div>{children}</div>,
-  PromptInputActionMenuTrigger: ({
-    children,
-    "data-testid": testId,
-  }: {
-    children: React.ReactNode;
-    "data-testid"?: string;
-  }) => <span data-testid={testId}>{children}</span>,
-  PromptInputAttachment: () => <div />,
-  PromptInputAttachments: () => <div />,
-  PromptInputBody: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  PromptInputButton: ({
-    children,
-    disabled,
-  }: {
-    children: React.ReactNode;
-    disabled?: boolean;
-  }) => (
-    <button type="button" disabled={disabled}>
-      {children}
-    </button>
-  ),
-  PromptInputFooter: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  PromptInputHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  PromptInputProvider: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  PromptInputSpeechButton: () => <button type="button">Speech</button>,
-  PromptInputSubmit: ({ status }: { status?: string }) => (
-    <button data-testid="prompt-submit" type="submit">
-      Submit {status ?? "unset"}
-    </button>
-  ),
-  PromptInputTextarea: ({
-    placeholder,
-    onChange,
-    onKeyDown,
-    ...props
-  }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <textarea
-      placeholder={placeholder}
-      onChange={(event) => {
-        mockTextInput.value = event.currentTarget.value;
-        onChange?.(event);
-      }}
-      onKeyDown={onKeyDown}
-      {...props}
-    />
-  ),
-  PromptInputTools: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="prompt-tools">{children}</div>
-  ),
-  usePromptInputController: () => ({
-    textInput: { value: mockTextInput.value, setInput: mockSetInput },
-    attachments: { files: [] },
-  }),
-  usePromptInputAttachments: () => ({
-    openFileDialog: vi.fn(),
-  }),
-}));
+vi.mock("@/components/ai-elements/prompt-input", () => {
+  const PromptInput = Object.assign(
+    ({ children }: { children: React.ReactNode }) => (
+      <form data-testid="prompt-input">{children}</form>
+    ),
+    {
+      ActionAddAttachments: ({ label }: { label: string }) => (
+        <span>{label}</span>
+      ),
+      ActionMenu: Object.assign(
+        ({ children }: { children: React.ReactNode }) => (
+          <div data-testid="action-menu">{children}</div>
+        ),
+        {
+          Content: ({ children }: { children: React.ReactNode }) => (
+            <div>{children}</div>
+          ),
+          Trigger: ({
+            children,
+            "data-testid": testId,
+          }: {
+            children: React.ReactNode;
+            "data-testid"?: string;
+          }) => <span data-testid={testId}>{children}</span>,
+        },
+      ),
+      Attachment: () => <div />,
+      Attachments: () => <div />,
+      Body: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      Button: ({
+        children,
+        disabled,
+      }: {
+        children: React.ReactNode;
+        disabled?: boolean;
+      }) => (
+        <button type="button" disabled={disabled}>
+          {children}
+        </button>
+      ),
+      Footer: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      Header: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      Provider: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      SpeechButton: () => <button type="button">Speech</button>,
+      Submit: ({ status }: { status?: string }) => (
+        <button data-testid="prompt-submit" type="submit">
+          Submit {status ?? "unset"}
+        </button>
+      ),
+      Textarea: ({
+        placeholder,
+        onChange,
+        onKeyDown,
+        ...props
+      }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+        <textarea
+          placeholder={placeholder}
+          onChange={(event) => {
+            mockTextInput.value = event.currentTarget.value;
+            onChange?.(event);
+          }}
+          onKeyDown={onKeyDown}
+          {...props}
+        />
+      ),
+      Tools: ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="prompt-tools">{children}</div>
+      ),
+    },
+  );
+
+  return {
+    PromptInput,
+    usePromptInputController: () => ({
+      textInput: { value: mockTextInput.value, setInput: mockSetInput },
+      attachments: { files: [] },
+    }),
+    usePromptInputAttachments: () => ({
+      openFileDialog: vi.fn(),
+    }),
+  };
+});
 
 vi.mock("@/components/chat/agent-tools-display", () => ({
   AgentToolsDisplay: () => <div data-testid="agent-tools-display" />,

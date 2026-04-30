@@ -7,6 +7,16 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import type { FileAttachment } from "./editable-user-message";
 
+type MessageSourcePart = {
+  type: string;
+  sourceId?: string;
+  url?: string;
+  title?: string;
+  mediaType?: string;
+  filename?: string;
+  [key: string]: unknown;
+};
+
 export type OptimisticToolCall = {
   toolCallId: string;
   toolName: string;
@@ -23,6 +33,23 @@ export type CompactToolGroup = {
     errorText: string | undefined;
   }>;
 };
+
+export type MessageSource =
+  | {
+      kind: "url";
+      key: string;
+      sourceId: string;
+      url: string;
+      title: string;
+    }
+  | {
+      kind: "document";
+      key: string;
+      sourceId: string;
+      title: string;
+      mediaType: string;
+      filename?: string;
+    };
 
 /**
  * Extract file attachments from message parts.
@@ -55,6 +82,55 @@ export function hasTextPart(parts: UIMessage["parts"] | undefined): boolean {
   return parts?.some((p) => p.type === "text") ?? false;
 }
 
+export function extractMessageSources(
+  parts: readonly MessageSourcePart[] | undefined,
+): MessageSource[] {
+  if (!parts) return [];
+
+  const seen = new Set<string>();
+  const sources: MessageSource[] = [];
+
+  for (const part of parts) {
+    if (part.type === "source-url") {
+      if (!part.url) continue;
+      const key = getSourceDedupKey({
+        sourceId: part.sourceId,
+        fallback: `url:${part.url}:${part.title ?? ""}`,
+      });
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sources.push({
+        kind: "url",
+        key,
+        sourceId: part.sourceId ?? key,
+        url: part.url,
+        title: part.title || part.url,
+      });
+      continue;
+    }
+
+    if (part.type === "source-document") {
+      if (!part.mediaType) continue;
+      const key = getSourceDedupKey({
+        sourceId: part.sourceId,
+        fallback: `document:${part.mediaType}:${part.title}:${part.filename ?? ""}`,
+      });
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sources.push({
+        kind: "document",
+        key,
+        sourceId: part.sourceId ?? key,
+        title: part.title || part.filename || "Source document",
+        mediaType: part.mediaType,
+        filename: part.filename,
+      });
+    }
+  }
+
+  return sources;
+}
+
 export function filterOptimisticToolCalls(
   messages: UIMessage[],
   optimisticToolCalls: OptimisticToolCall[],
@@ -77,6 +153,16 @@ export function filterOptimisticToolCalls(
   return optimisticToolCalls.filter(
     (toolCall) => !renderedToolCallIds.has(toolCall.toolCallId),
   );
+}
+
+function getSourceDedupKey({
+  sourceId,
+  fallback,
+}: {
+  sourceId: string | undefined;
+  fallback: string;
+}) {
+  return sourceId || fallback;
 }
 
 export function identifyCompactToolGroups(

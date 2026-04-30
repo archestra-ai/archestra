@@ -29,7 +29,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { ToolChecklist } from "@/components/agent-tools-editor";
 import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
-import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { PromptInput } from "@/components/ai-elements/prompt-input";
 import { CatalogDocsLink } from "@/components/catalog-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
@@ -262,7 +262,7 @@ export function InitialAgentSelector({
         }}
       >
         <PopoverTrigger asChild>
-          <PromptInputButton
+          <PromptInput.Button
             role="combobox"
             aria-expanded={open}
             data-agent-selector
@@ -284,7 +284,7 @@ export function InitialAgentSelector({
                 }
               }}
             />
-          </PromptInputButton>
+          </PromptInput.Button>
         </PopoverTrigger>
         <PopoverContent
           side="bottom"

@@ -21,19 +21,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogo,
-  ModelSelectorName,
-  ModelSelector as ModelSelectorRoot,
-  ModelSelectorTrigger,
-} from "@/components/ai-elements/model-selector";
-import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { ModelSelector as ModelSelectorRoot } from "@/components/ai-elements/model-selector";
+import { PromptInput } from "@/components/ai-elements/prompt-input";
 import { UnknownCapabilitiesBadge } from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
@@ -639,16 +628,16 @@ export function ModelSelector({
     availableProviders.length === 0
   ) {
     return (
-      <PromptInputButton disabled>
-        <ModelSelectorName>No models available</ModelSelectorName>
-      </PromptInputButton>
+      <PromptInput.Button disabled>
+        <ModelSelectorRoot.Name>No models available</ModelSelectorRoot.Name>
+      </PromptInput.Button>
     );
   }
 
   return (
     <TooltipProvider delayDuration={300}>
       <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
-        <ModelSelectorTrigger asChild>
+        <ModelSelectorRoot.Trigger asChild>
           {variant === "outline" ? (
             <Button
               variant="outline"
@@ -658,7 +647,7 @@ export function ModelSelector({
               data-testid={E2eTestId.ChatModelSelectorTrigger}
             >
               {selectedModelLogo && (
-                <ModelSelectorLogo
+                <ModelSelectorRoot.Logo
                   provider={selectedModelLogo}
                   className="shrink-0"
                 />
@@ -687,20 +676,20 @@ export function ModelSelector({
               )}
             </Button>
           ) : (
-            <PromptInputButton
+            <PromptInput.Button
               disabled={disabled}
               className="max-w-[280px] min-w-0"
               data-testid={E2eTestId.ChatModelSelectorTrigger}
             >
               {selectedModelLogo && (
-                <ModelSelectorLogo
+                <ModelSelectorRoot.Logo
                   provider={selectedModelLogo}
                   className="shrink-0"
                 />
               )}
-              <ModelSelectorName className="truncate flex-1 text-left">
+              <ModelSelectorRoot.Name className="truncate flex-1 text-left">
                 {selectedModelDisplayName || "Select model"}
-              </ModelSelectorName>
+              </ModelSelectorRoot.Name>
               {onClear && selectedModel && (
                 <button
                   type="button"
@@ -714,11 +703,11 @@ export function ModelSelector({
                   <XIcon className="size-3" />
                 </button>
               )}
-            </PromptInputButton>
+            </PromptInput.Button>
           )}
-        </ModelSelectorTrigger>
+        </ModelSelectorRoot.Trigger>
         {open && (
-          <ModelSelectorContent
+          <ModelSelectorRoot.Content
             title="Select Model"
             onCloseAutoFocus={(e) => e.preventDefault()}
             showCloseButton={false}
@@ -733,7 +722,7 @@ export function ModelSelector({
             <DebouncedModelSelectorInput
               onDebouncedValueChange={setSearchQuery}
             />
-            <ModelSelectorList className="relative">
+            <ModelSelectorRoot.List className="relative">
               {isRefreshingResults && (
                 <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
                   <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
@@ -742,39 +731,39 @@ export function ModelSelector({
                   </div>
                 </div>
               )}
-              <ModelSelectorEmpty>
+              <ModelSelectorRoot.Empty>
                 {hasActiveFilters || hasSearch
                   ? "No models match the selected filters."
                   : "No models found."}
-              </ModelSelectorEmpty>
+              </ModelSelectorRoot.Empty>
 
               {/* Option to unselect model */}
               {onClear && (
-                <ModelSelectorGroup heading="">
-                  <ModelSelectorItem
+                <ModelSelectorRoot.Group heading="">
+                  <ModelSelectorRoot.Item
                     value="__none__"
                     onSelect={() => {
                       handleOpenChange(false);
                       onClear();
                     }}
                   >
-                    <ModelSelectorName>
+                    <ModelSelectorRoot.Name>
                       Best available model (resolved at runtime)
-                    </ModelSelectorName>
+                    </ModelSelectorRoot.Name>
                     {!selectedModel && <CheckIcon className="ml-auto size-4" />}
-                  </ModelSelectorItem>
-                </ModelSelectorGroup>
+                  </ModelSelectorRoot.Item>
+                </ModelSelectorRoot.Group>
               )}
 
               {selectedModel && (
-                <ModelSelectorGroup
+                <ModelSelectorRoot.Group
                   heading={
                     isSelectedModelMissingFromApiKey
                       ? "Current (API key missing)"
                       : "Current"
                   }
                 >
-                  <ModelSelectorItem
+                  <ModelSelectorRoot.Item
                     disabled
                     value={selectedModel}
                     className={cn(
@@ -782,16 +771,16 @@ export function ModelSelector({
                     )}
                   >
                     {selectedModelLogo && (
-                      <ModelSelectorLogo provider={selectedModelLogo} />
+                      <ModelSelectorRoot.Logo provider={selectedModelLogo} />
                     )}
-                    <ModelSelectorName>{selectedModel}</ModelSelectorName>
+                    <ModelSelectorRoot.Name>{selectedModel}</ModelSelectorRoot.Name>
                     <CheckIcon className="ml-auto size-4" />
-                  </ModelSelectorItem>
-                </ModelSelectorGroup>
+                  </ModelSelectorRoot.Item>
+                </ModelSelectorRoot.Group>
               )}
 
               {availableProviders.map((provider) => (
-                <ModelSelectorGroup
+                <ModelSelectorRoot.Group
                   key={provider}
                   heading={providerDisplayNames[provider]}
                 >
@@ -800,22 +789,22 @@ export function ModelSelector({
                     // This prevents issues when different providers have models with the same ID
                     const modelValue = createModelValue(provider, model.id);
                     return (
-                      <ModelSelectorItem
+                      <ModelSelectorRoot.Item
                         key={modelValue}
                         value={modelValue}
                         onSelect={() => handleSelectModel(modelValue)}
                         className="group"
                       >
-                        <ModelSelectorLogo
+                        <ModelSelectorRoot.Logo
                           provider={providerToLogoProvider[provider]}
                         />
-                        <ModelSelectorName>
+                        <ModelSelectorRoot.Name>
                           {model.displayName}{" "}
                           <span className="text-xs text-muted-foreground font-mono">
                             ({model.id})
                           </span>
                           <CopyModelIdButton modelId={model.id} />
-                        </ModelSelectorName>
+                        </ModelSelectorRoot.Name>
                         <div className="ml-auto flex items-center gap-2">
                           <ModelCapabilityBadges
                             capabilities={model.capabilities}
@@ -837,10 +826,10 @@ export function ModelSelector({
                             <div className="size-4" />
                           )}
                         </div>
-                      </ModelSelectorItem>
+                      </ModelSelectorRoot.Item>
                     );
                   })}
-                </ModelSelectorGroup>
+                </ModelSelectorRoot.Group>
               ))}
               <div ref={setLoadMoreNode} className="py-2 text-center text-xs">
                 {isFetchingNextPage && (
@@ -850,8 +839,8 @@ export function ModelSelector({
                   <span className="text-muted-foreground">End of results</span>
                 )}
               </div>
-            </ModelSelectorList>
-          </ModelSelectorContent>
+            </ModelSelectorRoot.List>
+          </ModelSelectorRoot.Content>
         )}
       </ModelSelectorRoot>
     </TooltipProvider>
@@ -873,7 +862,7 @@ function DebouncedModelSelectorInput({
   }, [onDebouncedValueChange, value]);
 
   return (
-    <ModelSelectorInput
+    <ModelSelectorRoot.Input
       placeholder="Search models..."
       value={value}
       onValueChange={setValue}

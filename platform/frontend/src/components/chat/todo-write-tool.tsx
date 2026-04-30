@@ -83,7 +83,7 @@ export function TodoWriteTool({
   }
 
   return (
-    <div className="mb-3 rounded-md border bg-card/50">
+    <div className="rounded-md border bg-card/50">
       <button
         type="button"
         className="w-full px-3 py-2 border-b bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors text-left"

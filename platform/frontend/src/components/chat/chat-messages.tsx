@@ -29,26 +29,10 @@ import {
   useState,
 } from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
-import { Message, MessageContent } from "@/components/ai-elements/message";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@/components/ai-elements/reasoning";
+import { Conversation } from "@/components/ai-elements/conversation";
+import { Message } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
-import {
-  Tool,
-  ToolContent,
-  ToolErrorDetails,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "@/components/ai-elements/tool";
+import { Tool } from "@/components/ai-elements/tool";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
@@ -86,10 +70,21 @@ import { AssignedCredentialUnavailableTool } from "./assigned-credential-unavail
 import { AuthRequiredTool } from "./auth-required-tool";
 import {
   extractFileAttachments,
+  extractMessageSources,
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
 } from "./chat-messages.utils";
+import {
+  ChatPartBlock,
+  DebugDataPart,
+  FilePartBlock,
+  isHiddenChatPart,
+  isUnknownDataPart,
+  MessageSources,
+  ReasoningPartBlock,
+  ToolPartBlock,
+} from "./chat-part-rendering";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -191,7 +186,7 @@ function ChatScrollButton({
     !isAtBottom && assistantMessageCount > lastSeenCountRef.current;
 
   return (
-    <ConversationScrollButton
+    <Conversation.ScrollButton
       label={hasNewMessages ? "New messages" : undefined}
     />
   );
@@ -608,7 +603,7 @@ export function ChatMessages({
       onPointerDown={() => setIsKeyboardMessageNavigationActive(false)}
     >
       <ScrollToBottomOnSubmit messages={messages} status={status} />
-      <ConversationContent>
+      <Conversation.Content>
         <div className="max-w-4xl mx-auto relative pb-8">
           <SensitiveContextStickyIndicator
             visible={showStickyUnsafeIndicator}
@@ -757,6 +752,10 @@ export function ChatMessages({
                           return null;
                         }
 
+                        const messageSources = extractMessageSources(
+                          message.parts,
+                        );
+
                         // Anthropic sends policy denials as text blocks (see MessageTool for OpenAI path)
                         const assistantAuthState =
                           resolveAssistantTextAuthState(part.text);
@@ -782,12 +781,14 @@ export function ChatMessages({
                                   dividerRef={unsafeBoundaryRef}
                                 />
                               )}
-                              <PolicyDeniedTool
-                                policyDenied={textToolAuthState.policyDenied}
-                                {...(agentId
-                                  ? { editable: true, profileId: agentId }
-                                  : { editable: false })}
-                              />
+                              <ToolPartBlock>
+                                <PolicyDeniedTool
+                                  policyDenied={textToolAuthState.policyDenied}
+                                  {...(agentId
+                                    ? { editable: true, profileId: agentId }
+                                    : { editable: false })}
+                                />
+                              </ToolPartBlock>
                             </Fragment>
                           );
                         }
@@ -818,7 +819,9 @@ export function ChatMessages({
                               return null;
                             }
                             return (
-                              <Fragment key={partKey}>{authToolPart}</Fragment>
+                              <ToolPartBlock key={partKey}>
+                                {authToolPart}
+                              </ToolPartBlock>
                             );
                           }
 
@@ -894,15 +897,13 @@ export function ChatMessages({
                                   const parsedKey = `${partKey}-parsed-${parsedIdx}`;
                                   if (parsedPart.type === "reasoning") {
                                     return (
-                                      <Reasoning
-                                        key={parsedKey}
-                                        className="w-full"
-                                      >
-                                        <ReasoningTrigger />
-                                        <ReasoningContent>
-                                          {parsedPart.text}
-                                        </ReasoningContent>
-                                      </Reasoning>
+                                      <ChatPartBlock key={parsedKey}>
+                                        <ReasoningPartBlock
+                                          type="reasoning"
+                                          text={parsedPart.text}
+                                          state="done"
+                                        />
+                                      </ChatPartBlock>
                                     );
                                   }
                                   // Render text parts - show actions only on the last text part
@@ -914,30 +915,39 @@ export function ChatMessages({
                                         .reverse()
                                         .findIndex((p) => p.type === "text");
                                   return (
-                                    <EditableAssistantMessage
-                                      key={parsedKey}
-                                      messageId={message.id}
-                                      partIndex={i}
-                                      partKey={partKey}
-                                      text={parsedPart.text}
-                                      isEditing={editingPartKey === partKey}
-                                      showActions={
-                                        showActions && isLastParsedTextPart
-                                      }
-                                      citationParts={
-                                        isLastParsedTextPart
-                                          ? citationParts
-                                          : undefined
-                                      }
-                                      isStreaming={
-                                        isStreamingThisPart &&
-                                        isLastParsedTextPart
-                                      }
-                                      editDisabled={isResponseInProgress}
-                                      onStartEdit={handleStartEdit}
-                                      onCancelEdit={handleCancelEdit}
-                                      onSave={handleSaveAssistantMessage}
-                                    />
+                                    <Fragment key={parsedKey}>
+                                      <EditableAssistantMessage
+                                        messageId={message.id}
+                                        partIndex={i}
+                                        partKey={partKey}
+                                        text={parsedPart.text}
+                                        isEditing={editingPartKey === partKey}
+                                        showActions={
+                                          showActions && isLastParsedTextPart
+                                        }
+                                        citationParts={
+                                          isLastParsedTextPart
+                                            ? citationParts
+                                            : undefined
+                                        }
+                                        isStreaming={
+                                          isStreamingThisPart &&
+                                          isLastParsedTextPart
+                                        }
+                                        editDisabled={isResponseInProgress}
+                                        onStartEdit={handleStartEdit}
+                                        onCancelEdit={handleCancelEdit}
+                                        onSave={handleSaveAssistantMessage}
+                                      />
+                                      {isLastParsedTextPart &&
+                                        isLastTextPart && (
+                                          <ChatPartBlock>
+                                            <MessageSources
+                                              sources={messageSources}
+                                            />
+                                          </ChatPartBlock>
+                                        )}
+                                    </Fragment>
                                   );
                                 })}
                               </Fragment>
@@ -965,6 +975,11 @@ export function ChatMessages({
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveAssistantMessage}
                               />
+                              {isLastTextPart && (
+                                <ChatPartBlock>
+                                  <MessageSources sources={messageSources} />
+                                </ChatPartBlock>
+                              )}
                             </Fragment>
                           );
                         }
@@ -995,25 +1010,28 @@ export function ChatMessages({
                         return (
                           <Fragment key={partKey}>
                             <Message from={message.role}>
-                              <MessageContent>
+                              <Message.Content>
                                 {message.role === "system" && (
                                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                     System Prompt
                                   </div>
                                 )}
                                 <Response>{part.text}</Response>
-                              </MessageContent>
+                              </Message.Content>
                             </Message>
                           </Fragment>
                         );
                       }
 
                       case "reasoning":
+                        console.log("Rendering reasoning part", {
+                          part,
+                          message,
+                        });
                         return (
-                          <Reasoning key={partKey} className="w-full">
-                            <ReasoningTrigger />
-                            <ReasoningContent>{part.text}</ReasoningContent>
-                          </Reasoning>
+                          <ChatPartBlock key={partKey}>
+                            <ReasoningPartBlock {...part} />
+                          </ChatPartBlock>
                         );
 
                       case "file": {
@@ -1064,72 +1082,13 @@ export function ChatMessages({
                           mediaType: string;
                           filename?: string;
                         };
-                        const isImage =
-                          filePart.mediaType?.startsWith("image/");
-                        const isVideo =
-                          filePart.mediaType?.startsWith("video/");
-                        const isPdf = filePart.mediaType === "application/pdf";
-
                         return (
-                          <div
+                          <ChatPartBlock
                             key={partKey}
-                            className="py-1 -mt-2 flex justify-start"
+                            className="-mt-1 flex justify-start"
                           >
-                            <div className="max-w-sm">
-                              {isImage && (
-                                <img
-                                  src={filePart.url}
-                                  alt={filePart.filename || "Attached image"}
-                                  className="max-w-full max-h-64 rounded-lg object-contain"
-                                />
-                              )}
-                              {isVideo && (
-                                <video
-                                  src={filePart.url}
-                                  controls
-                                  className="max-w-full max-h-64 rounded-lg"
-                                >
-                                  <track kind="captions" />
-                                </video>
-                              )}
-                              {isPdf && (
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
-                                  <svg
-                                    className="h-6 w-6 text-red-500"
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <title>PDF Document</title>
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zm-3 9h2v2H10v-2zm0 3h2v2H10v-2zm-3-3h2v2H7v-2zm0 3h2v2H7v-2z" />
-                                  </svg>
-                                  <span className="font-medium truncate">
-                                    {filePart.filename || "PDF Document"}
-                                  </span>
-                                </div>
-                              )}
-                              {!isImage && !isVideo && !isPdf && (
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
-                                  <svg
-                                    className="h-5 w-5 text-muted-foreground"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <title>File Attachment</title>
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                                    />
-                                  </svg>
-                                  <span className="truncate">
-                                    {filePart.filename || "Attached file"}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                            <FilePartBlock file={filePart} />
+                          </ChatPartBlock>
                         );
                       }
 
@@ -1277,6 +1236,18 @@ export function ChatMessages({
                           });
                         }
 
+                        if (isHiddenChatPart(part)) {
+                          return null;
+                        }
+
+                        if (isDebugging && isUnknownDataPart(part)) {
+                          return (
+                            <ChatPartBlock key={partKey}>
+                              <DebugDataPart part={part} />
+                            </ChatPartBlock>
+                          );
+                        }
+
                         // Regular tool-* parts: skip if a data-tool-ui-start already
                         // rendered this toolCallId (it owns the full lifecycle above).
                         if (
@@ -1381,6 +1352,7 @@ export function ChatMessages({
           )}
           {pendingToolCalls.map((toolCall) => (
             <MessageTool
+              key={`optimistic-tool-${toolCall.toolCallId}`}
               part={{
                 type: "dynamic-tool",
                 toolName: toolCall.toolName,
@@ -1388,7 +1360,6 @@ export function ChatMessages({
                 state: "input-available",
                 input: toolCall.input,
               }}
-              key={`optimistic-tool-${toolCall.toolCallId}`}
               toolResultPart={null}
               toolName={toolCall.toolName}
               agentId={agentId}
@@ -1414,7 +1385,7 @@ export function ChatMessages({
             </div>
           )}
         </div>
-      </ConversationContent>
+      </Conversation.Content>
       <ChatScrollButton assistantMessageCount={assistantMessageCount} />
       <McpInstallDialogs orchestrator={orchestrator} />
     </Conversation>
@@ -1657,12 +1628,14 @@ const MessageTool = memo(
 
     if (toolAuthState?.kind === "policy-denied") {
       return (
-        <PolicyDeniedTool
-          policyDenied={toolAuthState.policyDenied}
-          {...(agentId
-            ? { editable: true, profileId: agentId }
-            : { editable: false })}
-        />
+        <ToolPartBlock>
+          <PolicyDeniedTool
+            policyDenied={toolAuthState.policyDenied}
+            {...(agentId
+              ? { editable: true, profileId: agentId }
+              : { editable: false })}
+          />
+        </ToolPartBlock>
       );
     }
 
@@ -1689,12 +1662,14 @@ const MessageTool = memo(
 
     if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
       return (
-        <TodoWriteTool
-          part={part}
-          toolResultPart={toolResultPart}
-          errorText={errorText}
-          onToolApprovalResponse={onToolApprovalResponse}
-        />
+        <ToolPartBlock>
+          <TodoWriteTool
+            part={part}
+            toolResultPart={toolResultPart}
+            errorText={errorText}
+            onToolApprovalResponse={onToolApprovalResponse}
+          />
+        </ToolPartBlock>
       );
     }
 
@@ -1703,7 +1678,7 @@ const MessageTool = memo(
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
-        <div className="mb-1">
+        <ToolPartBlock>
           <div className="flex items-center gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -1728,7 +1703,7 @@ const MessageTool = memo(
             </TooltipProvider>
           </div>
           {authToolBody}
-        </div>
+        </ToolPartBlock>
       );
     }
 
@@ -1744,7 +1719,7 @@ const MessageTool = memo(
       const iconInfo = toolIconMap?.get(toolName);
 
       return (
-        <div className="mb-1">
+        <ToolPartBlock>
           <div className="flex items-center gap-1.5">
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -1787,8 +1762,8 @@ const MessageTool = memo(
           </div>
           {isOpen && (
             <div className="mt-2">
-              <Tool defaultOpen={true}>
-                <ToolHeader
+              <Tool defaultOpen={true} className="mb-0">
+                <Tool.Header
                   type={`tool-${toolName}`}
                   state={getHeaderState({
                     state: part.state || "input-available",
@@ -1797,15 +1772,15 @@ const MessageTool = memo(
                   })}
                   isCollapsible={!!hasInput}
                 />
-                <ToolContent>
-                  {hasInput ? <ToolInput input={part.input} /> : null}
+                <Tool.Content>
+                  {hasInput ? <Tool.Input input={part.input} /> : null}
                   {toolResultPart && (
-                    <ToolOutput
+                    <Tool.Output
                       label="Result"
                       output={mcpOutput?.content ?? toolResultPart.output}
                     />
                   )}
-                </ToolContent>
+                </Tool.Content>
               </Tool>
             </div>
           )}
@@ -1830,7 +1805,7 @@ const MessageTool = memo(
               />
             </div>
           )}
-        </div>
+        </ToolPartBlock>
       );
     }
 
@@ -1838,114 +1813,122 @@ const MessageTool = memo(
       hasContent && (canExpandToolCalls || isApprovalRequested);
 
     return (
-      <Tool
-        className={isExpandable ? "cursor-pointer" : ""}
-        open={isOpen}
-        onOpenChange={handleOpenChange}
-        defaultOpen={shouldDefaultOpen}
-      >
-        <ToolHeader
-          type={`tool-${toolName}`}
-          state={getHeaderState({
-            state: part.state || "input-available",
-            toolResultPart,
-            errorText,
-          })}
-          isCollapsible={isExpandable}
-          actionButton={logsButton}
-        />
-        <ToolContent forceMount={uiResourceUri ? true : undefined}>
-          {hasInput ? <ToolInput input={part.input} /> : null}
-          {isApprovalRequested &&
-            onToolApprovalResponse &&
-            "approval" in part &&
-            part.approval?.id && (
-              <ToolStatusRow
-                icon={
-                  <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
-                }
-                title="Approval required"
-                description="Review this tool call before it can continue."
-                actions={[
-                  {
-                    label: "Approve",
-                    variant: "secondary",
-                    icon: <CheckCircleIcon className="size-4" />,
-                    onClick: () =>
-                      onToolApprovalResponse({
-                        id: (part as { approval: { id: string } }).approval.id,
-                        approved: true,
-                      }),
-                  },
-                  {
-                    label: "Decline",
-                    variant: "outline",
-                    onClick: () => {
-                      setUserDenied(true);
-                      onToolApprovalResponse({
-                        id: (part as { approval: { id: string } }).approval.id,
-                        approved: false,
-                        reason: "User denied",
-                      });
+      <ToolPartBlock>
+        <Tool
+          className={cn("mb-0", isExpandable && "cursor-pointer")}
+          open={isOpen}
+          onOpenChange={handleOpenChange}
+          defaultOpen={shouldDefaultOpen}
+        >
+          <Tool.Header
+            type={`tool-${toolName}`}
+            state={getHeaderState({
+              state: part.state || "input-available",
+              toolResultPart,
+              errorText,
+            })}
+            isCollapsible={isExpandable}
+            actionButton={logsButton}
+          />
+          <Tool.Content forceMount={uiResourceUri ? true : undefined}>
+            {hasInput ? <Tool.Input input={part.input} /> : null}
+            {isApprovalRequested &&
+              onToolApprovalResponse &&
+              "approval" in part &&
+              part.approval?.id && (
+                <ToolStatusRow
+                  icon={
+                    <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
+                  }
+                  title="Approval required"
+                  description="Review this tool call before it can continue."
+                  actions={[
+                    {
+                      label: "Approve",
+                      variant: "secondary",
+                      icon: <CheckCircleIcon className="size-4" />,
+                      onClick: () =>
+                        onToolApprovalResponse({
+                          id: (part as { approval: { id: string } }).approval
+                            .id,
+                          approved: true,
+                        }),
                     },
-                  },
-                ]}
-              />
-            )}
-          {errorText && !authToolBody ? (
-            <ToolErrorDetails errorText={errorText} />
-          ) : null}
-          {authToolBody}
+                    {
+                      label: "Decline",
+                      variant: "outline",
+                      onClick: () => {
+                        setUserDenied(true);
+                        onToolApprovalResponse({
+                          id: (part as { approval: { id: string } }).approval
+                            .id,
+                          approved: false,
+                          reason: "User denied",
+                        });
+                      },
+                    },
+                  ]}
+                />
+              )}
+            {errorText && !authToolBody ? (
+              <Tool.ErrorDetails errorText={errorText} />
+            ) : null}
+            {authToolBody}
 
-          {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
-          {!isApprovalRequested &&
-            !isToolDenied &&
-            !userDenied &&
-            !errorText &&
-            uiResourceUri &&
-            agentId && (
-              <McpAppSection
-                uiResourceUri={uiResourceUri}
-                agentId={agentId}
-                toolName={toolName}
-                toolInput={part.input as Record<string, unknown>}
-                rawOutput={mcpOutput}
-                preloadedResource={
-                  earlyToolUiData?.html
-                    ? {
-                        html: earlyToolUiData.html,
-                        csp: earlyToolUiData.csp,
-                        permissions: earlyToolUiData.permissions,
-                      }
-                    : undefined
-                }
-                onSendMessage={onSendMessage}
+            {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
+            {!isApprovalRequested &&
+              !isToolDenied &&
+              !userDenied &&
+              !errorText &&
+              uiResourceUri &&
+              agentId && (
+                <McpAppSection
+                  uiResourceUri={uiResourceUri}
+                  agentId={agentId}
+                  toolName={toolName}
+                  toolInput={part.input as Record<string, unknown>}
+                  rawOutput={mcpOutput}
+                  preloadedResource={
+                    earlyToolUiData?.html
+                      ? {
+                          html: earlyToolUiData.html,
+                          csp: earlyToolUiData.csp,
+                          permissions: earlyToolUiData.permissions,
+                        }
+                      : undefined
+                  }
+                  onSendMessage={onSendMessage}
+                />
+              )}
+            {/* Show error output even when UI resource is present - errors take priority */}
+            {!authToolBody && errorText && uiResourceUri && toolResultPart && (
+              <Tool.Output
+                label="Error"
+                output={output}
+                errorText={errorText}
               />
             )}
-          {/* Show error output even when UI resource is present - errors take priority */}
-          {!authToolBody && errorText && uiResourceUri && toolResultPart && (
-            <ToolOutput label="Error" output={output} errorText={errorText} />
-          )}
-          {/* Show text output when NOT rendering a UI resource */}
-          {!authToolBody && !uiResourceUri && toolResultPart && (
-            <ToolOutput
-              label={errorText ? "Error" : "Result"}
-              output={output}
-              errorText={errorText}
-            />
-          )}
-          {!authToolBody &&
-            !uiResourceUri &&
-            !toolResultPart &&
-            Boolean(part.output) && (
-              <ToolOutput
+            {/* Show text output when NOT rendering a UI resource */}
+            {!authToolBody && !uiResourceUri && toolResultPart && (
+              <Tool.Output
                 label={errorText ? "Error" : "Result"}
                 output={output}
                 errorText={errorText}
               />
             )}
-        </ToolContent>
-      </Tool>
+            {!authToolBody &&
+              !uiResourceUri &&
+              !toolResultPart &&
+              Boolean(part.output) && (
+                <Tool.Output
+                  label={errorText ? "Error" : "Result"}
+                  output={output}
+                  errorText={errorText}
+                />
+              )}
+          </Tool.Content>
+        </Tool>
+      </ToolPartBlock>
     );
   },
   (prev, next) =>

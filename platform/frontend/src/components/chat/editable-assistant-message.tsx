@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Message } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import type { KnowledgeGraphCitationsProps } from "@/components/chat/knowledge-graph-citations";
 import { KnowledgeGraphCitations } from "@/components/chat/knowledge-graph-citations";
@@ -119,7 +119,7 @@ export function EditableAssistantMessage({
   if (isEditing) {
     return (
       <Message from="assistant" className="relative pt-0">
-        <MessageContent
+        <Message.Content
           aria-label="Message content"
           className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-secondary/50 ring-primary/50"
         >
@@ -162,7 +162,7 @@ export function EditableAssistantMessage({
               </div>
             </div>
           </div>
-        </MessageContent>
+        </Message.Content>
       </Message>
     );
   }
@@ -176,10 +176,10 @@ export function EditableAssistantMessage({
           showActions && "pb-9",
         )}
       >
-        <MessageContent variant="flat">
+        <Message.Content variant="flat">
           <Response isStreaming={isStreaming}>{text}</Response>
           {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
-        </MessageContent>
+        </Message.Content>
         {showActions && (
           <MessageActions
             textToCopy={text}

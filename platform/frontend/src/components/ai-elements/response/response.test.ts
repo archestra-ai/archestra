@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSameOriginUrl } from "./response";
+import { isSameOriginUrl } from ".";
 
 describe("isSameOriginUrl", () => {
   // jsdom sets window.location.origin to "http://localhost:3000" by default in vitest

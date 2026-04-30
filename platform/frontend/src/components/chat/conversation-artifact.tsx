@@ -7,10 +7,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
+import { CodeBlock } from "@/components/ai-elements/code-block";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -118,7 +115,7 @@ export function ConversationArtifactPanel({
             }}
             contentClassName="[&_*]:!bg-transparent"
           >
-            <CodeBlockCopyButton />
+            <CodeBlock.CopyButton />
           </CodeBlock>
         );
       }

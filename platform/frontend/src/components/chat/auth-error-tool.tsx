@@ -26,7 +26,7 @@ export function AuthErrorTool({
   actionTooltipText,
 }: AuthErrorToolProps) {
   return (
-    <div className="mt-3 rounded-xl border border-border px-5 py-4">
+    <div className="rounded-xl border border-border px-5 py-4">
       <div className="flex flex-wrap items-start gap-3 text-sm">
         <KeyRound className="mt-0.5 size-4 flex-none text-amber-600" />
         <div className="min-w-0 flex-1 text-muted-foreground">

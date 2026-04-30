@@ -10,7 +10,7 @@ import {
 } from "@shared";
 import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PromptInputButton } from "@/components/ai-elements/prompt-input";
+import { PromptInput } from "@/components/ai-elements/prompt-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Command,
@@ -274,13 +274,13 @@ export function LlmProviderApiKeySelector({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <PromptInputButton
+        <PromptInput.Button
           disabled={disabled}
           className="max-w-[220px] min-w-0"
           data-testid={E2eTestId.ChatApiKeySelectorTrigger}
         >
           <Key className="size-4 shrink-0" />
-        </PromptInputButton>
+        </PromptInput.Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
         <Command>

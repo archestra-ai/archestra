@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
   extractFileAttachments,
+  extractMessageSources,
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
@@ -146,6 +147,98 @@ describe("hasTextPart", () => {
       { type: "reasoning", text: "Thinking..." },
     ];
     expect(hasTextPart(parts)).toBe(false);
+  });
+});
+
+describe("extractMessageSources", () => {
+  it("returns an empty array when no sources exist", () => {
+    expect(extractMessageSources([{ type: "text", text: "Hello" }])).toEqual(
+      [],
+    );
+  });
+
+  it("extracts URL and document sources", () => {
+    const parts = [
+      {
+        type: "source-url",
+        sourceId: "source-1",
+        url: "https://example.com",
+        title: "Example",
+      },
+      {
+        type: "source-document",
+        sourceId: "doc-1",
+        title: "Document",
+        filename: "document.pdf",
+        mediaType: "application/pdf",
+      },
+    ] as UIMessage["parts"];
+
+    expect(extractMessageSources(parts)).toEqual([
+      {
+        kind: "url",
+        key: "source-1",
+        sourceId: "source-1",
+        url: "https://example.com",
+        title: "Example",
+      },
+      {
+        kind: "document",
+        key: "doc-1",
+        sourceId: "doc-1",
+        title: "Document",
+        filename: "document.pdf",
+        mediaType: "application/pdf",
+      },
+    ]);
+  });
+
+  it("deduplicates sources by source id", () => {
+    const parts = [
+      {
+        type: "source-url",
+        sourceId: "source-1",
+        url: "https://example.com/one",
+        title: "One",
+      },
+      {
+        type: "source-url",
+        sourceId: "source-1",
+        url: "https://example.com/two",
+        title: "Two",
+      },
+    ] as UIMessage["parts"];
+
+    expect(extractMessageSources(parts)).toHaveLength(1);
+    expect(extractMessageSources(parts)[0]).toMatchObject({
+      url: "https://example.com/one",
+      title: "One",
+    });
+  });
+
+  it("uses stable fallback keys when source id is empty", () => {
+    const parts = [
+      {
+        type: "source-url",
+        sourceId: "",
+        url: "https://example.com",
+      },
+      {
+        type: "source-url",
+        sourceId: "",
+        url: "https://example.com",
+      },
+    ] as UIMessage["parts"];
+
+    expect(extractMessageSources(parts)).toEqual([
+      {
+        kind: "url",
+        key: "url:https://example.com:",
+        sourceId: "",
+        url: "https://example.com",
+        title: "https://example.com",
+      },
+    ]);
   });
 });
 

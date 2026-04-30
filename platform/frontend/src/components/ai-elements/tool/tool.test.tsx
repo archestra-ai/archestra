@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { normalizeToolOutput } from "./tool-output.utils";
 
 const { mockUseTheme } = vi.hoisted(() => ({
   mockUseTheme: vi.fn(),
@@ -10,7 +11,7 @@ vi.mock("next-themes", () => ({
   useTheme: () => mockUseTheme(),
 }));
 
-import { ToolInput, ToolOutput } from "./tool";
+import { Tool } from "@/components/ai-elements/tool";
 
 function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
   Object.defineProperty(navigator, "clipboard", {
@@ -26,9 +27,8 @@ describe("Tool copy actions", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    render(<ToolInput input={{ city: "Toronto", limit: 5 }} />);
+    render(<Tool.Input input={{ city: "Toronto", limit: 5 }} />);
 
-    // Expand the collapsible to reveal the copy button
     await user.click(screen.getByText("Parameters"));
 
     await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
@@ -44,7 +44,7 @@ describe("Tool copy actions", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    render(<ToolOutput output={{ result: "ok", count: 42 }} />);
+    render(<Tool.Output output={{ result: "ok", count: 42 }} />);
 
     await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
 
@@ -60,7 +60,7 @@ describe("Tool copy actions", () => {
     mockClipboard(writeText);
 
     render(
-      <ToolOutput
+      <Tool.Output
         output={{
           content: "ARCH_TEST = asdfasdfadsf",
           unsafeContextBoundary: {
@@ -83,5 +83,32 @@ describe("Tool copy actions", () => {
     await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
 
     expect(writeText).toHaveBeenCalledWith("ARCH_TEST = asdfasdfadsf");
+  });
+});
+
+describe("normalizeToolOutput", () => {
+  it("uses MCP content before raw metadata", () => {
+    expect(
+      normalizeToolOutput({
+        content: "visible content",
+        rawContent: [{ type: "text", text: "metadata" }],
+      }),
+    ).toBe("visible content");
+  });
+
+  it("uses structured content when MCP content is absent", () => {
+    expect(
+      normalizeToolOutput({
+        structuredContent: { result: "ok" },
+        rawContent: [{ type: "text", text: "metadata" }],
+      }),
+    ).toEqual({ result: "ok" });
+  });
+
+  it("leaves plain output unchanged", () => {
+    const output = { result: "ok", count: 42 };
+
+    expect(normalizeToolOutput(output)).toBe(output);
+    expect(normalizeToolOutput("plain text")).toBe("plain text");
   });
 });

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Message } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -90,7 +90,7 @@ export function InlineChatError({
   if (slimChatErrorUi) {
     return (
       <Message from="assistant">
-        <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
+        <Message.Content className="bg-destructive/10 border border-destructive/20 rounded-lg">
           <div className="flex items-start gap-2 text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <div className="flex-1 space-y-2">
@@ -121,14 +121,14 @@ export function InlineChatError({
               </div>
             </div>
           </div>
-        </MessageContent>
+        </Message.Content>
       </Message>
     );
   }
 
   return (
     <Message from="assistant">
-      <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
+      <Message.Content className="bg-destructive/10 border border-destructive/20 rounded-lg">
         <div className="flex items-start gap-2 text-destructive">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <div className="flex-1 space-y-2">
@@ -225,7 +225,7 @@ export function InlineChatError({
             )}
           </div>
         </div>
-      </MessageContent>
+      </Message.Content>
     </Message>
   );
 }

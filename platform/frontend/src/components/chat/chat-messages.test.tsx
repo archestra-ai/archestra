@@ -3,21 +3,24 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/components/ai-elements/conversation", () => ({
-  Conversation: ({
-    children,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement>) => (
-    <div {...props}>{children}</div>
-  ),
-  ConversationContent: ({
-    children,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement>) => (
-    <div {...props}>{children}</div>
-  ),
-  ConversationScrollButton: () => null,
-}));
+vi.mock("@/components/ai-elements/conversation", () => {
+  const Conversation = Object.assign(
+    ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+      <div {...props}>{children}</div>
+    ),
+    {
+      Content: ({
+        children,
+        ...props
+      }: React.HTMLAttributes<HTMLDivElement>) => (
+        <div {...props}>{children}</div>
+      ),
+      ScrollButton: () => null,
+    },
+  );
+
+  return { Conversation };
+});
 
 vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
@@ -26,24 +29,45 @@ vi.mock("use-stick-to-bottom", () => ({
   }),
 }));
 
-vi.mock("@/components/ai-elements/message", () => ({
-  Message: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  MessageContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
+vi.mock("@/components/ai-elements/message", () => {
+  const Message = Object.assign(
+    ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    {
+      Content: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+    },
+  );
 
-vi.mock("@/components/ai-elements/reasoning", () => ({
-  Reasoning: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  ReasoningContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  ReasoningTrigger: () => null,
-}));
+  return { Message };
+});
+
+vi.mock("@/components/ai-elements/reasoning", () => {
+  const Reasoning = Object.assign(
+    ({
+      children,
+      isStreaming,
+    }: {
+      children: React.ReactNode;
+      isStreaming?: boolean;
+    }) => (
+      <div
+        data-streaming={isStreaming ? "true" : "false"}
+        data-testid="reasoning"
+      >
+        {children}
+      </div>
+    ),
+    {
+      Content: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      Trigger: () => null,
+    },
+  );
+
+  return { Reasoning };
+});
 
 vi.mock("@/components/ai-elements/response", () => ({
   Response: ({ children }: { children: React.ReactNode }) => (
@@ -51,22 +75,49 @@ vi.mock("@/components/ai-elements/response", () => ({
   ),
 }));
 
-vi.mock("@/components/ai-elements/tool", () => ({
-  Tool: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  ToolContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  ToolHeader: ({ type }: { type: string }) => <div>{type}</div>,
-  ToolInput: ({ input }: { input: unknown }) => (
-    <pre>{JSON.stringify(input)}</pre>
-  ),
-  ToolOutput: ({ output }: { output: unknown }) => (
-    <pre>{JSON.stringify(output)}</pre>
-  ),
-  ToolErrorDetails: ({ errorText }: { errorText: string }) => (
-    <div>{errorText}</div>
-  ),
-}));
+vi.mock("@/components/ai-elements/sources", () => {
+  const Sources = Object.assign(
+    ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="sources">{children}</div>
+    ),
+    {
+      Content: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      Source: ({ href, title }: { href?: string; title?: string }) => (
+        <a href={href}>{title}</a>
+      ),
+      Trigger: ({ count }: { count: number }) => (
+        <button type="button">Used {count} sources</button>
+      ),
+    },
+  );
+
+  return { Sources };
+});
+
+vi.mock("@/components/ai-elements/tool", () => {
+  const Tool = Object.assign(
+    ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    {
+      Content: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      ErrorDetails: ({ errorText }: { errorText: string }) => (
+        <div>{errorText}</div>
+      ),
+      Header: ({ type }: { type: string }) => <div>{type}</div>,
+      Input: ({ input }: { input: unknown }) => (
+        <pre>{JSON.stringify(input)}</pre>
+      ),
+      Output: ({ output }: { output: unknown }) => (
+        <pre>{JSON.stringify(output)}</pre>
+      ),
+    },
+  );
+
+  return { Tool };
+});
 
 vi.mock("@/components/chat/editable-assistant-message", () => ({
   EditableAssistantMessage: ({
@@ -190,7 +241,9 @@ vi.mock("@/components/chat/todo-write-tool", () => ({
 }));
 
 vi.mock("@/components/chat/mcp-app-container", () => ({
-  McpAppSection: () => null,
+  McpAppSection: ({ uiResourceUri }: { uiResourceUri: string }) => (
+    <div data-testid="mcp-app-section">{uiResourceUri}</div>
+  ),
   McpToolOutput: null,
 }));
 
@@ -260,6 +313,434 @@ import { ChatMessages } from "./chat-messages";
 describe("ChatMessages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("renders SDK reasoning parts", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "reasoning",
+            text: "I should inspect the request before answering.",
+            state: "done",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByText("I should inspect the request before answering."),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("reasoning")).toHaveAttribute(
+      "data-streaming",
+      "false",
+    );
+  });
+
+  it("passes streaming state to SDK reasoning parts", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "reasoning",
+            text: "Still thinking...",
+            state: "streaming",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning")).toHaveAttribute(
+      "data-streaming",
+      "true",
+    );
+  });
+
+  it("renders SDK sources after the assistant answer", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Here is the answer." },
+          {
+            type: "source-url",
+            sourceId: "source-1",
+            url: "https://example.com/report",
+            title: "Example Report",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const answer = screen.getByText("Here is the answer.");
+    const sources = screen.getByTestId("sources");
+
+    expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Example Report" }),
+    ).toHaveAttribute("href", "https://example.com/report");
+    expect(
+      answer.compareDocumentPosition(sources) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("deduplicates SDK sources by source id", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Answer with sources." },
+          {
+            type: "source-url",
+            sourceId: "source-1",
+            url: "https://example.com/one",
+            title: "First title",
+          },
+          {
+            type: "source-url",
+            sourceId: "source-1",
+            url: "https://example.com/two",
+            title: "Second title",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "First title" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Second title")).not.toBeInTheDocument();
+  });
+
+  it("renders SDK source documents without links", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Document-backed answer." },
+          {
+            type: "source-document",
+            sourceId: "doc-1",
+            title: "Planning Notes",
+            filename: "planning.pdf",
+            mediaType: "application/pdf",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Planning Notes")).toBeInTheDocument();
+    expect(
+      screen.getByText("planning.pdf - application/pdf"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Planning Notes" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps internal SDK and transport parts hidden in normal chat", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Visible answer." },
+          { type: "step-start" },
+          {
+            type: "data-heartbeat",
+            data: { timestamp: 1 },
+          },
+          {
+            type: "data-token-usage",
+            data: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Visible answer.")).toBeInTheDocument();
+    expect(screen.queryByText("step-start")).not.toBeInTheDocument();
+    expect(screen.queryByText("data-heartbeat")).not.toBeInTheDocument();
+    expect(screen.queryByText("data-token-usage")).not.toBeInTheDocument();
+  });
+
+  it("keeps data-tool-ui-start rendering as an MCP app", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "data-tool-ui-start",
+            data: {
+              toolCallId: "call-1",
+              toolName: "browser__open",
+              uiResourceUri: "ui://browser/open",
+              html: "<div>Browser</div>",
+            },
+          },
+          {
+            type: "tool-browser__open",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { url: "https://example.com" },
+            output: {
+              content: "Opened browser",
+              _meta: {
+                ui: {
+                  resourceUri: "ui://browser/open",
+                },
+              },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        agentId="agent-1"
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-app-section")).toHaveTextContent(
+      "ui://browser/open",
+    );
+    expect(screen.queryByText("data-tool-ui-start")).not.toBeInTheDocument();
+  });
+
+  it("reserves conversation rhythm for standalone reasoning blocks", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "reasoning",
+            text: "Checking spacing before answering.",
+            state: "done",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const rhythmBlock = screen
+      .getByTestId("reasoning")
+      .closest("[data-chat-part-block]");
+
+    expect(rhythmBlock).toHaveClass("pb-8");
+  });
+
+  it("reserves conversation rhythm for grouped sources", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Answer with a source." },
+          {
+            type: "source-url",
+            sourceId: "source-1",
+            url: "https://example.com/source",
+            title: "Source",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const rhythmBlock = screen
+      .getByTestId("sources")
+      .closest("[data-chat-part-block]");
+
+    expect(rhythmBlock).toHaveClass("pb-8");
+  });
+
+  it("reserves conversation rhythm for assistant file attachments", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "file",
+            url: "https://example.com/summary.pdf",
+            mediaType: "application/pdf",
+            filename: "summary.pdf",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const rhythmBlock = screen
+      .getByText("summary.pdf")
+      .closest("[data-chat-part-block]");
+
+    expect(rhythmBlock).toHaveClass("pb-8");
+  });
+
+  it("reserves conversation rhythm for tool blocks", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Check issue 1." }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        optimisticToolCalls={[
+          {
+            toolCallId: "optimistic-call-1",
+            toolName: "github__get_issue",
+            input: { issue_number: 1 },
+          },
+        ]}
+        status="submitted"
+      />,
+    );
+
+    const rhythmBlock = screen
+      .getByText("tool-github__get_issue")
+      .closest("[data-chat-part-block]");
+
+    expect(rhythmBlock).toHaveClass("pb-8");
+    expect(rhythmBlock).toHaveClass("px-4");
+  });
+
+  it("reserves conversation rhythm for compact tool groups", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-github__list_issues",
+            toolCallId: "call-1",
+            state: "input-available",
+            input: { owner: "a", repo: "b" },
+          },
+          {
+            type: "tool-github__list_issues",
+            toolCallId: "call-1",
+            state: "output-available",
+            output: { issue: 1 },
+          },
+          {
+            type: "tool-github__list_pull_requests",
+            toolCallId: "call-2",
+            state: "input-available",
+            input: { owner: "a", repo: "b" },
+          },
+          {
+            type: "tool-github__list_pull_requests",
+            toolCallId: "call-2",
+            state: "output-available",
+            output: { pr: 2 },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const firstToolButton = screen.getAllByRole("button")[0];
+    const rhythmBlock = firstToolButton.closest("[data-chat-part-block]");
+
+    expect(rhythmBlock).toHaveClass("pb-8");
+    expect(rhythmBlock).toHaveClass("px-4");
   });
 
   it("renders the swap divider for branded built-in swap tools", () => {
@@ -1173,9 +1654,13 @@ describe("ChatMessages", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Edit Editable user" }));
+    await user.click(
+      screen.getByRole("button", { name: "Edit Editable user" }),
+    );
 
-    const textarea = screen.getByRole("textbox", { name: "Edit Editable user" });
+    const textarea = screen.getByRole("textbox", {
+      name: "Edit Editable user",
+    });
     const [, secondMessage] = screen.getAllByLabelText(/Message \d+ of \d+/);
 
     textarea.focus();

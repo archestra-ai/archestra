@@ -140,7 +140,8 @@ Okta is an enterprise identity management platform. Archestra supports Okta OIDC
 
 5. Complete the Okta app setup.
 6. Assign the users or groups that should access Archestra.
-7. Users can sign in from the Archestra sign-in page or from the Archestra tile on their Okta End-User Dashboard.
+7. In Archestra, go to **Settings > Identity Providers**, enable Okta, and enter the Okta issuer URL, client ID, and client secret from the Okta app integration.
+8. Users can sign in from the Archestra sign-in page or from the Archestra tile on their Okta End-User Dashboard.
 
 For Okta's general catalog installation flow, see [Add existing app integrations](https://help.okta.com/oie/en-us/Content/Topics/Apps/apps-add-applications.htm).
 

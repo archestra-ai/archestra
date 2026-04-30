@@ -84,8 +84,12 @@ export function AgentActions({
       icon: <Download className="h-4 w-4" />,
       label: "Export",
       permissions: { agent: ["read"] },
-      disabled: isBuiltIn,
-      disabledTooltip: "Built-in agents cannot be exported",
+      disabled: isBuiltIn || agent.agentType !== "agent",
+      disabledTooltip: isBuiltIn
+        ? "Built-in agents cannot be exported"
+        : agent.agentType !== "agent"
+          ? "Only internal agents can be exported"
+          : undefined,
       onClick: () => onExport(agent),
     },
     editOrViewAction,

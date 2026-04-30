@@ -182,26 +182,34 @@ export function ImportAgentDialog({
 
     setState({ status: "importing" });
 
-    const result = await importMutation.mutateAsync(state.payload);
-    if (!result) {
+    try {
+      const result = await importMutation.mutateAsync(state.payload);
+      if (!result) {
+        setState({
+          status: "error",
+          message: "Failed to import agent. Please check the server logs.",
+        });
+        return;
+      }
+
+      setState({
+        status: "success",
+        agentName: result.agent.name,
+        agentId: result.agent.id,
+        warnings: result.warnings,
+      });
+
+      onSuccess?.(
+        { id: result.agent.id, name: result.agent.name },
+        result.warnings.length,
+      );
+    } catch {
       setState({
         status: "error",
-        message: "Failed to import agent. Please check the server logs.",
+        message:
+          "Failed to import agent. The server returned an error. Please check the payload and try again.",
       });
-      return;
     }
-
-    setState({
-      status: "success",
-      agentName: result.agent.name,
-      agentId: result.agent.id,
-      warnings: result.warnings,
-    });
-
-    onSuccess?.(
-      { id: result.agent.id, name: result.agent.name },
-      result.warnings.length,
-    );
   }, [state, importMutation, onSuccess]);
 
   return (
@@ -442,7 +450,7 @@ export function ImportAgentDialog({
         <div className="flex w-full justify-end gap-2">
           {state.status === "success" ? (
             <Button onClick={() => handleOpenChange(false)}>Done</Button>
-          ) : (
+          ) : state.status === "importing" ? null : (
             <>
               <Button
                 variant="outline"

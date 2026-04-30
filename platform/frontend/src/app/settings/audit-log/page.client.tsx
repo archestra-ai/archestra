@@ -559,6 +559,46 @@ function renderAuditEventDetails(
     return <div>Reinstalled MCP server “{metadata.name}”.</div>;
   }
 
+  // Generic structured diff fallback (emitted by audit middleware)
+  if (metadata && Array.isArray(metadata.changes)) {
+    const changes = metadata.changes as Array<{
+      field?: unknown;
+      from?: unknown;
+      to?: unknown;
+    }>;
+    const safeChanges = changes.filter(
+      (c) => typeof c?.field === "string" && (c.from !== c.to),
+    ) as Array<{ field: string; from: unknown; to: unknown }>;
+
+    if (safeChanges.length > 0) {
+      const resourceName =
+        typeof metadata.resourceName === "string" ? metadata.resourceName : null;
+
+      return (
+        <div className="space-y-2">
+          <div>
+            {resourceName ? (
+              <>
+                Changed <span className="font-medium">{resourceName}</span>:
+              </>
+            ) : (
+              "Changed fields:"
+            )}
+          </div>
+          <ul className="list-inside list-disc space-y-1">
+            {safeChanges.map((c) => (
+              <li key={c.field}>
+                <span className="font-medium">{c.field}</span>:{" "}
+                <span className="font-mono">{stringifyValue(c.from)}</span> →{" "}
+                <span className="font-mono">{stringifyValue(c.to)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+  }
+
   return (
     <pre className="whitespace-pre-wrap">
       {metadata ? JSON.stringify(metadata, null, 2) : "—"}

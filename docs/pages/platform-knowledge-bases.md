@@ -19,7 +19,7 @@ The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside A
 
 ## Configuration
 
-Open **Settings > Knowledge**. Both an embedding and a reranking model must be set before Knowledge Bases and connectors can be used.
+Open **Settings > Knowledge**. Both an embedding and a reranking model must be set before Knowledge Bases and can be used.
 
 ### Embedding Configuration
 
@@ -51,6 +51,11 @@ Connectors pull data from external tools (Jira, Confluence, GitHub, etc.) and fe
 
 ### Assigning to an Agent
 
-Open the agent and add the Knowledge Base under its knowledge sources. An agent can be assigned multiple Knowledge Bases or individual connectors. Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant snippets to answer the user's question.
+1. Go to **Agents** in the left sidebar and click the agent you want to attach knowledge to (or create a new one).
+2. In the **Edit Agent** dialog, scroll to **Knowledge Sources**.
+3. Click **Select connectors or knowledge bases** and pick one or more entries from the **Knowledge Bases** and **Connectors** lists. An agent can be assigned multiple Knowledge Bases or individual connectors.
+4. Click **Update** to save.
+
+Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
 
 ![Selecting Knowledge Bases and connectors on an agent](/docs/assets/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)

@@ -2112,32 +2112,116 @@ function prepareMessagesForProvider(params: {
 }): ChatMessage[] {
   const { messages, provider } = params;
 
-  if (provider !== "anthropic") {
-    return messages;
+  if (provider === "anthropic") {
+    return messages.map(normalizeAnthropicMessageFileParts);
   }
 
-  return messages.map((message) => {
-    if (!message.parts?.length) {
-      return message;
-    }
+  if (provider === "bedrock") {
+    return messages.map((message) =>
+      ensureBedrockMessageHasContent(
+        ensureBedrockUserMessageHasTextPart(message),
+      ),
+    );
+  }
 
-    let changed = false;
-    const parts = message.parts.map((part) => {
-      const normalizedPart = normalizeAnthropicFilePart(part);
-      if (normalizedPart !== part) {
-        changed = true;
-      }
-      return normalizedPart;
-    });
-
-    return changed
-      ? {
-          ...message,
-          parts,
-        }
-      : message;
-  });
+  return messages;
 }
+
+function normalizeAnthropicMessageFileParts(message: ChatMessage): ChatMessage {
+  if (!message.parts?.length) {
+    return message;
+  }
+
+  let changed = false;
+  const parts = message.parts.map((part) => {
+    const normalizedPart = normalizeAnthropicFilePart(part);
+    if (normalizedPart !== part) {
+      changed = true;
+    }
+    return normalizedPart;
+  });
+
+  return changed ? { ...message, parts } : message;
+}
+
+// Bedrock rejects user messages that contain a file/document block but no text
+// block ("A text block must be included when using documents."). When the user
+// sends a file with an empty prompt, prepend a placeholder so the request is
+// accepted.
+function ensureBedrockUserMessageHasTextPart(
+  message: ChatMessage,
+): ChatMessage {
+  if (message.role !== "user" || !message.parts?.length) {
+    return message;
+  }
+
+  let hasFilePart = false;
+  let hasNonEmptyTextPart = false;
+  for (const part of message.parts) {
+    if (part.type === "file") {
+      hasFilePart = true;
+    } else if (
+      part.type === "text" &&
+      typeof part.text === "string" &&
+      part.text.trim().length > 0
+    ) {
+      hasNonEmptyTextPart = true;
+    }
+  }
+
+  if (!hasFilePart || hasNonEmptyTextPart) {
+    return message;
+  }
+
+  return {
+    ...message,
+    parts: [
+      { type: "text", text: BEDROCK_DOCUMENT_PLACEHOLDER_TEXT },
+      ...message.parts,
+    ],
+  };
+}
+
+// Bedrock also rejects messages whose content array is empty after the AI SDK
+// drops empty text blocks and reasoning blocks without a signature ("The
+// content field in the Message object at messages.N is empty"). Pad with
+// placeholder text so turn alternation is preserved.
+function ensureBedrockMessageHasContent(message: ChatMessage): ChatMessage {
+  if (message.role === "system" || message.role === "tool") {
+    return message;
+  }
+  if (message.parts?.some(producesBedrockContentBlock)) {
+    return message;
+  }
+
+  const placeholder = {
+    type: "text",
+    text: BEDROCK_EMPTY_CONTENT_PLACEHOLDER_TEXT,
+  };
+  return {
+    ...message,
+    parts: message.parts ? [...message.parts, placeholder] : [placeholder],
+  };
+}
+
+// Mirrors the AI SDK's bedrock converter: text/reasoning blocks without usable
+// payload are silently dropped; everything else (tool-call, tool-result, file,
+// image) always produces a content block.
+function producesBedrockContentBlock(part: ChatMessagePart): boolean {
+  if (part.type === "text") {
+    return typeof part.text === "string" && part.text.trim().length > 0;
+  }
+  if (part.type === "reasoning") {
+    const bedrock = (part.providerOptions as { bedrock?: unknown } | undefined)
+      ?.bedrock as { signature?: unknown; redactedData?: unknown } | undefined;
+    return Boolean(bedrock?.signature || bedrock?.redactedData);
+  }
+  return true;
+}
+
+const BEDROCK_DOCUMENT_PLACEHOLDER_TEXT =
+  "Please review the attached document.";
+const BEDROCK_EMPTY_CONTENT_PLACEHOLDER_TEXT = "(no content)";
 
 function normalizeAnthropicFilePart(part: ChatMessagePart): ChatMessagePart {
   if (

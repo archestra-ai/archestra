@@ -716,3 +716,38 @@ postgresql:
   global:
     security:
       allowInsecureImages: true
+
+# Redis configuration
+redis:
+  # External Redis URL to use instead of deploying a Redis instance
+  # If null, a Redis instance will be deployed using the Bitnami Redis chart
+  #
+  # Option 1 - Set URL here (stored in K8s secret automatically):
+  #   external_url: redis://username:password@host:6379
+  #
+  # Option 2 - Use pre-existing K8s secret (leave external_url as null):
+  #   archestra:
+  #     envFromSecrets:
+  #       - name: REDIS_URL
+  #         secretName: my-redis-secret
+  #         secretKey: redis-url
+  #
+  # IMPORTANT: When using external Redis, you MUST also set enabled=false
+  external_url: null
+
+  # Whether to deploy the bundled Redis instance
+  # Set to false when using external_url
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: false
+  # Resource configuration for Redis
+  # See: https://artifacthub.io/packages/helm/bitnami/redis for all options
+  primary:
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"

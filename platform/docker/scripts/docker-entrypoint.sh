@@ -282,11 +282,21 @@ else
     # The application uses EFFECTIVE_DATABASE_URL directly
 fi
 
+# Redis always starts (used for WhatsApp auth state)
+cat /etc/supervisord.redis.conf >> /etc/supervisord.conf
+
 # Update supervisord config with actual environment variables
 # Escape % as %% for supervisord (it uses % for string interpolation like %(ENV_VAR)s)
 # Then use awk to handle other special characters in DATABASE_URL (like |, &, \)
+# Export REDIS_URL for Redis (always available with embedded Redis)
+export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
+
 ESCAPED_DATABASE_URL=$(echo "$EFFECTIVE_DATABASE_URL" | sed 's/%/%%/g')
 awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
+
+# Inject REDIS_URL into supervisord config
+ESCAPED_REDIS_URL=$(echo "$REDIS_URL" | sed 's/%/%%/g')
+awk -v url="$ESCAPED_REDIS_URL" '{gsub(/REDIS_URL="[^"]*"/, "REDIS_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
 
 # Configure ngrok tunnel if auth token is provided
 # ngrok is downloaded at runtime (not baked into the image) to avoid shipping

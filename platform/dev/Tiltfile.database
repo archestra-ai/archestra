@@ -46,6 +46,20 @@ helm_remote(
 
 k8s_resource('postgresql', port_forwards=['5432:5432', '9187:9187'], labels=['database'])
 
+# Redis for WhatsApp auth state and future use
+helm_remote(
+    'redis',
+    repo_url='https://charts.bitnami.com/bitnami',
+    namespace='archestra-dev',
+    create_namespace=True,
+    set=[
+        'architecture=standalone',
+        'auth.enabled=false',
+    ]
+)
+
+k8s_resource('redis', port_forwards=['6379:6379'], labels=['database'])
+
 # Database cleanup button (manual trigger only, for development)
 local_resource(
   'db-clean',

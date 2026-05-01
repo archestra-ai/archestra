@@ -171,8 +171,8 @@ COPY docker/certs/aws-rds-global-bundle.pem /tmp/aws-rds-ca.pem
 COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17, pgvector, and supervisord
-    apk add --no-cache postgresql17=17.9-r0 postgresql17-contrib=17.9-r0 postgresql-pgvector su-exec && \
+    # Install PostgreSQL 17, pgvector, Redis, and supervisord
+    apk add --no-cache postgresql17=17.9-r0 postgresql17-contrib=17.9-r0 postgresql-pgvector redis su-exec && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
@@ -235,6 +235,7 @@ COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
+COPY docker/supervisord/redis.conf /etc/supervisord.redis.conf
 
 # Install production dependencies for both workspaces
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend --filter='./integrations/chatops/*'

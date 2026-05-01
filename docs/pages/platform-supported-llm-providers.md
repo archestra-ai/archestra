@@ -1,7 +1,7 @@
 ---
 title: Supported LLM Providers
-category: Agents
-order: 3
+category: LLM Proxy
+order: 2
 description: LLM providers supported by Archestra Platform
 lastUpdated: 2026-02-22
 ---

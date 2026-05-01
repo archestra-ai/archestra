@@ -104659,7 +104659,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List all knowledge bases for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -105166,7 +105166,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Create a new knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create knowledge bases and connectors",
+        "description": "Create a new knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -105481,7 +105481,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Get a knowledge base by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Get a knowledge base by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -105782,7 +105782,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Update a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Update a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -106103,7 +106103,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -106377,7 +106377,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Check the health of a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Check the health of a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -106658,7 +106658,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List all connectors for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -107833,7 +107833,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Create a new connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create knowledge bases and connectors",
+        "description": "Create a new connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -109465,7 +109465,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a connector by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Get a connector by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -110450,7 +110450,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Update a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Update a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -111996,7 +111996,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112270,7 +112270,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually trigger a connector sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Manually trigger a connector sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112548,7 +112548,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112826,7 +112826,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Test a connector connection\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Test a connector connection\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -113103,7 +113103,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Assign a connector to one or more knowledge bases\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Assign a connector to one or more knowledge bases\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -113397,7 +113397,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List knowledge bases assigned to a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List knowledge bases assigned to a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -113712,7 +113712,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Unassign a connector from a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Unassign a connector from a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -113994,7 +113994,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List connector runs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List connector runs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -114459,7 +114459,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a single connector run (including logs)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Get a single connector run (including logs)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {

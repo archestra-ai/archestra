@@ -1,8 +1,8 @@
 ---
 title: Tool Policy Configuration Agent
-category: Agents
-subcategory: Built-In Agents
-order: 7
+category: LLM Proxy
+subcategory: Security Concepts
+order: 4
 description: Built-in agent that auto-configures tool call policies and tool result policies
 ---
 

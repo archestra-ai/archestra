@@ -174,3 +174,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @umaiskhan-ops
 - @AvulaNagaSanjay
 - @ritankarsaha
+- @premsreelathasugeendran
+- @rishi-rj-s

@@ -43,7 +43,7 @@ Pick the LLM that scores and reorders search results by relevance.
 
 ### Creating a Knowledge Base
 
-A Knowledge Base is a named collection of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
+A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
 
 ### Creating a Connector
 

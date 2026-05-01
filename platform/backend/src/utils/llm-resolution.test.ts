@@ -26,7 +26,6 @@ const NO_KEY = {
   source: "environment",
   chatApiKeyId: undefined,
   baseUrl: null,
-  extraHeaders: null,
 };
 
 const MOCK_MODEL = {
@@ -85,7 +84,6 @@ describe("resolveSmartDefaultLlm", () => {
             source: "org",
             chatApiKeyId: "key-123",
             baseUrl: null,
-            extraHeaders: null,
           };
         }
         return NO_KEY;
@@ -167,7 +165,6 @@ describe("resolveSmartDefaultLlm", () => {
             source: "org",
             chatApiKeyId: "ant-key-id",
             baseUrl: null,
-            extraHeaders: null,
           };
         }
         if (params.provider === "openai") {
@@ -176,7 +173,6 @@ describe("resolveSmartDefaultLlm", () => {
             source: "org",
             chatApiKeyId: "openai-key-id",
             baseUrl: null,
-            extraHeaders: null,
           };
         }
         return NO_KEY;
@@ -223,7 +219,6 @@ describe("resolveSmartDefaultLlm", () => {
             source: "org",
             chatApiKeyId: "key-123",
             baseUrl: null,
-            extraHeaders: null,
           };
         }
         return NO_KEY;
@@ -272,7 +267,6 @@ describe("resolveSmartDefaultLlm", () => {
       source: "environment",
       chatApiKeyId: undefined,
       baseUrl: null,
-      extraHeaders: null,
     });
 
     const result = await resolveSmartDefaultLlm({ organizationId: org.id });
@@ -335,7 +329,6 @@ describe("resolveSmartDefaultLlmForChat", () => {
             source: "org",
             chatApiKeyId: "key-123",
             baseUrl: null,
-            extraHeaders: null,
           };
         }
         return NO_KEY;
@@ -431,7 +424,6 @@ describe("resolveSmartDefaultLlmForChat", () => {
             source: "org",
             chatApiKeyId: "key-123",
             baseUrl: null,
-            extraHeaders: null,
           };
         }
         return NO_KEY;

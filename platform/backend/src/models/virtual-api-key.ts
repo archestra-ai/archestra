@@ -37,7 +37,6 @@ type ModelRouterProviderApiKeyInfo = ModelRouterProviderApiKeyInput & {
 type ModelRouterProviderApiKeyRoutingInfo = ModelRouterProviderApiKeyInfo & {
   secretId: string | null;
   baseUrl: string | null;
-  extraHeaders: Record<string, string> | null;
 };
 
 type VirtualApiKeyAccessContext = {
@@ -546,7 +545,6 @@ class VirtualApiKeyModel {
         chatApiKeyName: schema.llmProviderApiKeysTable.name,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
-        extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
       })
       .from(schema.virtualApiKeyModelRouterApiKeysTable)
       .innerJoin(

@@ -179,7 +179,6 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     let apiKey: string | undefined;
     let baseUrl: string | undefined;
-    let extraHeaders: Record<string, string> | null = null;
 
     // 1. JWKS auth if the agent has an external identity provider configured.
     const resolvedAgent = await resolveAgent(agentId);
@@ -192,7 +191,6 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       logger.info("[BedrockOpenai] auth: jwks");
       apiKey = jwksResult.apiKey;
       baseUrl = jwksResult.baseUrl;
-      extraHeaders = jwksResult.extraHeaders;
     } else if (bearerToken) {
       if (hasArchestraTokenPrefix(bearerToken)) {
         logger.info("[BedrockOpenai] auth: virtual-key");
@@ -201,7 +199,6 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const resolved = await validateVirtualApiKey(bearerToken, "bedrock");
           apiKey = resolved.apiKey;
           baseUrl = resolved.baseUrl;
-          extraHeaders = resolved.extraHeaders;
         } catch (err) {
           await virtualKeyRateLimiter.recordFailure(request.ip);
           throw err;
@@ -229,7 +226,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     let models: Awaited<ReturnType<typeof fetchBedrockModels>>;
     if (apiKey) {
       logger.info("[BedrockOpenai] fetching models via api key");
-      models = await fetchBedrockModels(apiKey, baseUrl, extraHeaders);
+      models = await fetchBedrockModels(apiKey, baseUrl);
     } else {
       logger.info("[BedrockOpenai] fetching models via IAM");
       models = await fetchBedrockModelsViaIam();

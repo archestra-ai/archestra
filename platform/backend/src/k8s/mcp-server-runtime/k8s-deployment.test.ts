@@ -3183,6 +3183,70 @@ spec:
     const container = spec.spec?.template.spec?.containers[0];
     expect(container?.args).toEqual(["--token", "hello-world", "$UNKNOWN"]);
   });
+
+  test("does not crash when YAML container.args is not an array", () => {
+    // Malformed YAML where args is a scalar string instead of an array.
+    // js-yaml parses this without error and the unsafe `as k8s.V1Deployment`
+    // cast in customYamlToDeployment lets it through. The Array.isArray guard
+    // in generateDeploymentFromYaml prevents resolveArgs from crashing on a
+    // non-array value; the malformed args are left in place so K8s API
+    // surfaces the validation error downstream.
+    const yamlWithMalformedArgs = `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          command: ["node"]
+          args: foo
+`;
+
+    const catalogItem = {
+      deploymentSpecYaml: yamlWithMalformedArgs,
+      localConfig: {
+        command: "node",
+        arguments: [],
+        environment: [],
+      },
+    } as unknown as import("@/types").InternalMcpCatalog;
+
+    const mcpServer = {
+      id: "yaml-malformed-args-id",
+      name: "yaml-malformed-args-server",
+      catalogId: "catalog-yaml-malformed-args",
+    } as McpServer;
+
+    const k8sDeployment = new K8sDeployment({
+      mcpServer: mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: catalogItem,
+    });
+
+    let spec:
+      | ReturnType<typeof k8sDeployment.generateDeploymentSpec>
+      | undefined;
+    expect(() => {
+      spec = k8sDeployment.generateDeploymentSpec(
+        "test:latest",
+        { command: "node", arguments: [] },
+        false,
+        8080,
+      );
+    }).not.toThrow();
+
+    // Malformed value is preserved (not silently replaced with a fallback);
+    // K8s API will reject the deployment downstream.
+    const container = spec?.spec?.template.spec?.containers[0];
+    expect(container?.args).toBe("foo");
+  });
 });
 
 describe("K8sDeployment.createK8sSecret", () => {

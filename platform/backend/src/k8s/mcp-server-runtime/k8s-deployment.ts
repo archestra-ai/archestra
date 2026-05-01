@@ -1131,7 +1131,7 @@ export default class K8sDeployment {
           ? container.args
           : localConfig.arguments;
 
-      if (sourceArgs && sourceArgs.length > 0) {
+      if (Array.isArray(sourceArgs) && sourceArgs.length > 0) {
         container.args = this.resolveArgs(sourceArgs, envVars);
       }
     }

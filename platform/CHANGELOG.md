@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.31](https://github.com/archestra-ai/archestra/compare/platform-v1.2.30...platform-v1.2.31) (2026-05-01)
+
+
+### Features
+
+* add OneDrive knowledge connector ([#3958](https://github.com/archestra-ai/archestra/issues/3958)) ([5ba54ee](https://github.com/archestra-ai/archestra/commit/5ba54ee0d9ceea7f8c385dd80edbefd38682c562))
+* display Organization badge with globe icon in MCP logs dialog ([#4276](https://github.com/archestra-ai/archestra/issues/4276)) ([d5b5b49](https://github.com/archestra-ai/archestra/commit/d5b5b493d0f21200f98f6465081f310af58b0548))
+
+
+### Bug Fixes
+
+* Layout issue of the Org connection in the MCP Card ([#4273](https://github.com/archestra-ai/archestra/issues/4273)) ([7661cae](https://github.com/archestra-ai/archestra/commit/7661cae1a03ed4fb9be997476d9114cfa5829ebb))
+* pass custom headers in chat ([#4278](https://github.com/archestra-ai/archestra/issues/4278)) ([49994f6](https://github.com/archestra-ai/archestra/commit/49994f6d5476810d9e774d01576a5e240d98b8c1))
+
 ## [1.2.30](https://github.com/archestra-ai/archestra/compare/platform-v1.2.29...platform-v1.2.30) (2026-05-01)
 
 

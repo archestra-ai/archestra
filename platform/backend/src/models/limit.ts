@@ -500,9 +500,12 @@ export class LimitValidationService {
    * Check if current usage has already exceeded any token cost limits
    * Returns null if allowed, or [refusalMessage, contentMessage] if blocked
    */
-  static async checkLimitsBeforeRequest(
-    agentId: string,
-  ): Promise<null | [string, string]> {
+  static async checkLimitsBeforeRequest(params: {
+    agentId: string;
+    userId?: string;
+    virtualKeyId?: string;
+  }): Promise<null | [string, string]> {
+    const { agentId, userId, virtualKeyId } = params;
     try {
       logger.info(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
@@ -544,7 +547,40 @@ export class LimitValidationService {
         await LimitModel.cleanupLimitsIfNeeded(organizationId);
       }
 
-      // Check agent-level limits first (highest priority)
+      if (virtualKeyId) {
+        logger.info(
+          `[LimitValidation] Checking virtual-key-level limits for: ${virtualKeyId}`,
+        );
+        const vkLimitViolation = await LimitValidationService.checkEntityLimits(
+          "virtual_key",
+          virtualKeyId,
+        );
+        if (vkLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by virtual-key-level limit for: ${virtualKeyId}`,
+          );
+          return vkLimitViolation;
+        }
+        logger.info(
+          `[LimitValidation] Virtual-key-level limits OK for: ${virtualKeyId}`,
+        );
+      }
+
+      if (userId) {
+        logger.info(
+          `[LimitValidation] Checking user-level limits for: ${userId}`,
+        );
+        const userLimitViolation =
+          await LimitValidationService.checkEntityLimits("user", userId);
+        if (userLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by user-level limit for: ${userId}`,
+          );
+          return userLimitViolation;
+        }
+        logger.info(`[LimitValidation] User-level limits OK for: ${userId}`);
+      }
+
       logger.info(
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
@@ -659,7 +695,7 @@ export class LimitValidationService {
    * Check if current token cost usage has exceeded limits for a specific entity
    */
   private static async checkEntityLimits(
-    entityType: "organization" | "team" | "agent",
+    entityType: LimitEntityType,
     entityId: string,
   ): Promise<null | [string, string]> {
     try {

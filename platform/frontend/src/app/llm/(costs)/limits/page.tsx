@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Progress } from "@/components/ui/progress";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -39,8 +40,12 @@ import {
   useUpdateLimit,
 } from "@/lib/limits.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useOrganization,
+  useOrganizationMembers,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
@@ -91,6 +96,9 @@ export default function LimitsPage() {
   const { data: limits = [], isPending } = useLimits();
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
+  const { data: members = [] } = useOrganizationMembers();
+  const { data: virtualKeysData } = useAllVirtualApiKeys({ limit: 100 });
+  const virtualKeys = virtualKeysData?.data ?? [];
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
@@ -159,11 +167,28 @@ export default function LimitsPage() {
 
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
-      if (limit.entityType === "organization") return "Organization";
-      const team = teams.find((candidate) => candidate.id === limit.entityId);
-      return team?.name ?? "Unknown team";
+      if (limit.entityType === "organization") {
+        return "Organization";
+      }
+      if (limit.entityType === "team") {
+        const team = teams.find((candidate) => candidate.id === limit.entityId);
+        return team?.name ?? "Unknown team";
+      }
+      if (limit.entityType === "user") {
+        const member = members.find(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        return member?.name ?? member?.email ?? "Unknown user";
+      }
+      if (limit.entityType === "virtual_key") {
+        const key = virtualKeys.find(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        return key?.name ?? "Unknown key";
+      }
+      return "Unknown";
     },
-    [teams],
+    [teams, members, virtualKeys],
   );
 
   const getUsageStatus = useCallback(
@@ -402,6 +427,8 @@ export default function LimitsPage() {
             <SelectItem value="all">All applied to</SelectItem>
             <SelectItem value="organization">Organization</SelectItem>
             <SelectItem value="team">Team</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+            <SelectItem value="virtual_key">Virtual Key</SelectItem>
           </SelectContent>
         </Select>
 
@@ -439,7 +466,7 @@ export default function LimitsPage() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Configure scoped LLM token-cost limits for the organization or a team."
+        description="Configure scoped LLM token-cost limits."
         size="small"
       >
         <DialogForm
@@ -469,11 +496,13 @@ export default function LimitsPage() {
                   <SelectContent>
                     <SelectItem value="organization">Organization</SelectItem>
                     <SelectItem value="team">Team</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="virtual_key">Virtual Key</SelectItem>
                   </SelectContent>
                 </Select>
 
                 {formState.entityType === "team" && (
-                  <Select
+                  <SearchableSelect
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -481,18 +510,49 @@ export default function LimitsPage() {
                         entityId: value,
                       }))
                     }
-                  >
-                    <SelectTrigger className="w-full sm:flex-1">
-                      <SelectValue placeholder="Select team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select team"
+                    items={teams.map((team) => ({
+                      value: team.id,
+                      label: team.name,
+                    }))}
+                    className="w-full sm:flex-1"
+                  />
+                )}
+
+                {formState.entityType === "user" && (
+                  <SearchableSelect
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                    placeholder="Select user"
+                    items={members.map((member) => ({
+                      value: member.id,
+                      label: member.name ?? member.email ?? "Unknown user",
+                    }))}
+                    className="w-full sm:flex-1"
+                  />
+                )}
+
+                {formState.entityType === "virtual_key" && (
+                  <SearchableSelect
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                    placeholder="Select virtual key"
+                    items={virtualKeys.map((key) => ({
+                      value: key.id,
+                      label: key.name,
+                    }))}
+                    className="w-full sm:flex-1"
+                  />
                 )}
               </div>
             </div>

@@ -39,6 +39,13 @@ vi.mock("@/lib/organization.query", () => ({
   useOrganization: () => ({
     data: { id: "org-1", limitCleanupInterval: "1m" },
   }),
+  useOrganizationMembers: () => ({ data: [] }),
+}));
+
+vi.mock("@/lib/virtual-api-keys.query", () => ({
+  useAllVirtualApiKeys: () => ({
+    data: { data: [], pagination: { total: 0 } },
+  }),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -75,6 +82,10 @@ vi.mock("@/components/ui/select", () => ({
   SelectItem: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+}));
+
+vi.mock("@/components/ui/searchable-select", () => ({
+  SearchableSelect: () => <div>SearchableSelect</div>,
 }));
 
 vi.mock("@/components/ui/permission-button", () => ({

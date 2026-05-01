@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@/test";
+import AgentTeamModel from "./agent-team";
 import LimitModel, { LimitValidationService } from "./limit";
 
 describe("LimitModel", () => {
@@ -62,6 +63,44 @@ describe("LimitModel", () => {
       expect(limit.entityType).toBe("organization");
       expect(limit.entityId).toBe(org.id);
       expect(limit.limitValue).toBe(10000000);
+    });
+
+    test("can create a token_cost limit for a user", async ({ makeUser }) => {
+      const user = await makeUser();
+
+      const limit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 500000,
+        model: ["gpt-4o"],
+      });
+
+      expect(limit.entityType).toBe("user");
+      expect(limit.entityId).toBe(user.id);
+      expect(limit.limitValue).toBe(500000);
+    });
+
+    test("can create a token_cost limit for a virtual_key", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+      const limit = await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: apiKey.id,
+        limitType: "token_cost",
+        limitValue: 250000,
+        model: ["claude-3-5-sonnet-20241022"],
+      });
+
+      expect(limit.entityType).toBe("virtual_key");
+      expect(limit.entityId).toBe(apiKey.id);
+      expect(limit.limitValue).toBe(250000);
     });
 
     test("can create a token_cost limit with multiple models", async ({
@@ -493,6 +532,64 @@ describe("LimitModel", () => {
       expect(limit2Usage[0].currentUsageTokensIn).toBe(100);
       expect(limit2Usage[0].currentUsageTokensOut).toBe(200);
     });
+
+    test("should update token usage for a user limit", async ({ makeUser }) => {
+      const user = await makeUser();
+
+      const limit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["claude-3-5-sonnet-20241022"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "user",
+        user.id,
+        "claude-3-5-sonnet-20241022",
+        100,
+        200,
+      );
+
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+
+      expect(modelUsage.length).toBe(1);
+      expect(modelUsage[0].currentUsageTokensIn).toBe(100);
+      expect(modelUsage[0].currentUsageTokensOut).toBe(200);
+    });
+
+    test("should update token usage for a virtual_key limit", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+      const limit = await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: apiKey.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "virtual_key",
+        apiKey.id,
+        "gpt-4o",
+        50,
+        100,
+      );
+
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+
+      expect(modelUsage.length).toBe(1);
+      expect(modelUsage[0].currentUsageTokensIn).toBe(50);
+      expect(modelUsage[0].currentUsageTokensOut).toBe(100);
+    });
   });
 
   describe("getModelUsageBreakdown", () => {
@@ -734,96 +831,300 @@ describe("LimitModel", () => {
 
       expect(limits).toHaveLength(0);
     });
+
+    test("should find user limits for validation", async ({ makeUser }) => {
+      const user = await makeUser();
+
+      await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      const limits = await LimitModel.findLimitsForValidation(
+        "user",
+        user.id,
+        "token_cost",
+      );
+
+      expect(limits).toHaveLength(1);
+      expect(limits[0].limitType).toBe("token_cost");
+    });
+
+    test("should find virtual_key limits for validation", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+      await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: apiKey.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      const limits = await LimitModel.findLimitsForValidation(
+        "virtual_key",
+        apiKey.id,
+        "token_cost",
+      );
+
+      expect(limits).toHaveLength(1);
+      expect(limits[0].limitType).toBe("token_cost");
+    });
   });
 });
 
 describe("LimitValidationService", () => {
   describe("checkLimitsBeforeRequest", () => {
     test("should return null when no limits are set", async () => {
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: "agent-123",
+      });
       expect(result).toBeNull();
     });
 
-    test("should return null when usage is within limits", async () => {
-      // TODO: Add test data setup for limits and team/organization
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
-      expect(result).toBeNull();
+    test("should check virtual-key limits before agent limits", async ({
+      makeAgent,
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+      // Create a virtual key limit with very low threshold
+      await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: apiKey.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "virtual_key",
+        apiKey.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        virtualKeyId: apiKey.id,
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.[1]).toContain("virtual_key-level");
     });
 
-    test("should return refusal message when agent-level limit is exceeded", async () => {
-      // TODO: Set up test data with agent limit of 1000 tokens and current usage of 1000+
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
+    test("should check user limits before agent limits", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+      const user = await makeUser();
 
-      // For now, this will return null since no test data is set up
-      // Once test data is added, update this expectation
-      expect(result).toBeNull();
+      // Create a user limit with very low threshold
+      await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "user",
+        user.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: user.id,
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.[1]).toContain("user-level");
     });
 
-    test("should return refusal message when team-level limit is exceeded", async () => {
-      // TODO: Set up test data with team limit exceeded
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
-      expect(result).toBeNull();
+    test("should check agent limits before team limits", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ name: "Test Agent" });
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      await LimitModel.create({
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "team",
+        team.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.[1]).toContain("agent-level");
     });
 
-    test("should return refusal message when organization-level limit is exceeded", async () => {
-      // TODO: Set up test data with organization limit exceeded
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
-      expect(result).toBeNull();
+    test("should check team limits before organization limits", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const agent = await makeAgent({ name: "Test Agent" });
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      await LimitModel.create({
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "team",
+        team.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "organization",
+        org.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.[1]).toContain("team-level");
     });
 
-    test("should check agent limits first (highest priority)", async () => {
-      // TODO: Set up conflicting limits where agent allows but team/org forbids
-      // Should return null (allowed) because agent limit takes priority
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
-      expect(result).toBeNull();
-    });
+    test("should return refusal message when limit is exceeded", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
 
-    test("should return properly formatted refusal message", async () => {
-      // TODO: Set up test data to trigger a limit violation
-      // Then verify the format matches tool call blocking pattern
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest("agent-123");
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
 
-      if (result) {
-        const [refusalMessage, contentMessage] = result;
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
 
-        // Check that refusal message contains metadata
-        expect(refusalMessage).toContain(
-          "<archestra-limit-type>token_cost</archestra-limit-type>",
-        );
-        expect(refusalMessage).toContain("<archestra-limit-current-usage>");
-        expect(refusalMessage).toContain("<archestra-limit-value>");
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+      });
 
-        // Check that content message is user-friendly
-        expect(contentMessage).toContain("token cost limit");
-        expect(contentMessage).toContain("Current usage:");
-        expect(contentMessage).toContain("Limit:");
-      }
+      expect(result).not.toBeNull();
+      const [refusalMessage, contentMessage] = result as unknown as [
+        string,
+        string,
+      ];
+
+      expect(refusalMessage).toContain(
+        "<archestra-limit-type>token_cost</archestra-limit-type>",
+      );
+      expect(refusalMessage).toContain("<archestra-limit-current-usage>");
+      expect(refusalMessage).toContain("<archestra-limit-value>");
+
+      expect(contentMessage).toContain("token cost limit");
+      expect(contentMessage).toContain("Current usage:");
+      expect(contentMessage).toContain("Limit:");
     });
 
     test("should handle errors gracefully and allow requests", async () => {
-      // Pass invalid agent ID to trigger error handling
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest(
-          "invalid-agent-id",
-        );
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: "invalid-agent-id",
+      });
 
-      // Should return null (allow) even on error
       expect(result).toBeNull();
     });
 
     test("should handle agents with no team assignments", async () => {
-      // Test agent without team assignments
-      const result =
-        await LimitValidationService.checkLimitsBeforeRequest(
-          "orphan-agent-123",
-        );
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: "orphan-agent-123",
+      });
       expect(result).toBeNull();
     });
   });

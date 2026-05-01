@@ -3,6 +3,7 @@ import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
 import ConversationModel from "./conversation";
 import InteractionModel from "./interaction";
+import LimitModel from "./limit";
 import TeamModel from "./team";
 
 describe("InteractionModel", () => {
@@ -3102,6 +3103,291 @@ describe("InteractionModel", () => {
 
       expect(deletedProfileInteraction).toBeDefined();
       expect(existingProfileInteraction).toBeDefined();
+    });
+  });
+
+  describe("updateUsageAfterInteraction", () => {
+    test("updates user limit usage when interaction has userId", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+
+      const userLimit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        inputTokens: 100,
+        outputTokens: 200,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].model).toBe("gpt-4o");
+      expect(usage[0].tokensIn).toBe(100);
+      expect(usage[0].tokensOut).toBe(200);
+    });
+
+    test("updates virtual_key limit usage when interaction has virtualKeyId", async ({
+      makeAgent,
+      makeOrganization,
+      makeVirtualApiKey,
+    }) => {
+      const agent = await makeAgent();
+      const org = await makeOrganization();
+      const virtualKey = await makeVirtualApiKey(org.id);
+
+      const vkLimit = await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: virtualKey.id,
+        limitType: "token_cost",
+        limitValue: 5000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        virtualKeyId: virtualKey.id,
+        model: "gpt-4o",
+        inputTokens: 50,
+        outputTokens: 100,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].model).toBe("gpt-4o");
+      expect(usage[0].tokensIn).toBe(50);
+      expect(usage[0].tokensOut).toBe(100);
+    });
+
+    test("updates both user AND virtual_key limits when both present", async ({
+      makeAgent,
+      makeUser,
+      makeOrganization,
+      makeVirtualApiKey,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const virtualKey = await makeVirtualApiKey(org.id);
+
+      const userLimit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      const vkLimit = await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: virtualKey.id,
+        limitType: "token_cost",
+        limitValue: 5000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        virtualKeyId: virtualKey.id,
+        model: "gpt-4o",
+        inputTokens: 75,
+        outputTokens: 150,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const userUsage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(userUsage).toHaveLength(1);
+      expect(userUsage[0].tokensIn).toBe(75);
+      expect(userUsage[0].tokensOut).toBe(150);
+
+      const vkUsage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      expect(vkUsage).toHaveLength(1);
+      expect(vkUsage[0].tokensIn).toBe(75);
+      expect(vkUsage[0].tokensOut).toBe(150);
+    });
+
+    test("still updates agent/team/org limits as before (regression)", async ({
+      makeAgent,
+      makeOrganization,
+      makeAdmin,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeAdmin();
+      const team = await makeTeam(org.id, admin.id);
+      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+
+      const agentLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      const teamLimit = await LimitModel.create({
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 5000000,
+        model: ["gpt-4o"],
+      });
+
+      const orgLimit = await LimitModel.create({
+        entityType: "organization",
+        entityId: org.id,
+        limitType: "token_cost",
+        limitValue: 10000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        model: "gpt-4o",
+        inputTokens: 80,
+        outputTokens: 160,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const agentUsage = await LimitModel.getModelUsageBreakdown(agentLimit.id);
+      expect(agentUsage).toHaveLength(1);
+      expect(agentUsage[0].tokensIn).toBe(80);
+      expect(agentUsage[0].tokensOut).toBe(160);
+
+      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      expect(teamUsage).toHaveLength(1);
+      expect(teamUsage[0].tokensIn).toBe(80);
+
+      const orgUsage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      expect(orgUsage).toHaveLength(1);
+      expect(orgUsage[0].tokensIn).toBe(80);
+    });
+
+    test("handles missing userId and virtualKeyId gracefully", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      await expect(
+        InteractionModel.create({
+          profileId: agent.id,
+          model: "gpt-4o",
+          inputTokens: 50,
+          outputTokens: 100,
+          request: { model: "gpt-4o", messages: [] },
+          response: {
+            id: "r1",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4o",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    test("skips update when tokens are zero", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+
+      const userLimit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        inputTokens: 0,
+        outputTokens: 0,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].tokensIn).toBe(0);
+      expect(usage[0].tokensOut).toBe(0);
     });
   });
 });

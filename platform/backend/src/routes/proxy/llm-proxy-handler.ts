@@ -110,6 +110,7 @@ export interface LLMProxyContext<TRequest> {
   externalAgentId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
+  virtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
@@ -174,6 +175,7 @@ export async function handleLLMProxy<
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let virtualKeyId: string | undefined;
 
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
@@ -310,6 +312,7 @@ export async function handleLLMProxy<
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
       wasVirtualKeyResolved = true;
+      virtualKeyId = virtualResult.virtualKeyId;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure(request.ip);
@@ -333,7 +336,11 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
-      await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: resolvedAgentId,
+        userId,
+        virtualKeyId,
+      });
 
     if (limitViolation) {
       const [_refusalMessage, contentMessage] = limitViolation;
@@ -615,6 +622,7 @@ export async function handleLLMProxy<
       externalAgentId,
       userId,
       resolvedUser,
+      virtualKeyId,
       sessionId,
       sessionSource,
       source,
@@ -649,6 +657,7 @@ export async function handleLLMProxy<
         externalAgentId,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,
@@ -711,6 +720,7 @@ async function handleStreaming<
     unsafeContextBoundary,
     externalAgentId,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1035,6 +1045,7 @@ async function handleStreaming<
             externalAgentId,
             executionId,
             userId,
+            virtualKeyId,
             sessionId,
             sessionSource,
             source,
@@ -1093,6 +1104,7 @@ async function handleNonStreaming<
     unsafeContextBoundary,
     externalAgentId,
     userId,
+    virtualKeyId,
     resolvedUser,
     sessionId,
     sessionSource,
@@ -1240,6 +1252,7 @@ async function handleNonStreaming<
           externalAgentId,
           executionId,
           userId,
+          virtualKeyId,
           sessionId,
           sessionSource,
           source,
@@ -1303,6 +1316,7 @@ async function handleNonStreaming<
         externalAgentId,
         executionId,
         userId,
+        virtualKeyId,
         sessionId,
         sessionSource,
         source,

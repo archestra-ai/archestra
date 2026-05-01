@@ -48,6 +48,7 @@ export async function resolveAgent(
 export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  virtualKeyId: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -125,6 +126,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
+    virtualKeyId: resolved.virtualKey.id,
   };
 }
 

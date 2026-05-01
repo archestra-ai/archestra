@@ -55,7 +55,9 @@ describe("KnowledgePageLayout", () => {
       renderLayout();
 
       expect(
-        screen.getByText("Knowledge base setup required"),
+        screen.getByText(
+          "Connect your docs, drives, and repos so your agents answer from your knowledge",
+        ),
       ).toBeInTheDocument();
     });
 
@@ -65,11 +67,11 @@ describe("KnowledgePageLayout", () => {
       expect(screen.queryByTestId("content")).not.toBeInTheDocument();
     });
 
-    it("shows 'Go to Knowledge Settings' button", () => {
+    it("shows 'Configure now' button", () => {
       renderLayout();
 
       expect(
-        screen.getByRole("button", { name: /Go to Knowledge Settings/ }),
+        screen.getByRole("button", { name: /Configure now/ }),
       ).toBeInTheDocument();
     });
 
@@ -101,7 +103,9 @@ describe("KnowledgePageLayout", () => {
       renderLayout();
 
       expect(
-        screen.queryByText("Knowledge base setup required"),
+        screen.queryByText(
+          "Connect your docs, drives, and repos so your agents answer from your knowledge",
+        ),
       ).not.toBeInTheDocument();
     });
 

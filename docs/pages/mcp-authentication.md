@@ -272,7 +272,7 @@ Configure all three of the following:
 - **MCP catalog item**: In the server's multitenant authorization settings, choose either **Identity Provider Token Exchange** to exchange the caller's IdP token for a downstream token, or **Identity Provider JWT / JWKS** to forward the caller's IdP JWT directly.
 - **Tool assignment**: Assign the tool with **Resolve at call time** so Archestra resolves credentials per caller when the tool runs.
 
-See [Identity Providers - Using Enterprise-Managed Credentials for Downstream MCP Calls](/docs/platform-identity-providers#using-enterprise-managed-credentials-for-downstream-mcp-calls) for related setup details.
+See [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth) for related setup details.
 
 This works with any gateway auth method that lets Archestra resolve a specific user and a usable IdP token for that user. In practice, **JWKS** and **ID-JAG** are the clearest options, **OAuth 2.1** also works when the authenticated Archestra user has a linked session with the same IdP, and personal user bearer tokens can work when they map to a specific user with a linked IdP session. Team and organization bearer tokens do not carry enough user identity for per-user downstream token exchange.
 

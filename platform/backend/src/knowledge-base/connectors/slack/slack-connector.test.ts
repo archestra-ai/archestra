@@ -109,7 +109,6 @@ describe("SlackConnector", () => {
         channelIds: ["C12345ABC"],
         skipBotMessages: false,
         includeThreadReplies: true,
-        includePinnedItems: false,
       });
       expect(result.valid).toBe(true);
     });

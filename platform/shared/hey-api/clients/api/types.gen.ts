@@ -28913,7 +28913,6 @@ export type GetConnectorsResponses = {
                 syncWindowDays?: number;
                 skipBotMessages?: boolean;
                 includeThreadReplies?: boolean;
-                includePinnedItems?: boolean;
                 batchSize?: number;
             } | {
                 type: 'outline';
@@ -29071,7 +29070,6 @@ export type CreateConnectorData = {
             syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
-            includePinnedItems?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29282,7 +29280,6 @@ export type CreateConnectorResponses = {
             syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
-            includePinnedItems?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29590,7 +29587,6 @@ export type GetConnectorResponses = {
             syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
-            includePinnedItems?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29734,7 +29730,6 @@ export type UpdateConnectorData = {
             syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
-            includePinnedItems?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29946,7 +29941,6 @@ export type UpdateConnectorResponses = {
             syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
-            includePinnedItems?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';

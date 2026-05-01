@@ -268,16 +268,16 @@ describe("knowledge-connector schemas", () => {
       const result = SlackConfigSchema.parse({
         type: "slack",
         channelIds: ["C123", "G456"],
+        syncWindowDays: 30,
         skipBotMessages: true,
         includeThreadReplies: false,
-        includePinnedItems: true,
         batchSize: 50,
       });
       expect(result.type).toBe("slack");
       expect(result.channelIds).toEqual(["C123", "G456"]);
+      expect(result.syncWindowDays).toBe(30);
       expect(result.skipBotMessages).toBe(true);
       expect(result.includeThreadReplies).toBe(false);
-      expect(result.includePinnedItems).toBe(true);
       expect(result.batchSize).toBe(50);
     });
   });

@@ -55,11 +55,11 @@ export function transformConfigArrayFields(
     const value = result.syncWindowDays.trim();
     if (value.length === 0) {
       delete result.syncWindowDays;
+    } else if (/^\d+$/.test(value)) {
+      result.syncWindowDays = Number.parseInt(value, 10);
     } else {
-      const parsed = Number.parseInt(value, 10);
-      if (!Number.isNaN(parsed)) {
-        result.syncWindowDays = parsed;
-      }
+      // Keep invalid values untouched so backend validation can reject clearly.
+      result.syncWindowDays = value;
     }
   }
 

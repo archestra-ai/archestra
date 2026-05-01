@@ -374,7 +374,6 @@ export const SlackConfigSchema = z.object({
   syncWindowDays: z.number().int().min(1).max(3650).optional(),
   skipBotMessages: z.boolean().optional(),
   includeThreadReplies: z.boolean().optional(),
-  includePinnedItems: z.boolean().optional(),
   batchSize: z.number().optional(),
 });
 export type SlackConfig = z.infer<typeof SlackConfigSchema>;

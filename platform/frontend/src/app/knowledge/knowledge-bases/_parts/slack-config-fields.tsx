@@ -73,12 +73,7 @@ export function SlackConfigFields({ control }: { control: Control<any> }) {
         name="config.syncWindowDays"
         rules={{
           validate: (value) => {
-            if (
-              value === undefined ||
-              value === null ||
-              value === "" ||
-              value === 0
-            ) {
+            if (value === undefined || value === null || value === "") {
               return true;
             }
 

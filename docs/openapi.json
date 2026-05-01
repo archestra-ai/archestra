@@ -106524,9 +106524,6 @@
                                   "includeThreadReplies": {
                                     "type": "boolean"
                                   },
-                                  "includePinnedItems": {
-                                    "type": "boolean"
-                                  },
                                   "batchSize": {
                                     "type": "number"
                                   }
@@ -107658,9 +107655,6 @@
                           "includeThreadReplies": {
                             "type": "boolean"
                           },
-                          "includePinnedItems": {
-                            "type": "boolean"
-                          },
                           "batchSize": {
                             "type": "number"
                           }
@@ -108422,9 +108416,6 @@
                               "type": "boolean"
                             },
                             "includeThreadReplies": {
-                              "type": "boolean"
-                            },
-                            "includePinnedItems": {
                               "type": "boolean"
                             },
                             "batchSize": {
@@ -109507,9 +109498,6 @@
                             "includeThreadReplies": {
                               "type": "boolean"
                             },
-                            "includePinnedItems": {
-                              "type": "boolean"
-                            },
                             "batchSize": {
                               "type": "number"
                             }
@@ -110479,9 +110467,6 @@
                           "includeThreadReplies": {
                             "type": "boolean"
                           },
-                          "includePinnedItems": {
-                            "type": "boolean"
-                          },
                           "batchSize": {
                             "type": "number"
                           }
@@ -111241,9 +111226,6 @@
                               "type": "boolean"
                             },
                             "includeThreadReplies": {
-                              "type": "boolean"
-                            },
-                            "includePinnedItems": {
                               "type": "boolean"
                             },
                             "batchSize": {

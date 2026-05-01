@@ -313,7 +313,6 @@ Authentication uses a **Bot User OAuth Token** (starts with `xoxb-`). To configu
    - `groups:read`
    - `users:read`
    - `users:read.email`
-   - `pins:read`
 3. Install the app to your workspace and copy the Bot User OAuth Token into the API Token field
 4. **Important**: You must explicitly `/invite` your bot to any channel you want it to index
 

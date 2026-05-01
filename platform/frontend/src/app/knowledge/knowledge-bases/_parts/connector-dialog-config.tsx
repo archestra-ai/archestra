@@ -354,6 +354,7 @@ export function getConnectorCredentialConfig(params: {
     asana: "Personal Access Token",
     onedrive: "Client Secret",
     salesforce: "Password + Security Token",
+    slack: "Bot Token",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string> = {
@@ -876,6 +877,7 @@ const INLINE_CONFIG_FIELDS: Record<
     </>
   ),
   outline: () => <></>,
+  slack: () => <></>,
   salesforce: ({ form, mode }) => (
     <FormField
       control={form.control}

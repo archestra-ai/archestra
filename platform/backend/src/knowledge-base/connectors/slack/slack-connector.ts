@@ -17,8 +17,8 @@ const USER_CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour TTL
 /**
  * Slack knowledge connector.
  *
- * Syncs channel messages, thread replies, and optionally pinned items from
- * a Slack workspace into the knowledge base for RAG retrieval.
+ * Syncs channel messages and thread replies from a Slack workspace into the
+ * knowledge base for RAG retrieval.
  *
  * NOTE: This is a **read-only knowledge ingestion** connector — it is
  * completely separate from the ChatOps Slack provider

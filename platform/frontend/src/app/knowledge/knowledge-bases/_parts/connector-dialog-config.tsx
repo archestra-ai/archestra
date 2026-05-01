@@ -33,9 +33,9 @@ export type ConnectorUrlConfig = {
 };
 
 export type ConnectorCredentialConfig = {
-  apiTokenLabel: string;
-  apiTokenPlaceholder: string;
-  apiTokenRequiredMessage: string;
+  apiTokenLabel?: string;
+  apiTokenPlaceholder?: string;
+  apiTokenRequiredMessage?: string;
   apiTokenHelpText?: ReactNode;
 };
 
@@ -317,7 +317,7 @@ export function getConnectorCredentialConfig(params: {
     ? "API token is required"
     : "API token or personal access token is required";
 
-  const apiTokenLabels: Record<ConnectorType, string> = {
+  const apiTokenLabels: Record<ConnectorType, string | undefined> = {
     servicenow: "Password",
     notion: "Integration Token",
     sharepoint: "Client Secret",
@@ -331,10 +331,10 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal Access Token",
     asana: "Personal Access Token",
     salesforce: "Password + Security Token",
-    file_upload: "Personal Access Token",
+    file_upload: undefined,
   };
 
-  const createApiTokenPlaceholders: Record<ConnectorType, string> = {
+  const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
     servicenow: "Your ServiceNow password",
     notion: "secret_...",
     sharepoint: "Your Azure AD client secret",
@@ -348,10 +348,10 @@ export function getConnectorCredentialConfig(params: {
     linear: "Your personal access token",
     asana: "Your personal access token",
     salesforce: "Your Salesforce password followed by your security token",
-    file_upload: "Your personal access token",
+    file_upload: undefined,
   };
 
-  const editApiTokenPlaceholders: Record<ConnectorType, string> = {
+  const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
     servicenow: "Leave empty to keep existing password",
     salesforce: "Leave empty to keep existing password + security token",
     notion: "Leave empty to keep existing token",
@@ -365,10 +365,10 @@ export function getConnectorCredentialConfig(params: {
     gitlab: "Leave empty to keep existing token",
     linear: "Leave empty to keep existing token",
     asana: "Leave empty to keep existing token",
-    file_upload: "Leave empty to keep existing token",
+    file_upload: undefined,
   };
 
-  const apiTokenRequiredMessages: Record<ConnectorType, string> = {
+  const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
     servicenow: "Password is required",
     notion: "Integration token is required",
     sharepoint: "Client secret is required",
@@ -382,7 +382,7 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal access token is required",
     asana: "Personal access token is required",
     salesforce: "Password and security token are required",
-    file_upload: "Personal access token is required",
+    file_upload: undefined,
   };
 
   const apiTokenHelpText = getApiTokenHelpText({

@@ -517,7 +517,7 @@ export function CreateConnectorDialog({
                   </div>
                 )}
 
-                {connectorType !== "file_upload" && (
+                {Boolean(apiTokenLabel) && (
                   <>
                     <FormField
                       control={form.control}

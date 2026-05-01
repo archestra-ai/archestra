@@ -366,17 +366,14 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             <MetadataItem label="Documents">
               <div>{connector.totalDocsIngested}</div>
             </MetadataItem>
-            <MetadataItem label="Schedule">
-              <div>{formatCronSchedule(connector.schedule)}</div>
-            </MetadataItem>
+            {connector.connectorType !== "file_upload" && (
+              <MetadataItem label="Schedule">
+                <div>{formatCronSchedule(connector.schedule)}</div>
+              </MetadataItem>
+            )}
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>
         </div>
-
-        {connector.connectorType === "file_upload" && (
-          <FileUploadConnectorWarnings connectorId={connectorId} />
-        )}
-
         {connector.connectorType === "file_upload" ? (
           <ConnectorFilesSection connectorId={connectorId} />
         ) : (
@@ -422,30 +419,6 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         />
       </div>
     </PageLayout>
-  );
-}
-
-function FileUploadConnectorWarnings({ connectorId }: { connectorId: string }) {
-  const { data: assignedKbs, isPending } =
-    useConnectorKnowledgeBases(connectorId);
-
-  if (isPending || (assignedKbs?.data ?? []).length > 0) return null;
-
-  return (
-    <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-50/60 dark:bg-yellow-950/20 p-4 text-sm">
-      <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
-      <div className="space-y-1">
-        <p className="font-medium text-yellow-800 dark:text-yellow-300">
-          Files are not searchable in chat
-        </p>
-        <p className="text-yellow-700 dark:text-yellow-400">
-          This connector is not assigned to any knowledge base. Assign it using
-          the <span className="font-medium">Knowledge Bases</span> field in the
-          metadata above, then assign that knowledge base to an agent so the
-          files can be retrieved in chat.
-        </p>
-      </div>
-    </div>
   );
 }
 

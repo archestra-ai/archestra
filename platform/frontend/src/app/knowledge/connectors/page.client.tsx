@@ -94,8 +94,8 @@ function ConnectorsList() {
       connectorTypeFilter === "all"
         ? undefined
         : (connectorTypeFilter as NonNullable<
-            archestraApiTypes.GetConnectorsData["query"]
-          >["connectorType"]),
+          archestraApiTypes.GetConnectorsData["query"]
+        >["connectorType"]),
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConnector, setEditingConnector] =
@@ -167,35 +167,53 @@ function ConnectorsList() {
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          {row.original.lastSyncAt ? (
-            <>
-              <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-              <span
-                className="text-xs text-muted-foreground"
-                title={formatDate({ date: row.original.lastSyncAt })}
-              >
-                {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                  addSuffix: true,
-                })}
+      cell: ({ row }) => {
+        if (row.original.connectorType === "file_upload") {
+          return (
+            <span className="text-xs text-muted-foreground">
+              Manual uploads
+            </span>
+          );
+        }
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.lastSyncAt ? (
+              <>
+                <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+                <span
+                  className="text-xs text-muted-foreground"
+                  title={formatDate({ date: row.original.lastSyncAt })}
+                >
+                  {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                    addSuffix: true,
+                  })}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Never synced
               </span>
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">Never synced</span>
-          )}
-        </div>
-      ),
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "schedule",
       header: "Schedule",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Database className="h-3.5 w-3.5" />
-          <span>{formatCronSchedule(row.original.schedule)}</span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        if (row.original.connectorType === "file_upload") {
+          return (
+            <span className="text-xs text-muted-foreground">Manual uploads</span>
+          );
+        }
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Database className="h-3.5 w-3.5" />
+            <span>{formatCronSchedule(row.original.schedule)}</span>
+          </div>
+        );
+      },
     },
     {
       id: "assigned",

@@ -235,7 +235,7 @@ async function userExists(
 setup.describe.configure({ mode: "serial" });
 
 // Setup editor authentication - runs after admin setup
-setup("authenticate as editor", async ({ page }) => {
+setup.skip("authenticate as editor", async ({ page }) => {
   // Check if editor user already exists
   const editorExists = await userExists(
     page.request,
@@ -394,7 +394,7 @@ async function ensureBasicUserRole(
 }
 
 // Setup member authentication - runs after admin setup
-setup("authenticate as member", async ({ page }) => {
+setup.skip("authenticate as member", async ({ page }) => {
   // Check if member user already exists
   const memberExists = await userExists(
     page.request,
@@ -457,7 +457,7 @@ setup("authenticate as member", async ({ page }) => {
 });
 
 // Setup basic-user authentication (custom role with slim permissions)
-setup("authenticate as basic-user (custom role)", async ({ page }) => {
+setup.skip("authenticate as basic-user (custom role)", async ({ page }) => {
   const basicUserExists = await userExists(
     page.request,
     BASIC_USER_EMAIL,

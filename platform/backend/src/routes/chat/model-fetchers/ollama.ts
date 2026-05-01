@@ -5,11 +5,13 @@ import { type ModelInfo, PLACEHOLDER_BEARER_TOKEN } from "./types";
 export async function fetchOllamaModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.ollama.baseUrl;
   const url = `${baseUrl}/models`;
   const response = await fetch(url, {
     headers: {
+      ...(extraHeaders ?? {}),
       Authorization: apiKey ? `Bearer ${apiKey}` : PLACEHOLDER_BEARER_TOKEN,
     },
   });

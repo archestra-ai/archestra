@@ -17,6 +17,7 @@ export function transformConfigArrayFields(
     "assignmentGroups",
     "driveIds",
     "fileTypes",
+    "userIds",
     "channelIds",
     "projectGids",
     "tagsToSkip",

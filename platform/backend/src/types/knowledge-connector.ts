@@ -12,6 +12,7 @@ const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
 const DROPBOX = z.literal("dropbox");
+const ONEDRIVE = z.literal("onedrive");
 const ASANA = z.literal("asana");
 const OUTLINE = z.literal("outline");
 const LINEAR = z.literal("linear");
@@ -28,6 +29,7 @@ export const ConnectorTypeSchema = z.union([
   SHAREPOINT,
   GDRIVE,
   DROPBOX,
+  ONEDRIVE,
   ASANA,
   LINEAR,
   SLACK,
@@ -344,6 +346,26 @@ export const DropboxCheckpointSchema = z.object({
 });
 export type DropboxCheckpoint = z.infer<typeof DropboxCheckpointSchema>;
 
+// ===== OneDrive Config & Checkpoint =====
+
+export const OneDriveConfigSchema = z.object({
+  type: ONEDRIVE,
+  tenantId: z.string().min(1),
+  userIds: z.array(z.string()).min(1, "At least one user ID is required"),
+  folderId: z.string().optional(),
+  recursive: z.boolean().optional(),
+  maxDepth: z.number().int().min(1).max(100).optional(),
+  fileTypes: z.array(z.string()).optional(),
+  batchSize: z.number().optional(),
+});
+export type OneDriveConfig = z.infer<typeof OneDriveConfigSchema>;
+
+export const OneDriveCheckpointSchema = z.object({
+  type: ONEDRIVE,
+  lastSyncedAt: z.string().optional(),
+});
+export type OneDriveCheckpoint = z.infer<typeof OneDriveCheckpointSchema>;
+
 // ===== Slack Config & Checkpoint =====
 
 export const SlackConfigSchema = z.object({
@@ -393,6 +415,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
   DropboxConfigSchema,
+  OneDriveConfigSchema,
   AsanaConfigSchema,
   LinearConfigSchema,
   SlackConfigSchema,
@@ -411,6 +434,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
   DropboxCheckpointSchema,
+  OneDriveCheckpointSchema,
   AsanaCheckpointSchema,
   LinearCheckpointSchema,
   SlackCheckpointSchema,
@@ -453,9 +477,16 @@ export interface ConnectorItemFailure {
   error: string;
 }
 
+export interface ConnectorItemSkipped {
+  itemId: string | number;
+  name: string;
+  reason: string;
+}
+
 export interface ConnectorSyncBatch {
   documents: ConnectorDocument[];
   failures?: ConnectorItemFailure[];
+  skipped?: ConnectorItemSkipped[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
 }
@@ -488,6 +519,7 @@ export interface Connector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
+    embeddingInputModalities?: ModelInputModality[];
   }): Promise<number | null>;
 
   sync(params: {

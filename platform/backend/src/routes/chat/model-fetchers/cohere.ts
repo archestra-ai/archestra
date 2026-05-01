@@ -5,12 +5,14 @@ import type { ModelInfo } from "./types";
 export async function fetchCohereModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.cohere.baseUrl;
   const url = `${baseUrl}/v2/models`;
 
   const response = await fetch(url, {
     headers: {
+      ...(extraHeaders ?? {}),
       Authorization: `Bearer ${apiKey}`,
     },
   });

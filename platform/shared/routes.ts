@@ -12,6 +12,10 @@ export const RouteId = {
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
+  // Agent Template Routes
+  GetAgentTemplates: "getAgentTemplates",
+  GetAgentTemplateInstallRequirements: "getAgentTemplateInstallRequirements",
+
   // Schedule Trigger Routes
   GetScheduleTriggers: "getScheduleTriggers",
   CreateScheduleTrigger: "createScheduleTrigger",

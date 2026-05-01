@@ -401,6 +401,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Labels are cross-type — any agent-type read permission suffices (checked in handler)
   [RouteId.GetLabelKeys]: {},
   [RouteId.GetLabelValues]: {},
+
+  // Agent templates (permission enforced dynamically in handler)
+  [RouteId.GetAgentTemplates]: {},
+  [RouteId.GetAgentTemplateInstallRequirements]: {},
   [RouteId.GetTokens]: {
     team: ["read"],
   },

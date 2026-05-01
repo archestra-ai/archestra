@@ -91,6 +91,18 @@ interface AgentToolsEditorProps {
   layout?: "pills" | "cards";
   /** When true, the "Add MCP server" combobox starts open. */
   openComboboxOnMount?: boolean;
+  /**
+   * Optional template prefill for create flow (when `agentId` is not set yet).
+   *
+   * These are fully-qualified MCP tool names (e.g. "server-name__tool_name").
+   * The editor will map them to discovered catalog tools and pre-select them.
+   */
+  initialToolFullNames?: string[];
+  /**
+   * Change this when selecting a different template to re-initialize prefill state.
+   * (Example: template id)
+   */
+  initialSelectionKey?: string | null;
 }
 
 export const AgentToolsEditor = forwardRef<
@@ -104,6 +116,8 @@ export const AgentToolsEditor = forwardRef<
     onSelectedCountChange,
     layout = "pills",
     openComboboxOnMount,
+    initialToolFullNames,
+    initialSelectionKey,
   },
   ref,
 ) {
@@ -115,6 +129,8 @@ export const AgentToolsEditor = forwardRef<
       onSelectedCountChange={onSelectedCountChange}
       layout={layout}
       openComboboxOnMount={openComboboxOnMount}
+      initialToolFullNames={initialToolFullNames}
+      initialSelectionKey={initialSelectionKey}
       ref={ref}
     />
   );
@@ -131,6 +147,8 @@ const AgentToolsEditorContent = forwardRef<
     onSelectedCountChange,
     layout = "pills",
     openComboboxOnMount,
+    initialToolFullNames,
+    initialSelectionKey,
   },
   ref,
 ) {
@@ -215,11 +233,23 @@ const AgentToolsEditorContent = forwardRef<
 
   // Track whether default tools have been pre-selected for new agent creation
   const defaultToolsInitializedRef = useRef(false);
+  const templatePrefillInitializedRef = useRef(false);
+  const lastInitialSelectionKeyRef = useRef<string | null>(null);
+  const lastReportedSelectedCountRef = useRef<number | null>(null);
 
-  // Pre-select default Archestra tools when creating a new agent (no agentId)
+  // Pre-select default Archestra tools and/or template tools when creating a new agent (no agentId)
   useEffect(() => {
     if (agentId) return; // Only for new agent creation
-    if (defaultToolsInitializedRef.current) return; // Only initialize once
+    let didMutatePending = false;
+
+    const nextKey = initialSelectionKey ?? null;
+    if (lastInitialSelectionKeyRef.current !== nextKey) {
+      pendingChangesRef.current.clear();
+      defaultToolsInitializedRef.current = false;
+      templatePrefillInitializedRef.current = false;
+      lastInitialSelectionKeyRef.current = nextKey;
+      didMutatePending = true;
+    }
 
     const toolsByCatalogIndex = toolCountQueries.map(
       (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
@@ -228,21 +258,78 @@ const AgentToolsEditorContent = forwardRef<
       catalogItems,
       toolsByCatalogIndex,
     );
-    if (!result) return;
+    if (!defaultToolsInitializedRef.current && result) {
+      const archestraCatalog = catalogItems[result.catalogIndex];
+      if (archestraCatalog) {
+        defaultToolsInitializedRef.current = true;
+        pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
+          selectedToolIds: result.toolIds,
+          credentialSourceId: null,
+          catalogItem: archestraCatalog,
+          selectAll: false,
+          isActive: true,
+        });
+        didMutatePending = true;
+      }
+    }
 
-    const archestraCatalog = catalogItems[result.catalogIndex];
-    if (!archestraCatalog) return;
+    if (
+      !templatePrefillInitializedRef.current &&
+      initialToolFullNames?.length
+    ) {
+      const desired = new Set(initialToolFullNames);
+      const found = new Set<string>();
+      const anyToolQueryPending =
+        toolCountQueries.some((q) => q.isPending) ||
+        toolCountQueries.some((q) => q.isFetching);
 
-    defaultToolsInitializedRef.current = true;
-    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
-      selectedToolIds: result.toolIds,
-      credentialSourceId: null,
-      catalogItem: archestraCatalog,
-      selectAll: false,
-    });
-    onSelectedCountChange?.(result.toolIds.size);
-    setPendingVersion((v) => v + 1);
-  }, [agentId, catalogItems, toolCountQueries, onSelectedCountChange]);
+      for (let i = 0; i < catalogItems.length; i++) {
+        const catalog = catalogItems[i];
+        const tools = toolsByCatalogIndex[i] ?? [];
+        if (!catalog || tools.length === 0) continue;
+
+        const matchingTools = tools.filter((t) => desired.has(t.name));
+        for (const t of matchingTools) found.add(t.name);
+
+        const selectedToolIds = new Set(matchingTools.map((t) => t.id));
+        if (selectedToolIds.size === 0) continue;
+
+        pendingChangesRef.current.set(catalog.id, {
+          selectedToolIds,
+          credentialSourceId: DYNAMIC_CREDENTIAL_VALUE,
+          catalogItem: catalog,
+          selectAll: false,
+          isActive: true,
+        });
+        didMutatePending = true;
+      }
+
+      const allDesiredFound = found.size >= desired.size;
+      if (allDesiredFound || !anyToolQueryPending) {
+        templatePrefillInitializedRef.current = true;
+      }
+      if (found.size > 0) didMutatePending = true;
+    }
+
+    let total = 0;
+    for (const changes of pendingChangesRef.current.values()) {
+      total += changes.selectedToolIds.size;
+    }
+    if (lastReportedSelectedCountRef.current !== total) {
+      lastReportedSelectedCountRef.current = total;
+      onSelectedCountChange?.(total);
+    }
+    if (didMutatePending) {
+      setPendingVersion((v) => v + 1);
+    }
+  }, [
+    agentId,
+    catalogItems,
+    toolCountQueries,
+    initialToolFullNames,
+    initialSelectionKey,
+    onSelectedCountChange,
+  ]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {

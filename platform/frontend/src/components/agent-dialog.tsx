@@ -26,6 +26,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeft,
   Bot,
   Building2,
   CheckIcon,
@@ -36,6 +37,7 @@ import {
   Loader2,
   Plus,
   RotateCcw,
+  Search,
   User,
   Users,
   X,
@@ -55,6 +57,7 @@ import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
 } from "@/components/agent-tools-editor";
+import { AgentTemplateCatalogPanel } from "@/components/agent-template-catalog-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -636,6 +639,15 @@ export function AgentDialog({
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [isSaving, setIsSaving] = useState(false);
+  const [createWizardStep, setCreateWizardStep] = useState<
+    "form" | "template-browse"
+  >("form");
+  const [templateToolFullNames, setTemplateToolFullNames] = useState<
+    string[] | null
+  >(null);
+  const [templateSelectionKey, setTemplateSelectionKey] = useState<
+    string | null
+  >(null);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
@@ -750,6 +762,9 @@ export function AgentDialog({
         setToolExposureMode("full");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
+        setCreateWizardStep("form");
+        setTemplateToolFullNames(null);
+        setTemplateSelectionKey(null);
       }
       // Reset counts when dialog opens
       setSelectedToolsCount(0);
@@ -1124,6 +1139,9 @@ export function AgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  const isCreateAgentDialog =
+    !agent && !readOnly && agentType === "agent" && !isBuiltIn;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
@@ -1131,11 +1149,29 @@ export function AgentDialog({
           <div className="flex items-start justify-between gap-4 pr-6">
             <div className="min-w-0 flex-1">
               <DialogTitle className="flex items-center gap-2">
-                {readOnly
-                  ? `View ${agent?.name ?? "Agent"}`
-                  : isBuiltIn
-                    ? `Edit ${agent?.name ?? "Built-In Agent"}`
-                    : getDialogTitle(agentType, !!agent)}
+                {isCreateAgentDialog &&
+                createWizardStep === "template-browse" ? (
+                  <button
+                    type="button"
+                    onClick={() => setCreateWizardStep("form")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setCreateWizardStep("form");
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 text-left"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Create Agent</span>
+                  </button>
+                ) : readOnly ? (
+                  `View ${agent?.name ?? "Agent"}`
+                ) : isBuiltIn ? (
+                  `Edit ${agent?.name ?? "Built-In Agent"}`
+                ) : (
+                  getDialogTitle(agentType, !!agent)
+                )}
                 {!isBuiltIn && (
                   <AgentBadge type={scope} className="font-normal" />
                 )}
@@ -1179,7 +1215,42 @@ export function AgentDialog({
         >
           <fieldset disabled={readOnly} className="contents">
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-4">
-              {agentType === "profile" && (
+              {isCreateAgentDialog && createWizardStep === "template-browse" ? (
+                <AgentTemplateCatalogPanel
+                  enabled
+                  onSelectTemplate={(template) => {
+                    setName(template.name);
+                    setDescription(template.description);
+                    setSystemPrompt(template.systemPrompt);
+                    setLlmModel(template.llmModel);
+                    setTemplateToolFullNames(template.tools ?? []);
+                    setTemplateSelectionKey(template.id);
+                    setLabels(
+                      (template.labels ?? []).map((l) => ({
+                        key: l.key,
+                        value: l.value,
+                      })),
+                    );
+                    setIcon(template.icon ?? null);
+                    setCreateWizardStep("form");
+                  }}
+                  onRequestClose={() => setCreateWizardStep("form")}
+                />
+              ) : (
+                <>
+                  {isCreateAgentDialog ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setCreateWizardStep("template-browse")}
+                    >
+                      <Search className="h-4 w-4 mr-2" />
+                      Select from Template Catalog
+                    </Button>
+                  ) : null}
+
+                  {agentType === "profile" && (
                 <Alert variant="warning">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
@@ -1188,7 +1259,7 @@ export function AgentDialog({
                     and Labels.
                   </AlertDescription>
                 </Alert>
-              )}
+                  )}
 
               {/* Section 1: Name, Description, Visibility, LLM Configuration */}
               {showPrimarySettingsCard && (
@@ -1534,6 +1605,14 @@ export function AgentDialog({
                           assignmentTeamIds={assignedTeamIds}
                           onSelectedCountChange={setSelectedToolsCount}
                           openComboboxOnMount={openToolsCombobox}
+                          initialToolFullNames={
+                            !agent
+                              ? (templateToolFullNames ?? undefined)
+                              : undefined
+                          }
+                          initialSelectionKey={
+                            !agent ? templateSelectionKey : null
+                          }
                         />
                       </>
                     ) : agent ? (
@@ -2202,13 +2281,16 @@ export function AgentDialog({
                   </div>
                 </div>
               )}
+                </>
+              )}
             </div>
           </fieldset>
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
               {readOnly ? "Close" : "Cancel"}
             </Button>
-            {!readOnly && (
+            {!readOnly &&
+              !(isCreateAgentDialog && createWizardStep === "template-browse") && (
               <Button
                 type="submit"
                 disabled={

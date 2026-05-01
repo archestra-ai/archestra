@@ -1,6 +1,7 @@
 export { default as browserStreamRoutes } from "@/features/browser-stream/routes/browser-stream.routes";
 export { default as a2aRoutes } from "./a2a";
 export { default as agentRoutes } from "./agent";
+export { default as agentTemplateRoutes } from "./agent-templates";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as authRoutes } from "./auth";

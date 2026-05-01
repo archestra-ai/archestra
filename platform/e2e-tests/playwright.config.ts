@@ -37,6 +37,7 @@ const testPatterns = {
 
 const uiTestMatch = [
   "**/agents.spec.ts",
+  "**/agent-templates.spec.ts",
   "**/auth-origin.spec.ts",
   "**/auth-redirect.spec.ts",
   "**/auth.spec.ts",

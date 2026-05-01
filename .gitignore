@@ -21,4 +21,4 @@ __pycache__/
 .claude/worktrees/
 .claude/*.lock
 .turbo/
-
+extra-docs/

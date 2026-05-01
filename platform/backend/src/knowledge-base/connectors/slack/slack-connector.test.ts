@@ -103,6 +103,15 @@ describe("SlackConnector", () => {
       expect(result.error).toContain("invalid-id");
     });
 
+    it("rejects whitespace-only channel IDs", async () => {
+      const connector = new SlackConnector();
+      const result = await connector.validateConfig({
+        channelIds: ["   "],
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("Invalid Slack channel ID");
+    });
+
     it("accepts config with boolean toggle fields", async () => {
       const connector = new SlackConnector();
       const result = await connector.validateConfig({
@@ -250,7 +259,7 @@ describe("SlackConnector", () => {
 
       const connector = new SlackConnector();
       const result = await connector.estimateTotalItems({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       });
@@ -295,7 +304,7 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       })) {
@@ -357,7 +366,7 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       })) {
@@ -478,7 +487,7 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       })) {
@@ -828,6 +837,33 @@ describe("SlackConnector", () => {
 
   // ===== sync — per-channel checkpointing =====
   describe("sync — checkpointing", () => {
+    it("de-duplicates repeated channel IDs to avoid duplicate channel sync", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [],
+        has_more: false,
+      });
+
+      const connector = new SlackConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001", "C001"] },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      expect(mockConversationsHistory).toHaveBeenCalledTimes(1);
+    });
+
     it("stores per-channel cursors in checkpoint", async () => {
       mockConversationsList.mockResolvedValueOnce({
         ok: true,
@@ -865,7 +901,7 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       })) {
@@ -881,6 +917,80 @@ describe("SlackConnector", () => {
       const cursors = finalCp.channelCursors as Record<string, string>;
       expect(cursors.C001).toBe("1700000010.000000");
       expect(cursors.C002).toBe("1700000020.000000");
+    });
+
+    it("does not move checkpoint cursor backwards when older messages are returned", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      // Older-than-checkpoint message should not reduce cursor.
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000049.000000", "Older replayed message", {
+            user: "U001",
+          }),
+        ],
+        has_more: false,
+      });
+
+      mockUsersInfo.mockResolvedValue({
+        user: { real_name: "Alice", profile: {}, name: "alice" },
+      });
+
+      const connector = new SlackConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001"] },
+        credentials,
+        checkpoint: {
+          type: "slack",
+          channelCursors: { C001: "1700000050.000000" },
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      const finalCp = batches[0].checkpoint as Record<string, unknown>;
+      const cursors = finalCp.channelCursors as Record<string, string>;
+      expect(cursors.C001).toBe("1700000050.000000");
+    });
+
+    it("preserves existing cursor when incremental run has no new messages", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [],
+        has_more: false,
+      });
+
+      const connector = new SlackConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001"] },
+        credentials,
+        checkpoint: {
+          type: "slack",
+          channelCursors: { C001: "1700000050.000000" },
+        },
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(1);
+      const finalCp = batches[0].checkpoint as Record<string, unknown>;
+      const cursors = finalCp.channelCursors as Record<string, string>;
+      expect(cursors.C001).toBe("1700000050.000000");
+      expect(batches[0].documents).toHaveLength(0);
     });
 
     it("uses existing cursor for incremental sync (oldest param)", async () => {
@@ -970,12 +1080,15 @@ describe("SlackConnector", () => {
       });
 
       const connector = new SlackConnector();
+      const recentCheckpointTs = String(
+        Math.floor(Date.now() / 1000) - 5 * 24 * 60 * 60,
+      );
       for await (const _batch of connector.sync({
         config: { channelIds: ["C001"], syncWindowDays: 90 },
         credentials,
         checkpoint: {
           type: "slack",
-          channelCursors: { C001: "1700000050.000000" },
+          channelCursors: { C001: recentCheckpointTs },
         },
       })) {
       }
@@ -983,7 +1096,7 @@ describe("SlackConnector", () => {
       expect(mockConversationsHistory).toHaveBeenCalledWith(
         expect.objectContaining({
           channel: "C001",
-          oldest: "1700000050.000000",
+          oldest: recentCheckpointTs,
         }),
       );
     });
@@ -1084,7 +1197,7 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       })) {
@@ -1135,7 +1248,7 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001"] },
+        config: { channelIds: ["C001", "C002"] },
         credentials,
         checkpoint: null,
       })) {
@@ -1256,6 +1369,18 @@ describe("SlackConnector", () => {
       const connector = new SlackConnector();
       const generator = connector.sync({
         config: { batchSize: "not-a-number" },
+        credentials,
+        checkpoint: null,
+      });
+      await expect(generator.next()).rejects.toThrow(
+        "Invalid Slack configuration",
+      );
+    });
+
+    it("throws when channelIds are missing", async () => {
+      const connector = new SlackConnector();
+      const generator = connector.sync({
+        config: {},
         credentials,
         checkpoint: null,
       });

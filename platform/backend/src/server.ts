@@ -34,6 +34,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { bundledGenericAdapterRuntimeManager } from "@/agents/chatops/bundled-generic-adapter-runtime-manager";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
@@ -96,7 +97,7 @@ const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const eeRoutes =
   config.enterpriseFeatures.core || config.codegenMode
     ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-      await import("./routes/index.ee")
+    await import("./routes/index.ee")
     : ({} as Record<string, never>);
 
 const {
@@ -505,10 +506,9 @@ const startMetricsServer = async () => {
     host,
   });
   metricsServer.log.info(
-    `Metrics server started on port ${observability.metrics.port}${
-      observability.metrics.secret
-        ? " (with authentication)"
-        : " (no authentication)"
+    `Metrics server started on port ${observability.metrics.port}${observability.metrics.secret
+      ? " (with authentication)"
+      : " (no authentication)"
     }`,
   );
 };
@@ -596,8 +596,8 @@ const registerSandboxRoute = (
   if (process.env.ARCHESTRA_MCP_SANDBOX_PORT) {
     logger.warn(
       "ARCHESTRA_MCP_SANDBOX_PORT is deprecated and no longer used. " +
-        "The sandbox is now served from the main backend on /_sandbox/. " +
-        "Remove this env var from your configuration.",
+      "The sandbox is now served from the main backend on /_sandbox/. " +
+      "Remove this env var from your configuration.",
     );
   }
 
@@ -660,8 +660,7 @@ const startMcpServerRuntime = async (
       });
     } catch (error) {
       fastify.log.error(
-        `Failed to import MCP Server Runtime: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"
         }`,
       );
       // Continue server startup even if MCP runtime fails
@@ -788,6 +787,7 @@ const startWebServer = async () => {
     // Initialize chatops providers (MS Teams, Slack, etc.)
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
+    await bundledGenericAdapterRuntimeManager.initialize();
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
@@ -918,7 +918,9 @@ const startWebServer = async () => {
         }
 
         // Track which cleanup operations have completed
-        const completedCleanups = new Set<"emailProvider" | "chatOps">();
+        const completedCleanups = new Set<
+          "bundledGenericAdapters" | "emailProvider" | "chatOps"
+        >();
 
         // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
         const cleanupPromise = Promise.allSettled([
@@ -930,10 +932,18 @@ const startWebServer = async () => {
             completedCleanups.add("chatOps");
             fastify.log.info("ChatOps provider cleanup completed");
           }),
+          bundledGenericAdapterRuntimeManager.cleanup().then(() => {
+            completedCleanups.add("bundledGenericAdapters");
+            fastify.log.info("Bundled ChatOps adapter cleanup completed");
+          }),
         ]).then(() => "completed" as const);
 
         // Wait for cleanup with timeout, then exit anyway
-        const allCleanupNames = ["emailProvider", "chatOps"] as const;
+        const allCleanupNames = [
+          "emailProvider",
+          "chatOps",
+          "bundledGenericAdapters",
+        ] as const;
         const result = await Promise.race([
           cleanupPromise,
           new Promise<"timeout">((resolve) =>

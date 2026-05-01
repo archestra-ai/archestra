@@ -15,8 +15,8 @@ ARG KIND_COMMIT
 ARG DOCKER_CLI_VERSION
 ARG DOCKER_CLI_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
-        echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
-        exit 1; \
+    echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
+    exit 1; \
     fi
 RUN apk add --no-cache git
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
@@ -77,6 +77,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
+COPY integrations/chatops ./integrations/chatops
 COPY patches/ patches/
 
 # Install all dependencies
@@ -109,12 +110,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
+COPY --from=deps /app/integrations ./integrations
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
+COPY integrations ./integrations
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -211,8 +214,8 @@ RUN apk add --no-cache supervisor && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
-           /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
-           /usr/lib/python*/ensurepip
+    /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
+    /usr/lib/python*/ensurepip
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
@@ -226,6 +229,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY integrations/chatops ./integrations/chatops
 COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
@@ -233,7 +237,7 @@ COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend --filter='./integrations/chatops/*'
 
 # CVE-2026-33671: replace Next's bundled picomatch 4.0.3 with 4.0.4 (same as deps stage).
 # Production install refetches next so the patched copy from the builder is not inherited.
@@ -253,6 +257,9 @@ COPY --from=builder /app/backend/scripts ./backend/scripts
 COPY --from=builder /app/backend/drizzle.config.ts ./backend/
 COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/migrations
 RUN chmod +x /app/backend/scripts/start-production.sh
+
+# Copy built bundled ChatOps adapters
+COPY --from=builder /app/integrations ./integrations
 
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public

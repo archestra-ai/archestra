@@ -20418,6 +20418,190 @@ export type GetChatOpsStatusResponses = {
 
 export type GetChatOpsStatusResponse = GetChatOpsStatusResponses[keyof GetChatOpsStatusResponses];
 
+export type ListBundledChatOpsAdaptersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/generic/builtin-adapters';
+};
+
+export type ListBundledChatOpsAdaptersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListBundledChatOpsAdaptersError = ListBundledChatOpsAdaptersErrors[keyof ListBundledChatOpsAdaptersErrors];
+
+export type ListBundledChatOpsAdaptersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        adapters: Array<{
+            adapterId: 'whatsapp';
+            displayName: string;
+            description: string;
+            status: 'stopped' | 'starting' | 'running' | 'error';
+            pid: number | null;
+            lastStartedAt: string | null;
+            lastExitAt: string | null;
+            errorMessage: string | null;
+        }>;
+    };
+};
+
+export type ListBundledChatOpsAdaptersResponse = ListBundledChatOpsAdaptersResponses[keyof ListBundledChatOpsAdaptersResponses];
+
+export type StartBundledChatOpsAdapterData = {
+    body?: never;
+    path: {
+        adapterId: 'whatsapp';
+    };
+    query?: never;
+    url: '/api/chatops/generic/builtin-adapters/{adapterId}/start';
+};
+
+export type StartBundledChatOpsAdapterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartBundledChatOpsAdapterError = StartBundledChatOpsAdapterErrors[keyof StartBundledChatOpsAdapterErrors];
+
+export type StartBundledChatOpsAdapterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        adapterId: 'whatsapp';
+        displayName: string;
+        description: string;
+        status: 'stopped' | 'starting' | 'running' | 'error';
+        pid: number | null;
+        lastStartedAt: string | null;
+        lastExitAt: string | null;
+        errorMessage: string | null;
+    };
+};
+
+export type StartBundledChatOpsAdapterResponse = StartBundledChatOpsAdapterResponses[keyof StartBundledChatOpsAdapterResponses];
+
 export type ListChatOpsBindingsData = {
     body?: never;
     path?: never;

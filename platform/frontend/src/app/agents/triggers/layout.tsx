@@ -55,6 +55,7 @@ export default function AgentTriggersLayout({
     slack: slackActive,
     email: emailActive,
     a2a: a2aActive,
+    bundled: bundledTriggers,
   } = useTriggerStatuses();
 
   const tabs = useMemo(() => {
@@ -96,8 +97,19 @@ export default function AgentTriggersLayout({
         href: "/agents/triggers/a2a",
         active: a2aActive,
       },
+      ...bundledTriggers.map((adapter) => ({
+        label: (
+          <TabLabel
+            icon={Bot}
+            label={adapter.displayName}
+            active={adapter.active}
+          />
+        ),
+        href: adapter.href,
+        active: adapter.active,
+      })),
     ];
-  }, [msTeamsActive, slackActive, emailActive, a2aActive]);
+  }, [msTeamsActive, slackActive, emailActive, a2aActive, bundledTriggers]);
 
   if (canReadTriggers === false) {
     return null;

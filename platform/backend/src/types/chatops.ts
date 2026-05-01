@@ -14,6 +14,42 @@ export type ChatOpsConnectionMode = z.infer<typeof ChatOpsConnectionModeSchema>;
 export const ChatOpsStatusSchema = z.enum(["configured", "unassigned"]);
 export type ChatOpsStatus = z.infer<typeof ChatOpsStatusSchema>;
 
+export const BundledChatOpsAdapterIdSchema = z.enum(["whatsapp"]);
+export type BundledChatOpsAdapterId = z.infer<
+  typeof BundledChatOpsAdapterIdSchema
+>;
+
+export const BundledChatOpsAdapterRuntimeStatusSchema = z.enum([
+  "stopped",
+  "starting",
+  "running",
+  "error",
+]);
+export type BundledChatOpsAdapterRuntimeStatus = z.infer<
+  typeof BundledChatOpsAdapterRuntimeStatusSchema
+>;
+
+export const BundledChatOpsAdapterSummarySchema = z.object({
+  adapterId: BundledChatOpsAdapterIdSchema,
+  displayName: z.string(),
+  description: z.string(),
+  status: BundledChatOpsAdapterRuntimeStatusSchema,
+  pid: z.number().int().positive().nullable(),
+  lastStartedAt: z.string().datetime().nullable(),
+  lastExitAt: z.string().datetime().nullable(),
+  errorMessage: z.string().nullable(),
+});
+export type BundledChatOpsAdapterSummary = z.infer<
+  typeof BundledChatOpsAdapterSummarySchema
+>;
+
+export const BundledChatOpsAdapterListResponseSchema = z.object({
+  adapters: z.array(BundledChatOpsAdapterSummarySchema),
+});
+export type BundledChatOpsAdapterListResponse = z.infer<
+  typeof BundledChatOpsAdapterListResponseSchema
+>;
+
 /** Credentials shape returned by the chatops status endpoint */
 export const ChatOpsProviderCredentialsSchema = z
   .object({

@@ -405,6 +405,8 @@ export const RouteId = {
 
   // ChatOps Routes
   GetChatOpsStatus: "getChatOpsStatus",
+  ListBundledChatOpsAdapters: "listBundledChatOpsAdapters",
+  StartBundledChatOpsAdapter: "startBundledChatOpsAdapter",
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",

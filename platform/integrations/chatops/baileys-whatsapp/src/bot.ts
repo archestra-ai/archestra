@@ -1,14 +1,14 @@
-import { fileURLToPath } from 'url'
-import path from 'path'
 import { Boom } from '@hapi/boom'
-import P from 'pino'
-import qrcode from 'qrcode-terminal'
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys'
+import path from 'path'
+import P from 'pino'
+import qrcode from 'qrcode-terminal'
+import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const AUTH_FOLDER = path.join(__dirname, '..', 'baileys_auth_info')
@@ -57,10 +57,7 @@ async function startSock() {
       if (!msg.message) continue
 
       const jid = msg.key.remoteJid
-      const text =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        ''
+      const text = msg.message.conversation || msg.message.extendedTextMessage?.text || ''
 
       console.log({ jid, text })
     }

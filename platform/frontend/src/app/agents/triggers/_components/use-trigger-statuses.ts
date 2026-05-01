@@ -1,13 +1,22 @@
 import { useInternalAgents } from "@/lib/agent.query";
-import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
+import {
+  useBundledChatOpsAdapters,
+  useChatOpsStatus,
+} from "@/lib/chatops/chatops.query";
 import { useIncomingEmailStatus } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
 import { useConfig } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import {
+  buildBundledTriggerNavigation,
+  getFirstTriggerHref,
+} from "./bundled-trigger-navigation";
 
 export function useTriggerStatuses() {
   const { data: chatOpsProviders, isLoading: chatOpsLoading } =
     useChatOpsStatus();
+  const { data: bundledAdapters, isLoading: bundledLoading } =
+    useBundledChatOpsAdapters();
   const { data: configData, isLoading: featuresLoading } = useConfig();
   const { data: emailStatus, isLoading: emailLoading } =
     useIncomingEmailStatus();
@@ -43,23 +52,26 @@ export function useTriggerStatuses() {
   // step, so it's "active" whenever there's at least one agent to expose.
   const a2aActive = (internalAgents?.length ?? 0) > 0;
 
-  const triggers = [
+  const bundled = buildBundledTriggerNavigation(bundledAdapters);
+
+  const fixedTriggers = [
     { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
     { active: slackActive, href: "/agents/triggers/slack" },
     { active: emailActive, href: "/agents/triggers/email" },
     { active: a2aActive, href: "/agents/triggers/a2a" },
   ] as const;
-  const firstActiveHref =
-    triggers.find((t) => t.active)?.href ?? triggers[0].href;
+  const firstActiveHref = getFirstTriggerHref(fixedTriggers, bundled);
 
   return {
     msTeams: msTeamsActive,
     slack: slackActive,
     email: emailActive,
     a2a: a2aActive,
+    bundled,
     firstActiveHref,
     isLoading:
       chatOpsLoading ||
+      bundledLoading ||
       featuresLoading ||
       emailLoading ||
       apiKeysLoading ||

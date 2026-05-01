@@ -8,7 +8,10 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "tsx src/bot.ts"
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/bot.js",
+    "dev": "tsx src/bot.ts",
+    "type-check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.0",
@@ -20,6 +23,6 @@
     "@types/node": "^25.6.0",
     "@types/qrcode-terminal": "^0.12.2",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "catalog:"
   }
 }

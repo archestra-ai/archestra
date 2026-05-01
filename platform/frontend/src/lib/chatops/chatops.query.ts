@@ -8,6 +8,9 @@ import {
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
+export type BundledChatOpsAdapter =
+  archestraApiTypes.ListBundledChatOpsAdaptersResponses["200"]["adapters"][number];
+
 export function useChatOpsStatus() {
   return useQuery({
     queryKey: ["chatops", "status"],
@@ -18,6 +21,20 @@ export function useChatOpsStatus() {
         return null;
       }
       return data?.providers || [];
+    },
+  });
+}
+
+export function useBundledChatOpsAdapters() {
+  return useQuery({
+    queryKey: ["chatops", "bundled-adapters"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.listBundledChatOpsAdapters();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.adapters || [];
     },
   });
 }
@@ -156,6 +173,30 @@ export function useRefreshChatOpsChannelDiscovery() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
+export function useStartBundledChatOpsAdapter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      adapterId: archestraApiTypes.StartBundledChatOpsAdapterData["path"]["adapterId"],
+    ) => {
+      const { data, error } = await archestraApiSdk.startBundledChatOpsAdapter({
+        path: { adapterId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success(`${data.displayName} started`);
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bundled-adapters"] });
     },
   });
 }

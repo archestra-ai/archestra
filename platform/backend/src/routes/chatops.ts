@@ -14,6 +14,7 @@ import {
   buildWelcomeMessage,
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
+import { bundledGenericAdapterRuntimeManager } from "@/agents/chatops/bundled-generic-adapter-runtime-manager";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
@@ -34,6 +35,10 @@ import {
 } from "@/models";
 import {
   ApiError,
+  type BundledChatOpsAdapterId,
+  BundledChatOpsAdapterIdSchema,
+  BundledChatOpsAdapterListResponseSchema,
+  BundledChatOpsAdapterSummarySchema,
   type ChatOpsConnectionMode,
   ChatOpsConnectionModeSchema,
   type ChatOpsProvider,
@@ -501,7 +506,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     .sendActivity(
                       `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
                     )
-                    .catch(() => {});
+                    .catch(() => { });
                 }
               }
 
@@ -519,7 +524,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             // Refresh names + discover channels in parallel (must await — TurnContext proxy is revoked after callback returns)
             await Promise.all([
-              refreshBindingNames(context, binding, message).catch(() => {}),
+              refreshBindingNames(context, binding, message).catch(() => { }),
               awaitDiscovery(provider, context),
             ]);
 
@@ -904,6 +909,47 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send({ providers });
+    },
+  );
+
+  fastify.get(
+    "/api/chatops/generic/builtin-adapters",
+    {
+      schema: {
+        operationId: RouteId.ListBundledChatOpsAdapters,
+        description: "List bundled ChatOps adapters and their runtime state",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          BundledChatOpsAdapterListResponseSchema,
+        ),
+      },
+    },
+    async (_, reply) => {
+      return reply.send({
+        adapters: bundledGenericAdapterRuntimeManager.listSummaries(),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/chatops/generic/builtin-adapters/:adapterId/start",
+    {
+      schema: {
+        operationId: RouteId.StartBundledChatOpsAdapter,
+        description: "Start a bundled ChatOps adapter process",
+        tags: ["ChatOps"],
+        params: z.object({
+          adapterId: BundledChatOpsAdapterIdSchema,
+        }),
+        response: constructResponseSchema(BundledChatOpsAdapterSummarySchema),
+      },
+    },
+    async (request, reply) => {
+      const adapter = await bundledGenericAdapterRuntimeManager.startAdapter(
+        request.params.adapterId as BundledChatOpsAdapterId,
+      );
+
+      return reply.send(adapter);
     },
   );
 
@@ -1461,9 +1507,9 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
         dmInfo:
           provider?.getBotUserId() || provider?.getWorkspaceId()
             ? {
-                botUserId: provider.getBotUserId() ?? undefined,
-                teamId: provider.getWorkspaceId() ?? undefined,
-              }
+              botUserId: provider.getBotUserId() ?? undefined,
+              teamId: provider.getWorkspaceId() ?? undefined,
+            }
             : undefined,
       };
     }
@@ -1545,11 +1591,11 @@ async function handleAgentSelection(
 ): Promise<void> {
   const value = context.activity.value as
     | {
-        agentId?: string;
-        channelId?: string;
-        workspaceId?: string;
-        originalMessageText?: string;
-      }
+      agentId?: string;
+      channelId?: string;
+      workspaceId?: string;
+      originalMessageText?: string;
+    }
     | undefined;
   const { agentId, channelId, workspaceId, originalMessageText } = value || {};
 
@@ -1676,7 +1722,7 @@ async function handleAgentSelection(
   } else {
     await context.sendActivity(
       `Agent **${agent.name}** is now assigned to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
-        "Send a message (with @mention) to start interacting!",
+      "Send a message (with @mention) to start interacting!",
     );
   }
 }
@@ -1761,10 +1807,10 @@ async function resolveAndVerifySenderForMSTeams(
         await context
           .sendActivity(
             `Hey there 👋 We created an Archestra user for you (${message.senderEmail}). ` +
-              `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
-              `[Open DM with me](${dmDeepLink})`,
+            `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+            `[Open DM with me](${dmDeepLink})`,
           )
-          .catch(() => {});
+          .catch(() => { });
       }
 
       logger.info(
@@ -1886,7 +1932,7 @@ async function awaitDiscovery(
   });
   await chatOpsManager
     .discoverChannels({ provider, context, workspaceId, allWorkspaceIds })
-    .catch(() => {});
+    .catch(() => { });
 }
 
 /**

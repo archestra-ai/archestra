@@ -7,7 +7,9 @@ import { adminAuthFile, IS_CI } from "./consts";
 const projectNames = {
   setupAdmin: "setup-admin",
   setupUsers: "setup-users",
+  setupBasicUser: "setup-basic-user",
   setupTeams: "setup-teams",
+  chatPermissions: "chat-permissions",
   credentialsWithVault: "credentials-with-vault",
   quickstart: "quickstart",
   chromium: "chromium",
@@ -25,7 +27,9 @@ const testPatterns = {
   // Setup files
   adminSetup: /auth\.admin\.setup\.ts/,
   usersSetup: /auth\.users\.setup\.ts/,
+  basicUserSetup: /auth\.basic-user\.setup\.ts/,
   teamsSetup: /auth\.teams\.setup\.ts/,
+  chatPermissions: "**/chat-permissions.spec.ts",
   quickstart: "**/quickstart.spec.ts",
   // Special test files that need isolated execution
   credentialsWithVault: "**/credentials-with-vault.ee.spec.ts",
@@ -37,12 +41,12 @@ const testPatterns = {
 
 const uiTestMatch = [
   "**/agents.spec.ts",
+  "**/bundled-triggers.spec.ts",
   "**/auth-origin.spec.ts",
   "**/auth-redirect.spec.ts",
   "**/auth.spec.ts",
   "**/chat-auth-required.spec.ts",
   "**/chat-localstorage.spec.ts",
-  "**/chat-permissions.spec.ts",
   "**/chat.spec.ts",
   "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",
@@ -84,6 +88,7 @@ const quickstartTestMatch = [
  * These tests run in their own dedicated projects for isolation.
  */
 const browserTestIgnore = [
+  testPatterns.chatPermissions,
   testPatterns.credentialsWithVault,
   testPatterns.identityProviders,
   testPatterns.quickstart,
@@ -156,11 +161,27 @@ export default defineConfig({
       dependencies: [projectNames.setupAdmin],
     },
     {
+      name: projectNames.setupBasicUser,
+      testMatch: testPatterns.basicUserSetup,
+      testDir: "./",
+      dependencies: [projectNames.setupAdmin],
+    },
+    {
       name: projectNames.setupTeams,
       testMatch: testPatterns.teamsSetup,
       testDir: "./",
       // Teams setup needs users to be created first
       dependencies: [projectNames.setupUsers],
+    },
+    {
+      name: projectNames.chatPermissions,
+      testDir: "./tests",
+      testMatch: testPatterns.chatPermissions,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: [projectNames.setupBasicUser],
     },
     // Vault integration tests - tests BYOS (Bring Your Own Secrets) with HashiCorp Vault
     // Note: This test file manages its own secrets manager state (switches to Vault, then back to DB)

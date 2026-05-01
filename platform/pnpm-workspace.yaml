@@ -3,6 +3,7 @@ packages:
   - "frontend"
   - "shared"
   - "e2e-tests"
+  - "integrations/chatops/*"
 
 catalog:
   typescript: ^6.0.2

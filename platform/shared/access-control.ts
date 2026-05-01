@@ -188,11 +188,11 @@ export const adminPermissions: Record<Resource, Action[]> = {
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
-  {
-    [ADMIN_ROLE_NAME]: adminPermissions,
-    [EDITOR_ROLE_NAME]: editorPermissions,
-    [MEMBER_ROLE_NAME]: memberPermissions,
-  };
+{
+  [ADMIN_ROLE_NAME]: adminPermissions,
+  [EDITOR_ROLE_NAME]: editorPermissions,
+  [MEMBER_ROLE_NAME]: memberPermissions,
+};
 
 /**
  * Human-readable descriptions for each resource:action permission combination.
@@ -938,6 +938,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatOpsStatus]: {
     agentTrigger: ["read"],
   },
+  [RouteId.ListBundledChatOpsAdapters]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.StartBundledChatOpsAdapter]: {
+    agentTrigger: ["update"],
+  },
   [RouteId.ListChatOpsBindings]: {
     agentTrigger: ["read"],
   },
@@ -1047,6 +1053,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Agents
   "/agents": { agent: ["read"] },
   "/agents/triggers": { agentTrigger: ["read"] },
+  "/agents/triggers/[triggerId]": { agentTrigger: ["read"] },
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },

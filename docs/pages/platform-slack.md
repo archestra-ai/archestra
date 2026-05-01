@@ -1,7 +1,6 @@
 ---
 title: Slack
 category: Agents
-subcategory: Agent Triggers
 order: 4
 description: Connect Archestra agents to Slack channels
 lastUpdated: 2026-02-23

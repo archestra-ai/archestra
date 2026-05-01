@@ -392,7 +392,7 @@ function GenericAuthRow({
           ? `Team Token (${selectedTeamToken.team.name})`
           : selectedTeamToken.name
       : "Select token";
-  const selectedDescription = isPersonal
+  const _selectedDescription = isPersonal
     ? "The most secure option."
     : selectedTeamToken?.isOrganizationToken
       ? "To share org-wide"

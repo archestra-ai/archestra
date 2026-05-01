@@ -367,6 +367,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgent]: {},
   [RouteId.CreateAgent]: {},
+  [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.GetDefaultMcpGateway]: {

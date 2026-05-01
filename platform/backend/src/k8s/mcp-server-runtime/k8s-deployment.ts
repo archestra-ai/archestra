@@ -814,23 +814,7 @@ export default class K8sDeployment {
                 command: [localConfig.command],
               }
             : {}),
-          args: (localConfig.arguments || []).map((arg) => {
-            // Interpolate ${user_config.xxx} placeholders with actual values
-            // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
-            if (this.environmentValues || this.userConfigValues) {
-              return arg.replace(
-                /\$\{user_config\.([^}]+)\}/g,
-                (match, configKey) => {
-                  return (
-                    this.environmentValues?.[configKey] ||
-                    this.userConfigValues?.[configKey] ||
-                    match
-                  );
-                },
-              );
-            }
-            return arg;
-          }),
+          args: this.resolveArgs(localConfig.arguments || [], envVars),
           // For stdio-based MCP servers, we use stdin/stdout
           // For HTTP-based MCP servers, expose port instead
           ...(needsHttp
@@ -1142,27 +1126,13 @@ export default class K8sDeployment {
         container.command = [localConfig.command];
       }
 
-      if (localConfig.arguments && localConfig.arguments.length > 0) {
-        // Process arguments with placeholder replacement
-        const processedArgs = localConfig.arguments.map((arg) => {
-          if (this.environmentValues || this.userConfigValues) {
-            return arg.replace(
-              /\$\{user_config\.([^}]+)\}/g,
-              (match, configKey) => {
-                return (
-                  this.environmentValues?.[configKey] ||
-                  this.userConfigValues?.[configKey] ||
-                  match
-                );
-              },
-            );
-          }
-          return arg;
-        });
+      const sourceArgs =
+        container.args && container.args.length > 0
+          ? container.args
+          : localConfig.arguments;
 
-        if (!container.args || container.args.length === 0) {
-          container.args = processedArgs;
-        }
+      if (Array.isArray(sourceArgs) && sourceArgs.length > 0) {
+        container.args = this.resolveArgs(sourceArgs, envVars);
       }
     }
 
@@ -1384,6 +1354,47 @@ export default class K8sDeployment {
     });
 
     return { envVars: env, mountedSecrets };
+  }
+
+  /**
+   * Resolve placeholders inside MCP server argument strings:
+   *   1. ${user_config.xxx} — Archestra-specific config interpolation (existing).
+   *   2. ${VAR} / $VAR — POSIX-shell-style references to env vars defined for
+   *      the server. Lets users write `--token $MY_TOKEN` without wrapping the
+   *      command in `sh -c`.
+   */
+  private resolveArgs(args: string[], envVars: k8s.V1EnvVar[]): string[] {
+    const envMappings: Record<string, string> = {};
+
+    for (const envVar of envVars) {
+      if (envVar.value !== undefined) {
+        envMappings[envVar.name] = envVar.value;
+      }
+    }
+
+    return args.map((arg) => {
+      let result = arg;
+      if (this.environmentValues || this.userConfigValues) {
+        result = result.replace(
+          /\$\{user_config\.([^}]+)\}/g,
+          (match, configKey) => {
+            return (
+              this.environmentValues?.[configKey] ||
+              this.userConfigValues?.[configKey] ||
+              match
+            );
+          },
+        );
+      }
+      result = result
+        .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) =>
+          envMappings[name] != null ? envMappings[name] : match,
+        )
+        .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, name) =>
+          envMappings[name] != null ? envMappings[name] : match,
+        );
+      return result;
+    });
   }
 
   /**

@@ -513,6 +513,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Defense-in-depth: never allow cross-organization access, even for admins.
+      // Permissions are scoped to the current organizationId.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
       // Single DB query for all permission checks on this agent type
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
@@ -558,6 +564,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.findById(id, user.id, true);
 
       if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization exports, even for admins.
+      // Permissions are scoped to the current organizationId.
+      if (agent.organizationId !== organizationId) {
         throw new ApiError(404, "Agent not found");
       }
 

@@ -38740,16 +38740,29 @@
                       },
                       "scope": {
                         "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ],
                         "description": "Original scope; imports always default to personal"
                       },
                       "considerContextUntrusted": {
                         "type": "boolean"
                       },
                       "toolAssignmentMode": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "automatic",
+                          "manual"
+                        ]
                       },
                       "toolExposureMode": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "full",
+                          "search_and_run_only"
+                        ]
                       },
                       "llmModel": {
                         "nullable": true,
@@ -38760,7 +38773,12 @@
                         "type": "boolean"
                       },
                       "incomingEmailSecurityMode": {
-                        "type": "string"
+                        "type": "string",
+                        "enum": [
+                          "private",
+                          "internal",
+                          "public"
+                        ]
                       },
                       "incomingEmailAllowedDomain": {
                         "nullable": true,
@@ -38768,9 +38786,13 @@
                       },
                       "passthroughHeaders": {
                         "nullable": true,
+                        "maxItems": 20,
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[a-zA-Z0-9-]+$"
                         }
                       }
                     },
@@ -38787,8 +38809,7 @@
                       "llmModel",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
-                      "incomingEmailAllowedDomain",
-                      "passthroughHeaders"
+                      "incomingEmailAllowedDomain"
                     ]
                   },
                   "labels": {
@@ -38897,7 +38918,86 @@
                           "description": "Connector name"
                         },
                         "connectorType": {
-                          "type": "string",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "jira"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "confluence"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "github"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "gitlab"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "servicenow"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "notion"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "sharepoint"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "gdrive"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "dropbox"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "asana"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "linear"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "outline"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "salesforce"
+                              ]
+                            }
+                          ],
                           "description": "Connector type (e.g. confluence, github)"
                         }
                       },
@@ -41604,16 +41704,29 @@
                         },
                         "scope": {
                           "type": "string",
+                          "enum": [
+                            "personal",
+                            "team",
+                            "org"
+                          ],
                           "description": "Original scope; imports always default to personal"
                         },
                         "considerContextUntrusted": {
                           "type": "boolean"
                         },
                         "toolAssignmentMode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "manual"
+                          ]
                         },
                         "toolExposureMode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
                         },
                         "llmModel": {
                           "nullable": true,
@@ -41624,7 +41737,12 @@
                           "type": "boolean"
                         },
                         "incomingEmailSecurityMode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "private",
+                            "internal",
+                            "public"
+                          ]
                         },
                         "incomingEmailAllowedDomain": {
                           "nullable": true,
@@ -41632,10 +41750,9 @@
                         },
                         "passthroughHeaders": {
                           "nullable": true,
+                          "maxItems": 20,
                           "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                          "items": {}
                         }
                       },
                       "required": [
@@ -41651,8 +41768,7 @@
                         "llmModel",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
-                        "incomingEmailAllowedDomain",
-                        "passthroughHeaders"
+                        "incomingEmailAllowedDomain"
                       ],
                       "additionalProperties": false
                     },
@@ -41767,7 +41883,86 @@
                             "description": "Connector name"
                           },
                           "connectorType": {
-                            "type": "string",
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "jira"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "confluence"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "github"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "gitlab"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "servicenow"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "notion"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sharepoint"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "gdrive"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "dropbox"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "asana"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "linear"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "outline"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "salesforce"
+                                ]
+                              }
+                            ],
                             "description": "Connector type (e.g. confluence, github)"
                           }
                         },

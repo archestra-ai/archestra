@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -7,13 +8,17 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
+import {
+  assignToolToAgent,
+  validateAssignment,
+} from "@/services/agent-tool-assignment";
 import type { Agent } from "@/types";
+import { ApiError } from "@/types";
 import {
   type AgentExportPayload,
   AgentExportPayloadSchema,
   type ImportWarning,
 } from "@/types/agent-export";
-import type { ConnectorType } from "@/types/knowledge-connector";
 
 /**
  * Result of an agent import operation.
@@ -43,7 +48,8 @@ export async function importAgentFromPayload(
   // 1. Validate payload against schema
   const parsed = AgentExportPayloadSchema.safeParse(payload);
   if (!parsed.success) {
-    throw new Error(
+    throw new ApiError(
+      400,
       `Invalid import payload: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
     );
   }
@@ -51,7 +57,8 @@ export async function importAgentFromPayload(
 
   // 2. Version check
   if (data.version !== "1") {
-    throw new Error(
+    throw new ApiError(
+      400,
       `Unsupported import version "${data.version}". Only version "1" is supported.`,
     );
   }
@@ -69,10 +76,16 @@ export async function importAgentFromPayload(
     warnings,
   );
 
-  // 6. Resolve connectors (by name + type)
+  // 6. Resolve connectors (by name + type + user visibility)
+  const knowledgeSourceAccess =
+    await knowledgeSourceAccessControlService.buildAccessControlContext({
+      userId,
+      organizationId,
+    });
   const connectorIds = await resolveConnectors(
     data.connectors,
     organizationId,
+    knowledgeSourceAccess,
     warnings,
   );
 
@@ -86,20 +99,13 @@ export async function importAgentFromPayload(
       icon: data.agent.icon,
       scope: "personal", // Always personal on import
       considerContextUntrusted: data.agent.considerContextUntrusted,
-      toolAssignmentMode: data.agent.toolAssignmentMode as
-        | "automatic"
-        | "manual",
-      toolExposureMode: data.agent.toolExposureMode as
-        | "full"
-        | "search_and_run_only",
+      toolAssignmentMode: data.agent.toolAssignmentMode,
+      toolExposureMode: data.agent.toolExposureMode,
       llmModel: data.agent.llmModel,
       llmApiKeyId: null,
       identityProviderId: null,
       incomingEmailEnabled: data.agent.incomingEmailEnabled,
-      incomingEmailSecurityMode: data.agent.incomingEmailSecurityMode as
-        | "private"
-        | "internal"
-        | "public",
+      incomingEmailSecurityMode: data.agent.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: data.agent.incomingEmailAllowedDomain,
       passthroughHeaders: data.agent.passthroughHeaders,
       organizationId,
@@ -119,6 +125,7 @@ export async function importAgentFromPayload(
   await resolveAndAssignDelegations(
     data.delegations,
     agent.id,
+    userId,
     organizationId,
     warnings,
   );
@@ -198,12 +205,6 @@ async function resolveAndAssignTools(
 ): Promise<void> {
   if (toolRefs.length === 0) return;
 
-  const assignments: Array<{
-    agentId: string;
-    toolId: string;
-    credentialResolutionMode?: "static" | "dynamic" | "enterprise_managed";
-  }> = [];
-
   for (const ref of toolRefs) {
     const tool = await findToolByReference(ref);
 
@@ -219,23 +220,45 @@ async function resolveAndAssignTools(
       continue;
     }
 
-    assignments.push({
+    const validationError = await validateAssignment({
       agentId,
       toolId: tool.id,
-      ...(ref.credentialResolutionMode
-        ? { credentialResolutionMode: ref.credentialResolutionMode }
-        : {}),
+      credentialResolutionMode: ref.credentialResolutionMode,
     });
-  }
 
-  if (assignments.length > 0) {
+    if (validationError) {
+      warnings.push({
+        type: "tool",
+        name: ref.toolName,
+        message: `Tool "${ref.toolName}" could not be assigned: ${validationError.error.message}`,
+      });
+      continue;
+    }
+
     try {
-      await AgentToolModel.bulkCreate(assignments);
+      const result = await assignToolToAgent({
+        agentId,
+        toolId: tool.id,
+        credentialResolutionMode: ref.credentialResolutionMode,
+      });
+
+      if (result && result !== "duplicate" && result !== "updated") {
+        warnings.push({
+          type: "tool",
+          name: ref.toolName,
+          message: `Tool "${ref.toolName}" could not be assigned: ${result.error.message}`,
+        });
+      }
     } catch (error) {
       logger.warn(
-        { agentId, error: String(error) },
-        "Failed to bulk-create tool assignments during import",
+        { agentId, toolName: ref.toolName, error: String(error) },
+        "Failed to assign tool during import",
       );
+      warnings.push({
+        type: "tool",
+        name: ref.toolName,
+        message: `Tool "${ref.toolName}" could not be assigned due to an unexpected error.`,
+      });
     }
   }
 }
@@ -291,6 +314,7 @@ async function findToolByReference(ref: {
 async function resolveAndAssignDelegations(
   delegationRefs: AgentExportPayload["delegations"],
   agentId: string,
+  userId: string,
   organizationId: string,
   warnings: ImportWarning[],
 ): Promise<void> {
@@ -314,6 +338,22 @@ async function resolveAndAssignDelegations(
         type: "delegation",
         name: ref.targetAgentName,
         message: `Delegation target agent "${ref.targetAgentName}" not found in this organization. Create it first, then add the delegation manually.`,
+      });
+      continue;
+    }
+
+    // Enforce delegation visibility for non-admin users by using the same
+    // team-filtered agent lookup pattern used in other routes.
+    const accessibleTarget = await AgentModel.findById(
+      targetAgent.id,
+      userId,
+      false,
+    );
+    if (!accessibleTarget) {
+      warnings.push({
+        type: "delegation",
+        name: ref.targetAgentName,
+        message: `Delegation target agent "${ref.targetAgentName}" is not accessible to the importing user.`,
       });
       continue;
     }
@@ -367,6 +407,11 @@ async function resolveKnowledgeBases(
 async function resolveConnectors(
   connectorRefs: AgentExportPayload["connectors"],
   organizationId: string,
+  access: Awaited<
+    ReturnType<
+      typeof knowledgeSourceAccessControlService.buildAccessControlContext
+    >
+  >,
   warnings: ImportWarning[],
 ): Promise<string[]> {
   if (connectorRefs.length === 0) return [];
@@ -376,7 +421,7 @@ async function resolveConnectors(
   for (const ref of connectorRefs) {
     const connector = await KnowledgeBaseConnectorModel.findByNameAndType(
       ref.name,
-      ref.connectorType as ConnectorType,
+      ref.connectorType,
       organizationId,
     );
 
@@ -385,6 +430,17 @@ async function resolveConnectors(
         type: "connector",
         name: ref.name,
         message: `Connector "${ref.name}" (type: ${ref.connectorType}) not found in this organization. Configure it first, then assign it to the agent manually.`,
+      });
+      continue;
+    }
+
+    if (
+      !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
+    ) {
+      warnings.push({
+        type: "connector",
+        name: ref.name,
+        message: `Connector "${ref.name}" (type: ${ref.connectorType}) is not accessible to the importing user.`,
       });
       continue;
     }

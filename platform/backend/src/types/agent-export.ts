@@ -1,6 +1,14 @@
+import { IncomingEmailSecurityModeSchema } from "@shared";
 import { z } from "zod";
-import { SelectAgentSchema } from "./agent";
+import {
+  AgentScopeSchema,
+  PassthroughHeadersSchema,
+  SelectAgentSchema,
+  ToolAssignmentModeSchema,
+  ToolExposureModeSchema,
+} from "./agent";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
+import { ConnectorTypeSchema } from "./knowledge-connector";
 
 /**
  * Agent Export/Import JSON schema — version 1.
@@ -35,9 +43,9 @@ const ExportKnowledgeBaseReferenceSchema = z.object({
 
 const ExportConnectorReferenceSchema = z.object({
   name: z.string().describe("Connector name"),
-  connectorType: z
-    .string()
-    .describe("Connector type (e.g. confluence, github)"),
+  connectorType: ConnectorTypeSchema.describe(
+    "Connector type (e.g. confluence, github)",
+  ),
 });
 
 const ExportLabelSchema = z.object({
@@ -58,20 +66,20 @@ const ExportAgentConfigSchema = z.object({
   description: z.string().nullable(),
   systemPrompt: z.string().nullable(),
   icon: z.string().nullable(),
-  scope: z
-    .string()
-    .describe("Original scope; imports always default to personal"),
+  scope: AgentScopeSchema.describe(
+    "Original scope; imports always default to personal",
+  ),
   considerContextUntrusted: z.boolean(),
-  toolAssignmentMode: z.string(),
-  toolExposureMode: z.string(),
+  toolAssignmentMode: ToolAssignmentModeSchema,
+  toolExposureMode: ToolExposureModeSchema,
   llmModel: z
     .string()
     .nullable()
     .describe("Informational; not auto-configured on import"),
   incomingEmailEnabled: z.boolean(),
-  incomingEmailSecurityMode: z.string(),
+  incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   incomingEmailAllowedDomain: z.string().nullable(),
-  passthroughHeaders: z.array(z.string()).nullable(),
+  passthroughHeaders: PassthroughHeadersSchema,
 });
 
 // -- Top-level export payload --

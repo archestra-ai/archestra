@@ -39,7 +39,12 @@ type ParsedPayload = archestraApiTypes.ImportAgentData["body"];
 type ImportState =
   | { status: "idle" }
   | { status: "parsed"; payload: ParsedPayload; fileName: string | null }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string }
+  | {
+      status: "imported";
+      agent: { id: string; name: string };
+      warnings: Array<{ type: string; name: string; message: string }>;
+    };
 
 export function ImportAgentDialog({
   open,
@@ -188,18 +193,35 @@ export function ImportAgentDialog({
   const handleImport = useCallback(() => {
     if (state.status !== "parsed") return;
 
-    handleOpenChange(false);
-
     importMutation.mutate(state.payload, {
       onSuccess: (result) => {
-        if (!result) return;
+        if (!result) {
+          setState({
+            status: "error",
+            message: "Import failed. Please try again.",
+          });
+          return;
+        }
+
+        setState({
+          status: "imported",
+          agent: { id: result.agent.id, name: result.agent.name },
+          warnings: result.warnings,
+        });
+
         onSuccess?.(
           { id: result.agent.id, name: result.agent.name },
           result.warnings.length,
         );
       },
+      onError: () => {
+        setState({
+          status: "error",
+          message: "Import failed. Please try again.",
+        });
+      },
     });
-  }, [state, importMutation, onSuccess, handleOpenChange]);
+  }, [state, importMutation, onSuccess]);
 
   return (
     <FormDialog
@@ -523,6 +545,46 @@ export function ImportAgentDialog({
               </p>
             </div>
           )}
+
+          {/* Imported state */}
+          {state.status === "imported" && (
+            <div className="space-y-4">
+              <Alert variant="info">
+                <Bot className="h-4 w-4" />
+                <AlertTitle>Import Complete</AlertTitle>
+                <AlertDescription>
+                  <span className="block text-sm">
+                    Imported agent: <strong>{state.agent.name}</strong>
+                  </span>
+                </AlertDescription>
+              </Alert>
+
+              {state.warnings.length > 0 && (
+                <Alert variant="warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Imported with warnings</AlertTitle>
+                  <AlertDescription>
+                    <div className="mt-2 space-y-1">
+                      {state.warnings.slice(0, 5).map((w) => (
+                        <div key={`${w.type}-${w.name}`} className="text-sm">
+                          {w.message}
+                        </div>
+                      ))}
+                      {state.warnings.length > 5 && (
+                        <div className="text-xs text-muted-foreground">
+                          + {state.warnings.length - 5} more
+                        </div>
+                      )}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                You can now close this dialog.
+              </p>
+            </div>
+          )}
         </div>
       </DialogBody>
 
@@ -533,12 +595,18 @@ export function ImportAgentDialog({
             onClick={() => {
               if (state.status === "parsed") {
                 resetState();
+              } else if (state.status === "imported") {
+                handleOpenChange(false);
               } else {
                 handleOpenChange(false);
               }
             }}
           >
-            {state.status === "parsed" ? "Back" : "Cancel"}
+            {state.status === "parsed"
+              ? "Back"
+              : state.status === "imported"
+                ? "Done"
+                : "Cancel"}
           </Button>
           {inputMode === "paste" &&
             (state.status === "idle" || state.status === "error") && (
@@ -550,8 +618,8 @@ export function ImportAgentDialog({
               </Button>
             )}
           {state.status === "parsed" && (
-            <Button onClick={handleImport} disabled={state.status !== "parsed"}>
-              Import Agent
+            <Button onClick={handleImport} disabled={importMutation.isPending}>
+              {importMutation.isPending ? "Importing..." : "Import Agent"}
             </Button>
           )}
         </div>

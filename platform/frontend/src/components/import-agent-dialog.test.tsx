@@ -271,6 +271,15 @@ describe("ImportAgentDialog", () => {
     await user.click(screen.getByRole("button", { name: /import agent/i }));
 
     expect(mutate).toHaveBeenCalledOnce();
+    // Dialog stays open to show success state
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    await waitFor(() => {
+      expect(screen.getByText(/import complete/i)).toBeInTheDocument();
+    });
+
+    // Done closes the dialog
+    await user.click(screen.getByRole("button", { name: /done/i }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

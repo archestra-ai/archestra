@@ -11565,18 +11565,18 @@ export type ImportAgentData = {
             /**
              * Original scope; imports always default to personal
              */
-            scope: string;
+            scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
-            toolAssignmentMode: string;
-            toolExposureMode: string;
+            toolAssignmentMode: 'automatic' | 'manual';
+            toolExposureMode: 'full' | 'search_and_run_only';
             /**
              * Informational; not auto-configured on import
              */
             llmModel: string | null;
             incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: string;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
-            passthroughHeaders: Array<string> | null;
+            passthroughHeaders?: Array<string> | null;
         };
         labels: Array<{
             key: string;
@@ -11620,7 +11620,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: string;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         }>;
     };
     path?: never;
@@ -12356,18 +12356,18 @@ export type ExportAgentResponses = {
             /**
              * Original scope; imports always default to personal
              */
-            scope: string;
+            scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
-            toolAssignmentMode: string;
-            toolExposureMode: string;
+            toolAssignmentMode: 'automatic' | 'manual';
+            toolExposureMode: 'full' | 'search_and_run_only';
             /**
              * Informational; not auto-configured on import
              */
             llmModel: string | null;
             incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: string;
+            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
-            passthroughHeaders: Array<string> | null;
+            passthroughHeaders?: Array<unknown> | null;
         };
         labels: Array<{
             key: string;
@@ -12411,7 +12411,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: string;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'asana' | 'linear' | 'outline' | 'salesforce';
         }>;
     };
 };

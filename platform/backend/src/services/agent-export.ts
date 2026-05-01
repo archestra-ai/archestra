@@ -24,8 +24,11 @@ export async function serializeAgentForExport(
   ] = await Promise.all([
     resolveToolReferences(agent),
     resolveDelegationReferences(agent),
-    resolveKnowledgeBaseReferences(agent.knowledgeBaseIds),
-    resolveConnectorReferences(agent.connectorIds),
+    resolveKnowledgeBaseReferences(
+      agent.knowledgeBaseIds,
+      agent.organizationId,
+    ),
+    resolveConnectorReferences(agent.connectorIds, agent.organizationId),
   ]);
 
   return {
@@ -157,7 +160,12 @@ async function resolveDelegationReferences(
       name: schema.agentsTable.name,
     })
     .from(schema.agentsTable)
-    .where(inArray(schema.agentsTable.id, targetAgentIds));
+    .where(
+      and(
+        inArray(schema.agentsTable.id, targetAgentIds),
+        eq(schema.agentsTable.organizationId, agent.organizationId),
+      ),
+    );
 
   const nameMap = new Map(agents.map((a) => [a.id, a.name]));
 
@@ -178,6 +186,7 @@ async function resolveDelegationReferences(
  */
 async function resolveKnowledgeBaseReferences(
   knowledgeBaseIds: string[],
+  organizationId?: string,
 ): Promise<AgentExportPayload["knowledgeBases"]> {
   if (knowledgeBaseIds.length === 0) return [];
 
@@ -187,7 +196,14 @@ async function resolveKnowledgeBaseReferences(
       name: schema.knowledgeBasesTable.name,
     })
     .from(schema.knowledgeBasesTable)
-    .where(inArray(schema.knowledgeBasesTable.id, knowledgeBaseIds));
+    .where(
+      and(
+        inArray(schema.knowledgeBasesTable.id, knowledgeBaseIds),
+        ...(organizationId
+          ? [eq(schema.knowledgeBasesTable.organizationId, organizationId)]
+          : []),
+      ),
+    );
 
   return kbs.map((kb) => ({ name: kb.name }));
 }
@@ -197,6 +213,7 @@ async function resolveKnowledgeBaseReferences(
  */
 async function resolveConnectorReferences(
   connectorIds: string[],
+  organizationId?: string,
 ): Promise<AgentExportPayload["connectors"]> {
   if (connectorIds.length === 0) return [];
 
@@ -207,7 +224,19 @@ async function resolveConnectorReferences(
       connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
     })
     .from(schema.knowledgeBaseConnectorsTable)
-    .where(inArray(schema.knowledgeBaseConnectorsTable.id, connectorIds));
+    .where(
+      and(
+        inArray(schema.knowledgeBaseConnectorsTable.id, connectorIds),
+        ...(organizationId
+          ? [
+              eq(
+                schema.knowledgeBaseConnectorsTable.organizationId,
+                organizationId,
+              ),
+            ]
+          : []),
+      ),
+    );
 
   return connectors.map((c) => ({
     name: c.name,

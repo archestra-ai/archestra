@@ -407,6 +407,10 @@ export const RouteId = {
   GetChatOpsStatus: "getChatOpsStatus",
   ListBundledChatOpsAdapters: "listBundledChatOpsAdapters",
   StartBundledChatOpsAdapter: "startBundledChatOpsAdapter",
+  StopBundledChatOpsAdapter: "stopBundledChatOpsAdapter",
+  GetBundledChatOpsAdapterConnectionPage:
+    "getBundledChatOpsAdapterConnectionPage",
+  UnlinkBundledChatOpsAdapter: "unlinkBundledChatOpsAdapter",
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",
   UpdateChatOpsBinding: "updateChatOpsBinding",

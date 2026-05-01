@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Bot, LoaderCircle, Play } from "lucide-react";
+import { AlertTriangle, Bot, LoaderCircle, Play, Square } from "lucide-react";
 import { useParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -15,6 +15,7 @@ import {
 import {
     useBundledChatOpsAdapters,
     useStartBundledChatOpsAdapter,
+    useStopBundledChatOpsAdapter,
 } from "@/lib/chatops/chatops.query";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +53,7 @@ export default function BundledTriggerPage() {
 
     const { data: bundledAdapters, isLoading } = useBundledChatOpsAdapters();
     const startMutation = useStartBundledChatOpsAdapter();
+    const stopMutation = useStopBundledChatOpsAdapter();
 
     const adapter = bundledAdapters?.find((item) => item.adapterId === triggerId);
 
@@ -94,6 +96,7 @@ export default function BundledTriggerPage() {
     const statusCopy = getStatusCopy(adapter.status, adapter.errorMessage);
     const isRunning = adapter.status === "running";
     const isStarting = adapter.status === "starting";
+    const showConnectionPage = isRunning && adapter.hasConnectionPage;
 
     return (
         <div className="flex flex-col gap-4">
@@ -109,22 +112,48 @@ export default function BundledTriggerPage() {
                         </div>
                     </div>
                     <CardAction>
-                        <PermissionButton
-                            data-testid="bundled-trigger-start-button"
-                            permissions={{ agentTrigger: ["update"] }}
-                            size="sm"
-                            disabled={isRunning || isStarting || startMutation.isPending}
-                            onClick={() => {
-                                void startMutation.mutateAsync(adapter.adapterId);
-                            }}
-                        >
-                            <Play className="mr-1 h-4 w-4" />
-                            {isRunning
-                                ? "Running"
-                                : isStarting || startMutation.isPending
-                                    ? "Starting..."
-                                    : "Start"}
-                        </PermissionButton>
+                        <div className="flex items-center gap-2">
+                            {!isRunning && !isStarting && (
+                                <PermissionButton
+                                    data-testid="bundled-trigger-start-button"
+                                    permissions={{ agentTrigger: ["update"] }}
+                                    size="sm"
+                                    disabled={startMutation.isPending}
+                                    onClick={() => {
+                                        void startMutation.mutateAsync(adapter.adapterId);
+                                    }}
+                                >
+                                    <Play className="mr-1 h-4 w-4" />
+                                    {startMutation.isPending ? "Starting..." : "Start"}
+                                </PermissionButton>
+                            )}
+                            {isRunning && (
+                                <PermissionButton
+                                    data-testid="bundled-trigger-stop-button"
+                                    permissions={{ agentTrigger: ["update"] }}
+                                    variant="destructive"
+                                    size="sm"
+                                    disabled={stopMutation.isPending}
+                                    onClick={() => {
+                                        void stopMutation.mutateAsync(adapter.adapterId);
+                                    }}
+                                >
+                                    <Square className="mr-1 h-4 w-4" />
+                                    {stopMutation.isPending ? "Stopping..." : "Stop"}
+                                </PermissionButton>
+                            )}
+                            {isStarting && (
+                                <PermissionButton
+                                    data-testid="bundled-trigger-start-button"
+                                    permissions={{ agentTrigger: ["update"] }}
+                                    size="sm"
+                                    disabled
+                                >
+                                    <LoaderCircle className="mr-1 h-4 w-4 animate-spin" />
+                                    Starting...
+                                </PermissionButton>
+                            )}
+                        </div>
                     </CardAction>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -149,6 +178,19 @@ export default function BundledTriggerPage() {
                     <p className="text-sm text-muted-foreground">{statusCopy}</p>
                 </CardContent>
             </Card>
+
+            {showConnectionPage && (
+                <Card data-testid="bundled-trigger-connection-page" className="max-w-3xl">
+                    <CardContent className="p-4">
+                        <iframe
+                            src={`/api/chatops/generic/builtin-adapters/${adapter.adapterId}/connection-page`}
+                            title={`${adapter.displayName} Connection Page`}
+                            className="w-full rounded-md border"
+                            style={{ height: 500, border: "1px solid hsl(var(--border))" }}
+                        />
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }

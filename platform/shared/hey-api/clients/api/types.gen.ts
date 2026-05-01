@@ -20504,6 +20504,7 @@ export type ListBundledChatOpsAdaptersResponses = {
             lastStartedAt: string | null;
             lastExitAt: string | null;
             errorMessage: string | null;
+            hasConnectionPage: boolean;
         }>;
     };
 };
@@ -20597,10 +20598,137 @@ export type StartBundledChatOpsAdapterResponses = {
         lastStartedAt: string | null;
         lastExitAt: string | null;
         errorMessage: string | null;
+        hasConnectionPage: boolean;
     };
 };
 
 export type StartBundledChatOpsAdapterResponse = StartBundledChatOpsAdapterResponses[keyof StartBundledChatOpsAdapterResponses];
+
+export type StopBundledChatOpsAdapterData = {
+    body?: never;
+    path: {
+        adapterId: 'whatsapp';
+    };
+    query?: never;
+    url: '/api/chatops/generic/builtin-adapters/{adapterId}/stop';
+};
+
+export type StopBundledChatOpsAdapterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StopBundledChatOpsAdapterError = StopBundledChatOpsAdapterErrors[keyof StopBundledChatOpsAdapterErrors];
+
+export type StopBundledChatOpsAdapterResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        adapterId: 'whatsapp';
+        displayName: string;
+        description: string;
+        status: 'stopped' | 'starting' | 'running' | 'error';
+        pid: number | null;
+        lastStartedAt: string | null;
+        lastExitAt: string | null;
+        errorMessage: string | null;
+        hasConnectionPage: boolean;
+    };
+};
+
+export type StopBundledChatOpsAdapterResponse = StopBundledChatOpsAdapterResponses[keyof StopBundledChatOpsAdapterResponses];
+
+export type GetBundledChatOpsAdapterConnectionPageData = {
+    body?: never;
+    path: {
+        adapterId: 'whatsapp';
+    };
+    query?: never;
+    url: '/api/chatops/generic/builtin-adapters/{adapterId}/connection-page';
+};
+
+export type GetBundledChatOpsAdapterConnectionPageResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetBundledChatOpsAdapterConnectionPage2Data = {
+    body?: never;
+    path: {
+        adapterId: 'whatsapp';
+        '*': string;
+    };
+    query?: never;
+    url: '/api/chatops/generic/builtin-adapters/{adapterId}/connection-page/{*}';
+};
+
+export type GetBundledChatOpsAdapterConnectionPage2Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type ListChatOpsBindingsData = {
     body?: never;

@@ -188,11 +188,11 @@ export const adminPermissions: Record<Resource, Action[]> = {
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
-{
-  [ADMIN_ROLE_NAME]: adminPermissions,
-  [EDITOR_ROLE_NAME]: editorPermissions,
-  [MEMBER_ROLE_NAME]: memberPermissions,
-};
+  {
+    [ADMIN_ROLE_NAME]: adminPermissions,
+    [EDITOR_ROLE_NAME]: editorPermissions,
+    [MEMBER_ROLE_NAME]: memberPermissions,
+  };
 
 /**
  * Human-readable descriptions for each resource:action permission combination.
@@ -942,6 +942,15 @@ export const requiredEndpointPermissionsMap: Partial<
     agentTrigger: ["read"],
   },
   [RouteId.StartBundledChatOpsAdapter]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.StopBundledChatOpsAdapter]: {
+    agentTrigger: ["update"],
+  },
+  [RouteId.GetBundledChatOpsAdapterConnectionPage]: {
+    agentTrigger: ["read"],
+  },
+  [RouteId.UnlinkBundledChatOpsAdapter]: {
     agentTrigger: ["update"],
   },
   [RouteId.ListChatOpsBindings]: {

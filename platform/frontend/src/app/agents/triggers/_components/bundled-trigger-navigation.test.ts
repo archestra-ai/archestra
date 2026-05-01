@@ -16,6 +16,7 @@ describe("bundled trigger navigation", () => {
                 lastStartedAt: "2026-05-01T12:00:00.000Z",
                 lastExitAt: null,
                 errorMessage: null,
+                hasConnectionPage: true,
             },
         ]);
 

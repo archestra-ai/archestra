@@ -17,10 +17,12 @@
     "@hapi/boom": "^10.0.0",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
     "pino": "^9.0.0",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "@types/qrcode": "^1.5.5",
     "@types/qrcode-terminal": "^0.12.2",
     "tsx": "^4.21.0",
     "typescript": "catalog:"

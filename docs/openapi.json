@@ -70880,6 +70880,9 @@
                           "errorMessage": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "hasConnectionPage": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -70890,7 +70893,8 @@
                           "pid",
                           "lastStartedAt",
                           "lastExitAt",
-                          "errorMessage"
+                          "errorMessage",
+                          "hasConnectionPage"
                         ],
                         "additionalProperties": false
                       }
@@ -71211,6 +71215,9 @@
                     "errorMessage": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "hasConnectionPage": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -71221,7 +71228,8 @@
                     "pid",
                     "lastStartedAt",
                     "lastExitAt",
-                    "errorMessage"
+                    "errorMessage",
+                    "hasConnectionPage"
                   ],
                   "additionalProperties": false
                 }
@@ -71461,6 +71469,408 @@
           "kind": "static",
           "permissions": [
             "agentTrigger:update"
+          ]
+        }
+      }
+    },
+    "/api/chatops/generic/builtin-adapters/{adapterId}/stop": {
+      "post": {
+        "operationId": "stopBundledChatOpsAdapter",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Stop a bundled ChatOps adapter process\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "whatsapp"
+              ]
+            },
+            "in": "path",
+            "name": "adapterId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "adapterId": {
+                      "type": "string",
+                      "enum": [
+                        "whatsapp"
+                      ]
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "stopped",
+                        "starting",
+                        "running",
+                        "error"
+                      ]
+                    },
+                    "pid": {
+                      "nullable": true,
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "lastStartedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "lastExitAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "errorMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "hasConnectionPage": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "adapterId",
+                    "displayName",
+                    "description",
+                    "status",
+                    "pid",
+                    "lastStartedAt",
+                    "lastExitAt",
+                    "errorMessage",
+                    "hasConnectionPage"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentTrigger:update"
+          ]
+        }
+      }
+    },
+    "/api/chatops/generic/builtin-adapters/{adapterId}/connection-page": {
+      "get": {
+        "operationId": "getBundledChatOpsAdapterConnectionPage",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Proxy connection page from a bundled ChatOps adapter\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "whatsapp"
+              ]
+            },
+            "in": "path",
+            "name": "adapterId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentTrigger:read"
+          ]
+        }
+      }
+    },
+    "/api/chatops/generic/builtin-adapters/{adapterId}/connection-page/{*}": {
+      "get": {
+        "operationId": "getBundledChatOpsAdapterConnectionPage",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Proxy connection page sub-requests from a bundled ChatOps adapter\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "whatsapp"
+              ]
+            },
+            "in": "path",
+            "name": "adapterId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentTrigger:read"
           ]
         }
       }

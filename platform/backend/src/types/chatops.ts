@@ -38,6 +38,7 @@ export const BundledChatOpsAdapterSummarySchema = z.object({
   lastStartedAt: z.string().datetime().nullable(),
   lastExitAt: z.string().datetime().nullable(),
   errorMessage: z.string().nullable(),
+  hasConnectionPage: z.boolean(),
 });
 export type BundledChatOpsAdapterSummary = z.infer<
   typeof BundledChatOpsAdapterSummarySchema

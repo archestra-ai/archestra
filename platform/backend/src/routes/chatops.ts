@@ -506,7 +506,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     .sendActivity(
                       `${welcome.text}\n\n[${welcome.actionLabel}](${welcome.actionUrl})`,
                     )
-                    .catch(() => { });
+                    .catch(() => {});
                 }
               }
 
@@ -524,7 +524,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             // Refresh names + discover channels in parallel (must await — TurnContext proxy is revoked after callback returns)
             await Promise.all([
-              refreshBindingNames(context, binding, message).catch(() => { }),
+              refreshBindingNames(context, binding, message).catch(() => {}),
               awaitDiscovery(provider, context),
             ]);
 
@@ -950,6 +950,157 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(adapter);
+    },
+  );
+
+  fastify.post(
+    "/api/chatops/generic/builtin-adapters/:adapterId/stop",
+    {
+      schema: {
+        operationId: RouteId.StopBundledChatOpsAdapter,
+        description: "Stop a bundled ChatOps adapter process",
+        tags: ["ChatOps"],
+        params: z.object({
+          adapterId: BundledChatOpsAdapterIdSchema,
+        }),
+        response: constructResponseSchema(BundledChatOpsAdapterSummarySchema),
+      },
+    },
+    async (request, reply) => {
+      const adapter = await bundledGenericAdapterRuntimeManager.stopAdapter(
+        request.params.adapterId as BundledChatOpsAdapterId,
+      );
+
+      return reply.send(adapter);
+    },
+  );
+
+  fastify.get(
+    "/api/chatops/generic/builtin-adapters/:adapterId/connection-page",
+    {
+      schema: {
+        operationId: RouteId.GetBundledChatOpsAdapterConnectionPage,
+        description: "Proxy connection page from a bundled ChatOps adapter",
+        tags: ["ChatOps"],
+        params: z.object({
+          adapterId: BundledChatOpsAdapterIdSchema,
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { adapterId } = request.params as {
+        adapterId: BundledChatOpsAdapterId;
+      };
+
+      const connectionPageConfig =
+        bundledGenericAdapterRuntimeManager.getConnectionPageConfig(adapterId);
+
+      if (!connectionPageConfig) {
+        throw new ApiError(
+          404,
+          `Bundled adapter ${adapterId} does not have a connection page.`,
+        );
+      }
+
+      const summary = bundledGenericAdapterRuntimeManager.getSummary(adapterId);
+      if (summary.status !== "running") {
+        throw new ApiError(
+          503,
+          `Bundled adapter ${adapterId} is not running (status: ${summary.status}).`,
+        );
+      }
+
+      let upstream: Response;
+      try {
+        upstream = await fetch(
+          `http://localhost:${connectionPageConfig.port}/`,
+          { signal: AbortSignal.timeout(5000) },
+        );
+      } catch {
+        throw new ApiError(
+          503,
+          `Bundled adapter ${adapterId} connection page is not ready yet.`,
+        );
+      }
+
+      const body = await upstream.text();
+      return reply
+        .status(upstream.status)
+        .header(
+          "content-type",
+          upstream.headers.get("content-type") ?? "text/html",
+        )
+        .send(body);
+    },
+  );
+
+  fastify.post(
+    "/api/chatops/generic/builtin-adapters/:adapterId/connection-page/unlink",
+    {
+      schema: {
+        operationId: RouteId.UnlinkBundledChatOpsAdapter,
+        description:
+          "Unlink a bundled ChatOps adapter device via connection page",
+        tags: ["ChatOps"],
+        params: z.object({
+          adapterId: BundledChatOpsAdapterIdSchema,
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { adapterId } = request.params as {
+        adapterId: BundledChatOpsAdapterId;
+      };
+
+      const connectionPageConfig =
+        bundledGenericAdapterRuntimeManager.getConnectionPageConfig(adapterId);
+
+      if (!connectionPageConfig) {
+        throw new ApiError(
+          404,
+          `Bundled adapter ${adapterId} does not have a connection page.`,
+        );
+      }
+
+      const summary = bundledGenericAdapterRuntimeManager.getSummary(adapterId);
+      if (summary.status !== "running") {
+        throw new ApiError(
+          503,
+          `Bundled adapter ${adapterId} is not running (status: ${summary.status}).`,
+        );
+      }
+
+      let upstream: Response;
+      try {
+        upstream = await fetch(
+          `http://localhost:${connectionPageConfig.port}/unlink`,
+          {
+            method: "POST",
+            signal: AbortSignal.timeout(5000),
+            redirect: "manual",
+          },
+        );
+      } catch {
+        throw new ApiError(
+          503,
+          `Bundled adapter ${adapterId} connection page is not ready yet.`,
+        );
+      }
+
+      if (upstream.status >= 300 && upstream.status < 400) {
+        return reply.redirect(
+          `/api/chatops/generic/builtin-adapters/${adapterId}/connection-page`,
+        );
+      }
+
+      const body = await upstream.text();
+      return reply
+        .status(upstream.status)
+        .header(
+          "content-type",
+          upstream.headers.get("content-type") ?? "text/html",
+        )
+        .send(body);
     },
   );
 
@@ -1507,9 +1658,9 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
         dmInfo:
           provider?.getBotUserId() || provider?.getWorkspaceId()
             ? {
-              botUserId: provider.getBotUserId() ?? undefined,
-              teamId: provider.getWorkspaceId() ?? undefined,
-            }
+                botUserId: provider.getBotUserId() ?? undefined,
+                teamId: provider.getWorkspaceId() ?? undefined,
+              }
             : undefined,
       };
     }
@@ -1591,11 +1742,11 @@ async function handleAgentSelection(
 ): Promise<void> {
   const value = context.activity.value as
     | {
-      agentId?: string;
-      channelId?: string;
-      workspaceId?: string;
-      originalMessageText?: string;
-    }
+        agentId?: string;
+        channelId?: string;
+        workspaceId?: string;
+        originalMessageText?: string;
+      }
     | undefined;
   const { agentId, channelId, workspaceId, originalMessageText } = value || {};
 
@@ -1722,7 +1873,7 @@ async function handleAgentSelection(
   } else {
     await context.sendActivity(
       `Agent **${agent.name}** is now assigned to this ${isTeamsDm ? "conversation" : "channel"}.\n` +
-      "Send a message (with @mention) to start interacting!",
+        "Send a message (with @mention) to start interacting!",
     );
   }
 }
@@ -1807,10 +1958,10 @@ async function resolveAndVerifySenderForMSTeams(
         await context
           .sendActivity(
             `Hey there 👋 We created an Archestra user for you (${message.senderEmail}). ` +
-            `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
-            `[Open DM with me](${dmDeepLink})`,
+              `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+              `[Open DM with me](${dmDeepLink})`,
           )
-          .catch(() => { });
+          .catch(() => {});
       }
 
       logger.info(
@@ -1932,7 +2083,7 @@ async function awaitDiscovery(
   });
   await chatOpsManager
     .discoverChannels({ provider, context, workspaceId, allWorkspaceIds })
-    .catch(() => { });
+    .catch(() => {});
 }
 
 /**

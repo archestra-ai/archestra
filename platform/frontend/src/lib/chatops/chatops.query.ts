@@ -200,3 +200,27 @@ export function useStartBundledChatOpsAdapter() {
     },
   });
 }
+
+export function useStopBundledChatOpsAdapter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      adapterId: archestraApiTypes.StopBundledChatOpsAdapterData["path"]["adapterId"],
+    ) => {
+      const { data, error } = await archestraApiSdk.stopBundledChatOpsAdapter({
+        path: { adapterId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success(`${data.displayName} stopped`);
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bundled-adapters"] });
+    },
+  });
+}

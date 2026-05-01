@@ -494,6 +494,120 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/agents/:id/clone",
+    {
+      schema: {
+        operationId: RouteId.CloneAgent,
+        description: "Clone an agent and all its associations",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type for permission checks
+      const sourceAgent = await AgentModel.findById(id, user.id, true);
+      if (!sourceAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Prevent cross-organization cloning: the permission checker is scoped
+      // to the caller's org, so an agent from a different org would bypass
+      // those checks. Return 404 to avoid leaking existence.
+      if (sourceAgent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Disallow cloning built-in agents (Phase 1 policy)
+      if (sourceAgent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be cloned");
+      }
+
+      // Single DB query for all permission checks on this agent type
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read + create permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(sourceAgent.agentType, "read");
+        checker.require(sourceAgent.agentType, "create");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions on the source agent
+      const userTeamIds = !checker.isAdmin(sourceAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: sourceAgent.agentType,
+        agentScope: sourceAgent.scope,
+        agentAuthorId: sourceAgent.authorId,
+        agentTeamIds: sourceAgent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Validate knowledgeBaseIds if provided
+      if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
+        if (sourceAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Knowledge bases cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const kbId of sourceAgent.knowledgeBaseIds) {
+          await validateKnowledgeBaseAccess({
+            kbId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Validate connectorIds if provided
+      if ((sourceAgent.connectorIds?.length ?? 0) > 0) {
+        if (sourceAgent.agentType === "llm_proxy") {
+          throw new ApiError(
+            400,
+            "Connectors cannot be assigned to LLM Proxy agents",
+          );
+        }
+        const knowledgeSourceAccess =
+          await knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: user.id,
+            organizationId,
+          });
+        for (const connectorId of sourceAgent.connectorIds) {
+          await validateConnectorAccess({
+            connectorId,
+            organizationId,
+            access: knowledgeSourceAccess,
+          });
+        }
+      }
+
+      // Delegate cloning logic to the model
+      const clonedAgent = await AgentModel.cloneAgent({
+        sourceId: sourceAgent.id,
+        userId: user.id,
+      });
+
+      return reply.send(clonedAgent);
+    },
+  );
+
   fastify.put(
     "/api/agents/:id",
     {

@@ -15,7 +15,7 @@ Plug your agents straight into your company's knowledge across Jira, Confluence,
 
 The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra. No external vector database or separate retrieval service required.
 
-![Agent answering from a Jira Knowledge Base with cited sources](/docs/assets/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
+![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
 
 ## Configuration
 
@@ -23,7 +23,7 @@ Open **Settings > Knowledge**. Both an embedding and a reranking model must be s
 
 ### Embedding Configuration
 
-![Embedding Configuration card in Settings > Knowledge](/docs/assets/automated_screenshots/platform-knowledge-bases_embedding-configuration.webp)
+![Embedding Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_embedding-configuration.webp)
 
 Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
@@ -34,7 +34,7 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 ### Reranking Configuration
 
-![Reranking Configuration card in Settings > Knowledge](/docs/assets/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
+![Reranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
 
 Pick the LLM that scores and reorders search results by relevance.
 
@@ -58,4 +58,4 @@ Connectors pull data from external tools (Jira, Confluence, GitHub, etc.) and fe
 
 Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
 
-![Selecting Knowledge Bases and connectors on an agent](/docs/assets/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
+![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)

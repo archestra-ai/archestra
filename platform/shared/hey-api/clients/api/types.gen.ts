@@ -11999,6 +11999,173 @@ export type UpdateAgentResponses = {
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
 
+export type CloneAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/clone';
+};
+
+export type CloneAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CloneAgentError = CloneAgentErrors[keyof CloneAgentErrors];
+
+export type CloneAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        slug: string | null;
+        isDefault: boolean;
+        isPersonalGateway: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        description: string | null;
+        icon: string | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
+        identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
+        toolAssignmentMode: 'automatic' | 'manual';
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | null;
+        builtIn: boolean | null;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        authorName?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+    };
+};
+
+export type CloneAgentResponse = CloneAgentResponses[keyof CloneAgentResponses];
+
 export type GetLabelKeysData = {
     body?: never;
     path?: never;

@@ -1235,6 +1235,7 @@ export const openaiAdapterFactory: LLMProvider<
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

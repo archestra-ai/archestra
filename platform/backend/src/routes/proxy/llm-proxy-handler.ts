@@ -11,6 +11,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import {
+  CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
@@ -266,8 +267,9 @@ export async function handleLLMProxy<
   let perKeyBaseUrl: string | undefined;
   /**
    * The chat_api_key row ID for this call, if the call resolved through a
-   * DB-managed key. Used at the bottom of the handler to look up extra HTTP
-   * headers. `undefined` for raw-bearer calls.
+   * DB-managed key OR was forwarded by an internal loopback caller via
+   * CHAT_API_KEY_ID_HEADER. Used at the bottom of the handler to look up
+   * extra HTTP headers. `undefined` for raw-bearer calls from external IPs.
    */
   let perKeyChatApiKeyId: string | undefined;
   let wasJwksAuthenticated = false;
@@ -330,7 +332,20 @@ export async function handleLLMProxy<
     }
   }
 
-  // 4. Enforce authentication for keyless providers on external requests
+  // 4. Internal callers (in-app chat) that send a raw provider secret can
+  // forward the resolved chat_api_keys row ID via a loopback-only header so
+  // the proxy can pick up per-key configuration (extraHeaders) below.
+  // External clients must NOT be able to spoof this — same SSRF reasoning
+  // as PROVIDER_BASE_URL_HEADER.
+  if (!perKeyChatApiKeyId && isLoopbackAddress(request.ip)) {
+    const headerValue =
+      headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
+    if (typeof headerValue === "string" && headerValue.length > 0) {
+      perKeyChatApiKeyId = headerValue;
+    }
+  }
+
+  // 5. Enforce authentication for keyless providers on external requests
   assertAuthenticatedForKeylessProvider(
     apiKey,
     wasVirtualKeyResolved,

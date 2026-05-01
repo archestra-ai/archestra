@@ -271,6 +271,127 @@ export function McpCatalogForm({
     "enterpriseManagedConfig.identityProviderId",
   );
 
+  const handleConfigPaste = (
+    e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const text = e.clipboardData.getData("text");
+    try {
+      const parsed = JSON.parse(text);
+
+      // 1. Handle direct array paste into Arguments field (as requested in #3859)
+      if (
+        Array.isArray(parsed) &&
+        e.currentTarget.name === "localConfig.arguments"
+      ) {
+        e.preventDefault();
+        form.setValue("localConfig.arguments", parsed.map(String).join("\n"), {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        return;
+      }
+
+      // 2. Handle full MCP config objects
+      if (typeof parsed === "object" && parsed !== null) {
+        // Helper to find the first object that looks like an MCP config
+        const findMcpConfig = (obj: any): any => {
+          if (!obj || typeof obj !== "object") return null;
+          if (obj.command || obj.args || obj.env) return obj;
+
+          for (const value of Object.values(obj)) {
+            const found = findMcpConfig(value);
+            if (found) return found;
+          }
+          return null;
+        };
+
+        const configToApply = findMcpConfig(parsed);
+        if (!configToApply) return;
+
+        let applied = false;
+
+        if (configToApply.name && typeof configToApply.name === "string") {
+          form.setValue("name", configToApply.name, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          applied = true;
+        }
+
+        if (
+          configToApply.description &&
+          typeof configToApply.description === "string"
+        ) {
+          form.setValue("description", configToApply.description, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          applied = true;
+        }
+
+        if (
+          configToApply.command &&
+          typeof configToApply.command === "string"
+        ) {
+          form.setValue("localConfig.command", configToApply.command, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          applied = true;
+        }
+
+        if (configToApply.args && Array.isArray(configToApply.args)) {
+          form.setValue(
+            "localConfig.arguments",
+            configToApply.args.map(String).join("\n"),
+            { shouldDirty: true, shouldValidate: true },
+          );
+          applied = true;
+        }
+
+        if (configToApply.env && typeof configToApply.env === "object") {
+          const newEnv = Object.entries(configToApply.env).map(([key, value]) => ({
+            key,
+            value: String(value),
+            type: "plain_text" as const,
+            promptOnInstallation: false,
+            required: false,
+            description: "",
+          }));
+
+          form.setValue("localConfig.environment", newEnv, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          applied = true;
+        }
+
+        // Support for Transport Type
+        const transportType = configToApply.transport || configToApply.transportType;
+        if (transportType === "stdio" || transportType === "http") {
+          form.setValue("localConfig.transportType", transportType, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          applied = true;
+        }
+
+        if (applied) {
+          // Only prevent default for command/arguments fields to avoid messy JSON in them.
+          // For Name and Description, let the text be pasted as well.
+          if (
+            e.currentTarget.name === "localConfig.command" ||
+            e.currentTarget.name === "localConfig.arguments"
+          ) {
+            e.preventDefault();
+          }
+        }
+      }
+    } catch {
+      // Ignore invalid JSON and allow default paste
+    }
+  };
+
   const handleAuthMethodChange = (
     nextAuthMethod: McpCatalogFormValues["authMethod"],
   ) => {
@@ -703,6 +824,7 @@ export function McpCatalogForm({
                           placeholder="e.g., GitHub MCP Server"
                           {...field}
                           disabled={nameDisabled}
+                          onPaste={handleConfigPaste}
                         />
                       </FormControl>
 
@@ -723,6 +845,7 @@ export function McpCatalogForm({
                         placeholder="Describe what this MCP server does..."
                         className="min-h-20"
                         {...field}
+                        onPaste={handleConfigPaste}
                       />
                     </FormControl>
                     <FormMessage />
@@ -941,6 +1064,7 @@ export function McpCatalogForm({
                           className="font-mono"
                           autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                           {...field}
+                          onPaste={handleConfigPaste}
                         />
                       </FormControl>
                       <FormMessage />
@@ -966,6 +1090,7 @@ export function McpCatalogForm({
                             className="font-mono"
                             autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                             {...field}
+                            onPaste={handleConfigPaste}
                           />
                         </FormControl>
                         <FormDescription>
@@ -992,6 +1117,7 @@ export function McpCatalogForm({
                             placeholder={`/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
                             {...field}
+                            onPaste={handleConfigPaste}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1140,6 +1266,7 @@ export function McpCatalogForm({
                           placeholder={mcpServerBaseImage}
                           className="font-mono"
                           {...field}
+                          onPaste={handleConfigPaste}
                         />
                       </FormControl>
                       <FormMessage />

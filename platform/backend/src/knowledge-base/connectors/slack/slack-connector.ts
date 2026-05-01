@@ -38,22 +38,36 @@ export class SlackConnector extends BaseConnector {
   async validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }> {
-    const parsed = parseSlackConfig(config);
-    if (!parsed) {
+    const parseResult = SlackConfigSchema.safeParse({
+      type: "slack",
+      ...config,
+    });
+    if (!parseResult.success) {
+      const channelIdsIssue = parseResult.error.issues.find(
+        (issue) => issue.path.length > 0 && issue.path[0] === "channelIds",
+      );
+      if (channelIdsIssue) {
+        return {
+          valid: false,
+          error:
+            "Channel IDs are required. Please specify the Slack channel IDs to sync to avoid indexing an entire workspace.",
+        };
+      }
+
       return { valid: false, error: "Invalid Slack configuration" };
     }
 
+    const parsed = parseResult.data;
+
     // Validate channelIds format if provided
-    if (parsed.channelIds && parsed.channelIds.length > 0) {
-      const invalidIds = parsed.channelIds.filter(
-        (id) => !/^[CG][A-Z0-9]+$/.test(id),
-      );
-      if (invalidIds.length > 0) {
-        return {
-          valid: false,
-          error: `Invalid Slack channel ID(s): ${invalidIds.join(", ")}. Channel IDs start with C or G followed by alphanumeric characters.`,
-        };
-      }
+    const invalidIds = parsed.channelIds.filter(
+      (id) => !/^[CG][A-Z0-9]+$/.test(id),
+    );
+    if (invalidIds.length > 0) {
+      return {
+        valid: false,
+        error: `Invalid Slack channel ID(s): ${invalidIds.join(", ")}. Channel IDs start with C or G followed by alphanumeric characters.`,
+      };
     }
 
     return { valid: true };
@@ -144,6 +158,15 @@ export class SlackConnector extends BaseConnector {
     if (!parsed) {
       throw new Error("Invalid Slack configuration");
     }
+
+    if (!parsed.channelIds || parsed.channelIds.length === 0) {
+      throw new Error(
+        "Channel IDs are required. Please specify the Slack channel IDs to sync to avoid indexing an entire workspace.",
+      );
+    }
+
+    // De-duplicate channel IDs to avoid redundant work and confusing logs.
+    parsed.channelIds = Array.from(new Set(parsed.channelIds));
 
     const checkpoint = (params.checkpoint as SlackCheckpoint | null) ?? {
       type: "slack" as const,

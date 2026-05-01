@@ -370,7 +370,7 @@ export type OneDriveCheckpoint = z.infer<typeof OneDriveCheckpointSchema>;
 
 export const SlackConfigSchema = z.object({
   type: SLACK,
-  channelIds: z.array(z.string()).optional(),
+  channelIds: z.array(z.string()).min(1, "At least one channel ID is required"),
   skipBotMessages: z.boolean().optional(),
   includeThreadReplies: z.boolean().optional(),
   includePinnedItems: z.boolean().optional(),

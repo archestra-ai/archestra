@@ -19,9 +19,19 @@ export function SlackConfigFields({ control }: { control: Control<any> }) {
       <FormField
         control={control}
         name="config.channelIds"
+        rules={{
+          validate: (value) => {
+            const raw = (value ?? "") as string;
+            const ids = raw
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            return ids.length > 0 || "Channel IDs are required";
+          },
+        }}
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Channel IDs (optional)</FormLabel>
+            <FormLabel>Channel IDs (required)</FormLabel>
             <FormControl>
               <Input
                 placeholder="C07XXXXXX, G08YYYYYY"
@@ -30,10 +40,9 @@ export function SlackConfigFields({ control }: { control: Control<any> }) {
               />
             </FormControl>
             <FormDescription>
-              Comma-separated Slack channel IDs to sync. Leave blank to sync all
-              channels the bot has been added to. Find channel IDs in Slack:
-              right-click a channel → View channel details → scroll to the
-              bottom.
+              Comma-separated Slack channel IDs to sync. Find channel IDs in
+              Slack: right-click a channel → View channel details → scroll to
+              the bottom.
             </FormDescription>
             <FormMessage />
           </FormItem>

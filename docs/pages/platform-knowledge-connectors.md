@@ -298,7 +298,7 @@ Ingests public channel messages and thread replies from a Slack workspace. Messa
 
 | Field | Description |
 | --- | --- |
-| Channel IDs | Comma-separated channel IDs to sync (optional — leave blank to sync all public channels the bot has been added to) |
+| Channel IDs | Comma-separated channel IDs to sync (required) |
 | Skip Bot Messages | Toggle to exclude messages from other bots and app integrations (default: on) |
 | Include Thread Replies | Toggle to fetch thread replies and append them to the parent message (default: on) |
 

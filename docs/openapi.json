@@ -106507,6 +106507,7 @@
                                     ]
                                   },
                                   "channelIds": {
+                                    "minItems": 1,
                                     "type": "array",
                                     "items": {
                                       "type": "string"
@@ -106526,7 +106527,8 @@
                                   }
                                 },
                                 "required": [
-                                  "type"
+                                  "type",
+                                  "channelIds"
                                 ],
                                 "additionalProperties": false
                               },
@@ -107634,6 +107636,7 @@
                             ]
                           },
                           "channelIds": {
+                            "minItems": 1,
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -107653,7 +107656,8 @@
                           }
                         },
                         "required": [
-                          "type"
+                          "type",
+                          "channelIds"
                         ]
                       },
                       {
@@ -108393,6 +108397,7 @@
                               ]
                             },
                             "channelIds": {
+                              "minItems": 1,
                               "type": "array",
                               "items": {
                                 "type": "string"
@@ -108412,7 +108417,8 @@
                             }
                           },
                           "required": [
-                            "type"
+                            "type",
+                            "channelIds"
                           ],
                           "additionalProperties": false
                         },
@@ -109469,6 +109475,7 @@
                               ]
                             },
                             "channelIds": {
+                              "minItems": 1,
                               "type": "array",
                               "items": {
                                 "type": "string"
@@ -109488,7 +109495,8 @@
                             }
                           },
                           "required": [
-                            "type"
+                            "type",
+                            "channelIds"
                           ],
                           "additionalProperties": false
                         },
@@ -110434,6 +110442,7 @@
                             ]
                           },
                           "channelIds": {
+                            "minItems": 1,
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -110453,7 +110462,8 @@
                           }
                         },
                         "required": [
-                          "type"
+                          "type",
+                          "channelIds"
                         ]
                       },
                       {
@@ -111191,6 +111201,7 @@
                               ]
                             },
                             "channelIds": {
+                              "minItems": 1,
                               "type": "array",
                               "items": {
                                 "type": "string"
@@ -111210,7 +111221,8 @@
                             }
                           },
                           "required": [
-                            "type"
+                            "type",
+                            "channelIds"
                           ],
                           "additionalProperties": false
                         },

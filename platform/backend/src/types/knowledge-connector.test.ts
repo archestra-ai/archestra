@@ -247,13 +247,21 @@ describe("knowledge-connector schemas", () => {
   });
 
   describe("SlackConfigSchema mapping rules", () => {
-    test("allows omitting all optional fields", () => {
-      const result = SlackConfigSchema.parse({
-        type: "slack",
-      });
-      expect(result.type).toBe("slack");
-      expect(result.channelIds).toBeUndefined();
-      expect(result.batchSize).toBeUndefined();
+    test("requires channelIds", () => {
+      expect(() =>
+        SlackConfigSchema.parse({
+          type: "slack",
+        }),
+      ).toThrow();
+    });
+
+    test("rejects empty channelIds", () => {
+      expect(() =>
+        SlackConfigSchema.parse({
+          type: "slack",
+          channelIds: [],
+        }),
+      ).toThrow();
     });
 
     test("parses all Slack configuration fields", () => {

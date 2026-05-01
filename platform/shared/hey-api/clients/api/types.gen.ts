@@ -28909,7 +28909,7 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
             } | {
                 type: 'slack';
-                channelIds?: Array<string>;
+                channelIds: Array<string>;
                 skipBotMessages?: boolean;
                 includeThreadReplies?: boolean;
                 includePinnedItems?: boolean;
@@ -29066,7 +29066,7 @@ export type CreateConnectorData = {
             batchSize?: number;
         } | {
             type: 'slack';
-            channelIds?: Array<string>;
+            channelIds: Array<string>;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29276,7 +29276,7 @@ export type CreateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'slack';
-            channelIds?: Array<string>;
+            channelIds: Array<string>;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29583,7 +29583,7 @@ export type GetConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'slack';
-            channelIds?: Array<string>;
+            channelIds: Array<string>;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29726,7 +29726,7 @@ export type UpdateConnectorData = {
             batchSize?: number;
         } | {
             type: 'slack';
-            channelIds?: Array<string>;
+            channelIds: Array<string>;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29937,7 +29937,7 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'slack';
-            channelIds?: Array<string>;
+            channelIds: Array<string>;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;

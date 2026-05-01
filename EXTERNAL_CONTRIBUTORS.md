@@ -169,3 +169,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @andreahlert
 - @ilmpc
 - @AlexMelanFromRingo
+- @di3go04

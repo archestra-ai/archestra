@@ -50,7 +50,7 @@ See [MCP Gateway - Search-and-Run Tool Mode](/docs/platform-mcp-gateway#search-a
 Agents can be triggered through:
 
 - Archestra Chat UI
-- A2A (Agent-to-Agent) protocol
+- [Webhook (A2A)](/docs/platform-agent-triggers-webhook-a2a)
 - [Scheduled Tasks](/docs/platform-agent-triggers-schedule)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
@@ -60,83 +60,15 @@ Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming 
 
 ## Knowledge Sources
 
-Agents can be assigned one or more knowledge bases or knowledge connectors. This gives the agent retrieval access to your internal docs and connected systems without hardcoding those sources into the prompt.
+Agents can be assigned one or more Knowledge Bases or knowledge connectors. This gives the agent retrieval access to your internal docs and connected systems without hardcoding those sources into the prompt.
 
 When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
 
 See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
 
-## A2A (Agent-to-Agent)
+## Delegation
 
-A2A is a JSON-RPC 2.0 gateway for invoking agents programmatically from external systems. Each agent exposes two endpoints:
-
-- **Agent Card Discovery**: `GET /v1/a2a/:agentId/.well-known/agent.json`
-- **Message Execution**: `POST /v1/a2a/:agentId`
-
-### Authentication
-
-All A2A requests require Bearer token authentication. You can use a personal token from **Settings > Your Account**, a team token from **Settings > Teams**, or the organization token from **Settings > Organization**, as long as that token has access to the target agent.
-
-### Agent Card
-
-The discovery endpoint returns an Agent Card describing the agent's name, description, URL, and basic input/output capabilities. Use it when an external client needs to discover an agent before sending `message/send` requests.
-
-### Sending Messages
-
-Send JSON-RPC 2.0 requests to execute the agent:
-
-```bash
-curl -X POST "https://api.example.com/v1/a2a/<agentId>" \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": "1",
-    "method": "message/send",
-    "params": {
-      "message": {
-        "parts": [{ "kind": "text", "text": "Hello agent!" }]
-      }
-    }
-  }'
-```
-
-Response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "result": {
-    "messageId": "msg-...",
-    "role": "agent",
-    "parts": [{ "kind": "text", "text": "Agent response..." }]
-  }
-}
-```
-
-### Pass-Through Payloads (Webhooks)
-
-The `POST /v1/a2a/:promptId` endpoint also accepts arbitrary JSON payloads that are not wrapped in a JSON-RPC envelope. This is useful when integrating with webhook sources whose payload shape cannot be customized.
-
-When the body is not a valid JSON-RPC 2.0 request, the entire payload is JSON-stringified and forwarded to the agent as the user message. The response is still returned as a JSON-RPC envelope, with `id` defaulting to `1`.
-
-```bash
-curl -X POST "https://api.example.com/v1/a2a/<promptId>" \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "event": "issue.opened", "issue": { "id": 42, "title": "Bug" } }'
-```
-
-The agent receives the literal string `{"event":"issue.opened","issue":{"id":42,"title":"Bug"}}` as its user message and can parse/route on it as needed.
-
-### Delegation Chain
-
-When an agent delegates work to another agent, Archestra tracks that call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state so downstream tool policy enforcement does not reset mid-run.
-
-### Configuration
-
-A2A uses the same LLM configuration as Chat. See [Deployment - Environment Variables](/docs/platform-deployment#environment-variables) for the full list of `ARCHESTRA_CHAT_*` variables.
+When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
 
 ## System Prompt Templating
 

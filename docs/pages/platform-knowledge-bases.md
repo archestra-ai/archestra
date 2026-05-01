@@ -2,8 +2,8 @@
 title: Overview
 category: Knowledge
 order: 1
-description: Built-in RAG with pgvector for document ingestion, hybrid search, and retrieval
-lastUpdated: 2026-04-03
+description: Built-in RAG Knowledge Base to give your agents access to your data.
+lastUpdated: 2026-04-30
 ---
 
 <!--
@@ -11,123 +11,51 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
-Knowledge bases provide built-in retrieval augmented generation (RAG) powered by PostgreSQL and pgvector. Connectors sync data from external tools into knowledge bases, where documents are chunked, embedded, and indexed for hybrid search. Agents automatically query their assigned knowledge sources at runtime.
+Plug your agents straight into your company's knowledge across Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and more, so they can answer from your own data.
 
-> **Enterprise access control.** Advanced access control requires an enterprise license. Contact sales@archestra.ai for licensing information.
+The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra. No external vector database or separate retrieval service required.
 
-## Architecture
+![Agent answering from a Jira Knowledge Base with cited sources](/docs/assets/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
 
-The RAG stack runs entirely within PostgreSQL — no external vector database required. See [Platform Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for full configuration reference.
+## Configuration
 
-### Ingestion
+Open **Settings > Knowledge**. Both an embedding and a reranking model must be set before Knowledge Bases and can be used.
 
-Connectors run on a cron schedule, pulling documents that are chunked and embedded into PostgreSQL with pgvector.
+### Embedding Configuration
 
-```mermaid
-flowchart LR
-    C[Connectors] -->|cron schedule| D[Documents]
-    D --> CH[Chunking]
-    CH -->|Embedding provider API| E[Embedding]
-    E --> PG[(PostgreSQL + pgvector)]
-```
+![Embedding Configuration card in Settings > Knowledge](/docs/assets/automated_screenshots/platform-knowledge-bases_embedding-configuration.webp)
 
-### Querying
+Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
-At runtime, the agent's query is embedded, then vector and optional full-text search run in parallel. Results are fused, reranked, and filtered before being returned.
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 768, 1536, 3072.
+- **Model** — any embedding-capable model exposed by the selected key.
 
-```mermaid
-flowchart LR
-    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
-    QE --> VS[Vector Search]
-    QE --> FTS["Full-Text Search (configurable)"]
-    VS --> RRF[Reciprocal Rank Fusion]
-    FTS --> RRF
-    RRF --> RR[Reranking]
-    RR --> ACL[ACL Filtering]
-    ACL --> R[Results]
-```
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync.
 
-## Knowledge Settings
+### Reranking Configuration
 
-Embedding and reranking are configured in **Settings > Knowledge** by selecting existing LLM Provider Keys. Both must be configured before knowledge bases and connectors can be used.
+![Reranking Configuration card in Settings > Knowledge](/docs/assets/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
 
-### Embedding
+Pick the LLM that scores and reorders search results by relevance.
 
-The embedding model can be any synced model with embedding dimensions configured in **LLM Providers > Models**. The selected API key must expose at least one such model.
+- **Key** — any LLM provider key.
+- **Model** — any chat model from that provider.
 
-The embedding model is locked after it has been saved. Changing it requires dropping the embedding configuration and re-embedding documents.
+### Creating a Knowledge Base
 
-### Reranking
+A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
 
-The reranker uses an LLM to score and reorder search results by relevance. Any synced chat model can be used. In practice, the model should support structured output.
+### Creating a Connector
 
-## Connectors
+Connectors pull data from external tools (Jira, Confluence, GitHub, etc.) and feed it into one or more Knowledge Bases. Each connector has a visibility setting that controls who can query its data — see [Connector Visibility](/docs/platform-knowledge-connectors#visibility). For supported types and configuration, see [Connectors](/docs/platform-knowledge-connectors).
 
-Connectors pull data from external tools (Jira, Confluence, etc.) on a schedule. Each connector tracks a checkpoint for incremental sync -- only changes since the last run are processed. A connector can be assigned to multiple knowledge bases.
+### Assigning to an Agent
 
-See [Knowledge Connectors](/docs/platform-knowledge-connectors) for supported connector types, configuration, and management.
+1. Go to **Agents** in the left sidebar and click the agent you want to attach knowledge to (or create a new one).
+2. In the **Edit Agent** dialog, scroll to **Knowledge Sources**.
+3. Click **Select connectors or knowledge bases** and pick one or more entries from the **Knowledge Bases** and **Connectors** lists. An agent can be assigned multiple Knowledge Bases or individual connectors.
+4. Click **Update** to save.
 
-### Sync Behavior
+Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
 
-Connector sync has two simple phases:
-
-1. **Ingestion**: pull new or changed source documents and chunk them.
-2. **Embedding**: generate vectors for those chunks so the content becomes searchable.
-
-Syncs can start on schedule or manually. Archestra prevents overlapping runs for the same connector, keeps an incremental checkpoint, and resumes large syncs from the last saved position instead of starting over.
-
-In practice this means:
-
-- new documents are inserted, chunked, and embedded
-- unchanged documents are skipped
-- changed documents are reprocessed so search stays current
-- large syncs can continue over multiple runs without losing progress
-
-Use **Force Re-sync** when you want to clear the checkpoint and rebuild the indexed content from the beginning.
-
-## Assigning Knowledge Bases
-
-Knowledge bases can be assigned to Agents and MCP Gateways. An Agent can have multiple knowledge bases, and a knowledge base can be shared across agents.
-
-A knowledge base is a collection of connectors. For example, a single team knowledge base might combine:
-
-- Jira connectors for that team's boards
-- Confluence connectors for that team's spaces
-- GitHub connectors for that team's issues and pull requests
-
-That same knowledge base can then be reused across multiple Agents and MCP Gateways. Visibility still comes from each individual connector, so access is determined by the connectors that contribute data, not by a separate visibility setting on the knowledge base itself.
-
-### Visibility Modes
-
-| Mode                      | Behavior                                                        |
-| ------------------------- | --------------------------------------------------------------- |
-| **Org-wide**              | All documents accessible to all users in the organization       |
-| **Team-scoped**           | Documents accessible only to members of the assigned teams      |
-| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups). *Coming soon — see [#3218](https://github.com/archestra-ai/archestra/issues/3218).* |
-
-Source visibility determines which connector data each user can retrieve when an Agent or MCP Gateway calls `query_knowledge_sources`.
-
-Archestra also keeps the rest of the product aligned with that same access model:
-
-- The Knowledge Bases and Connectors pages only show sources the current user can see
-- Agent and MCP Gateway configuration only allows assigning visible sources
-
-Users with `knowledgeSource:admin` can view and query all knowledge bases and connectors regardless of org or team scope.
-
-### Practical Example
-
-Suppose you have two Confluence connectors:
-
-- `Engineering Confluence` syncing spaces like `ENG` and `ARCH`, visible to the Engineering team
-- `Support Confluence` syncing spaces like `SUP` and `HELP`, visible to the Support team
-
-Both connectors can feed the same knowledge base, but visibility is still enforced per connector.
-
-At query time:
-
-- an Engineering user only retrieves chunks from the Engineering connector
-- a Support user only retrieves chunks from the Support connector
-- a user with access to both teams can retrieve from both connectors
-- a user with `knowledgeSource:admin` can retrieve from both regardless of team assignment
-
-This means you can keep one shared retrieval setup while still preventing users from seeing documents that came from connectors outside their allowed team scope.
+![Selecting Knowledge Bases and connectors on an agent](/docs/assets/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)

@@ -325,13 +325,13 @@ export const permissionDescriptions: Record<string, string> = {
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
     "Customize organization appearance, authentication, etc",
-  "knowledgeSource:read": "View knowledge bases and connectors",
-  "knowledgeSource:create": "Create knowledge bases and connectors",
-  "knowledgeSource:update": "Modify knowledge bases and connectors",
-  "knowledgeSource:delete": "Delete knowledge bases and connectors",
+  "knowledgeSource:read": "View Knowledge Bases and Connectors",
+  "knowledgeSource:create": "Create Knowledge Bases and Connectors",
+  "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
+  "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
-    "View all knowledge bases and connectors, bypassing visibility restrictions",
+    "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":

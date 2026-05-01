@@ -2,7 +2,7 @@
 
 import { PROVIDERS_WITH_OPTIONAL_API_KEY } from "@shared";
 import {
-  AlertTriangle,
+  ArrowUpRight,
   Info,
   Loader2,
   Lock,
@@ -30,17 +30,24 @@ import {
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
-  SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   DialogBody,
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -48,7 +55,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
-import { useEmbeddingModels, useLlmModels } from "@/lib/llm-models.query";
+import {
+  useEmbeddingModels,
+  useLlmModels,
+  useModelsWithApiKeys,
+} from "@/lib/llm-models.query";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
@@ -76,11 +87,27 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   ...DEFAULT_FORM_VALUES,
 };
-const KNOWLEDGE_SETTINGS_CONTROL_CLASS = "w-full max-w-[28rem]";
 const KNOWLEDGE_MODEL_POPOVER_CLASS =
   "w-max min-w-[var(--radix-popover-trigger-width)] max-w-[min(32rem,calc(100vw-2rem))]";
 const KNOWLEDGE_MODEL_POPOVER_LIST_CLASS =
   "max-h-[min(220px,calc(var(--radix-popover-content-available-height)-3rem))]";
+
+function CardRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+      <Label className="shrink-0 text-sm text-muted-foreground sm:w-24">
+        {label}
+      </Label>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
 
 function AddApiKeyDialog({
   open,
@@ -163,15 +190,6 @@ function AddApiKeyDialog({
         className="flex min-h-0 flex-1 flex-col"
       >
         <DialogBody className="space-y-4">
-          {forEmbedding && (
-            <Alert variant="default">
-              <Info className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                After adding the key, sync models and mark an embedding model
-                via the model catalog (LLM Providers &gt; Models).
-              </AlertDescription>
-            </Alert>
-          )}
           <LlmProviderApiKeyForm
             mode="full"
             showConsoleLink={false}
@@ -209,6 +227,7 @@ function ApiKeySelector({
   forEmbedding,
   label,
   pulse,
+  allowedKeyIds,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
@@ -216,12 +235,16 @@ function ApiKeySelector({
   forEmbedding?: boolean;
   label: string;
   pulse?: boolean;
+  allowedKeyIds?: Set<string>;
 }) {
   const { data: apiKeys, isPending } = useAvailableLlmProviderApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const prevSelectableCountRef = useRef<number | null>(null);
 
-  const keys = apiKeys ?? [];
+  const allKeys = apiKeys ?? [];
+  const keys = allowedKeyIds
+    ? allKeys.filter((k) => allowedKeyIds.has(k.id))
+    : allKeys;
   const hasKeys = keys.length > 0;
   const selectedKey = keys.find((key) => key.id === value) ?? null;
 
@@ -267,44 +290,42 @@ function ApiKeySelector({
   }
 
   return (
-    <div className="space-y-2">
-      <Select
-        value={value ?? ""}
-        onValueChange={(v) => onChange(v || null)}
-        disabled={disabled}
+    <Select
+      value={value ?? ""}
+      onValueChange={(v) => onChange(v || null)}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        className={cn(
+          "w-full",
+          pulse && "animate-pulse ring-2 ring-primary/40",
+        )}
       >
-        <SelectTrigger
-          className={cn(
-            "w-full",
-            pulse && "animate-pulse ring-2 ring-primary/40",
+        <SelectValue placeholder={`Select ${label}...`}>
+          {selectedKey ? (
+            <LlmProviderApiKeyOptionLabel
+              icon={PROVIDER_CONFIG[selectedKey.provider].icon}
+              providerName={PROVIDER_CONFIG[selectedKey.provider].name}
+              keyName={selectedKey.name}
+              secondaryLabel={`${selectedKey.provider} - ${selectedKey.scope}`}
+            />
+          ) : (
+            `Select ${label}...`
           )}
-        >
-          <SelectValue placeholder={`Select ${label}...`}>
-            {selectedKey ? (
-              <LlmProviderApiKeyOptionLabel
-                icon={PROVIDER_CONFIG[selectedKey.provider].icon}
-                providerName={PROVIDER_CONFIG[selectedKey.provider].name}
-                keyName={selectedKey.name}
-                secondaryLabel={`${selectedKey.provider} - ${selectedKey.scope}`}
-              />
-            ) : (
-              `Select ${label}...`
-            )}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <LlmProviderApiKeySelectItems
-            options={keys.map((key) => ({
-              value: key.id,
-              icon: PROVIDER_CONFIG[key.provider].icon,
-              providerName: PROVIDER_CONFIG[key.provider].name,
-              keyName: key.name,
-              secondaryLabel: `${key.provider} - ${key.scope}`,
-            }))}
-          />
-        </SelectContent>
-      </Select>
-    </div>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <LlmProviderApiKeySelectItems
+          options={keys.map((key) => ({
+            value: key.id,
+            icon: PROVIDER_CONFIG[key.provider].icon,
+            providerName: PROVIDER_CONFIG[key.provider].name,
+            keyName: key.name,
+            secondaryLabel: `${key.provider} - ${key.scope}`,
+          }))}
+        />
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -411,26 +432,11 @@ function DropEmbeddingConfigDialog({
     <DeleteConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Drop Embedding Configuration"
-      description={
-        <div className="space-y-3">
-          <p>
-            This will delete all embedded documents and reset connector
-            checkpoints. Connectors and knowledge bases are preserved — the next
-            sync will re-ingest everything with the new embedding model.
-          </p>
-          <Alert variant="destructive" className="py-2">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              All embedded documents will be permanently deleted. Connectors and
-              knowledge bases will not be affected.
-            </AlertDescription>
-          </Alert>
-        </div>
-      }
+      title="Drop embedding configuration?"
+      description="This deletes all embedded documents. Connectors and knowledge bases are preserved — the next sync will re-ingest everything with the new embedding model."
       isPending={dropMutation.isPending}
       onConfirm={handleDrop}
-      confirmLabel="Drop Embedding Config"
+      confirmLabel="Drop"
       pendingLabel="Dropping..."
     />
   );
@@ -457,6 +463,17 @@ function KnowledgeSettingsContent() {
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
+  const { data: modelsWithApiKeys } = useModelsWithApiKeys();
+  const embeddingCapableKeyIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const model of modelsWithApiKeys ?? []) {
+      if (model.embeddingDimensions == null) continue;
+      for (const key of model.apiKeys) {
+        ids.add(key.id);
+      }
+    }
+    return ids;
+  }, [modelsWithApiKeys]);
   const selectedEmbeddingApiKey = useMemo(
     () =>
       apiKeys?.find((apiKey) => apiKey.id === embeddingChatApiKeyId) ?? null,
@@ -504,21 +521,9 @@ function KnowledgeSettingsContent() {
   // Embedding model is locked once both key and model have been saved
   const isEmbeddingModelLocked =
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
-  const showConfigureEmbeddingModelsLink =
-    !!embeddingChatApiKeyId &&
-    !isEmbeddingModelLocked &&
-    (embeddingModels?.length ?? 0) === 0;
-  const showSelectEmbeddingKeyHint =
-    !embeddingChatApiKeyId && !isEmbeddingModelLocked;
-  const showEmbeddingMeta = !!selectedEmbeddingModel || isEmbeddingModelLocked;
-  const showEmbeddingSupportText =
-    showEmbeddingMeta ||
-    showSelectEmbeddingKeyHint ||
-    showConfigureEmbeddingModelsLink;
-  const showEmbeddingActions =
-    isEmbeddingModelLocked || (!!embeddingChatApiKeyId && !!embeddingModel);
-  const showEmbeddingSupportPanel =
-    showEmbeddingSupportText || showEmbeddingActions;
+  const showTestConnection =
+    !!embeddingChatApiKeyId && !!embeddingModel && !isEmbeddingModelLocked;
+  const showEmbeddingFooter = isEmbeddingModelLocked || showTestConnection;
 
   // Check if keys exist for pulsing logic
   const hasApiKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
@@ -535,8 +540,6 @@ function KnowledgeSettingsContent() {
     selectedModel: rerankerModel,
     hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
-
-  const isFullyConfigured = !embeddingSetupStep && !rerankerSetupStep;
 
   const handleSave = async () => {
     await updateKnowledgeSettings.mutateAsync({
@@ -568,163 +571,89 @@ function KnowledgeSettingsContent() {
       loadingFallback={<LoadingSpinner />}
     >
       <SettingsSectionStack>
-        {!isInitialLoading && !isFullyConfigured && (
-          <Alert variant="warning">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              An embedding and reranking API key and model must be configured
-              before knowledge bases and connectors can be used.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <SettingsBlock
-          title="Embedding Configuration"
-          description="Choose the API key and embedding model used for knowledge base documents. Only synced models with configured embedding dimensions appear here."
-          control={
+        <Card>
+          <CardHeader>
+            <CardTitle>Embedding Configuration</CardTitle>
+            <CardDescription className="leading-relaxed">
+              Choose the API key and embedding model used for knowledge base
+              documents. Only keys with synced models that have configured
+              embedding dimensions appear here. Supported dimensions: 768, 1536,
+              3072.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <WithPermissions
               permissions={{ knowledgeSettings: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div
-                  className={cn(
-                    "flex flex-col gap-2.5",
-                    KNOWLEDGE_SETTINGS_CONTROL_CLASS,
-                  )}
-                >
-                  <ApiKeySelector
-                    value={embeddingChatApiKeyId}
-                    onChange={setEmbeddingChatApiKeyId}
-                    disabled={!hasPermission || isEmbeddingModelLocked}
-                    forEmbedding
-                    label="embedding API key"
-                    pulse={
-                      embeddingSetupStep === "add-key" ||
-                      embeddingSetupStep === "select-key"
-                    }
-                  />
-                  <LlmModelSearchableSelect
-                    value={embeddingModel ?? ""}
-                    onValueChange={(v) => setEmbeddingModel(v || null)}
-                    options={(embeddingModels ?? []).map((model) => ({
-                      value: model.id,
-                      model: model.id,
-                      provider: model.provider,
-                    }))}
-                    placeholder="Select embedding model..."
-                    searchPlaceholder="Search embedding models..."
-                    emptyMessage={embeddingEmptyMessage}
-                    className={cn(
-                      "w-full",
-                      embeddingSetupStep === "select-model" &&
-                        "animate-pulse ring-2 ring-primary/40",
+                <div className="flex flex-col gap-4">
+                  <CardRow label="Key">
+                    <ApiKeySelector
+                      value={embeddingChatApiKeyId}
+                      onChange={setEmbeddingChatApiKeyId}
+                      disabled={!hasPermission || isEmbeddingModelLocked}
+                      forEmbedding
+                      label="embedding API key"
+                      allowedKeyIds={embeddingCapableKeyIds}
+                      pulse={
+                        embeddingSetupStep === "add-key" ||
+                        embeddingSetupStep === "select-key"
+                      }
+                    />
+                  </CardRow>
+                  <CardRow label="Model">
+                    <LlmModelSearchableSelect
+                      value={embeddingModel ?? ""}
+                      onValueChange={(v) => setEmbeddingModel(v || null)}
+                      options={(embeddingModels ?? []).map((model) => ({
+                        value: model.id,
+                        model: model.id,
+                        provider: model.provider,
+                        badge: model.embeddingDimensions
+                          ? `${model.embeddingDimensions} dims`
+                          : undefined,
+                      }))}
+                      placeholder="Select embedding model..."
+                      searchPlaceholder="Search embedding models..."
+                      emptyMessage={embeddingEmptyMessage}
+                      className={cn(
+                        "w-full",
+                        embeddingSetupStep === "select-model" &&
+                          "animate-pulse ring-2 ring-primary/40",
+                      )}
+                      popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+                      popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
+                      popoverSide="bottom"
+                      popoverAlign="end"
+                      truncateOptionLabels={false}
+                      disabled={
+                        !hasPermission ||
+                        isEmbeddingModelLocked ||
+                        !embeddingChatApiKeyId
+                      }
+                    />
+                  </CardRow>
+                  <p className="text-sm text-muted-foreground sm:pl-28">
+                    Don't see your model?{" "}
+                    <Link
+                      href="/llm/providers/models"
+                      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+                    >
+                      Sync models and configure embedding dimensions
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </p>
+                  {selectedEmbeddingProvider === "gemini" &&
+                    selectedEmbeddingModel?.embeddingDimensions === 1536 && (
+                      <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-28">
+                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          Gemini will truncate from its native 3072 dimensions
+                          via outputDimensionality.
+                        </span>
+                      </p>
                     )}
-                    popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
-                    popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
-                    popoverSide="bottom"
-                    popoverAlign="end"
-                    truncateOptionLabels={false}
-                    disabled={
-                      !hasPermission ||
-                      isEmbeddingModelLocked ||
-                      !embeddingChatApiKeyId
-                    }
-                  />
-                  {showEmbeddingSupportPanel && (
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <div
-                        className={cn(
-                          "flex flex-col gap-3",
-                          showEmbeddingSupportText &&
-                            showEmbeddingActions &&
-                            "md:flex-row md:items-start md:justify-between",
-                        )}
-                      >
-                        {showEmbeddingSupportText && (
-                          <div className="space-y-1.5">
-                            {selectedEmbeddingModel && (
-                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                <span>
-                                  Uses{" "}
-                                  {selectedEmbeddingModel.embeddingDimensions}
-                                  -dimensional vectors.
-                                  {selectedEmbeddingProvider === "gemini" &&
-                                    selectedEmbeddingModel.embeddingDimensions ===
-                                      1536 &&
-                                    " Gemini will truncate from its native 3072 dimensions via outputDimensionality."}
-                                </span>
-                              </p>
-                            )}
-                            {isEmbeddingModelLocked && (
-                              <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                <span>
-                                  Locked — changing the embedding model requires
-                                  re-embedding all documents.
-                                </span>
-                              </p>
-                            )}
-                            {showSelectEmbeddingKeyHint && (
-                              <p className="text-xs text-muted-foreground">
-                                Select an embedding API key first.
-                              </p>
-                            )}
-                            {showConfigureEmbeddingModelsLink && (
-                              <p className="text-xs text-muted-foreground">
-                                Configure embedding dimensions for a synced
-                                model{" "}
-                                <Link
-                                  href="/llm/providers/models"
-                                  className="text-primary underline underline-offset-2"
-                                >
-                                  here
-                                </Link>
-                                .
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {showEmbeddingActions && (
-                          <div className="flex flex-wrap justify-end gap-2 md:shrink-0">
-                            {embeddingChatApiKeyId && embeddingModel && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={testConnection.isPending}
-                                onClick={() =>
-                                  testConnection.mutate({
-                                    embeddingChatApiKeyId,
-                                    embeddingModel,
-                                  })
-                                }
-                              >
-                                {testConnection.isPending ? (
-                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Zap className="mr-1 h-3.5 w-3.5" />
-                                )}
-                                Test Connection
-                              </Button>
-                            )}
-                            {isEmbeddingModelLocked && (
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => setShowDropDialog(true)}
-                              >
-                                <Trash2 className="mr-1 h-3.5 w-3.5" />
-                                Drop
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   <DropEmbeddingConfigDialog
                     open={showDropDialog}
                     onOpenChange={setShowDropDialog}
@@ -732,50 +661,112 @@ function KnowledgeSettingsContent() {
                 </div>
               )}
             </WithPermissions>
-          }
-        />
+          </CardContent>
+          {showEmbeddingFooter && (
+            <CardFooter className="-mb-6 mt-2 flex flex-col gap-3 rounded-b-xl border-t bg-muted/30 py-4 sm:flex-row sm:items-center sm:justify-between">
+              {isEmbeddingModelLocked ? (
+                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    To change the embedding model, drop the existing index — all
+                    documents will need to be re-embedded.
+                  </span>
+                </p>
+              ) : (
+                <span />
+              )}
+              <WithPermissions
+                permissions={{ knowledgeSettings: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {showTestConnection && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!hasPermission || testConnection.isPending}
+                        onClick={() => {
+                          if (!embeddingChatApiKeyId || !embeddingModel) return;
+                          testConnection.mutate({
+                            embeddingChatApiKeyId,
+                            embeddingModel,
+                          });
+                        }}
+                      >
+                        {testConnection.isPending ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Test Connection
+                      </Button>
+                    )}
+                    {isEmbeddingModelLocked && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={!hasPermission}
+                        onClick={() => setShowDropDialog(true)}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        Drop
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </WithPermissions>
+            </CardFooter>
+          )}
+        </Card>
 
-        <SettingsBlock
-          title="Reranking Configuration"
-          description="Configure the LLM used to rerank knowledge base search results for improved relevance. Any LLM provider and model can be used."
-          control={
+        <Card>
+          <CardHeader>
+            <CardTitle>Reranking Configuration</CardTitle>
+            <CardDescription>
+              Configure the LLM used to rerank knowledge base search results for
+              improved relevance. Any LLM provider and model can be used.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <WithPermissions
               permissions={{ knowledgeSettings: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div
-                  className={cn(
-                    "flex flex-col gap-2",
-                    KNOWLEDGE_SETTINGS_CONTROL_CLASS,
-                  )}
-                >
-                  <ApiKeySelector
-                    value={rerankerChatApiKeyId}
-                    onChange={handleRerankerKeyChange}
-                    disabled={!hasPermission}
-                    label="reranker API key"
-                    pulse={
-                      !embeddingSetupStep &&
-                      (rerankerSetupStep === "add-key" ||
-                        rerankerSetupStep === "select-key")
-                    }
-                  />
-                  <RerankerModelSelector
-                    value={rerankerModel}
-                    onChange={setRerankerModel}
-                    disabled={!hasPermission}
-                    selectedKeyId={rerankerChatApiKeyId}
-                    pulse={
-                      !embeddingSetupStep &&
-                      rerankerSetupStep === "select-model"
-                    }
-                  />
+                <div className="flex flex-col gap-4">
+                  <CardRow label="Key">
+                    <ApiKeySelector
+                      value={rerankerChatApiKeyId}
+                      onChange={handleRerankerKeyChange}
+                      disabled={!hasPermission}
+                      label="reranker API key"
+                      pulse={
+                        !embeddingSetupStep &&
+                        (rerankerSetupStep === "add-key" ||
+                          rerankerSetupStep === "select-key")
+                      }
+                    />
+                  </CardRow>
+                  <CardRow label="Model">
+                    <RerankerModelSelector
+                      value={rerankerModel}
+                      onChange={setRerankerModel}
+                      disabled={!hasPermission}
+                      selectedKeyId={rerankerChatApiKeyId}
+                      pulse={
+                        !embeddingSetupStep &&
+                        rerankerSetupStep === "select-model"
+                      }
+                    />
+                  </CardRow>
                 </div>
               )}
             </WithPermissions>
-          }
-        />
+          </CardContent>
+        </Card>
 
         <SettingsSaveBar
           hasChanges={hasChanges}

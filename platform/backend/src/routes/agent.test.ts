@@ -140,6 +140,26 @@ describe("agent routes", () => {
       expect(agent).toHaveProperty("teams");
     });
 
+    test("should return 404 when agent belongs to a different organization", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const otherAgent = await makeAgent({
+        name: `Other Org Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId: otherOrg.id,
+        scope: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${otherAgent.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
     test("should return 404 for non-existent agent", async () => {
       const fakeId = crypto.randomUUID();
 

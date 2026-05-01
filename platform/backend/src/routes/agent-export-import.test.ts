@@ -248,6 +248,26 @@ describe("Agent export/import routes", () => {
         "Only internal agents can be exported",
       );
     });
+
+    test("returns 404 when the agent belongs to a different organization", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const otherOrgAgent = await makeAgent({
+        name: "Other Org Agent",
+        agentType: "agent",
+        organizationId: otherOrg.id,
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${otherOrgAgent.id}/export`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
   });
 
   // ---------------------------------------------------------------------------

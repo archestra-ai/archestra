@@ -214,14 +214,25 @@ export function ImportAgentDialog({
           result.warnings.length,
         );
       },
-      onError: () => {
+      onError: (err) => {
+        const maybeMessage =
+          typeof err === "object" &&
+          err !== null &&
+          "error" in err &&
+          typeof (err as { error?: unknown }).error === "object" &&
+          (err as { error?: unknown }).error !== null &&
+          "message" in (err as { error: { message?: unknown } }).error &&
+          typeof (err as { error: { message: unknown } }).error.message ===
+            "string"
+            ? (err as { error: { message: string } }).error.message
+            : null;
         setState({
           status: "error",
-          message: "Import failed. Please try again.",
+          message: maybeMessage ?? "Import failed. Please try again.",
         });
       },
     });
-  }, [state, importMutation, onSuccess]);
+  }, [importMutation, onSuccess, state]);
 
   return (
     <FormDialog

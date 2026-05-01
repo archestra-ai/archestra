@@ -283,6 +283,57 @@ describe("ImportAgentDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it("renders backend warnings after import", async () => {
+    const user = userEvent.setup();
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    mutate.mockImplementation((_payload, options) => {
+      options?.onSuccess?.({
+        agent: { id: "agent-123", name: "Warn Agent (imported)" },
+        warnings: [
+          {
+            type: "tool",
+            name: "missing_tool",
+            message: 'Tool "missing_tool" could not be resolved.',
+          },
+        ],
+      });
+    });
+
+    await simulateFileUpload(user, validPayloadJson);
+    await waitFor(() => screen.getByRole("button", { name: /import agent/i }));
+
+    await user.click(screen.getByRole("button", { name: /import agent/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/warn agent \(imported\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/missing_tool/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows backend error message when mutation fails", async () => {
+    const user = userEvent.setup();
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    mutate.mockImplementation((_payload, options) => {
+      options?.onError?.({
+        error: { message: "Invalid import payload: bad field" },
+      });
+    });
+
+    await simulateFileUpload(user, validPayloadJson);
+    await waitFor(() => screen.getByRole("button", { name: /import agent/i }));
+
+    await user.click(screen.getByRole("button", { name: /import agent/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid Configuration")).toBeInTheDocument();
+      expect(
+        screen.getByText(/invalid import payload: bad field/i),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("calls onSuccess callback with agent data and warning count", async () => {
     const onSuccess = vi.fn();
     const user = userEvent.setup();

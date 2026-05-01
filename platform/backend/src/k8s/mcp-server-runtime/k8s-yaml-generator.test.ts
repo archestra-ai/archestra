@@ -511,5 +511,102 @@ spec:
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
     });
+
+    test("warns when container.args is defined directly", () => {
+      const yamlWithArgs = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          args: ["--token", "$FOO"]
+`;
+
+      const result = validateDeploymentYaml(yamlWithArgs);
+
+      expect(
+        result.warnings.some((w) =>
+          w.includes("overrides the Arguments field"),
+        ),
+      ).toBe(true);
+    });
+
+    test("does not warn when container.args is the ${archestra.arguments} placeholder", () => {
+      const yamlWithPlaceholder = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          args: \${archestra.arguments}
+`;
+
+      const result = validateDeploymentYaml(yamlWithPlaceholder);
+
+      expect(
+        result.warnings.some((w) =>
+          w.includes("overrides the Arguments field"),
+        ),
+      ).toBe(false);
+    });
+
+    test("does not warn when container.args is omitted", () => {
+      const yamlWithoutArgs = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+`;
+
+      const result = validateDeploymentYaml(yamlWithoutArgs);
+
+      expect(
+        result.warnings.some((w) =>
+          w.includes("overrides the Arguments field"),
+        ),
+      ).toBe(false);
+    });
+
+    test("does not warn when only sidecar containers define args", () => {
+      const yamlWithSidecarArgs = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+        - name: sidecar
+          image: sidecar:latest
+          args: ["--port", "9090"]
+`;
+
+      const result = validateDeploymentYaml(yamlWithSidecarArgs);
+
+      expect(
+        result.warnings.some((w) =>
+          w.includes("overrides the Arguments field"),
+        ),
+      ).toBe(false);
+    });
   });
 });

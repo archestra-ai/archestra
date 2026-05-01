@@ -28910,6 +28910,7 @@ export type GetConnectorsResponses = {
             } | {
                 type: 'slack';
                 channelIds: Array<string>;
+                syncWindowDays?: number;
                 skipBotMessages?: boolean;
                 includeThreadReplies?: boolean;
                 includePinnedItems?: boolean;
@@ -29067,6 +29068,7 @@ export type CreateConnectorData = {
         } | {
             type: 'slack';
             channelIds: Array<string>;
+            syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29277,6 +29279,7 @@ export type CreateConnectorResponses = {
         } | {
             type: 'slack';
             channelIds: Array<string>;
+            syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29584,6 +29587,7 @@ export type GetConnectorResponses = {
         } | {
             type: 'slack';
             channelIds: Array<string>;
+            syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29727,6 +29731,7 @@ export type UpdateConnectorData = {
         } | {
             type: 'slack';
             channelIds: Array<string>;
+            syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;
@@ -29938,6 +29943,7 @@ export type UpdateConnectorResponses = {
         } | {
             type: 'slack';
             channelIds: Array<string>;
+            syncWindowDays?: number;
             skipBotMessages?: boolean;
             includeThreadReplies?: boolean;
             includePinnedItems?: boolean;

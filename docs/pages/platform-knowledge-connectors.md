@@ -299,6 +299,7 @@ Ingests public channel messages and thread replies from a Slack workspace. Messa
 | Field | Description |
 | --- | --- |
 | Channel IDs | Comma-separated channel IDs to sync (required) |
+| Sync Window (days) | Optional limit for indexing only the last N days of messages per selected channel |
 | Skip Bot Messages | Toggle to exclude messages from other bots and app integrations (default: on) |
 | Include Thread Replies | Toggle to fetch thread replies and append them to the parent message (default: on) |
 
@@ -316,7 +317,7 @@ Authentication uses a **Bot User OAuth Token** (starts with `xoxb-`). To configu
 3. Install the app to your workspace and copy the Bot User OAuth Token into the API Token field
 4. **Important**: You must explicitly `/invite` your bot to any channel you want it to index
 
-Incremental sync stores a separate timezone-aware cursor (`lastSyncedTs`) for each channel to ensure no messages are missed even if one channel has high activity.
+Incremental sync stores a separate timezone-aware cursor (`lastSyncedTs`) for each channel to ensure no messages are missed even if one channel has high activity. When `Sync Window (days)` is set, each channel sync uses the newer of the channel checkpoint cursor and the configured window boundary.
 
 ## Managing Connectors
 

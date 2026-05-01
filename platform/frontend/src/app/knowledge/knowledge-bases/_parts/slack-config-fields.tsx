@@ -70,6 +70,61 @@ export function SlackConfigFields({ control }: { control: Control<any> }) {
       />
       <FormField
         control={control}
+        name="config.syncWindowDays"
+        rules={{
+          validate: (value) => {
+            if (
+              value === undefined ||
+              value === null ||
+              value === "" ||
+              value === 0
+            ) {
+              return true;
+            }
+
+            const parsedValue =
+              typeof value === "number"
+                ? value
+                : Number.parseFloat(String(value));
+            if (!Number.isFinite(parsedValue)) {
+              return "Sync window must be a whole number between 1 and 3650";
+            }
+
+            if (!Number.isInteger(parsedValue)) {
+              return "Sync window must be a whole number between 1 and 3650";
+            }
+
+            if (parsedValue < 1 || parsedValue > 3650) {
+              return "Sync window must be a whole number between 1 and 3650";
+            }
+
+            return true;
+          },
+        }}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Sync Window (days)</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                min={1}
+                max={3650}
+                step={1}
+                placeholder="90"
+                {...field}
+                value={(field.value as number | string | undefined) ?? ""}
+              />
+            </FormControl>
+            <FormDescription>
+              Optional. Limits indexing to messages from the last N days per
+              selected channel.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
         name="config.includeThreadReplies"
         render={({ field }) => (
           <FormItem className="flex items-center justify-between rounded-lg border p-3">

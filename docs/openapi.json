@@ -106513,6 +106513,11 @@
                                       "type": "string"
                                     }
                                   },
+                                  "syncWindowDays": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 3650
+                                  },
                                   "skipBotMessages": {
                                     "type": "boolean"
                                   },
@@ -107642,6 +107647,11 @@
                               "type": "string"
                             }
                           },
+                          "syncWindowDays": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 3650
+                          },
                           "skipBotMessages": {
                             "type": "boolean"
                           },
@@ -108402,6 +108412,11 @@
                               "items": {
                                 "type": "string"
                               }
+                            },
+                            "syncWindowDays": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3650
                             },
                             "skipBotMessages": {
                               "type": "boolean"
@@ -109481,6 +109496,11 @@
                                 "type": "string"
                               }
                             },
+                            "syncWindowDays": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3650
+                            },
                             "skipBotMessages": {
                               "type": "boolean"
                             },
@@ -110448,6 +110468,11 @@
                               "type": "string"
                             }
                           },
+                          "syncWindowDays": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 3650
+                          },
                           "skipBotMessages": {
                             "type": "boolean"
                           },
@@ -111206,6 +111231,11 @@
                               "items": {
                                 "type": "string"
                               }
+                            },
+                            "syncWindowDays": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3650
                             },
                             "skipBotMessages": {
                               "type": "boolean"

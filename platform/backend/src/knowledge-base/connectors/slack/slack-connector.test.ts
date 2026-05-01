@@ -123,6 +123,40 @@ describe("SlackConnector", () => {
       expect(result.valid).toBe(true);
     });
 
+    it("accepts config with valid syncWindowDays", async () => {
+      const connector = new SlackConnector();
+      const result = await connector.validateConfig({
+        channelIds: ["C12345ABC"],
+        syncWindowDays: 90,
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("rejects invalid syncWindowDays values", async () => {
+      const connector = new SlackConnector();
+
+      const zeroResult = await connector.validateConfig({
+        channelIds: ["C12345ABC"],
+        syncWindowDays: 0,
+      });
+      expect(zeroResult.valid).toBe(false);
+      expect(zeroResult.error).toContain("Sync window (days)");
+
+      const floatResult = await connector.validateConfig({
+        channelIds: ["C12345ABC"],
+        syncWindowDays: 1.5,
+      });
+      expect(floatResult.valid).toBe(false);
+      expect(floatResult.error).toContain("Sync window (days)");
+
+      const stringResult = await connector.validateConfig({
+        channelIds: ["C12345ABC"],
+        syncWindowDays: "30",
+      });
+      expect(stringResult.valid).toBe(false);
+      expect(stringResult.error).toContain("Sync window (days)");
+    });
+
     it("rejects invalid batchSize type", async () => {
       const connector = new SlackConnector();
       const result = await connector.validateConfig({
@@ -889,6 +923,104 @@ describe("SlackConnector", () => {
           oldest: "1700000050.000000",
         }),
       );
+    });
+
+    it("uses sync window oldest on first sync when no checkpoint exists", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [],
+        has_more: false,
+      });
+
+      const connector = new SlackConnector();
+      const beforeSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+      for await (const _batch of connector.sync({
+        config: { channelIds: ["C001"], syncWindowDays: 1 },
+        credentials,
+        checkpoint: null,
+      })) {
+      }
+      const afterSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+
+      expect(mockConversationsHistory).toHaveBeenCalledTimes(1);
+      const historyArgs = mockConversationsHistory.mock.calls[0][0] as {
+        oldest?: string;
+      };
+      const oldest = Number.parseFloat(historyArgs.oldest ?? "0");
+      expect(oldest).toBeGreaterThanOrEqual(beforeSeconds - 2);
+      expect(oldest).toBeLessThanOrEqual(afterSeconds + 2);
+    });
+
+    it("prefers newer checkpoint over sync window oldest", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [],
+        has_more: false,
+      });
+
+      const connector = new SlackConnector();
+      for await (const _batch of connector.sync({
+        config: { channelIds: ["C001"], syncWindowDays: 90 },
+        credentials,
+        checkpoint: {
+          type: "slack",
+          channelCursors: { C001: "1700000050.000000" },
+        },
+      })) {
+      }
+
+      expect(mockConversationsHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: "C001",
+          oldest: "1700000050.000000",
+        }),
+      );
+    });
+
+    it("prefers sync window oldest over stale checkpoint", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [],
+        has_more: false,
+      });
+
+      const connector = new SlackConnector();
+      const beforeSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+      for await (const _batch of connector.sync({
+        config: { channelIds: ["C001"], syncWindowDays: 1 },
+        credentials,
+        checkpoint: {
+          type: "slack",
+          channelCursors: { C001: "1000.000000" },
+        },
+      })) {
+      }
+      const afterSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+
+      const historyArgs = mockConversationsHistory.mock.calls[0][0] as {
+        oldest?: string;
+      };
+      const oldest = Number.parseFloat(historyArgs.oldest ?? "0");
+      expect(oldest).toBeGreaterThanOrEqual(beforeSeconds - 2);
+      expect(oldest).toBeLessThanOrEqual(afterSeconds + 2);
     });
 
     it("yields zero-update batch for no-op incremental sync", async () => {

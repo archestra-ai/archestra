@@ -27,7 +27,7 @@ const USER_CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour TTL
  *
  * Auth: Bot User OAuth Token (`xoxb-…`) stored in credentials.apiToken.
  * Required bot scopes: channels:history, channels:read, groups:history,
- * groups:read, users:read, pins:read.
+ * groups:read, users:read.
  *
  * Checkpoint strategy: per-channel `ts` high-water marks stored as a map
  * (`channelCursors`) so each channel progresses independently.
@@ -51,6 +51,17 @@ export class SlackConnector extends BaseConnector {
           valid: false,
           error:
             "Channel IDs are required. Please specify the Slack channel IDs to sync to avoid indexing an entire workspace.",
+        };
+      }
+
+      const syncWindowDaysIssue = parseResult.error.issues.find(
+        (issue) => issue.path.length > 0 && issue.path[0] === "syncWindowDays",
+      );
+      if (syncWindowDaysIssue) {
+        return {
+          valid: false,
+          error:
+            "Sync window (days) must be a whole number between 1 and 3650.",
         };
       }
 
@@ -176,6 +187,10 @@ export class SlackConnector extends BaseConnector {
     const skipBotMessages = parsed.skipBotMessages ?? true;
     const includeThreadReplies = parsed.includeThreadReplies ?? true;
     const channelCursors = { ...checkpoint.channelCursors };
+    const windowOldestTs =
+      parsed.syncWindowDays !== undefined
+        ? getWindowOldestTs(parsed.syncWindowDays)
+        : null;
 
     const client = getSlackClient(params.credentials);
 
@@ -184,6 +199,7 @@ export class SlackConnector extends BaseConnector {
         channelIds: parsed.channelIds,
         skipBotMessages,
         includeThreadReplies,
+        syncWindowDays: parsed.syncWindowDays,
         channelCursorCount: Object.keys(channelCursors).length,
       },
       "Starting Slack sync",
@@ -211,13 +227,23 @@ export class SlackConnector extends BaseConnector {
 
       if (!channelId) continue;
 
-      const oldestTs = channelCursors[channelId] ?? "0";
+      const checkpointOldestTs = channelCursors[channelId] ?? "0";
+      const effectiveOldestTs =
+        windowOldestTs !== null
+          ? getMaxSlackTs(checkpointOldestTs, windowOldestTs)
+          : checkpointOldestTs;
       let cursor: string | undefined;
       let hasMoreMessages = true;
-      let maxTs = oldestTs;
+      let maxTs = effectiveOldestTs;
 
       this.log.debug(
-        { channelId, channelName, oldestTs },
+        {
+          channelId,
+          channelName,
+          checkpointOldestTs,
+          windowOldestTs: windowOldestTs ?? undefined,
+          effectiveOldestTs,
+        },
         "Syncing Slack channel",
       );
 
@@ -227,7 +253,7 @@ export class SlackConnector extends BaseConnector {
 
           const historyResult = await client.conversations.history({
             channel: channelId,
-            oldest: oldestTs as string,
+            oldest: effectiveOldestTs,
             limit: batchSize,
             cursor,
           });
@@ -544,4 +570,19 @@ function getSlackClient(credentials: ConnectorCredentials): WebClient {
 function parseSlackConfig(config: Record<string, unknown>): SlackConfig | null {
   const result = SlackConfigSchema.safeParse({ type: "slack", ...config });
   return result.success ? result.data : null;
+}
+
+function getWindowOldestTs(syncWindowDays: number): string {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const windowSeconds = syncWindowDays * 24 * 60 * 60;
+  return String(Math.max(0, nowSeconds - windowSeconds));
+}
+
+function getMaxSlackTs(firstTs: string, secondTs: string): string {
+  const first = Number.parseFloat(firstTs);
+  const second = Number.parseFloat(secondTs);
+
+  if (!Number.isFinite(first)) return secondTs;
+  if (!Number.isFinite(second)) return firstTs;
+  return first >= second ? firstTs : secondTs;
 }

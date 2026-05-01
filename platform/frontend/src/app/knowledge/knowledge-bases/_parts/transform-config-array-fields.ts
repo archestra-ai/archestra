@@ -50,5 +50,18 @@ export function transformConfigArrayFields(
     }
   }
 
+  // Numeric fields sent from text/number inputs may arrive as strings.
+  if (typeof result.syncWindowDays === "string") {
+    const value = result.syncWindowDays.trim();
+    if (value.length === 0) {
+      delete result.syncWindowDays;
+    } else {
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isNaN(parsed)) {
+        result.syncWindowDays = parsed;
+      }
+    }
+  }
+
   return result;
 }

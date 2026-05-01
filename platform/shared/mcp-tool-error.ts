@@ -7,6 +7,7 @@ export const McpToolErrorTypeSchema = z.enum([
   "auth_expired",
   "assigned_credential_unavailable",
   "policy_denied",
+  "tool_state",
   "generic",
 ]);
 
@@ -63,12 +64,22 @@ export const PolicyDeniedMcpToolErrorSchema = z
   })
   .strict();
 
+export const ToolStateMcpToolErrorSchema = z
+  .object({
+    type: z.literal("tool_state"),
+    message: z.string(),
+    code: z.string(),
+    toolName: z.string().optional(),
+  })
+  .strict();
+
 export const McpToolErrorSchema = z.discriminatedUnion("type", [
   GenericMcpToolErrorSchema,
   AuthRequiredMcpToolErrorSchema,
   AuthExpiredMcpToolErrorSchema,
   AssignedCredentialUnavailableMcpToolErrorSchema,
   PolicyDeniedMcpToolErrorSchema,
+  ToolStateMcpToolErrorSchema,
 ]);
 
 export type GenericMcpToolError = z.infer<typeof GenericMcpToolErrorSchema>;
@@ -84,6 +95,7 @@ export type AssignedCredentialUnavailableMcpToolError = z.infer<
 export type PolicyDeniedMcpToolError = z.infer<
   typeof PolicyDeniedMcpToolErrorSchema
 >;
+export type ToolStateMcpToolError = z.infer<typeof ToolStateMcpToolErrorSchema>;
 export type PolicyDeniedReasonType = z.infer<
   typeof PolicyDeniedReasonTypeSchema
 >;

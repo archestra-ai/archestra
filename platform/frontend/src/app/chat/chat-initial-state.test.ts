@@ -102,6 +102,30 @@ describe("resolveInitialAgentSelection", () => {
       })?.id,
     ).toBe("member-default");
   });
+
+  test("returns null when no agents are available", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents: [],
+        organizationDefaultAgentId: "org-default",
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      }),
+    ).toBeNull();
+  });
+
+  test("falls back to the first agent when no defaults match", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        organizationDefaultAgentId: null,
+        savedAgentId: "missing-saved-agent",
+        memberDefaultAgentId: "missing-member-default",
+        canUseSavedAgent: true,
+      })?.id,
+    ).toBe("first-agent");
+  });
 });
 
 describe("getProviderForModelId", () => {

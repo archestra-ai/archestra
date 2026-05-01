@@ -269,6 +269,56 @@ describe("ChatMessages", () => {
     expect(screen.getAllByText("Switched to Jira Agent")).toHaveLength(1);
   });
 
+  it("renders failed swap tools as compact error indicators instead of swap dividers", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__swap_agent",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { agent_name: "Jira Agent" },
+            output: JSON.stringify({
+              success: false,
+              code: "already_using_agent",
+              message:
+                'Already using agent "Jira Agent". Choose a different agent.',
+              archestraError: {
+                type: "tool_state",
+                code: "already_using_agent",
+                message:
+                  'Already using agent "Jira Agent". Choose a different agent.',
+                toolName: "swap_agent",
+              },
+            }),
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const toolButtons = screen.getAllByRole("button");
+    expect(toolButtons).toHaveLength(1);
+    expect(
+      screen.queryByText("tool-sparky__swap_agent"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Switched to Jira Agent"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(toolButtons[0]);
+    expect(screen.getByText("tool-sparky__swap_agent")).toBeInTheDocument();
+  });
+
   it("renders persisted chat errors between messages by timestamp", () => {
     const messages = [
       {

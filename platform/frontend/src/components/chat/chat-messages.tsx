@@ -1489,18 +1489,33 @@ const MessageTool = memo(
       onReauthMcp,
     });
 
-    // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
-    // Show the raw tool call when the user's name ends with "(debugging)"
+    // Successful swap_agent / swap_to_default_agent calls are rendered as dividers after all message parts.
+    // Failed/no-op swap calls use the compact tool status indicator so they do not render a false divider.
+    // Show the raw tool call when the user's name ends with "(debugging)".
     const swapToolShortName = getSwapToolShortName({
       toolName,
       getToolShortName,
     });
-    if (
-      !isDebugging &&
-      (swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
-        swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME)
-    ) {
-      return null;
+    const isSwapTool =
+      swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
+      swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME;
+    if (!isDebugging && isSwapTool) {
+      return errorText ? (
+        <CompactToolGroup
+          tools={[
+            {
+              key: part.toolCallId ?? toolName,
+              toolName,
+              part,
+              toolResultPart,
+              errorText,
+            },
+          ]}
+          toolIconMap={toolIconMap}
+          canExpandToolCalls={canExpandToolCalls}
+          onToolApprovalResponse={onToolApprovalResponse}
+        />
+      ) : null;
     }
 
     if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {

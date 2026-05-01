@@ -37,6 +37,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useCloneAgent,
   useDeleteProfile,
   useExportAgent,
   useProfile,
@@ -198,6 +199,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
   const [viewingAgent, setViewingAgent] = useState<AgentData | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+
+  const cloneAgent = useCloneAgent();
+
+  const handleClone = useCallback(
+    async (agentId: string) => {
+      const toastId = toast.loading("Cloning agent...");
+      try {
+        const cloned = await cloneAgent.mutateAsync(agentId);
+        if (cloned) {
+          toast.success("Agent cloned successfully", { id: toastId });
+          // Open edit dialog for the cloned agent so user can rename immediately
+          setEditingAgent(cloned as AgentData);
+        }
+      } catch (_error) {
+        toast.error("Failed to clone agent", { id: toastId });
+      }
+    },
+    [cloneAgent],
+  );
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
 
@@ -447,6 +467,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               setViewingAgent(agentData);
             }}
             onDelete={setDeletingAgentId}
+            onClone={handleClone}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {

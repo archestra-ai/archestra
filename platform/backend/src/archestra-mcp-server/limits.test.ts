@@ -54,7 +54,7 @@ describe("limit tool execution", () => {
     expect((result.content[0] as any).text).toContain("limit_value:");
   });
 
-  test("create_limit returns error when token_cost limit missing model", async () => {
+  test("create_limit succeeds with omitted model (all models)", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
       {
@@ -65,11 +65,49 @@ describe("limit tool execution", () => {
       },
       mockContext,
     );
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain(
-      "model array with at least one model is required",
+      "Successfully created limit",
     );
-    expect((result.content[0] as any).text).toContain("model:");
+    expect((result.content[0] as any).text).toContain("Model: All models");
+  });
+
+  test("create_limit succeeds with null model (all models)", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: null,
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain("Model: All models");
+  });
+
+  test("create_limit succeeds with empty model array (all models)", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: testAgent.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+        model: [],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain(
+      "Successfully created limit",
+    );
+    expect((result.content[0] as any).text).toContain("Model: All models");
   });
 
   test("create_limit returns error when mcp_server_calls limit missing mcp_server_name", async () => {

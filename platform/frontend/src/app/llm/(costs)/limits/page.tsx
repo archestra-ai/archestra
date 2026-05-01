@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CircleHelp, Edit, Plus, Trash2, X } from "lucide-react";
+import { CircleHelp, Edit, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
@@ -14,6 +14,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
 import { DataTable } from "@/components/ui/data-table";
 import {
   DialogBody,
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Progress } from "@/components/ui/progress";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -60,14 +62,16 @@ type LimitFormState = {
   entityType: LimitEntityType;
   entityId: string;
   limitValue: string;
-  model: string[];
+  models: string[];
+  isAllModels: boolean;
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
   entityType: "organization",
   entityId: "",
   limitValue: "",
-  model: [],
+  models: [],
+  isAllModels: true,
 };
 
 const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
@@ -108,7 +112,6 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
-  const [modelToAdd, setModelToAdd] = useState("");
   const [editingLimit, setEditingLimit] = useState<LimitData | null>(null);
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -135,7 +138,6 @@ export default function LimitsPage() {
   const handleCreateOpen = useCallback(() => {
     setEditingLimit(null);
     setFormState(DEFAULT_FORM_STATE);
-    setModelToAdd("");
     setIsDialogOpen(true);
   }, []);
 
@@ -155,13 +157,15 @@ export default function LimitsPage() {
 
   const handleEditOpen = useCallback((limit: LimitData) => {
     setEditingLimit(limit);
+    const models = getLimitModels(limit);
+    const isAllModels = models.length === 0 && limit.limitType === "token_cost";
     setFormState({
       entityType: limit.entityType as LimitEntityType,
       entityId: limit.entityType === "organization" ? "" : limit.entityId,
       limitValue: String(limit.limitValue),
-      model: getLimitModels(limit),
+      models: isAllModels ? [] : models,
+      isAllModels,
     });
-    setModelToAdd("");
     setIsDialogOpen(true);
   }, []);
 
@@ -225,9 +229,14 @@ export default function LimitsPage() {
         statusFilter === "all" || usageStatus === statusFilter;
       const matchesAppliedTo =
         appliedToFilter === "all" || limit.entityType === appliedToFilter;
+      const isAllModelsLimit =
+        limit.limitType === "token_cost" &&
+        (!limit.model ||
+          (Array.isArray(limit.model) && limit.model.length === 0));
       const matchesModel =
         modelFilter === "all" ||
-        (Array.isArray(limit.model) && limit.model.includes(modelFilter));
+        (Array.isArray(limit.model) && limit.model.includes(modelFilter)) ||
+        isAllModelsLimit;
 
       return matchesStatus && matchesAppliedTo && matchesModel;
     });
@@ -267,15 +276,25 @@ export default function LimitsPage() {
       {
         accessorKey: "model",
         header: "Models",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {getLimitModels(row.original).map((model) => (
-              <Badge key={model} variant="outline" className="text-xs">
-                {model}
-              </Badge>
-            ))}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const models = getLimitModels(row.original);
+          const isAllModels =
+            models.length === 0 && row.original.limitType === "token_cost";
+          return (
+            <div className="flex flex-wrap gap-1">
+              {isAllModels && (
+                <Badge variant="outline" className="text-xs">
+                  All models
+                </Badge>
+              )}
+              {models.map((model) => (
+                <Badge key={model} variant="outline" className="text-xs">
+                  {model}
+                </Badge>
+              ))}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "usage",
@@ -344,7 +363,7 @@ export default function LimitsPage() {
           : formState.entityId,
       limitType: "token_cost" as const,
       limitValue: Number(formState.limitValue),
-      model: formState.model,
+      model: formState.isAllModels ? null : formState.models,
     };
 
     if (editingLimit) {
@@ -373,7 +392,7 @@ export default function LimitsPage() {
 
   const canSubmit =
     Number(formState.limitValue) > 0 &&
-    formState.model.length > 0 &&
+    (formState.isAllModels || formState.models.length > 0) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
 
   return (
@@ -558,45 +577,24 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Add model</Label>
-              <LlmModelSearchableSelect
-                value={modelToAdd}
-                onValueChange={(value) => {
-                  setModelToAdd("");
+              <Label>Select models</Label>
+              <MultiSelect
+                value={formState.models}
+                onValueChange={(values) =>
                   setFormState((current) => ({
                     ...current,
-                    model: current.model.includes(value)
-                      ? current.model
-                      : [...current.model, value],
-                  }));
-                }}
-                options={modelOptions}
-                placeholder="Select model..."
-                showPricing
+                    models: values,
+                    isAllModels: values.length === 0,
+                  }))
+                }
+                placeholder="Select models..."
+                allValue="__all__"
+                allLabel="All models"
+                items={modelOptions.map((option) => ({
+                  value: option.value,
+                  label: option.model,
+                }))}
               />
-              <div className="flex flex-wrap gap-1">
-                {formState.model.map((model) => (
-                  <Badge key={model} variant="secondary" className="gap-1 pr-1">
-                    {model}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4"
-                      onClick={() =>
-                        setFormState((current) => ({
-                          ...current,
-                          model: current.model.filter(
-                            (currentModel) => currentModel !== model,
-                          ),
-                        }))
-                      }
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </Badge>
-                ))}
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -648,7 +646,7 @@ export default function LimitsPage() {
   );
 }
 
-function getLimitModels(limit: LimitData): string[] {
+export function getLimitModels(limit: LimitData): string[] {
   return Array.isArray(limit.model)
     ? limit.model.filter((model): model is string => typeof model === "string")
     : [];

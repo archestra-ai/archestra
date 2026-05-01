@@ -79,17 +79,17 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
         return false;
       }
     }
-    // Validation: token_cost requires non-empty model array and should not have mcp or tool specificity
+    // Validation: token_cost should not have mcp or tool specificity
     if (data.limitType === "token_cost") {
+      if (data.mcpServerName || data.toolName) {
+        return false;
+      }
       if (
         !data.model ||
         !Array.isArray(data.model) ||
         data.model.length === 0
       ) {
-        return false;
-      }
-      if (data.mcpServerName || data.toolName) {
-        return false;
+        data.model = null;
       }
     }
     return true;

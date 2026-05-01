@@ -375,4 +375,300 @@ describe("LLM proxy limit enforcement (integration)", () => {
     // virtual_key is checked first (most specific), so error should mention it
     expect(body.error.message).toContain("virtual_key-level");
   });
+
+  test("records usage in team all-models limit after successful request", async ({
+    makeAgent,
+    makeOrganization,
+    makeAdmin,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeAdmin();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, admin.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Team All-Models Agent",
+      teams: [team.id],
+      scope: "team",
+    });
+
+    // Create team-level all-models limit (model: null)
+    const teamLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1_000_000_000,
+      model: null,
+    });
+
+    await ModelModel.ensureModelExists("gpt-4o", "openai");
+
+    await setupRoute({
+      usage: { inputTokens: 500, outputTokens: 100 },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Tick to let background update run
+    // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // BUG REPRODUCTION: team all-models limit usage should be updated
+    const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+    expect(teamUsage).toHaveLength(1);
+    expect(teamUsage[0].model).toBe("gpt-4o");
+    expect(teamUsage[0].tokensIn).toBe(500);
+    expect(teamUsage[0].tokensOut).toBe(100);
+  });
+
+  test("records usage in team all-models limit when agent has multiple teams", async ({
+    makeAgent,
+    makeOrganization,
+    makeAdmin,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeAdmin();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+    const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Multi-Team All-Models Agent",
+      teams: [team1.id, team2.id],
+      scope: "team",
+    });
+
+    // Create all-models limit on team1 ONLY
+    const team1Limit = await LimitModel.create({
+      entityType: "team",
+      entityId: team1.id,
+      limitType: "token_cost",
+      limitValue: 1_000_000_000,
+      model: null,
+    });
+
+    // Create specific-model limit on team2
+    const team2Limit = await LimitModel.create({
+      entityType: "team",
+      entityId: team2.id,
+      limitType: "token_cost",
+      limitValue: 1_000_000_000,
+      model: ["gpt-4o"],
+    });
+
+    // Also create org and user limits to verify they update (control group)
+    const orgLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1_000_000_000,
+      model: null,
+    });
+
+    await ModelModel.ensureModelExists("gpt-4o", "openai");
+
+    await setupRoute({
+      usage: { inputTokens: 300, outputTokens: 60 },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Tick to let background update run
+    // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // BUG REPRODUCTION: team1 all-models limit usage must be updated
+    const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
+    expect(team1Usage).toHaveLength(1);
+    expect(team1Usage[0].model).toBe("gpt-4o");
+    expect(team1Usage[0].tokensIn).toBe(300);
+    expect(team1Usage[0].tokensOut).toBe(60);
+
+    // team2 specific-model limit should also be updated
+    const team2Usage = await LimitModel.getModelUsageBreakdown(team2Limit.id);
+    expect(team2Usage).toHaveLength(1);
+    expect(team2Usage[0].tokensIn).toBe(300);
+    expect(team2Usage[0].tokensOut).toBe(60);
+
+    // org all-models limit should be updated (control — user confirmed this works)
+    const orgUsage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+    expect(orgUsage).toHaveLength(1);
+    expect(orgUsage[0].model).toBe("gpt-4o");
+    expect(orgUsage[0].tokensIn).toBe(300);
+    expect(orgUsage[0].tokensOut).toBe(60);
+  });
+
+  test("blocks request with 429 when team all-models limit is exceeded", async ({
+    makeAgent,
+    makeOrganization,
+    makeAdmin,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeAdmin();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, admin.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Team All-Models Blocked Agent",
+      teams: [team.id],
+      scope: "team",
+    });
+
+    // Create team all-models limit with threshold of 1
+    await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+    });
+
+    // Pre-populate usage to exceed limit
+    await LimitModel.updateTokenLimitUsage(
+      "team",
+      team.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(429);
+    const body = response.json();
+    expect(body.error.code).toBe("token_cost_limit_exceeded");
+    expect(body.error.message).toContain("team-level");
+  });
+
+  test("blocks request with 429 when user all-models limit is exceeded", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "User All-Models Limit Agent",
+    });
+
+    // Create user all-models limit (model: null) with threshold of 1
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+    });
+
+    // Pre-populate usage to exceed limit
+    await LimitModel.updateTokenLimitUsage(
+      "user",
+      user.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        "X-Archestra-User-Id": user.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(429);
+    const body = response.json();
+    expect(body.error.code).toBe("token_cost_limit_exceeded");
+    expect(body.error.message).toContain("user-level");
+  });
+
+  test("blocks request with 429 when virtual_key all-models limit is exceeded", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "VK All-Models Limit Agent",
+    });
+
+    // Create a real virtual key with an OpenAI parent key
+    const secret = await makeSecret({ secret: { apiKey: "sk-test-key" } });
+    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { virtualKey, value: tokenValue } = await VirtualApiKeyModel.create({
+      chatApiKeyId: chatApiKey.id,
+      name: "Test VK for all-models limit",
+    });
+
+    // Create virtual_key all-models limit (model: null) with threshold of 1
+    await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: virtualKey.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+    });
+
+    // Pre-populate usage to exceed limit
+    await LimitModel.updateTokenLimitUsage(
+      "virtual_key",
+      virtualKey.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(`Bearer ${tokenValue}`),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(429);
+    const body = response.json();
+    expect(body.error.code).toBe("token_cost_limit_exceeded");
+    expect(body.error.message).toContain("virtual_key-level");
+  });
 });

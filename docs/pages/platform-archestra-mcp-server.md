@@ -639,7 +639,7 @@ Required RBAC permission: `llmLimit:create`
 | `entity_id` | `string` | Yes | The ID of the entity (organization, team, agent, user, or virtual_key). |
 | `limit_type` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The type of limit to apply. |
 | `limit_value` | `number` | Yes | The limit value (tokens or count depending on limit type). |
-| `model` | `string[]` | No | Array of model names. Required for token_cost limits. |
+| `model` | `string[] \| null` | No | Array of model names. Omit for all models. |
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
 
@@ -653,7 +653,7 @@ Required RBAC permission: `llmLimit:create`
 | `limit.entityId` | `string` | Yes | The limited entity ID. |
 | `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit, if any. |
+| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 
@@ -678,7 +678,7 @@ Required RBAC permission: `llmLimit:read`
 | `limits[].entityId` | `string` | Yes | The limited entity ID. |
 | `limits[].limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limits[].limitValue` | `number` | Yes | The configured limit value. |
-| `limits[].model` | `string[] \| null` | No | Models targeted by a token_cost limit, if any. |
+| `limits[].model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limits[].mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limits[].toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 
@@ -703,7 +703,7 @@ Required RBAC permission: `llmLimit:update`
 | `limit.entityId` | `string` | Yes | The limited entity ID. |
 | `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
 | `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit, if any. |
+| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
 | `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
 | `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
+import AgentTeamModel from "./agent-team";
 import ConversationModel from "./conversation";
 import InteractionModel from "./interaction";
 import LimitModel from "./limit";
@@ -3324,6 +3325,121 @@ describe("InteractionModel", () => {
       expect(orgUsage[0].tokensIn).toBe(80);
     });
 
+    test("updates team all-models limit via interaction flow", async ({
+      makeAgent,
+      makeOrganization,
+      makeAdmin,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeAdmin();
+      const team = await makeTeam(org.id, admin.id);
+      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+
+      // Also assign via agent_team table (like production)
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      const teamLimit = await LimitModel.create({
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 5000000,
+        model: null, // all-models
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        model: "gpt-4o",
+        inputTokens: 80,
+        outputTokens: 160,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to let background update run
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      expect(teamUsage).toHaveLength(1);
+      expect(teamUsage[0].tokensIn).toBe(80);
+      expect(teamUsage[0].tokensOut).toBe(160);
+    });
+
+    test("updates team all-models limit with multiple teams", async ({
+      makeAgent,
+      makeOrganization,
+      makeAdmin,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeAdmin();
+      const team1 = await makeTeam(org.id, admin.id);
+      const team2 = await makeTeam(org.id, admin.id);
+      const agent = await makeAgent({
+        teams: [team1.id, team2.id],
+        scope: "team",
+      });
+
+      // Assign to both teams
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+
+      // Create all-models limit for ONLY team1
+      const team1Limit = await LimitModel.create({
+        entityType: "team",
+        entityId: team1.id,
+        limitType: "token_cost",
+        limitValue: 5000000,
+        model: null, // all-models
+      });
+
+      // Create specific model limit for team2
+      const team2Limit = await LimitModel.create({
+        entityType: "team",
+        entityId: team2.id,
+        limitType: "token_cost",
+        limitValue: 5000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        model: "gpt-4o",
+        inputTokens: 100,
+        outputTokens: 200,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to let background update run
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // team1 all-models limit should be updated
+      const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
+      expect(team1Usage).toHaveLength(1);
+      expect(team1Usage[0].tokensIn).toBe(100);
+      expect(team1Usage[0].tokensOut).toBe(200);
+
+      // team2 specific-model limit should also be updated
+      const team2Usage = await LimitModel.getModelUsageBreakdown(team2Limit.id);
+      expect(team2Usage).toHaveLength(1);
+      expect(team2Usage[0].tokensIn).toBe(100);
+      expect(team2Usage[0].tokensOut).toBe(200);
+    });
+
     test("handles missing userId and virtualKeyId gracefully", async ({
       makeAgent,
     }) => {
@@ -3388,6 +3504,148 @@ describe("InteractionModel", () => {
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
+    });
+
+    test("updates user all-models limit via interaction flow", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+
+      const userLimit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1_000_000,
+        model: null, // all-models
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        inputTokens: 60,
+        outputTokens: 120,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to let background update run
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].model).toBe("gpt-4o");
+      expect(usage[0].tokensIn).toBe(60);
+      expect(usage[0].tokensOut).toBe(120);
+    });
+
+    test("updates virtual_key all-models limit via interaction flow", async ({
+      makeAgent,
+      makeOrganization,
+      makeVirtualApiKey,
+    }) => {
+      const agent = await makeAgent();
+      const org = await makeOrganization();
+      const virtualKey = await makeVirtualApiKey(org.id);
+
+      const vkLimit = await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: virtualKey.id,
+        limitType: "token_cost",
+        limitValue: 5_000_000,
+        model: null, // all-models
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        virtualKeyId: virtualKey.id,
+        model: "gpt-4o",
+        inputTokens: 40,
+        outputTokens: 80,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to let background update run
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].model).toBe("gpt-4o");
+      expect(usage[0].tokensIn).toBe(40);
+      expect(usage[0].tokensOut).toBe(80);
+    });
+
+    test("updates org all-models limit via interaction flow", async ({
+      makeAgent,
+      makeOrganization,
+      makeAdmin,
+      makeTeam,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      const team = await makeTeam(org.id, admin.id);
+      const agent = await makeAgent({
+        teams: [team.id],
+        scope: "team",
+      });
+
+      // Assign agent to team via junction table (like production)
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+      const orgLimit = await LimitModel.create({
+        entityType: "organization",
+        entityId: org.id,
+        limitType: "token_cost",
+        limitValue: 10_000_000,
+        model: null, // all-models
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        model: "gpt-4o",
+        inputTokens: 90,
+        outputTokens: 180,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to let background update run
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const usage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].model).toBe("gpt-4o");
+      expect(usage[0].tokensIn).toBe(90);
+      expect(usage[0].tokensOut).toBe(180);
     });
   });
 });

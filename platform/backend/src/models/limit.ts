@@ -178,9 +178,19 @@ class LimitModel {
     id: string,
     data: Partial<UpdateLimit>,
   ): Promise<Limit | null> {
+    // Normalize empty model array to null for consistent "all models" behavior
+    const patchData = { ...data };
+    if (
+      patchData.model !== undefined &&
+      (!patchData.model ||
+        (Array.isArray(patchData.model) && patchData.model.length === 0))
+    ) {
+      patchData.model = null;
+    }
+
     const [limit] = await db
       .update(schema.limitsTable)
-      .set(data)
+      .set(patchData)
       .where(eq(schema.limitsTable.id, id))
       .returning();
 
@@ -256,8 +266,10 @@ class LimitModel {
             eq(schema.limitsTable.entityType, entityType),
             eq(schema.limitsTable.entityId, entityId),
             eq(schema.limitsTable.limitType, "token_cost"),
-            // Check if model is in the JSONB array
-            sql`${schema.limitsTable.model} ? ${model}`,
+            or(
+              sql`${schema.limitsTable.model} ? ${model}`,
+              sql`${schema.limitsTable.model} IS NULL`,
+            ),
           ),
         );
 

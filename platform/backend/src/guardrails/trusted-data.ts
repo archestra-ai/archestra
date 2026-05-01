@@ -64,23 +64,20 @@ export async function evaluateIfContextIsTrusted(
   let unsafeContextBoundary: UnsafeContextBoundary | undefined;
 
   // If agent configured to consider context untrusted from the beginning,
-  // mark context as untrusted immediately and skip evaluation
+  // mark context as untrusted immediately but still evaluate Tool Result Policies
+  // to ensure blocked results are properly replaced
+  let contextIsTrusted = true;
   if (considerContextUntrusted) {
     logger.debug(
       { agentId },
-      "[trustedData] evaluateIfContextIsTrusted: context marked untrusted by agent config",
+      "[trustedData] evaluateIfContextIsTrusted: context marked untrusted by agent config, still evaluating policies",
     );
-    return {
-      toolResultUpdates: {},
-      contextIsTrusted: false,
-      usedDualLlm: false,
-      dualLlmAnalyses: [],
-      unsafeContextBoundary: {
-        kind: "preexisting_untrusted",
-        reason:
-          initialUntrustedReason ??
-          UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
-      },
+    contextIsTrusted = false;
+    unsafeContextBoundary = {
+      kind: "preexisting_untrusted",
+      reason:
+        initialUntrustedReason ??
+        UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted,
     };
   }
 
@@ -245,11 +242,14 @@ export async function evaluateIfContextIsTrusted(
       hasUntrustedData = true;
       // Preserve the first point where context became unsafe so the UI can show
       // a stable boundary even if later tool results are also untrusted.
-      unsafeContextBoundary ??= createToolResultBoundary({
-        reason: "tool_result_marked_untrusted",
-        toolCallId,
-        toolName,
-      });
+      // Only update boundary if not already set by considerContextUntrusted
+      if (!unsafeContextBoundary) {
+        unsafeContextBoundary = createToolResultBoundary({
+          reason: "tool_result_marked_untrusted",
+          toolCallId,
+          toolName,
+        });
+      }
     }
     // If not blocked or sanitized, no update needed (original content remains)
   }
@@ -258,7 +258,7 @@ export async function evaluateIfContextIsTrusted(
     {
       agentId,
       updateCount: Object.keys(toolResultUpdates).length,
-      contextIsTrusted: !hasUntrustedData,
+      contextIsTrusted,
       usedDualLlm,
       dualLlmAnalysisCount: dualLlmAnalyses.length,
     },
@@ -267,7 +267,7 @@ export async function evaluateIfContextIsTrusted(
 
   return {
     toolResultUpdates,
-    contextIsTrusted: !hasUntrustedData,
+    contextIsTrusted,
     usedDualLlm,
     dualLlmAnalyses,
     unsafeContextBoundary,

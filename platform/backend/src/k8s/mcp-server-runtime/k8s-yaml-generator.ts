@@ -268,23 +268,6 @@ export function validateDeploymentYaml(
           errors.push(
             "spec.template.spec.containers must have at least one container",
           );
-        } else {
-          // Surface that hardcoded container.args overrides the Arguments field
-          // on the server form. The ${archestra.arguments} placeholder is the
-          // documented escape hatch for inheriting values from the form.
-          const firstContainer = podSpec.containers[0] as Record<
-            string,
-            unknown
-          >;
-          const argsPlaceholder = placeholder("archestra", "arguments");
-          if (
-            firstContainer.args !== undefined &&
-            firstContainer.args !== argsPlaceholder
-          ) {
-            warnings.push(
-              `container.args overrides the Arguments field on this server. Use args: ${argsPlaceholder} to inherit values from the form.`,
-            );
-          }
         }
       }
     }

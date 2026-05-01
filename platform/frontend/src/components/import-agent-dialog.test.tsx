@@ -17,7 +17,7 @@
  * - Paste mode: Parse JSON button parses pasted content
  * - Paste mode: Parse JSON button is disabled for empty content
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportAgentDialog } from "./import-agent-dialog";
@@ -26,11 +26,19 @@ import { ImportAgentDialog } from "./import-agent-dialog";
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mutateAsync = vi.fn();
+const mutate = vi.fn().mockImplementation((payload, options) => {
+  options?.onSuccess?.({
+    agent: {
+      id: "agent-123",
+      name: `${payload.agent.name} (imported)`,
+    },
+    warnings: [],
+  });
+});
 
 vi.mock("@/lib/agent.query", () => ({
   useImportAgent: () => ({
-    mutateAsync,
+    mutate,
     isPending: false,
   }),
 }));
@@ -111,20 +119,15 @@ async function simulateFileUpload(
 
 describe("ImportAgentDialog", () => {
   beforeEach(() => {
-    mutateAsync.mockReset();
-    mutateAsync.mockResolvedValue({
-      agent: {
-        id: "agent-123",
-        name: "Test Import Agent (imported)",
-        agentType: "agent",
-        scope: "personal",
-        labels: [],
-        suggestedPrompts: [],
-        tools: [],
-        knowledgeBaseIds: [],
-        connectorIds: [],
-      },
-      warnings: [],
+    mutate.mockClear();
+    mutate.mockImplementation((payload, options) => {
+      options?.onSuccess?.({
+        agent: {
+          id: "agent-123",
+          name: `${payload.agent.name} (imported)`,
+        },
+        warnings: [],
+      });
     });
   });
 
@@ -188,10 +191,10 @@ describe("ImportAgentDialog", () => {
     expect(screen.getByText("Test Import Agent")).toBeInTheDocument();
 
     // Association counts
-    expect(screen.getByText(/2 tools/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 delegation/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 knowledge base/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 connector/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tools \(2\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Delegations \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Knowledge \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Connectors \(1\)/i)).toBeInTheDocument();
 
     // LLM model informational
     expect(screen.getByText("gpt-4o")).toBeInTheDocument();
@@ -257,69 +260,18 @@ describe("ImportAgentDialog", () => {
     expect(screen.queryByText("Ready to Import")).not.toBeInTheDocument();
   });
 
-  it("calls mutateAsync and shows success state after import", async () => {
+  it("calls mutate and closes dialog after import", async () => {
+    const onOpenChange = vi.fn();
     const user = userEvent.setup();
-    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+    render(<ImportAgentDialog open onOpenChange={onOpenChange} />);
 
     await simulateFileUpload(user, validPayloadJson);
     await waitFor(() => screen.getByRole("button", { name: /import agent/i }));
 
     await user.click(screen.getByRole("button", { name: /import agent/i }));
 
-    expect(mutateAsync).toHaveBeenCalledOnce();
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Agent Imported Successfully"),
-      ).toBeInTheDocument();
-      expect(screen.getByText(/has been created with/i)).toBeInTheDocument();
-    });
-
-    // Done button appears
-    expect(screen.getByRole("button", { name: /done/i })).toBeInTheDocument();
-  });
-
-  it("displays import warnings after a successful import with warnings", async () => {
-    mutateAsync.mockResolvedValueOnce({
-      agent: {
-        id: "agent-456",
-        name: "Warned Agent",
-        agentType: "agent",
-        scope: "personal",
-        labels: [],
-        suggestedPrompts: [],
-        tools: [],
-        knowledgeBaseIds: [],
-        connectorIds: [],
-      },
-      warnings: [
-        {
-          type: "tool",
-          name: "web_search",
-          message: 'Tool "web_search" not found in catalog "Web Catalog".',
-        },
-        {
-          type: "knowledgeBase",
-          name: "Company Wiki",
-          message:
-            'Knowledge base "Company Wiki" not found in this organization.',
-        },
-      ],
-    });
-
-    const user = userEvent.setup();
-    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
-
-    await simulateFileUpload(user, validPayloadJson);
-    await waitFor(() => screen.getByRole("button", { name: /import agent/i }));
-
-    await user.click(screen.getByRole("button", { name: /import agent/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/2 warnings/i)).toBeInTheDocument();
-      expect(screen.getByText(/web_search/i)).toBeInTheDocument();
-      expect(screen.getByText(/company wiki/i)).toBeInTheDocument();
-    });
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it("calls onSuccess callback with agent data and warning count", async () => {
@@ -352,21 +304,6 @@ describe("ImportAgentDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("'Done' button calls onOpenChange(false) after successful import", async () => {
-    const onOpenChange = vi.fn();
-    const user = userEvent.setup();
-    render(<ImportAgentDialog open onOpenChange={onOpenChange} />);
-
-    await simulateFileUpload(user, validPayloadJson);
-    await waitFor(() => screen.getByRole("button", { name: /import agent/i }));
-
-    await user.click(screen.getByRole("button", { name: /import agent/i }));
-    await waitFor(() => screen.getByRole("button", { name: /done/i }));
-
-    await user.click(screen.getByRole("button", { name: /done/i }));
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-  });
-
   it("parses pasted JSON and shows preview in paste mode", async () => {
     const user = userEvent.setup();
     render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
@@ -394,5 +331,145 @@ describe("ImportAgentDialog", () => {
       expect(screen.getByText("Ready to Import")).toBeInTheDocument();
       expect(screen.getByText("Pasted Agent")).toBeInTheDocument();
     });
+  });
+
+  it("shows error when a non-JSON file is dropped", async () => {
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    const dropzone = screen
+      .getByText(/drag and drop/i)
+      .closest("label") as HTMLLabelElement;
+    const file = new File(["not a json file"], "image.png", {
+      type: "image/png",
+    });
+
+    fireEvent.drop(dropzone, {
+      dataTransfer: {
+        files: [file],
+      },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Only .json files are accepted."),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows agent preview when a valid JSON file is dropped", async () => {
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    const dropzone = screen
+      .getByText(/drag and drop/i)
+      .closest("label") as HTMLLabelElement;
+    const file = new File([validPayloadJson], "agent-export.json", {
+      type: "application/json",
+    });
+
+    fireEvent.drop(dropzone, {
+      dataTransfer: {
+        files: [file],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Ready to Import")).toBeInTheDocument();
+      expect(screen.getByText("Test Import Agent")).toBeInTheDocument();
+    });
+  });
+
+  it("handles drag events properly to toggle styles", async () => {
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    const dropzone = screen
+      .getByText(/drag and drop/i)
+      .closest("label") as HTMLLabelElement;
+
+    // Initially not active
+    expect(dropzone).not.toHaveClass("border-primary");
+
+    // Enter
+    fireEvent.dragEnter(dropzone);
+    expect(dropzone).toHaveClass("border-primary");
+
+    // Leave
+    fireEvent.dragLeave(dropzone);
+    expect(dropzone).not.toHaveClass("border-primary");
+  });
+
+  it("handles file read error gracefully", async () => {
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    // Mock FileReader to fail
+    const readAsTextMock = vi
+      .spyOn(FileReader.prototype, "readAsText")
+      .mockImplementation(function (this: FileReader) {
+        if (this.onerror) {
+          this.onerror(
+            new ProgressEvent("error") as unknown as ProgressEvent<FileReader>,
+          );
+        }
+      });
+
+    const file = new File(["some content"], "agent.json", {
+      type: "application/json",
+    });
+    const dropzone = screen
+      .getByText(/drag and drop/i)
+      .closest("label") as HTMLLabelElement;
+    fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Failed to read the file. Please try again."),
+      ).toBeInTheDocument();
+    });
+
+    readAsTextMock.mockRestore();
+  });
+
+  it("shows error alert for invalid JSON in paste mode", async () => {
+    const user = userEvent.setup();
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /paste json/i }));
+
+    const textarea = screen.getByPlaceholderText(/paste agent json here/i);
+    await user.click(textarea);
+    await user.paste("{ invalid }");
+
+    await user.click(screen.getByRole("button", { name: /parse json/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid Configuration")).toBeInTheDocument();
+      expect(screen.getByText(/invalid json file/i)).toBeInTheDocument();
+    });
+  });
+
+  it("handles file change with no files selected gracefully", async () => {
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { files: null } });
+
+    expect(screen.getByText(/drag and drop/i)).toBeInTheDocument();
+  });
+
+  it("handles drop event with no files gracefully", async () => {
+    render(<ImportAgentDialog open onOpenChange={vi.fn()} />);
+
+    const dropzone = screen
+      .getByText(/drag and drop/i)
+      .closest("label") as HTMLLabelElement;
+
+    fireEvent.drop(dropzone, {
+      dataTransfer: {
+        files: [],
+      },
+    });
+
+    expect(screen.getByText(/drag and drop/i)).toBeInTheDocument();
   });
 });

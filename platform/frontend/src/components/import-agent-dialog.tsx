@@ -3,12 +3,21 @@
 import type { archestraApiTypes } from "@shared";
 import {
   AlertTriangle,
-  CheckCircle2,
+  BookOpen,
+  Bot,
   FileJson,
-  Loader2,
+  Link as LinkIcon,
+  MessageSquare,
+  Plug,
+  Tag,
   Upload,
+  Wrench,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import {
+  ConnectorTypeIcon,
+  hasConnectorIcon,
+} from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,13 +39,6 @@ type ParsedPayload = archestraApiTypes.ImportAgentData["body"];
 type ImportState =
   | { status: "idle" }
   | { status: "parsed"; payload: ParsedPayload; fileName: string | null }
-  | { status: "importing" }
-  | {
-      status: "success";
-      agentName: string;
-      agentId: string;
-      warnings: Array<{ type: string; name: string; message: string }>;
-    }
   | { status: "error"; message: string };
 
 export function ImportAgentDialog({
@@ -167,6 +169,12 @@ export function ImportAgentDialog({
         const content = ev.target?.result as string;
         parsePayload(content, file.name);
       };
+      reader.onerror = () => {
+        setState({
+          status: "error",
+          message: "Failed to read the file. Please try again.",
+        });
+      };
       reader.readAsText(file);
     },
     [parsePayload],
@@ -177,40 +185,21 @@ export function ImportAgentDialog({
     parsePayload(pasteContent, null);
   }, [pasteContent, parsePayload]);
 
-  const handleImport = useCallback(async () => {
+  const handleImport = useCallback(() => {
     if (state.status !== "parsed") return;
 
-    setState({ status: "importing" });
+    handleOpenChange(false);
 
-    try {
-      const result = await importMutation.mutateAsync(state.payload);
-      if (!result) {
-        setState({
-          status: "error",
-          message: "Failed to import agent. Please check the server logs.",
-        });
-        return;
-      }
-
-      setState({
-        status: "success",
-        agentName: result.agent.name,
-        agentId: result.agent.id,
-        warnings: result.warnings,
-      });
-
-      onSuccess?.(
-        { id: result.agent.id, name: result.agent.name },
-        result.warnings.length,
-      );
-    } catch {
-      setState({
-        status: "error",
-        message:
-          "Failed to import agent. The server returned an error. Please check the payload and try again.",
-      });
-    }
-  }, [state, importMutation, onSuccess]);
+    importMutation.mutate(state.payload, {
+      onSuccess: (result) => {
+        if (!result) return;
+        onSuccess?.(
+          { id: result.agent.id, name: result.agent.name },
+          result.warnings.length,
+        );
+      },
+    });
+  }, [state, importMutation, onSuccess, handleOpenChange]);
 
   return (
     <FormDialog
@@ -322,61 +311,199 @@ export function ImportAgentDialog({
                 </AlertDescription>
               </Alert>
 
-              <div className="rounded-lg border p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">
-                    {state.payload.agent.icon || "🤖"}
-                  </span>
+              <div className="rounded-lg border p-4 space-y-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border bg-muted text-2xl">
+                    {state.payload.agent.icon || (
+                      <Bot className="h-6 w-6 text-muted-foreground" />
+                    )}
+                  </div>
                   <div>
-                    <p className="font-medium">{state.payload.agent.name}</p>
+                    <p className="font-semibold text-base">
+                      {state.payload.agent.name}
+                    </p>
                     {state.payload.agent.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-2">
+                      <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
                         {state.payload.agent.description}
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                   {state.payload.tools.length > 0 && (
-                    <span>
-                      🔧 {state.payload.tools.length} tool
-                      {state.payload.tools.length !== 1 ? "s" : ""}
-                    </span>
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Wrench className="h-3.5 w-3.5" /> Tools (
+                        {state.payload.tools.length})
+                      </h4>
+                      <div className="flex flex-col gap-1.5">
+                        {state.payload.tools.slice(0, 3).map((tool) => (
+                          <div
+                            key={tool.toolName}
+                            className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-sm"
+                          >
+                            <span className="font-medium truncate">
+                              {tool.toolName}
+                            </span>
+                            {tool.catalogName && (
+                              <span className="ml-auto text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-background border truncate max-w-[80px]">
+                                {tool.catalogName}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                        {state.payload.tools.length > 3 && (
+                          <div className="text-xs text-muted-foreground px-2">
+                            + {state.payload.tools.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
-                  {state.payload.delegations.length > 0 && (
-                    <span>
-                      🔗 {state.payload.delegations.length} delegation
-                      {state.payload.delegations.length !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  {state.payload.knowledgeBases.length > 0 && (
-                    <span>
-                      📚 {state.payload.knowledgeBases.length} knowledge base
-                      {state.payload.knowledgeBases.length !== 1 ? "s" : ""}
-                    </span>
-                  )}
+
                   {state.payload.connectors.length > 0 && (
-                    <span>
-                      🔌 {state.payload.connectors.length} connector
-                      {state.payload.connectors.length !== 1 ? "s" : ""}
-                    </span>
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Plug className="h-3.5 w-3.5" /> Connectors (
+                        {state.payload.connectors.length})
+                      </h4>
+                      <div className="flex flex-col gap-1.5">
+                        {state.payload.connectors
+                          .slice(0, 3)
+                          .map((connector) => (
+                            <div
+                              key={connector.name}
+                              className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-sm"
+                            >
+                              {hasConnectorIcon(connector.connectorType) ? (
+                                <ConnectorTypeIcon
+                                  type={connector.connectorType}
+                                  className="h-4 w-4 shrink-0"
+                                />
+                              ) : (
+                                <Plug className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              )}
+                              <span className="font-medium truncate">
+                                {connector.name}
+                              </span>
+                            </div>
+                          ))}
+                        {state.payload.connectors.length > 3 && (
+                          <div className="text-xs text-muted-foreground px-2">
+                            + {state.payload.connectors.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
-                  {state.payload.labels.length > 0 && (
-                    <span>
-                      🏷️ {state.payload.labels.length} label
-                      {state.payload.labels.length !== 1 ? "s" : ""}
-                    </span>
+
+                  {state.payload.knowledgeBases.length > 0 && (
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <BookOpen className="h-3.5 w-3.5" /> Knowledge (
+                        {state.payload.knowledgeBases.length})
+                      </h4>
+                      <div className="flex flex-col gap-1.5">
+                        {state.payload.knowledgeBases.slice(0, 3).map((kb) => (
+                          <div
+                            key={kb.name}
+                            className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-sm"
+                          >
+                            <span className="font-medium truncate">
+                              {kb.name}
+                            </span>
+                          </div>
+                        ))}
+                        {state.payload.knowledgeBases.length > 3 && (
+                          <div className="text-xs text-muted-foreground px-2">
+                            + {state.payload.knowledgeBases.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
+
+                  {state.payload.delegations.length > 0 && (
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <LinkIcon className="h-3.5 w-3.5" /> Delegations (
+                        {state.payload.delegations.length})
+                      </h4>
+                      <div className="flex flex-col gap-1.5">
+                        {state.payload.delegations.slice(0, 3).map((del) => (
+                          <div
+                            key={del.targetAgentName}
+                            className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-sm"
+                          >
+                            <span className="font-medium truncate">
+                              {del.targetAgentName}
+                            </span>
+                          </div>
+                        ))}
+                        {state.payload.delegations.length > 3 && (
+                          <div className="text-xs text-muted-foreground px-2">
+                            + {state.payload.delegations.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {state.payload.suggestedPrompts.length > 0 && (
-                    <span>
-                      💬 {state.payload.suggestedPrompts.length} suggested
-                      prompt
-                      {state.payload.suggestedPrompts.length !== 1 ? "s" : ""}
-                    </span>
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <MessageSquare className="h-3.5 w-3.5" /> Prompts (
+                        {state.payload.suggestedPrompts.length})
+                      </h4>
+                      <div className="flex flex-col gap-1.5">
+                        {state.payload.suggestedPrompts
+                          .slice(0, 3)
+                          .map((prompt) => (
+                            <div
+                              key={prompt.summaryTitle}
+                              className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-sm"
+                            >
+                              <span className="font-medium truncate">
+                                {prompt.summaryTitle}
+                              </span>
+                            </div>
+                          ))}
+                        {state.payload.suggestedPrompts.length > 3 && (
+                          <div className="text-xs text-muted-foreground px-2">
+                            + {state.payload.suggestedPrompts.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {state.payload.labels.length > 0 && (
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Tag className="h-3.5 w-3.5" /> Labels (
+                        {state.payload.labels.length})
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {state.payload.labels.slice(0, 5).map((label) => (
+                          <span
+                            key={label.key}
+                            className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium bg-muted/30"
+                          >
+                            {label.key}: {label.value}
+                          </span>
+                        ))}
+                        {state.payload.labels.length > 5 && (
+                          <span className="text-xs text-muted-foreground px-1 self-center">
+                            + {state.payload.labels.length - 5} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
                 {state.payload.agent.llmModel && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground mt-4 border-t pt-4">
                     Model:{" "}
                     <code className="rounded bg-muted px-1 py-0.5">
                       {state.payload.agent.llmModel}
@@ -396,92 +523,36 @@ export function ImportAgentDialog({
               </p>
             </div>
           )}
-
-          {/* Importing state */}
-          {state.status === "importing" && (
-            <div className="flex flex-col items-center justify-center gap-3 py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">
-                Importing agent...
-              </p>
-            </div>
-          )}
-
-          {/* Success state */}
-          {state.status === "success" && (
-            <div className="space-y-4">
-              <Alert
-                variant="default"
-                className="border-green-500/50 bg-green-50 dark:bg-green-950/50 dark:border-green-500/30"
-              >
-                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <AlertTitle>Agent Imported Successfully</AlertTitle>
-                <AlertDescription>
-                  <strong>{state.agentName}</strong> has been created with
-                  personal scope.
-                </AlertDescription>
-              </Alert>
-
-              {state.warnings.length > 0 && (
-                <Alert variant="warning">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>
-                    {state.warnings.length} warning
-                    {state.warnings.length !== 1 ? "s" : ""}
-                  </AlertTitle>
-                  <AlertDescription>
-                    <ul className="mt-1 space-y-1">
-                      {state.warnings.map((w) => (
-                        <li key={`${w.type}-${w.name}`} className="text-xs">
-                          <strong className="capitalize">{w.type}:</strong>{" "}
-                          {w.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          )}
         </div>
       </DialogBody>
 
       <DialogStickyFooter className="mt-0">
         <div className="flex w-full justify-end gap-2">
-          {state.status === "success" ? (
-            <Button onClick={() => handleOpenChange(false)}>Done</Button>
-          ) : state.status === "importing" ? null : (
-            <>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (state.status === "parsed") {
+                resetState();
+              } else {
+                handleOpenChange(false);
+              }
+            }}
+          >
+            {state.status === "parsed" ? "Back" : "Cancel"}
+          </Button>
+          {inputMode === "paste" &&
+            (state.status === "idle" || state.status === "error") && (
               <Button
-                variant="outline"
-                onClick={() => {
-                  if (state.status === "parsed") {
-                    resetState();
-                  } else {
-                    handleOpenChange(false);
-                  }
-                }}
+                onClick={handlePasteImport}
+                disabled={!pasteContent.trim()}
               >
-                {state.status === "parsed" ? "Back" : "Cancel"}
+                Parse JSON
               </Button>
-              {inputMode === "paste" &&
-                (state.status === "idle" || state.status === "error") && (
-                  <Button
-                    onClick={handlePasteImport}
-                    disabled={!pasteContent.trim()}
-                  >
-                    Parse JSON
-                  </Button>
-                )}
-              {state.status === "parsed" && (
-                <Button
-                  onClick={handleImport}
-                  disabled={state.status !== "parsed"}
-                >
-                  Import Agent
-                </Button>
-              )}
-            </>
+            )}
+          {state.status === "parsed" && (
+            <Button onClick={handleImport} disabled={state.status !== "parsed"}>
+              Import Agent
+            </Button>
           )}
         </div>
       </DialogStickyFooter>

@@ -1277,15 +1277,37 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List files uploaded to a file-upload connector",
         tags: ["Connectors"],
         params: z.object({ id: z.string() }),
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
         response: constructResponseSchema(
-          z.object({ data: z.array(UploadedFileSchema) }),
+          createPaginatedResponseSchema(UploadedFileSchema),
         ),
       },
     },
-    async ({ params: { id }, organizationId, user }, reply) => {
+    async (
+      {
+        params: { id },
+        query: { limit, offset, search },
+        organizationId,
+        user,
+      },
+      reply,
+    ) => {
       await findConnectorOrThrow({ id, organizationId, userId: user.id });
 
-      const uploadedFiles = await KbUploadedFileModel.findByConnector(id);
+      const [uploadedFiles, total] = await Promise.all([
+        KbUploadedFileModel.findByConnectorPaginated({
+          connectorId: id,
+          limit,
+          offset,
+          search,
+        }),
+        KbUploadedFileModel.countByConnector({
+          connectorId: id,
+          search,
+        }),
+      ]);
 
       const docs = await KbDocumentModel.findBySourceIds({
         connectorId: id,
@@ -1310,7 +1332,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       });
 
-      return reply.send({ data });
+      return reply.send({
+        data,
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+      });
     },
   );
 

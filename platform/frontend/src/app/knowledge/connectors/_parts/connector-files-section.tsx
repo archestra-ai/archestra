@@ -1,34 +1,37 @@
 "use client";
 
-import { Check, Loader2, Pencil, Trash2, Upload, X } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import {
+  Check,
+  Loader2,
+  Pencil,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import {
   useActionState,
   useCallback,
+  useEffect,
   useRef,
   useState,
   useTransition,
 } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   formatFileSize,
   type UploadedFile,
-  useConnectorFile,
-  useConnectorFiles,
+  useConnectorFilesPaginated,
   useDeleteConnectorFile,
   useUpdateConnectorFileTitle,
   useUploadConnectorFiles,
@@ -47,8 +50,6 @@ function FileStatusBadge({
   embeddingStatus: string;
   processingError?: string | null;
 }) {
-  // When file is still being processed (text extraction + chunking),
-  // show that status. Once completed, show the embedding status.
   if (processingStatus && processingStatus !== "completed") {
     const variants = {
       pending: "secondary",
@@ -62,8 +63,10 @@ function FileStatusBadge({
       failed: "Processing Failed",
     };
 
-    const variant = variants[processingStatus as keyof typeof variants] ?? "secondary";
-    const label = labels[processingStatus as keyof typeof labels] ?? processingStatus;
+    const variant =
+      variants[processingStatus as keyof typeof variants] ?? "secondary";
+    const label =
+      labels[processingStatus as keyof typeof labels] ?? processingStatus;
 
     return (
       <Tooltip>
@@ -102,7 +105,9 @@ function FileStatusBadge({
 
   return (
     <Badge
-      variant={variants[embeddingStatus as keyof typeof variants] ?? "secondary"}
+      variant={
+        variants[embeddingStatus as keyof typeof variants] ?? "secondary"
+      }
       className="capitalize text-xs"
     >
       {embeddingStatus === "processing" && (
@@ -184,14 +189,13 @@ function EditableTitleCell({
   );
 }
 
-function FileRow({
+function DeleteFileButton({
   fileId,
   connectorId,
 }: {
   fileId: string;
   connectorId: string;
 }) {
-  const { data: file } = useConnectorFile(connectorId, fileId);
   const deleteFile = useDeleteConnectorFile(connectorId);
 
   const [, deleteAction, isDeleting] = useActionState(
@@ -202,50 +206,44 @@ function FileRow({
     null,
   );
 
-  if (!file) return null;
-
   return (
-    <TableRow>
-      <TableCell className="max-w-[180px]">
-        <EditableTitleCell file={file} connectorId={connectorId} />
-      </TableCell>
-      <TableCell className="max-w-[180px] text-sm text-muted-foreground truncate">
-        {file.originalName}
-      </TableCell>
-      <TableCell className="text-sm text-muted-foreground">
-        {formatFileSize(file.fileSize)}
-      </TableCell>
-      <TableCell>
-        <FileStatusBadge
-          processingStatus={file.processingStatus}
-          embeddingStatus={file.embeddingStatus}
-          processingError={file.processingError}
-        />
-      </TableCell>
-      <TableCell className="flex justify-center">
-        <form action={deleteAction}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="submit"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                disabled={isDeleting}
-              >
-                {isDeleting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Delete file</TooltipContent>
-          </Tooltip>
-        </form>
-      </TableCell>
-    </TableRow>
+    <form action={deleteAction}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="submit"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Delete file</TooltipContent>
+      </Tooltip>
+    </form>
   );
+}
+
+function useDebounce<T>(
+  value: T,
+  delayMs: number,
+  onValueChange?: () => void,
+): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedValue(value);
+      onValueChange?.();
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs, onValueChange]);
+  return debouncedValue;
 }
 
 export function ConnectorFilesSection({
@@ -254,8 +252,87 @@ export function ConnectorFilesSection({
   connectorId: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { data: files = [], isPending } = useConnectorFiles(connectorId);
+  const [searchInput, setSearchInput] = useState("");
+
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_TABLE_LIMIT);
+  const offset = pageIndex * pageSize;
+
+  const debouncedSearch = useDebounce(searchInput, 300);
+
+  const {
+    data: filesResponse,
+    isPending,
+    isFetching,
+  } = useConnectorFilesPaginated({
+    connectorId,
+    limit: pageSize,
+    offset,
+    search: debouncedSearch || undefined,
+  });
+
+  const items = filesResponse?.data ?? [];
+  const pagination = filesResponse?.pagination;
+
   const uploadFiles = useUploadConnectorFiles(connectorId);
+
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      setPageIndex(newPagination.pageIndex);
+      setPageSize(newPagination.pageSize);
+    },
+    [],
+  );
+
+  const columns: ColumnDef<UploadedFile>[] = [
+    {
+      id: "title",
+      accessorKey: "title",
+      header: "Title",
+      cell: ({ row }) => (
+        <EditableTitleCell file={row.original} connectorId={connectorId} />
+      ),
+    },
+    {
+      id: "originalName",
+      accessorKey: "originalName",
+      header: "Original Name",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground truncate block max-w-[180px]">
+          {row.original.originalName}
+        </span>
+      ),
+    },
+    {
+      id: "fileSize",
+      accessorKey: "fileSize",
+      header: "Size",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatFileSize(row.original.fileSize)}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <FileStatusBadge
+          processingStatus={row.original.processingStatus}
+          embeddingStatus={row.original.embeddingStatus}
+          processingError={row.original.processingError}
+        />
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      size: 40,
+      cell: ({ row }) => (
+        <DeleteFileButton fileId={row.original.id} connectorId={connectorId} />
+      ),
+    },
+  ];
 
   const [isPendingDrop, startDropTransition] = useTransition();
   const handleDrop = useCallback(
@@ -278,6 +355,7 @@ export function ConnectorFilesSection({
   );
 
   const isActuallyUploading = isUploading || isPendingDrop;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -318,40 +396,46 @@ export function ConnectorFilesSection({
           }}
         />
       </form>
-      {files.length ? (
-        <div className="overflow-x-auto rounded-md border">
-          <Table className="min-w-[540px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="whitespace-nowrap">Title</TableHead>
-                <TableHead className="whitespace-nowrap">
-                  Original Name
-                </TableHead>
-                <TableHead className="whitespace-nowrap">Size</TableHead>
-                <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isPending ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-6">
-                    <LoadingSpinner />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                files.map((file) => (
-                  <FileRow
-                    key={file.id}
-                    fileId={file.id}
-                    connectorId={connectorId}
-                  />
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      ) : null}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search files by name…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="pl-9 h-9"
+        />
+        {searchInput && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+            onClick={() => setSearchInput("")}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={items}
+        getRowId={(row) => row.id}
+        emptyMessage="No files uploaded"
+        hasActiveFilters={!!debouncedSearch}
+        onClearFilters={() => setSearchInput("")}
+        filteredEmptyMessage="No files match your search"
+        hideSelectedCount
+        manualPagination
+        pagination={{
+          pageIndex,
+          pageSize,
+          total: pagination?.total ?? 0,
+        }}
+        onPaginationChange={handlePaginationChange}
+        isLoading={isFetching || isPending}
+      />
+
       <button
         type="button"
         className="w-full border border-dashed rounded-lg p-10 text-center cursor-pointer hover:bg-muted/30 transition-colors"
@@ -374,11 +458,5 @@ export function ConnectorFilesSection({
         </p>
       </button>
     </div>
-  );
-}
-
-function LoadingSpinner() {
-  return (
-    <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
   );
 }

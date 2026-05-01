@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 export type KbUploadedFile = typeof schema.kbUploadedFilesTable.$inferSelect;
@@ -26,6 +26,52 @@ class KbUploadedFileModel {
       .select(listColumns)
       .from(schema.kbUploadedFilesTable)
       .where(eq(schema.kbUploadedFilesTable.connectorId, connectorId));
+  }
+
+  static async findByConnectorPaginated(params: {
+    connectorId: string;
+    limit: number;
+    offset: number;
+    search?: string;
+  }): Promise<Omit<KbUploadedFile, "fileData">[]> {
+    const conditions = [
+      eq(schema.kbUploadedFilesTable.connectorId, params.connectorId),
+    ];
+
+    if (params.search) {
+      conditions.push(
+        ilike(schema.kbUploadedFilesTable.originalName, `%${params.search}%`),
+      );
+    }
+
+    return db
+      .select(listColumns)
+      .from(schema.kbUploadedFilesTable)
+      .where(and(...conditions))
+      .orderBy(desc(schema.kbUploadedFilesTable.createdAt))
+      .limit(params.limit)
+      .offset(params.offset);
+  }
+
+  static async countByConnector(params: {
+    connectorId: string;
+    search?: string;
+  }): Promise<number> {
+    const conditions = [
+      eq(schema.kbUploadedFilesTable.connectorId, params.connectorId),
+    ];
+
+    if (params.search) {
+      conditions.push(
+        ilike(schema.kbUploadedFilesTable.originalName, `%${params.search}%`),
+      );
+    }
+
+    const [result] = await db
+      .select({ value: count() })
+      .from(schema.kbUploadedFilesTable)
+      .where(and(...conditions));
+    return result?.value ?? 0;
   }
 
   static async findByContentHash(

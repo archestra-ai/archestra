@@ -10,26 +10,71 @@ export type UploadedFile =
 type UploadResult =
   archestraApiTypes.UploadConnectorFilesResponses["200"]["results"][number];
 
+type PaginatedFilesResponse = {
+  data: UploadedFile[];
+  pagination: {
+    currentPage: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+};
+
 const ACTIVE_STATUSES = new Set(["pending", "processing"]);
 
-export function useConnectorFiles(connectorId: string) {
+export function useConnectorFilesPaginated(params: {
+  connectorId: string;
+  limit: number;
+  offset: number;
+  search?: string;
+}) {
   return useQuery({
-    queryKey: ["connector-files", connectorId],
+    queryKey: [
+      "connector-files",
+      params.connectorId,
+      params.limit,
+      params.offset,
+      params.search ?? "",
+    ],
     queryFn: async () => {
       const response = await client.get({
         url: "/api/connectors/{id}/files",
-        path: { id: connectorId },
+        path: { id: params.connectorId },
+        query: {
+          limit: params.limit,
+          offset: params.offset,
+          ...(params.search ? { search: params.search } : {}),
+        },
       });
-      const data = response.data as { data: UploadedFile[] } | undefined;
-      return data?.data ?? [];
+      const data = response.data as PaginatedFilesResponse | undefined;
+      return (
+        data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: params.limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
     },
-    enabled: Boolean(connectorId),
+    enabled: Boolean(params.connectorId),
     refetchInterval: (query) => {
-      const files = query.state.data as UploadedFile[] | undefined;
-      if (!files) return false;
-      const hasActive = files.some((f) => {
-        const ps = (f as Record<string, unknown>).processingStatus as string | undefined;
-        return (ps && ACTIVE_STATUSES.has(ps)) || ACTIVE_STATUSES.has(f.embeddingStatus);
+      const result = query.state.data;
+      if (!result?.data) return false;
+      const hasActive = result.data.some((f) => {
+        const ps = (f as Record<string, unknown>).processingStatus as
+          | string
+          | undefined;
+        return (
+          (ps && ACTIVE_STATUSES.has(ps)) ||
+          ACTIVE_STATUSES.has(f.embeddingStatus)
+        );
       });
       return hasActive ? 5000 : false;
     },
@@ -50,8 +95,10 @@ export function useConnectorFile(connectorId: string, fileId: string) {
     refetchInterval: (query) => {
       const file = query.state.data as UploadedFile | null | undefined;
       if (!file) return false;
-      const processingStatus = (file as Record<string, unknown>).processingStatus as string | undefined;
-      if (processingStatus && ACTIVE_STATUSES.has(processingStatus)) return 3000;
+      const processingStatus = (file as Record<string, unknown>)
+        .processingStatus as string | undefined;
+      if (processingStatus && ACTIVE_STATUSES.has(processingStatus))
+        return 3000;
       if (ACTIVE_STATUSES.has(file.embeddingStatus)) return 3000;
       return false;
     },

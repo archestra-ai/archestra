@@ -167,3 +167,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @jovanaradovanovic
 - @sergey-zakharov
 - @andreahlert
+- @ilmpc
+- @AlexMelanFromRingo
+- @di3go04
+- @wengkit218-pixel
+- @umaiskhan-ops
+- @AvulaNagaSanjay

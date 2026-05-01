@@ -4,6 +4,7 @@ import {
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
@@ -36,6 +37,7 @@ import {
   SuggestedPromptToolInputSchema,
   ToolAssignmentToolInputSchema,
 } from "./agent-resources";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   defineArchestraTool,
@@ -284,61 +286,86 @@ const registry = defineArchestraTools([
         const kbMap = new Map(knowledgeBases.map((kb) => [kb.id, kb]));
         const connectorMap = new Map(connectors.map((c) => [c.id, c]));
 
-        const agents = results.data.map((agent) => ({
-          id: agent.id,
-          name: agent.name,
-          scope: agent.scope,
-          description: agent.description,
-          teams: agent.teams.map((team) => ({ id: team.id, name: team.name })),
-          labels: agent.labels.map((label) => ({
-            key: label.key,
-            value: label.value,
-          })),
-          tools: agent.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-          })),
-          knowledgeSources: [
-            ...agent.knowledgeBaseIds
-              .map((knowledgeBaseId) => {
-                const knowledgeBase = kbMap.get(knowledgeBaseId);
-                if (!knowledgeBase) return null;
-                return {
-                  name: knowledgeBase.name,
-                  description: knowledgeBase.description,
-                  type: "knowledge_base" as const,
-                };
-              })
+        // HOTFIX: query_knowledge_sources is auto-injected at runtime by
+        // ToolModel.getMcpToolsByAgent based on whether the agent has any
+        // knowledge sources, but historical seed rows in agent_tools (from
+        // ensurePersonalChatAgent → assignDefaultArchestraToolsToAgent) leak
+        // through list_agents because this path reads agent_tools directly.
+        // Filter the tool out for agents with no KB and no connectors.
+        // TODO: drop query_knowledge_sources from DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES
+        // and clean up stale agent_tools rows so this filter becomes unnecessary.
+        const queryKnowledgeSourcesToolName = archestraMcpBranding.getToolName(
+          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        );
+
+        const agents = results.data.map((agent) => {
+          const hasKnowledgeSources =
+            agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
+          return {
+            id: agent.id,
+            name: agent.name,
+            scope: agent.scope,
+            description: agent.description,
+            teams: agent.teams.map((team) => ({
+              id: team.id,
+              name: team.name,
+            })),
+            labels: agent.labels.map((label) => ({
+              key: label.key,
+              value: label.value,
+            })),
+            tools: agent.tools
               .filter(
-                (
-                  knowledgeBase,
-                ): knowledgeBase is {
-                  name: string;
-                  description: string | null;
-                  type: "knowledge_base";
-                } => knowledgeBase !== null,
-              ),
-            ...agent.connectorIds
-              .map((connectorId) => {
-                const connector = connectorMap.get(connectorId);
-                if (!connector) return null;
-                return {
-                  name: connector.name,
-                  description: connector.description,
-                  type: "knowledge_connector" as const,
-                };
-              })
-              .filter(
-                (
-                  connector,
-                ): connector is {
-                  name: string;
-                  description: string | null;
-                  type: "knowledge_connector";
-                } => connector !== null,
-              ),
-          ],
-        }));
+                (tool) =>
+                  hasKnowledgeSources ||
+                  tool.name !== queryKnowledgeSourcesToolName,
+              )
+              .map((tool) => ({
+                name: tool.name,
+                description: tool.description,
+              })),
+            knowledgeSources: [
+              ...agent.knowledgeBaseIds
+                .map((knowledgeBaseId) => {
+                  const knowledgeBase = kbMap.get(knowledgeBaseId);
+                  if (!knowledgeBase) return null;
+                  return {
+                    name: knowledgeBase.name,
+                    description: knowledgeBase.description,
+                    type: "knowledge_base" as const,
+                  };
+                })
+                .filter(
+                  (
+                    knowledgeBase,
+                  ): knowledgeBase is {
+                    name: string;
+                    description: string | null;
+                    type: "knowledge_base";
+                  } => knowledgeBase !== null,
+                ),
+              ...agent.connectorIds
+                .map((connectorId) => {
+                  const connector = connectorMap.get(connectorId);
+                  if (!connector) return null;
+                  return {
+                    name: connector.name,
+                    description: connector.description,
+                    type: "knowledge_connector" as const,
+                  };
+                })
+                .filter(
+                  (
+                    connector,
+                  ): connector is {
+                    name: string;
+                    description: string | null;
+                    type: "knowledge_connector";
+                  } => connector !== null,
+                ),
+            ],
+          };
+        });
 
         return structuredSuccessResult(
           { total: results.pagination.total, agents },

@@ -1,7 +1,6 @@
 ---
 title: MS Teams
 category: Agents
-subcategory: Agent Triggers
 order: 5
 description: Connect Archestra agents to Microsoft Teams channels
 lastUpdated: 2026-02-20

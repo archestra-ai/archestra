@@ -30,6 +30,7 @@ export function mapOpenAiModelToModelInfo(
 export async function fetchOpenAiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.openai.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -38,6 +39,7 @@ export async function fetchOpenAiModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "OpenAI models",
+    extraHeaders,
   });
 
   const excludePatterns = [

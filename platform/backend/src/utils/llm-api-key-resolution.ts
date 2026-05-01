@@ -11,6 +11,7 @@ interface ResolvedProviderApiKey {
   source: string;
   chatApiKeyId: string | undefined;
   baseUrl: string | null;
+  extraHeaders: Record<string, string> | null;
 }
 
 /**
@@ -35,6 +36,7 @@ export async function resolveProviderApiKey(params: {
     secretId: string | null;
     scope: string;
     baseUrl: string | null;
+    extraHeaders: Record<string, string> | null;
   } | null = null;
 
   if (userId) {
@@ -66,6 +68,7 @@ export async function resolveProviderApiKey(params: {
           source: resolvedApiKey.scope,
           chatApiKeyId: resolvedApiKey.id,
           baseUrl: resolvedApiKey.baseUrl,
+          extraHeaders: resolvedApiKey.extraHeaders,
         };
       }
     }
@@ -76,6 +79,7 @@ export async function resolveProviderApiKey(params: {
         source: resolvedApiKey.scope,
         chatApiKeyId: resolvedApiKey.id,
         baseUrl: resolvedApiKey.baseUrl,
+        extraHeaders: resolvedApiKey.extraHeaders,
       };
     }
   }
@@ -87,6 +91,7 @@ export async function resolveProviderApiKey(params: {
       source: "environment",
       chatApiKeyId: undefined,
       baseUrl: null,
+      extraHeaders: null,
     };
   }
 
@@ -95,5 +100,6 @@ export async function resolveProviderApiKey(params: {
     source: "environment",
     chatApiKeyId: undefined,
     baseUrl: null,
+    extraHeaders: null,
   };
 }

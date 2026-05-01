@@ -121,6 +121,7 @@ export interface LLMProxyContext<TRequest> {
 export type LLMProxyAuthOverride = {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  extraHeaders?: Record<string, string> | null;
   authenticated: boolean;
   source?: InteractionSource;
 };
@@ -261,12 +262,14 @@ export async function handleLLMProxy<
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
+  let perKeyExtraHeaders: Record<string, string> | null = null;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
   // 1. Try JWKS auth if the agent has an external identity provider configured
   if (authOverride) {
     apiKey = authOverride.apiKey;
     perKeyBaseUrl = authOverride.baseUrl;
+    perKeyExtraHeaders = authOverride.extraHeaders ?? null;
     wasVirtualKeyResolved = authOverride.authenticated;
   } else {
     const jwksResult = await attemptJwksAuth(
@@ -278,6 +281,7 @@ export async function handleLLMProxy<
       wasJwksAuthenticated = true;
       apiKey = jwksResult.apiKey;
       perKeyBaseUrl = jwksResult.baseUrl;
+      perKeyExtraHeaders = jwksResult.extraHeaders;
       if (jwksResult.userId) {
         userId = jwksResult.userId;
         resolvedUser = await UserModel.getById(userId);
@@ -309,6 +313,7 @@ export async function handleLLMProxy<
       );
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
+      perKeyExtraHeaders = virtualResult.extraHeaders;
       wasVirtualKeyResolved = true;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -558,6 +563,13 @@ export async function handleLLMProxy<
     if (typeof headersObj["anthropic-beta"] === "string") {
       headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
     }
+    // Merge per-key extra headers behind any provider-forwarded headers
+    // (anthropic-beta etc.) so user-configured headers fill in the rest
+    // without overriding protocol-level headers.
+    const mergedHeaders: Record<string, string> = {
+      ...(perKeyExtraHeaders ?? {}),
+      ...headersToForward,
+    };
 
     // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
     // External clients must NOT be able to set this header — it would be an SSRF vector
@@ -577,7 +589,7 @@ export async function handleLLMProxy<
       externalAgentId,
       source,
       defaultHeaders:
-        Object.keys(headersToForward).length > 0 ? headersToForward : undefined,
+        Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
     });
 
     // Build final request

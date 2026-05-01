@@ -31600,6 +31600,9 @@ export type GetLlmProviderApiKeysResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        extraHeaders: {
+            [key: string]: string;
+        } | null;
         isSystem: boolean;
         isPrimary: boolean;
         createdAt: string;
@@ -31622,6 +31625,9 @@ export type CreateLlmProviderApiKeyData = {
         provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         apiKey?: string;
         baseUrl?: string | null;
+        extraHeaders?: {
+            [key: string]: string;
+        } | null;
         scope?: 'personal' | 'team' | 'org';
         teamId?: string;
         isPrimary?: boolean;
@@ -31712,6 +31718,9 @@ export type CreateLlmProviderApiKeyResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        extraHeaders: {
+            [key: string]: string;
+        } | null;
         isSystem: boolean;
         isPrimary: boolean;
         createdAt: string;
@@ -31810,6 +31819,9 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        extraHeaders: {
+            [key: string]: string;
+        } | null;
         isSystem: boolean;
         isPrimary: boolean;
         createdAt: string;
@@ -31999,6 +32011,9 @@ export type GetLlmProviderApiKeyResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        extraHeaders: {
+            [key: string]: string;
+        } | null;
         isSystem: boolean;
         isPrimary: boolean;
         createdAt: string;
@@ -32020,6 +32035,9 @@ export type UpdateLlmProviderApiKeyData = {
         name?: string;
         apiKey?: string;
         baseUrl?: string | null;
+        extraHeaders?: {
+            [key: string]: string;
+        } | null;
         scope?: 'personal' | 'team' | 'org';
         teamId?: string | null;
         isPrimary?: boolean;
@@ -32112,6 +32130,9 @@ export type UpdateLlmProviderApiKeyResponses = {
         userId: string | null;
         teamId: string | null;
         baseUrl: string | null;
+        extraHeaders: {
+            [key: string]: string;
+        } | null;
         isSystem: boolean;
         isPrimary: boolean;
         createdAt: string;

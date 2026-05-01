@@ -15,4 +15,5 @@ export interface ModelInfo {
 export type ModelFetcher = (
   apiKey: string,
   baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ) => Promise<ModelInfo[]>;

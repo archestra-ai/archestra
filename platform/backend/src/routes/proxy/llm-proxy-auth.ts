@@ -48,6 +48,7 @@ export async function resolveAgent(
 export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  extraHeaders: Record<string, string> | null;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -125,6 +126,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
+    extraHeaders: resolved.chatApiKey.extraHeaders ?? null,
   };
 }
 
@@ -135,6 +137,7 @@ export async function validateVirtualApiKey(
 export interface JwksAuthResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  extraHeaders: Record<string, string> | null;
   userId: string | undefined;
   organizationId: string;
 }
@@ -205,6 +208,7 @@ export async function attemptJwksAuth(
 
   let apiKey: string | undefined;
   let baseUrl: string | undefined;
+  let extraHeaders: Record<string, string> | null = null;
 
   if (isSupportedProvider(providerName)) {
     const resolved = await resolveProviderApiKey({
@@ -214,11 +218,13 @@ export async function attemptJwksAuth(
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
+    extraHeaders = resolved.extraHeaders;
   }
 
   return {
     apiKey,
     baseUrl,
+    extraHeaders,
     userId: jwksResult.userId,
     organizationId: jwksResult.organizationId,
   };

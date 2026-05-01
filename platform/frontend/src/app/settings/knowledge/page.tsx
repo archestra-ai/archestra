@@ -77,6 +77,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "openai",
   apiKey: null,
   baseUrl: null,
+  extraHeaders: [],
   scope: "org",
   teamId: null,
   vaultSecretPath: null,

@@ -73,6 +73,7 @@ type ModelRouterMappedProviderKey = {
   chatApiKeyName: string;
   secretId: string | null;
   baseUrl: string | null;
+  extraHeaders: Record<string, string> | null;
 };
 
 type ModelRouterVirtualKeyAuth = {
@@ -678,6 +679,7 @@ async function applyModelRouterAuthOverride(params: {
   ).llmProxyAuthOverride = {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
+    extraHeaders: mappedApiKey.extraHeaders ?? null,
     authenticated: true,
     source: "model_router",
   };

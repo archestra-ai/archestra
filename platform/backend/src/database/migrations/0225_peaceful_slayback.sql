@@ -1,0 +1,1 @@
+ALTER TABLE "chat_api_keys" ADD COLUMN "extra_headers" jsonb;

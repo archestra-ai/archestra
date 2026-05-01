@@ -410,6 +410,182 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("considerContextUntrusted=true still applies block_always tool result policies", async () => {
+      // Bug regression: previously an early return when considerContextUntrusted
+      // was true skipped policy evaluation, allowing the raw tool result to
+      // reach the model.
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [
+          { key: "emails[*].from", operator: "contains", value: "hacker" },
+        ],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_blocked_under_untrusted",
+              name: "get_emails",
+              content: {
+                emails: [{ from: "hacker@evil.com", subject: "Malicious" }],
+              },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({
+        call_blocked_under_untrusted:
+          "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
+      });
+      // Boundary keeps its preexisting reason - the tool-result block does not
+      // override the original cause of distrust.
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+    });
+
+    test("considerContextUntrusted=true keeps boundary preexisting when no policy matches", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_no_match",
+              name: "get_emails",
+              content: { emails: [{ from: "user@example.com" }] },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+    });
+
+    test("considerContextUntrusted=true skips dual-LLM sanitization", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_skipped",
+          conversations: [],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_skipped",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(result.usedDualLlm).toBe(false);
+      expect(result.dualLlmAnalyses).toEqual([]);
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+
+      createSpy.mockRestore();
+    });
+
+    test("considerContextUntrusted=true with permissive globalToolPolicy still marks context untrusted", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "user" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_yolo_untrusted",
+              name: "get_emails",
+              content: { from: "anyone@example.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        true,
+        "permissive",
+        { teamIds: [] },
+      );
+
+      // Permissive mode does not block, but the agent flag still wins.
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      });
+    });
+
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({

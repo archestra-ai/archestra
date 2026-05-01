@@ -1166,6 +1166,7 @@ export const vllmAdapterFactory: LLMProvider<
       apiKey: apiKey || "EMPTY",
       baseURL: options.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

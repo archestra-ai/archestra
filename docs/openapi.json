@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.29"
+    "version": "1.2.30"
   },
   "components": {
     "schemas": {
@@ -117491,6 +117491,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "extraHeaders": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
                       "isSystem": {
                         "type": "boolean"
                       },
@@ -117548,6 +117555,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "extraHeaders",
                       "isSystem",
                       "isPrimary",
                       "createdAt",
@@ -117843,6 +117851,13 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "extraHeaders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "scope": {
                     "default": "personal",
                     "type": "string",
@@ -117942,6 +117957,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -117967,6 +117989,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",
@@ -118329,6 +118352,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "extraHeaders": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
                       "isSystem": {
                         "type": "boolean"
                       },
@@ -118386,6 +118416,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "extraHeaders",
                       "isSystem",
                       "isPrimary",
                       "createdAt",
@@ -118720,6 +118751,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -118777,6 +118815,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",
@@ -119049,6 +119088,13 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "extraHeaders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "scope": {
                     "type": "string",
                     "enum": [
@@ -119158,6 +119204,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -119183,6 +119236,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",

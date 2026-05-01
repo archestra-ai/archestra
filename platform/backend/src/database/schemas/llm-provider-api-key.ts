@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -37,6 +38,8 @@ const llmProviderApiKeysTable = pgTable(
     }),
     /** Optional custom base URL override for the LLM provider API */
     baseUrl: text("base_url"),
+    /** Optional custom HTTP headers sent on every request to the provider (e.g. RBAC headers required by gateways like Kubeflow). */
+    extraHeaders: jsonb("extra_headers").$type<Record<string, string>>(),
     /** System keys are auto-managed for keyless LLM providers (Vertex AI, vLLM, etc.) */
     isSystem: boolean("is_system").notNull().default(false),
     /** When multiple LLM provider API keys exist for the same provider+scope, the primary key is preferred */

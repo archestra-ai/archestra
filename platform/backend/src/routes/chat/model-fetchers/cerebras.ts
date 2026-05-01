@@ -5,6 +5,7 @@ import type { ModelInfo } from "./types";
 export async function fetchCerebrasModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.cerebras.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -16,6 +17,7 @@ export async function fetchCerebrasModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "Cerebras models",
+    extraHeaders,
   });
 
   return data.data

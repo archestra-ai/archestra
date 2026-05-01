@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, FileText, Paperclip } from "lucide-react";
+import Link from "next/link";
 import {
   type KeyboardEventHandler,
   useEffect,
@@ -220,9 +221,13 @@ export function EditableUserMessage({
         {otherAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
             {otherAttachments.map((attachment) => (
-              <div
+              <Link
                 key={attachment.url}
-                className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2"
+                href={attachment.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={attachment.filename}
+                className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
               >
                 {isCsvAttachment(attachment.mediaType, attachment.filename) ||
                 isPlainTextAttachment(
@@ -240,31 +245,30 @@ export function EditableUserMessage({
                       filename: attachment.filename,
                     })}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <MessageContent>
-            <UserMessageText text={text} />
-          </MessageContent>
-        )}
-        {/* Actions below the message - only show edit for messages with text */}
-        {text && (
-          <MessageActions
-            textToCopy={text}
-            onEditClick={handleStartEdit}
-            onRegenerateClick={handleRegenerateClick}
-            isRegenerateConfirming={isRegenerateConfirming}
-            editDisabled={editDisabled}
-            className={cn(
-              "absolute -bottom-1 right-0 translate-y-full z-10 transition-opacity",
-              isRegenerateConfirming
-                ? "opacity-100"
-                : "opacity-0 group-hover/message:opacity-100",
-            )}
-          />
+          <div className="flex max-w-[80%] items-center justify-end gap-2">
+            <MessageActions
+              textToCopy={text}
+              onEditClick={handleStartEdit}
+              onRegenerateClick={handleRegenerateClick}
+              isRegenerateConfirming={isRegenerateConfirming}
+              editDisabled={editDisabled}
+              className={cn(
+                "shrink-0 transition-opacity",
+                isRegenerateConfirming
+                  ? "opacity-100"
+                  : "opacity-0 group-hover/message:opacity-100",
+              )}
+            />
+            <MessageContent className="max-w-none">
+              <UserMessageText text={text} />
+            </MessageContent>
+          </div>
         )}
       </div>
     </Message>

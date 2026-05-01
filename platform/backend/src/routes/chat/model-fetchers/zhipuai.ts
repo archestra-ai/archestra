@@ -5,6 +5,7 @@ import type { ModelInfo } from "./types";
 export async function fetchZhipuaiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.zhipuai.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -16,6 +17,7 @@ export async function fetchZhipuaiModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "Zhipuai models",
+    extraHeaders,
   });
 
   const chatModelPrefixes = ["glm-", "chatglm-"];

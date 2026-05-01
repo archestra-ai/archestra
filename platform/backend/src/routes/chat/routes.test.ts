@@ -109,6 +109,130 @@ describe("prepareMessagesForProvider", () => {
 
     expect(messages[0]).toBe(message);
   });
+
+  const pdfFilePart = {
+    type: "file",
+    mediaType: "application/pdf",
+    filename: "report.pdf",
+    url: "data:application/pdf;base64,JVBERi0=",
+  };
+
+  it("prepends placeholder text for bedrock user messages with only a file part", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [{ role: "user", parts: [pdfFilePart] }],
+    });
+
+    expect(messages[0].parts).toEqual([
+      { type: "text", text: expect.stringMatching(/\S/) },
+      pdfFilePart,
+    ]);
+  });
+
+  it("prepends placeholder when the only existing text part is whitespace", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "user",
+          parts: [{ type: "text", text: "   " }, pdfFilePart],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "text",
+      text: expect.stringMatching(/\S/),
+    });
+  });
+
+  it("leaves bedrock user messages with text and file untouched", () => {
+    const message = {
+      role: "user" as const,
+      parts: [{ type: "text", text: "Summarize this" }, pdfFilePart],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it("pads bedrock assistant messages whose only text part is whitespace", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [{ role: "assistant", parts: [{ type: "text", text: "" }] }],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("pads bedrock messages whose reasoning lacks a bedrock signature", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "reasoning", text: "thinking..." }],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/\S/),
+      }),
+    );
+  });
+
+  it("leaves bedrock assistant messages with a tool-call part untouched", () => {
+    const message = {
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "tool-call",
+          toolCallId: "call_123",
+          toolName: "search",
+          input: { q: "x" },
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it("leaves bedrock messages with reasoning that carries a bedrock signature", () => {
+    const message = {
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "reasoning",
+          text: "thinking...",
+          providerOptions: { bedrock: { signature: "sig-abc" } },
+        },
+      ],
+    };
+
+    const messages = __test.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
 });
 
 describe("getMessagesNotYetPersisted", () => {

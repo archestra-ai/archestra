@@ -68,6 +68,7 @@ describe("config routes", () => {
 
     expect(payload.features).toMatchObject({
       orchestratorK8sRuntime: expect.any(Boolean),
+      advancedToolFeaturesEnabled: false,
       byosEnabled: expect.any(Boolean),
       bedrockIamAuthEnabled: expect.any(Boolean),
       geminiVertexAiEnabled: expect.any(Boolean),

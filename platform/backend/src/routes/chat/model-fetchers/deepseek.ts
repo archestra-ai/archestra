@@ -5,6 +5,7 @@ import type { ModelInfo } from "./types";
 export async function fetchDeepSeekModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.deepseek.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -16,6 +17,7 @@ export async function fetchDeepSeekModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "DeepSeek models",
+    extraHeaders,
   });
 
   return (Array.isArray(data.data) ? data.data : []).map((model) => ({

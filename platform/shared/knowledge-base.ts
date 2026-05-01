@@ -45,6 +45,7 @@ export const CONNECTOR_TYPE_LABELS = {
   gdrive: "Google Drive",
   file_upload: "File Upload",
   dropbox: "Dropbox",
+  onedrive: "OneDrive",
   asana: "Asana",
   linear: "Linear",
   outline: "Outline",

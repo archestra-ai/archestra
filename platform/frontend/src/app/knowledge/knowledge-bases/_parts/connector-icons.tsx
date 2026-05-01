@@ -26,6 +26,7 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   },
   linear: { kind: "img", src: "/icons/linear.png" },
   dropbox: { kind: "img", src: "/icons/dropbox.png" },
+  onedrive: { kind: "img", src: "/icons/onedrive.png" },
   asana: { kind: "img", src: "/icons/asana.png" },
   salesforce: { kind: "img", src: "/icons/salesforce.png" },
   outline: { kind: "img", src: "/icons/getoutline.png" },

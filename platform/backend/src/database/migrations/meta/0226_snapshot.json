@@ -1,6 +1,6 @@
 {
-  "id": "8e482938-8234-4ac0-a3a0-1d686b4f7f45",
-  "prevId": "c8250b2a-8ff1-4b34-a43b-7cd549de550b",
+  "id": "af3ba9f2-cba6-4e47-9a7f-d4e41357e3a4",
+  "prevId": "46acc03c-c81b-44c3-8a22-10496939b14a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1735,6 +1735,13 @@
           "notNull": false,
           "default": 0
         },
+        "items_skipped": {
+          "name": "items_skipped",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
         "error": {
           "name": "error",
           "type": "text",
@@ -3426,139 +3433,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.kb_uploaded_files": {
-      "name": "kb_uploaded_files",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "connector_id": {
-          "name": "connector_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "original_name": {
-          "name": "original_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_size": {
-          "name": "file_size",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_hash": {
-          "name": "content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_data": {
-          "name": "file_data",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "processing_status": {
-          "name": "processing_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'completed'"
-        },
-        "processing_error": {
-          "name": "processing_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "kb_uploaded_files_connector_id_idx": {
-          "name": "kb_uploaded_files_connector_id_idx",
-          "columns": [
-            {
-              "expression": "connector_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "kb_uploaded_files_content_hash_uidx": {
-          "name": "kb_uploaded_files_content_hash_uidx",
-          "columns": [
-            {
-              "expression": "connector_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "content_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "kb_uploaded_files_connector_id_knowledge_base_connectors_id_fk": {
-          "name": "kb_uploaded_files_connector_id_knowledge_base_connectors_id_fk",
-          "tableFrom": "kb_uploaded_files",
-          "tableTo": "knowledge_base_connectors",
-          "columnsFrom": [
-            "connector_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.knowledge_base_connector_assignment": {
       "name": "knowledge_base_connector_assignment",
       "schema": "",
@@ -4379,6 +4253,12 @@
         "base_url": {
           "name": "base_url",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "extra_headers": {
+          "name": "extra_headers",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

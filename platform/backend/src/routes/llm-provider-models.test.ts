@@ -273,12 +273,14 @@ describe("chat model routes", () => {
       provider: "vllm",
       apiKeyValue: "",
       baseUrl: null,
+      extraHeaders: null,
     });
     expect(syncSpy).toHaveBeenNthCalledWith(2, {
       apiKeyId: openAiKey.id,
       provider: "openai",
       apiKeyValue: "resolved-secret",
       baseUrl: "https://proxy.example.com/v1",
+      extraHeaders: null,
     });
   });
 

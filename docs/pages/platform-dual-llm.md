@@ -1,8 +1,8 @@
 ---
 title: Dual LLM Agent
-category: Agents
-subcategory: Built-In Agents
-order: 8
+category: LLM Proxy
+subcategory: Security Concepts
+order: 5
 description: Built-in agents that quarantine untrusted tool output before it reaches the main agent
 ---
 

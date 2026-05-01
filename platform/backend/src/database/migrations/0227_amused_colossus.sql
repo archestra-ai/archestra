@@ -7,6 +7,8 @@ CREATE TABLE "kb_uploaded_files" (
 	"file_size" integer NOT NULL,
 	"content_hash" text NOT NULL,
 	"file_data" "bytea" NOT NULL,
+	"processing_status" text DEFAULT 'completed' NOT NULL,
+	"processing_error" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.30](https://github.com/archestra-ai/archestra/compare/platform-v1.2.29...platform-v1.2.30) (2026-05-01)
+
+
+### Features
+
+* add clone agent functionality ([#4082](https://github.com/archestra-ai/archestra/issues/4082)) ([2b44e3a](https://github.com/archestra-ai/archestra/commit/2b44e3a56bb2f84efe60289547b2dfca6f92049b))
+* add extra-headers ([#4264](https://github.com/archestra-ai/archestra/issues/4264)) ([407c86f](https://github.com/archestra-ai/archestra/commit/407c86fed7a3d0f9ed19b2d9bba136a5ddb1686b))
+
+
+### Bug Fixes
+
+* substitute $VAR / ${VAR} env var refs in MCP server arguments ([#4202](https://github.com/archestra-ai/archestra/issues/4202)) ([03419db](https://github.com/archestra-ai/archestra/commit/03419db9c61976f60a63537ca0eaf866d611d54c))
+
+
+### Documentation
+
+* polish knowledge base docs ([#4239](https://github.com/archestra-ai/archestra/issues/4239)) ([c752452](https://github.com/archestra-ai/archestra/commit/c752452031e40cfe9e23698fac79fcb727bdb4f3))
+
+
+### Miscellaneous Chores
+
+* connection page fixes ([#4238](https://github.com/archestra-ai/archestra/issues/4238)) ([e8189fe](https://github.com/archestra-ai/archestra/commit/e8189fe54c398650c1f3e9c92e61bd03ea2e442d))
+* fix ci ([#4270](https://github.com/archestra-ai/archestra/issues/4270)) ([bc52088](https://github.com/archestra-ai/archestra/commit/bc52088cc8aede0fdf8f1c6da190c0966ed3877a))
+* restruct agents docs ([#4253](https://github.com/archestra-ai/archestra/issues/4253)) ([7e3e4ae](https://github.com/archestra-ai/archestra/commit/7e3e4ae6dfe6f11e232f068079eb6c131a732925))
+
 ## [1.2.29](https://github.com/archestra-ai/archestra/compare/platform-v1.2.28...platform-v1.2.29) (2026-04-30)
 
 

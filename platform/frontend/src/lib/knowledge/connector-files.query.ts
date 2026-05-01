@@ -10,7 +10,7 @@ export type UploadedFile =
 type UploadResult =
   archestraApiTypes.UploadConnectorFilesResponses["200"]["results"][number];
 
-const ACTIVE_EMBEDDING_STATUSES = new Set(["pending", "processing"]);
+const ACTIVE_STATUSES = new Set(["pending", "processing"]);
 
 export function useConnectorFiles(connectorId: string) {
   return useQuery({
@@ -24,6 +24,15 @@ export function useConnectorFiles(connectorId: string) {
       return data?.data ?? [];
     },
     enabled: Boolean(connectorId),
+    refetchInterval: (query) => {
+      const files = query.state.data as UploadedFile[] | undefined;
+      if (!files) return false;
+      const hasActive = files.some((f) => {
+        const ps = (f as Record<string, unknown>).processingStatus as string | undefined;
+        return (ps && ACTIVE_STATUSES.has(ps)) || ACTIVE_STATUSES.has(f.embeddingStatus);
+      });
+      return hasActive ? 5000 : false;
+    },
   });
 }
 
@@ -40,9 +49,11 @@ export function useConnectorFile(connectorId: string, fileId: string) {
     enabled: Boolean(connectorId) && Boolean(fileId),
     refetchInterval: (query) => {
       const file = query.state.data as UploadedFile | null | undefined;
-      return file && ACTIVE_EMBEDDING_STATUSES.has(file.embeddingStatus)
-        ? 3000
-        : false;
+      if (!file) return false;
+      const processingStatus = (file as Record<string, unknown>).processingStatus as string | undefined;
+      if (processingStatus && ACTIVE_STATUSES.has(processingStatus)) return 3000;
+      if (ACTIVE_STATUSES.has(file.embeddingStatus)) return 3000;
+      return false;
     },
   });
 }

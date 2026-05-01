@@ -38,7 +38,54 @@ const ACCEPTED_EXTENSIONS =
   ".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.doc,.docx,.zip";
 const MAX_FILE_SIZE_MB = 10;
 
-function EmbeddingStatusBadge({ status }: { status: string }) {
+function FileStatusBadge({
+  processingStatus,
+  embeddingStatus,
+  processingError,
+}: {
+  processingStatus?: string;
+  embeddingStatus: string;
+  processingError?: string | null;
+}) {
+  // When file is still being processed (text extraction + chunking),
+  // show that status. Once completed, show the embedding status.
+  if (processingStatus && processingStatus !== "completed") {
+    const variants = {
+      pending: "secondary",
+      processing: "secondary",
+      failed: "destructive",
+    } as const;
+
+    const labels = {
+      pending: "Queued",
+      processing: "Extracting…",
+      failed: "Processing Failed",
+    };
+
+    const variant = variants[processingStatus as keyof typeof variants] ?? "secondary";
+    const label = labels[processingStatus as keyof typeof labels] ?? processingStatus;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant={variant} className="capitalize text-xs cursor-help">
+            {processingStatus === "processing" && (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            )}
+            {label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          {processingStatus === "failed" && processingError
+            ? processingError
+            : processingStatus === "pending"
+              ? "File is queued for text extraction"
+              : "Extracting text from file…"}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
   const variants = {
     completed: "default",
     pending: "secondary",
@@ -55,13 +102,13 @@ function EmbeddingStatusBadge({ status }: { status: string }) {
 
   return (
     <Badge
-      variant={variants[status as keyof typeof variants] ?? "secondary"}
+      variant={variants[embeddingStatus as keyof typeof variants] ?? "secondary"}
       className="capitalize text-xs"
     >
-      {status === "processing" && (
+      {embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
       )}
-      {labels[status as keyof typeof labels] ?? status}
+      {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
     </Badge>
   );
 }
@@ -169,7 +216,11 @@ function FileRow({
         {formatFileSize(file.fileSize)}
       </TableCell>
       <TableCell>
-        <EmbeddingStatusBadge status={file.embeddingStatus} />
+        <FileStatusBadge
+          processingStatus={file.processingStatus}
+          embeddingStatus={file.embeddingStatus}
+          processingError={file.processingError}
+        />
       </TableCell>
       <TableCell className="flex justify-center">
         <form action={deleteAction}>

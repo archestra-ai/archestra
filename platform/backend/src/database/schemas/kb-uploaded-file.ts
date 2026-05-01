@@ -31,6 +31,8 @@ const kbUploadedFilesTable = pgTable(
     fileSize: integer("file_size").notNull(),
     contentHash: text("content_hash").notNull(),
     fileData: bytea("file_data").notNull(),
+    processingStatus: text("processing_status").notNull().default("completed"),
+    processingError: text("processing_error"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

@@ -47139,6 +47139,8 @@ export type GetConnectorFilesResponses = {
             createdAt: string;
             title: string;
             embeddingStatus: string;
+            processingStatus?: string;
+            processingError?: string | null;
         }>;
     };
 };

@@ -7,7 +7,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import db, { schema } from "@/database";
 import {
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
@@ -15,7 +14,6 @@ import {
 } from "@/knowledge-base";
 import { chunkDocument } from "@/knowledge-base/chunker";
 import {
-  extractTextFiles,
   isSupportedMimeType,
   MAX_FILE_SIZE_BYTES,
   MAX_ZIP_TOTAL_BYTES,
@@ -1066,6 +1064,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     contentHash: z.string(),
     createdAt: z.string(),
     title: z.string().min(1),
+    processingStatus: z.string(),
+    processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
   });
 
@@ -1111,12 +1111,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const acl =
-        knowledgeSourceAccessControlService.buildConnectorDocumentAccessControlList(
-          { connector },
-        );
-
       const results: z.infer<typeof UploadResultSchema>[] = [];
+      const createdFileIds: string[] = [];
 
       for (const file of request.body.files) {
         const filename = file.name;
@@ -1142,34 +1138,81 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           continue;
         }
 
-        let extraction: Awaited<ReturnType<typeof extractTextFiles>>;
-        try {
-          extraction = await extractTextFiles(rawBuffer, mimeType, filename);
-        } catch (error) {
-          logger.warn(
-            { err: error, filename, mimeType },
-            "Failed to extract text from uploaded file, skipping",
-          );
-          results.push({ filename, status: "extraction_failed" });
-          continue;
-        }
+        if (isZip) {
+          const JSZip = (await import("jszip")).default;
+          const zip = await JSZip.loadAsync(rawBuffer);
+          let totalBytes = 0;
 
-        // Report skipped files (e.g., unsupported types or oversized files inside a ZIP)
-        for (const skip of extraction.skipped) {
-          const statusMap = {
-            too_large: "too_large",
-            unsupported: "unsupported",
-            extraction_failed: "extraction_failed",
-          } as const;
-          results.push({
-            filename: skip.filename,
-            status: statusMap[skip.reason],
-          });
-        }
+          for (const [relativePath, entry] of Object.entries(zip.files)) {
+            if (entry.dir) continue;
+            const basename = relativePath.split("/").pop() ?? relativePath;
+            if (basename.startsWith(".")) continue;
+            if (relativePath.startsWith("__MACOSX/")) continue;
 
-        for (const extractedFile of extraction.extracted) {
+            if (!isSupportedMimeType(basename, "")) {
+              results.push({ filename: relativePath, status: "unsupported" });
+              continue;
+            }
+
+            const entryBytes = await entry.async("nodebuffer");
+            if (entryBytes.byteLength > MAX_FILE_SIZE_BYTES) {
+              results.push({ filename: relativePath, status: "too_large" });
+              continue;
+            }
+            totalBytes += entryBytes.byteLength;
+            if (totalBytes > MAX_ZIP_TOTAL_BYTES) {
+              results.push({ filename: relativePath, status: "too_large" });
+              break;
+            }
+
+            const contentHash = KbUploadedFileModel.computeContentHash(
+              entryBytes.toString("base64"),
+            );
+
+            const existing = await KbUploadedFileModel.findByContentHash(
+              id,
+              contentHash,
+            );
+            if (existing) {
+              results.push({
+                filename: relativePath,
+                status: "duplicate",
+                existingTitle: existing.originalName,
+              });
+              continue;
+            }
+
+            try {
+              const created = await KbUploadedFileModel.create({
+                connectorId: id,
+                organizationId,
+                originalName: relativePath,
+                mimeType: "",
+                fileSize: entryBytes.byteLength,
+                contentHash,
+                fileData: entryBytes,
+                processingStatus: "pending",
+              });
+              createdFileIds.push(created.id);
+              results.push({
+                filename: relativePath,
+                status: "created",
+                fileId: created.id,
+              });
+            } catch (err) {
+              if (isContentHashConflict(err)) {
+                results.push({
+                  filename: relativePath,
+                  status: "duplicate",
+                });
+                continue;
+              }
+              throw err;
+            }
+          }
+        } else {
           const contentHash = KbUploadedFileModel.computeContentHash(
-            extractedFile.text,
+            rawBuffer.toString("base64"),
           );
 
           const existing = await KbUploadedFileModel.findByContentHash(
@@ -1177,119 +1220,49 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             contentHash,
           );
           if (existing) {
-            const existingDoc = await KbDocumentModel.findBySourceId({
-              connectorId: id,
-              sourceId: existing.id,
-            });
             results.push({
-              filename: extractedFile.filename,
+              filename,
               status: "duplicate",
-              existingTitle: existingDoc?.title,
+              existingTitle: existing.originalName,
             });
             continue;
           }
 
-          const title = extractedFile.filename;
-          const chunks = await chunkDocument({
-            title,
-            content: extractedFile.text,
-            metadata: {
-              originalFilename: extractedFile.filename,
-              mimeType: extractedFile.mimeType,
-            },
-          });
-
-          let uploadedFileId: string;
-          let documentId: string;
-
           try {
-            const txResult = await db.transaction(async (tx) => {
-              const [file] = await tx
-                .insert(schema.kbUploadedFilesTable)
-                .values({
-                  connectorId: id,
-                  organizationId,
-                  originalName: extractedFile.filename,
-                  mimeType: extractedFile.mimeType,
-                  fileSize: extractedFile.rawBytes.byteLength,
-                  contentHash,
-                  fileData: extractedFile.rawBytes,
-                })
-                .returning();
-
-              const [doc] = await tx
-                .insert(schema.kbDocumentsTable)
-                .values({
-                  organizationId,
-                  connectorId: id,
-                  sourceId: file.id,
-                  title,
-                  content: extractedFile.text,
-                  contentHash,
-                  acl,
-                  metadata: {
-                    originalFilename: extractedFile.filename,
-                    mimeType: extractedFile.mimeType,
-                  },
-                })
-                .returning();
-
-              if (chunks.length > 0) {
-                await tx.insert(schema.kbChunksTable).values(
-                  chunks.map((chunk) => ({
-                    documentId: doc.id,
-                    content: chunk.content,
-                    chunkIndex: chunk.chunkIndex,
-                    metadataSuffixSemantic: chunk.metadataSuffixSemantic,
-                    metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-                    acl,
-                  })),
-                );
-              }
-
-              return { fileId: file.id, documentId: doc.id };
+            const created = await KbUploadedFileModel.create({
+              connectorId: id,
+              organizationId,
+              originalName: filename,
+              mimeType,
+              fileSize: rawBuffer.byteLength,
+              contentHash,
+              fileData: rawBuffer,
+              processingStatus: "pending",
             });
-
-            uploadedFileId = txResult.fileId;
-            documentId = txResult.documentId;
+            createdFileIds.push(created.id);
+            results.push({
+              filename,
+              status: "created",
+              fileId: created.id,
+            });
           } catch (err) {
             if (isContentHashConflict(err)) {
-              const race = await KbUploadedFileModel.findByContentHash(
-                id,
-                contentHash,
-              );
-              if (race) {
-                const existingDoc = await KbDocumentModel.findBySourceId({
-                  connectorId: id,
-                  sourceId: race.id,
-                });
-                results.push({
-                  filename: extractedFile.filename,
-                  status: "duplicate",
-                  existingTitle: existingDoc?.title,
-                });
-                continue;
-              }
+              results.push({ filename, status: "duplicate" });
+              continue;
             }
             throw err;
           }
-
-          if (chunks.length > 0) {
-            await taskQueueService.enqueue({
-              taskType: "batch_embedding",
-              payload: {
-                documentIds: [documentId],
-                connectorRunId: null,
-              },
-            });
-          }
-
-          results.push({
-            filename: extractedFile.filename,
-            status: "created",
-            fileId: uploadedFileId,
-          });
         }
+      }
+
+      if (createdFileIds.length > 0) {
+        await taskQueueService.enqueue({
+          taskType: "process_uploaded_files",
+          payload: {
+            connectorId: id,
+            fileIds: createdFileIds,
+          },
+        });
       }
 
       return reply.send({ results });
@@ -1331,6 +1304,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           contentHash: file.contentHash,
           createdAt: file.createdAt.toISOString(),
           title: doc?.title ?? file.originalName,
+          processingStatus: file.processingStatus,
+          processingError: file.processingError ?? null,
           embeddingStatus: doc?.embeddingStatus ?? "pending",
         };
       });
@@ -1372,6 +1347,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         contentHash: file.contentHash,
         createdAt: file.createdAt.toISOString(),
         title: doc?.title ?? file.originalName,
+        processingStatus: file.processingStatus,
+        processingError: file.processingError ?? null,
         embeddingStatus: doc?.embeddingStatus ?? "pending",
       });
     },

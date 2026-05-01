@@ -1583,6 +1583,13 @@
       "when": 1777480132679,
       "tag": "0225_mushy_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1777650763659,
+      "tag": "0226_luxuriant_iron_monger",
+      "breakpoints": true
     }
   ]
 }

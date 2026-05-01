@@ -186,38 +186,6 @@ export function useUploadConnectorFiles(connectorId: string) {
   });
 }
 
-export function useUpdateConnectorFileTitle(connectorId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      fileId,
-      title,
-    }: {
-      fileId: string;
-      title: string;
-    }) => {
-      await client.patch({
-        url: "/api/connectors/{id}/files/{fileId}",
-        path: { id: connectorId, fileId },
-        body: { title },
-      });
-    },
-    onSuccess: (_data, { fileId }) => {
-      queryClient.invalidateQueries({
-        queryKey: ["connector-files", connectorId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["connector-file", connectorId, fileId],
-      });
-      toast.success("Title updated");
-    },
-    onError: () => {
-      toast.error("Failed to update title");
-    },
-  });
-}
-
 export function useDeleteConnectorFile(connectorId: string) {
   const queryClient = useQueryClient();
 

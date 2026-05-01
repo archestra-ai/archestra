@@ -12,7 +12,6 @@ import {
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
-import { chunkDocument } from "@/knowledge-base/chunker";
 import {
   isSupportedMimeType,
   MAX_FILE_SIZE_BYTES,
@@ -25,7 +24,6 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
-  KbChunkModel,
   KbDocumentModel,
   KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
@@ -1052,7 +1050,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "extraction_failed",
     ]),
     fileId: z.string().optional(),
-    existingTitle: z.string().optional(),
   });
 
   const UploadedFileSchema = z.object({
@@ -1063,7 +1060,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     fileSize: z.number().int().nonnegative(),
     contentHash: z.string(),
     createdAt: z.string(),
-    title: z.string().min(1),
     processingStatus: z.string(),
     processingError: z.string().nullable(),
     embeddingStatus: EmbeddingStatusSchema,
@@ -1177,7 +1173,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               results.push({
                 filename: relativePath,
                 status: "duplicate",
-                existingTitle: existing.originalName,
               });
               continue;
             }
@@ -1223,7 +1218,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             results.push({
               filename,
               status: "duplicate",
-              existingTitle: existing.originalName,
             });
             continue;
           }
@@ -1325,7 +1319,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fileSize: file.fileSize,
           contentHash: file.contentHash,
           createdAt: file.createdAt.toISOString(),
-          title: doc?.title ?? file.originalName,
           processingStatus: file.processingStatus,
           processingError: file.processingError ?? null,
           embeddingStatus: doc?.embeddingStatus ?? "pending",
@@ -1371,77 +1364,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         fileSize: file.fileSize,
         contentHash: file.contentHash,
         createdAt: file.createdAt.toISOString(),
-        title: doc?.title ?? file.originalName,
         processingStatus: file.processingStatus,
         processingError: file.processingError ?? null,
         embeddingStatus: doc?.embeddingStatus ?? "pending",
       });
-    },
-  );
-
-  fastify.patch(
-    "/api/connectors/:id/files/:fileId",
-    {
-      schema: {
-        operationId: RouteId.UpdateConnectorFile,
-        description: "Update the title of an uploaded file",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string(), fileId: z.string() }),
-        body: z.object({ title: z.string().min(1) }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async ({ params: { id, fileId }, body, organizationId, user }, reply) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const file = await KbUploadedFileModel.findById(fileId);
-      if (!file || file.connectorId !== id) {
-        throw new ApiError(404, "File not found");
-      }
-
-      const doc = await KbDocumentModel.findBySourceId({
-        connectorId: id,
-        sourceId: fileId,
-      });
-
-      if (!doc) {
-        throw new ApiError(404, "Document not found");
-      }
-
-      await KbDocumentModel.update(doc.id, {
-        title: body.title,
-        embeddingStatus: "pending",
-      });
-
-      await KbChunkModel.deleteByDocument(doc.id);
-      const chunks = await chunkDocument({
-        title: body.title,
-        content: doc.content,
-        metadata: doc.metadata as Record<string, unknown> | undefined,
-      });
-
-      if (chunks.length > 0) {
-        await KbChunkModel.insertMany(
-          chunks.map((chunk) => ({
-            documentId: doc.id,
-            content: chunk.content,
-            chunkIndex: chunk.chunkIndex,
-            metadataSuffixSemantic: chunk.metadataSuffixSemantic,
-            metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-            acl: doc.acl,
-          })),
-        );
-
-        await taskQueueService.enqueue({
-          taskType: "batch_embedding",
-          payload: {
-            documentIds: [doc.id],
-            connectorRunId: null,
-          },
-        });
-      }
-
-      return reply.send({ success: true });
     },
   );
 

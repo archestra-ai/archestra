@@ -438,7 +438,6 @@ export const RouteId = {
   UploadConnectorFiles: "uploadConnectorFiles",
   GetConnectorFiles: "getConnectorFiles",
   GetConnectorFile: "getConnectorFile",
-  UpdateConnectorFile: "updateConnectorFile",
   DeleteConnectorFile: "deleteConnectorFile",
 
   // Invitation Routes

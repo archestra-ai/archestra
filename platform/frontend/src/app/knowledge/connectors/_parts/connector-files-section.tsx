@@ -1,15 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  Check,
-  Loader2,
-  Pencil,
-  Search,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { Loader2, Search, Trash2, Upload, X } from "lucide-react";
 import {
   useActionState,
   useCallback,
@@ -33,7 +25,6 @@ import {
   type UploadedFile,
   useConnectorFilesPaginated,
   useDeleteConnectorFile,
-  useUpdateConnectorFileTitle,
   useUploadConnectorFiles,
 } from "@/lib/knowledge/connector-files.query";
 
@@ -115,77 +106,6 @@ function FileStatusBadge({
       )}
       {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
     </Badge>
-  );
-}
-
-function EditableTitleCell({
-  file,
-  connectorId,
-}: {
-  file: UploadedFile;
-  connectorId: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const updateTitle = useUpdateConnectorFileTitle(connectorId);
-
-  const [, titleAction, isSaving] = useActionState(
-    async (_: null, formData: FormData) => {
-      const title = (formData.get("title") as string | null)?.trim() ?? "";
-      if (title && title !== file.title) {
-        await updateTitle.mutateAsync({ fileId: file.id, title });
-      }
-      setEditing(false);
-      return null;
-    },
-    null,
-  );
-
-  if (editing) {
-    return (
-      <form action={titleAction} className="flex items-center gap-1">
-        <Input
-          name="title"
-          defaultValue={file.title}
-          className="h-7 text-sm"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setEditing(false);
-          }}
-          autoFocus
-        />
-        <Button
-          type="submit"
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          disabled={isSaving}
-        >
-          <Check className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          onClick={() => setEditing(false)}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      </form>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 group min-w-0">
-      <span className="text-sm truncate">{file.title}</span>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={() => setEditing(true)}
-      >
-        <Pencil className="h-3 w-3" />
-      </Button>
-    </div>
   );
 }
 
@@ -286,19 +206,11 @@ export function ConnectorFilesSection({
 
   const columns: ColumnDef<UploadedFile>[] = [
     {
-      id: "title",
-      accessorKey: "title",
-      header: "Title",
-      cell: ({ row }) => (
-        <EditableTitleCell file={row.original} connectorId={connectorId} />
-      ),
-    },
-    {
       id: "originalName",
       accessorKey: "originalName",
-      header: "Original Name",
+      header: "Name",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground truncate block max-w-[180px]">
+        <span className="text-sm truncate block max-w-[280px]">
           {row.original.originalName}
         </span>
       ),

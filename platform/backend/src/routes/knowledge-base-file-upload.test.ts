@@ -89,7 +89,7 @@ describe("connector file upload routes", () => {
       expect(result.results[0].fileId).toBeDefined();
     });
 
-    test("detects duplicate content and returns duplicate status with the existing title", async () => {
+    test("detects duplicate content and returns duplicate status", async () => {
       const content = Buffer.from("Duplicate content for dedup test");
 
       const { payload: payload1 } = buildJsonBody([
@@ -114,7 +114,6 @@ describe("connector file upload routes", () => {
       expect(response.json().results[0]).toMatchObject({
         filename: "second-upload.txt",
         status: "duplicate",
-        existingTitle: "first-upload.txt",
       });
     });
 
@@ -421,7 +420,6 @@ describe("connector file upload routes", () => {
       expect(second.json().results[0]).toMatchObject({
         filename: "race-second.txt",
         status: "duplicate",
-        existingTitle: "race-first.txt",
       });
 
       // The unique index must have prevented a second row from being inserted.
@@ -526,7 +524,6 @@ describe("connector file upload routes", () => {
         connectorId: fileUploadConnector.id,
         originalName: "single.txt",
         mimeType: "text/plain",
-        title: "single.txt",
       });
       expect(file).toHaveProperty("embeddingStatus");
       expect(file).toHaveProperty("createdAt");
@@ -579,86 +576,10 @@ describe("connector file upload routes", () => {
       expect(listBody.data[0]).toMatchObject({
         originalName: "listed.txt",
         mimeType: "text/plain",
-        title: "listed.txt",
       });
       expect(listBody.data[0]).toHaveProperty("id");
       expect(listBody.data[0]).toHaveProperty("contentHash");
       expect(listBody.data[0]).toHaveProperty("embeddingStatus");
-    });
-  });
-
-  describe("PATCH /api/connectors/:id/files/:fileId", () => {
-    test("updates the document title for an uploaded file", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "original.txt",
-          content: Buffer.from("File content to rename"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      const fileId = uploadResponse.json().results[0].fileId;
-
-      const patchResponse = await app.inject({
-        method: "PATCH",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${fileId}`,
-        payload: { title: "New Document Title" },
-      });
-
-      expect(patchResponse.statusCode).toBe(200);
-      expect(patchResponse.json().success).toBe(true);
-
-      const listResponse = await app.inject({
-        method: "GET",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-      });
-
-      const updated = listResponse
-        .json()
-        .data.find((f: { id: string }) => f.id === fileId);
-      expect(updated.title).toBe("New Document Title");
-    });
-
-    test("returns 404 when the file does not exist", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${crypto.randomUUID()}`,
-        payload: { title: "Should Not Work" },
-      });
-
-      expect(response.statusCode).toBe(404);
-    });
-
-    test("returns 400 when title is an empty string", async () => {
-      const { payload } = buildJsonBody([
-        {
-          name: "file.txt",
-          content: Buffer.from("content"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      const fileId = uploadResponse.json().results[0].fileId;
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: `/api/connectors/${fileUploadConnector.id}/files/${fileId}`,
-        payload: { title: "" },
-      });
-
-      expect(response.statusCode).toBe(400);
     });
   });
 

@@ -6,10 +6,7 @@ import {
   isSupportedMimeType,
 } from "@/knowledge-base/connectors/file-upload/file-processor";
 import logger from "@/logging";
-import {
-  KbUploadedFileModel,
-  KnowledgeBaseConnectorModel,
-} from "@/models";
+import { KbUploadedFileModel, KnowledgeBaseConnectorModel } from "@/models";
 import { taskQueueService } from "@/task-queue";
 
 /**
@@ -41,7 +38,10 @@ export async function handleProcessUploadedFiles(
 
   const connector = await KnowledgeBaseConnectorModel.findById(connectorId);
   if (!connector) {
-    logger.warn({ connectorId }, "[ProcessUploadedFiles] Connector not found, skipping");
+    logger.warn(
+      { connectorId },
+      "[ProcessUploadedFiles] Connector not found, skipping",
+    );
     return;
   }
 

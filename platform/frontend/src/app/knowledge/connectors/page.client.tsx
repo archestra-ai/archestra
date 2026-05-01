@@ -94,8 +94,8 @@ function ConnectorsList() {
       connectorTypeFilter === "all"
         ? undefined
         : (connectorTypeFilter as NonNullable<
-          archestraApiTypes.GetConnectorsData["query"]
-        >["connectorType"]),
+            archestraApiTypes.GetConnectorsData["query"]
+          >["connectorType"]),
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConnector, setEditingConnector] =
@@ -204,7 +204,9 @@ function ConnectorsList() {
       cell: ({ row }) => {
         if (row.original.connectorType === "file_upload") {
           return (
-            <span className="text-xs text-muted-foreground">Manual uploads</span>
+            <span className="text-xs text-muted-foreground">
+              Manual uploads
+            </span>
           );
         }
         return (

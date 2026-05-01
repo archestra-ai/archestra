@@ -356,23 +356,24 @@ export function getConnectorCredentialConfig(params: {
     file_upload: undefined,
   };
 
-  const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
-    servicenow: "Your ServiceNow password",
-    notion: "secret_...",
-    sharepoint: "Your Azure AD client secret",
-    gdrive: "Paste service account JSON key or OAuth access token",
-    dropbox: "Your Dropbox access token",
-    outline: "Your Outline API key (starts with ol_api_)",
-    jira: jiraConfluenceApiTokenPlaceholder,
-    confluence: jiraConfluenceApiTokenPlaceholder,
-    github: "Your personal access token",
-    gitlab: "Your personal access token",
-    linear: "Your personal access token",
-    asana: "Your personal access token",
-    onedrive: "Your Azure AD client secret",
-    salesforce: "Your Salesforce password followed by your security token",
-    file_upload: undefined,
-  };
+  const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
+    {
+      servicenow: "Your ServiceNow password",
+      notion: "secret_...",
+      sharepoint: "Your Azure AD client secret",
+      gdrive: "Paste service account JSON key or OAuth access token",
+      dropbox: "Your Dropbox access token",
+      outline: "Your Outline API key (starts with ol_api_)",
+      jira: jiraConfluenceApiTokenPlaceholder,
+      confluence: jiraConfluenceApiTokenPlaceholder,
+      github: "Your personal access token",
+      gitlab: "Your personal access token",
+      linear: "Your personal access token",
+      asana: "Your personal access token",
+      onedrive: "Your Azure AD client secret",
+      salesforce: "Your Salesforce password followed by your security token",
+      file_upload: undefined,
+    };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
     servicenow: "Leave empty to keep existing password",

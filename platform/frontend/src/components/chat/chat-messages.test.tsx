@@ -224,6 +224,51 @@ describe("ChatMessages", () => {
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
   });
 
+  it("deduplicates adjacent swap dividers for the same target", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__swap_agent",
+            toolCallId: "call-1",
+            state: "input-available",
+            input: { agent_name: "Jira Agent" },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__swap_agent",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { agent_name: "Jira Agent" },
+            output: { ok: true },
+          },
+        ],
+      },
+      {
+        id: "assistant-3",
+        role: "assistant",
+        parts: [{ type: "text", text: "I am the Jira Agent." }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByText("Switched to Jira Agent")).toHaveLength(1);
+  });
+
   it("renders persisted chat errors between messages by timestamp", () => {
     const messages = [
       {

@@ -48,6 +48,8 @@ export async function resolveAgent(
 export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
+  chatApiKeyId: string | undefined;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -125,6 +127,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
+    chatApiKeyId: resolved.chatApiKey.id,
   };
 }
 
@@ -135,6 +138,8 @@ export async function validateVirtualApiKey(
 export interface JwksAuthResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  /** Resolved chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
+  chatApiKeyId: string | undefined;
   userId: string | undefined;
   organizationId: string;
 }
@@ -205,6 +210,7 @@ export async function attemptJwksAuth(
 
   let apiKey: string | undefined;
   let baseUrl: string | undefined;
+  let chatApiKeyId: string | undefined;
 
   if (isSupportedProvider(providerName)) {
     const resolved = await resolveProviderApiKey({
@@ -214,11 +220,13 @@ export async function attemptJwksAuth(
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
+    chatApiKeyId = resolved.chatApiKeyId;
   }
 
   return {
     apiKey,
     baseUrl,
+    chatApiKeyId,
     userId: jwksResult.userId,
     organizationId: jwksResult.organizationId,
   };

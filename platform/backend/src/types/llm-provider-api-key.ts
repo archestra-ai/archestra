@@ -19,6 +19,7 @@ export const SelectLlmProviderApiKeySchema = createSelectSchema(
   // Override to match the actual DB column nullability so Fastify response
   // serialization doesn't throw when baseUrl is null.
   baseUrl: z.string().nullable(),
+  extraHeaders: z.record(z.string(), z.string()).nullable(),
 });
 
 export const InsertLlmProviderApiKeySchema = createInsertSchema(
@@ -32,6 +33,7 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
   .extend({
     provider: SupportedProvidersSchema,
     scope: ResourceVisibilityScopeSchema,
+    extraHeaders: z.record(z.string(), z.string()).nullable().optional(),
   });
 
 export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
@@ -47,6 +49,7 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
     provider: SupportedProvidersSchema.optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     isPrimary: z.boolean().optional(),
+    extraHeaders: z.record(z.string(), z.string()).nullable().optional(),
   });
 
 export type LlmProviderApiKey = z.infer<typeof SelectLlmProviderApiKeySchema>;

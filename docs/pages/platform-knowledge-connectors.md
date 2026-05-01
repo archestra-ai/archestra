@@ -169,6 +169,36 @@ Where to find each value:
 - **Client Secret** — the secret **Value** from **Certificates & secrets** (not the secret ID).
 - **Site URL** — the exact SharePoint site web URL, not the display name.
 
+## OneDrive
+
+Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
+
+| Field         | Description                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Tenant ID     | Your Azure AD (Entra ID) tenant ID or domain (e.g., `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)                        |
+| Client ID     | Azure AD app registration Application (client) ID                                                                    |
+| Client Secret | Azure AD app registration client secret value                                                                        |
+| User IDs      | Comma-separated list of user principal names or object IDs whose OneDrive to sync (e.g., `user@company.com`)       |
+| Folder ID     | Restrict sync to a specific OneDrive folder (optional -- find the ID from the Graph API or a drive item URL)         |
+| File Types    | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all supported types)  |
+| Recursive     | Traverse subfolders within each user's drive (default: on)                                                          |
+
+Authentication uses an Azure AD app registration with client credentials (OAuth2). The app registration requires the `Files.Read.All` application permission on Microsoft Graph, and admin consent must be granted.
+
+To configure the connector:
+
+- `Tenant ID` comes from **Microsoft Entra ID > App registrations > <your app> > Overview > Directory (tenant) ID**
+- `Client ID` comes from **Application (client) ID** on the same page
+- `Client Secret` is the secret **Value** from **Certificates & secrets**, not the secret ID
+- `User IDs` should be user principal names (UPNs, e.g. `user@company.com`) or Azure AD object IDs for the users whose drives you want to sync
+
+Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
+
+### Known Limitations
+
+- Only OneDrive for Business (work/school accounts) is supported. Consumer OneDrive is not supported.
+- Syncs the personal drive (`/drive`) of each specified user; shared libraries are not traversed.
+
 ## Google Drive
 
 Sync files from Google Drive (My Drive and Shared Drives).

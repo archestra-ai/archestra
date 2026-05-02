@@ -20,6 +20,8 @@ export function transformFormToApiData(
     name: values.name,
     description: values.description || null,
     serverType: values.serverType,
+    multitenant:
+      values.serverType === "local" ? Boolean(values.multitenant) : false,
     icon: values.icon ?? null,
   };
 

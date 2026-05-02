@@ -26350,6 +26350,7 @@ export type GetInternalMcpCatalogResponses = {
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
+        multitenant: boolean;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -26475,6 +26476,7 @@ export type CreateInternalMcpCatalogItemData = {
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
+        multitenant?: boolean;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -26665,6 +26667,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
+        multitenant: boolean;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -26952,6 +26955,7 @@ export type GetInternalMcpCatalogItemResponses = {
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
+        multitenant: boolean;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -27076,6 +27080,7 @@ export type UpdateInternalMcpCatalogItemData = {
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';
+        multitenant?: boolean;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -27268,6 +27273,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             description?: string;
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
+        multitenant: boolean;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;

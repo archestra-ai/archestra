@@ -351,20 +351,55 @@ export class McpServerRuntimeManager {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
 
     if (k8sDeployment) {
-      // Delete deployment first
-      await k8sDeployment.stopDeployment();
+      // Multi-tenant catalogs share one K8s deployment across all callers.
+      // Only the last caller out should delete the deployment / service /
+      // secret. Earlier callers just drop their in-memory reference.
+      const sharedWithOthers =
+        await McpServerRuntimeManager.isSharedMultitenantDeployment(
+          mcpServerId,
+        );
 
-      // Delete K8s Service (if it exists, for HTTP-based servers)
-      await k8sDeployment.deleteK8sService();
+      if (!sharedWithOthers) {
+        // Delete deployment first
+        await k8sDeployment.stopDeployment();
 
-      // Delete K8s Secret (if it exists)
-      await k8sDeployment.deleteK8sSecret();
+        // Delete K8s Service (if it exists, for HTTP-based servers)
+        await k8sDeployment.deleteK8sService();
 
-      // Delete docker-registry secrets (if any were created for imagePullSecrets)
-      await k8sDeployment.deleteDockerRegistrySecrets();
+        // Delete K8s Secret (if it exists)
+        await k8sDeployment.deleteK8sSecret();
+
+        // Delete docker-registry secrets (if any were created for imagePullSecrets)
+        await k8sDeployment.deleteDockerRegistrySecrets();
+      } else {
+        logger.info(
+          { mcpServerId },
+          "Skipping K8s deployment teardown: multi-tenant catalog still has other callers",
+        );
+      }
 
       this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
+  }
+
+  /**
+   * Returns true when the given mcp_server row points at a multi-tenant
+   * catalog that still has at least one other mcp_server row aliasing the
+   * same shared K8s deployment.
+   */
+  private static async isSharedMultitenantDeployment(
+    mcpServerId: string,
+  ): Promise<boolean> {
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (!mcpServer?.catalogId) return false;
+
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      mcpServer.catalogId,
+    );
+    if (!catalogItem?.multitenant) return false;
+
+    const siblings = await McpServerModel.findByCatalogId(mcpServer.catalogId);
+    return siblings.some((s) => s.id !== mcpServerId);
   }
 
   /**
@@ -464,8 +499,21 @@ export class McpServerRuntimeManager {
     }
 
     try {
-      await k8sDeployment.removeDeployment();
-      logger.info(`Successfully removed MCP server deployment ${mcpServerId}`);
+      const sharedWithOthers =
+        await McpServerRuntimeManager.isSharedMultitenantDeployment(
+          mcpServerId,
+        );
+      if (sharedWithOthers) {
+        logger.info(
+          { mcpServerId },
+          "Skipping K8s deployment removal: multi-tenant catalog still has other callers",
+        );
+      } else {
+        await k8sDeployment.removeDeployment();
+        logger.info(
+          `Successfully removed MCP server deployment ${mcpServerId}`,
+        );
+      }
     } catch (error) {
       logger.error(
         { err: error },

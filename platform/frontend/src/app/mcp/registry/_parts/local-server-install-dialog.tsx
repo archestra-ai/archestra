@@ -141,11 +141,14 @@ export function LocalServerInstallDialog({
       return fieldConfig.promptOnInstallation !== false;
     }),
   );
-  // Extract environment variables that need prompting during installation
-  const promptedEnvVars =
-    catalogItem?.localConfig?.environment?.filter(
-      (env) => env.promptOnInstallation !== false,
-    ) || [];
+  // Extract environment variables that need prompting during installation.
+  // Multi-tenant catalogs share one deployment, so env vars are catalog-level
+  // (set once by an admin). Per-caller install never prompts for env values.
+  const promptedEnvVars = catalogItem?.multitenant
+    ? []
+    : catalogItem?.localConfig?.environment?.filter(
+        (env) => env.promptOnInstallation !== false,
+      ) || [];
 
   // Separate secret vs non-secret env vars
   // Secret env vars can be loaded from vault, non-secret must be entered manually

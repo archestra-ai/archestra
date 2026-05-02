@@ -31,6 +31,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
@@ -68,6 +73,9 @@ interface InstallConfigFieldsTableProps<TFieldValues extends FieldValues> {
   descriptionFieldName?: string;
   valuePlaceholder?: string;
   useExternalSecretsManager?: boolean;
+  bearerPrefixFieldName?: string | null;
+  disablePromptOnInstallation?: boolean;
+  disablePromptOnInstallationReason?: string;
 }
 
 export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
@@ -87,11 +95,19 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
   descriptionFieldName = "description",
   valuePlaceholder = "your-value",
   useExternalSecretsManager = false,
+  bearerPrefixFieldName = null,
+  disablePromptOnInstallation = false,
+  disablePromptOnInstallationReason,
 }: InstallConfigFieldsTableProps<TFieldValues>) {
   const showTypeColumn = typeFieldName !== null;
+  const showBearerColumn = bearerPrefixFieldName !== null;
   const gridClass = showTypeColumn
-    ? "grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2"
-    : "grid grid-cols-[1.5fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2";
+    ? showBearerColumn
+      ? "grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_0.6fr_1.5fr_2.5fr_auto] gap-2"
+      : "grid grid-cols-[1.5fr_1.2fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2"
+    : showBearerColumn
+      ? "grid grid-cols-[1.5fr_0.7fr_0.7fr_0.6fr_1.5fr_2.5fr_auto] gap-2"
+      : "grid grid-cols-[1.5fr_0.7fr_0.7fr_1.5fr_2.5fr_auto] gap-2";
   const indexes = rowIndexes ?? fields.map((_, index) => index);
 
   const [dialogOpenForIndex, setDialogOpenForIndex] = useState<number | null>(
@@ -128,8 +144,11 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
         <div className={`${gridClass} p-3 bg-muted/50 border-b`}>
           <div className="text-xs font-medium">{keyLabel}</div>
           {showTypeColumn && <div className="text-xs font-medium">Type</div>}
-          <div className="text-xs font-medium">Prompt on each installation</div>
+          <div className="text-xs font-medium">Prompt user</div>
           <div className="text-xs font-medium">Required</div>
+          {showBearerColumn && (
+            <div className="text-xs font-medium">Bearer</div>
+          )}
           <div className="text-xs font-medium">Value</div>
           <div className="text-xs font-medium">Description</div>
           <div className="w-9" />
@@ -218,31 +237,57 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
                 name={
                   `${fieldNamePrefix}.${index}.${promptFieldName}` as FieldPath<TFieldValues>
                 }
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <div className="flex items-center h-10">
-                        <Checkbox
-                          data-testid={E2eTestId.PromptOnInstallationCheckbox}
-                          checked={field.value}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked);
-                            if (!checked) {
-                              form.setValue(
-                                `${fieldNamePrefix}.${index}.${requiredFieldName}` as FieldPath<TFieldValues>,
-                                false as PathValue<
-                                  TFieldValues,
-                                  FieldPath<TFieldValues>
-                                >,
-                              );
-                            }
-                          }}
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const checkbox = (
+                    <Checkbox
+                      data-testid={E2eTestId.PromptOnInstallationCheckbox}
+                      checked={field.value}
+                      disabled={disablePromptOnInstallation}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked);
+                        if (!checked) {
+                          form.setValue(
+                            `${fieldNamePrefix}.${index}.${requiredFieldName}` as FieldPath<TFieldValues>,
+                            false as PathValue<
+                              TFieldValues,
+                              FieldPath<TFieldValues>
+                            >,
+                          );
+                        }
+                      }}
+                    />
+                  );
+                  return (
+                    <FormItem>
+                      <FormControl>
+                        <div className="flex items-center h-10">
+                          {disablePromptOnInstallation &&
+                          disablePromptOnInstallationReason ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex needed so tooltip trigger receives keyboard focus when wrapping a disabled control
+                                  tabIndex={0}
+                                  className="cursor-not-allowed"
+                                >
+                                  {checkbox}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  {disablePromptOnInstallationReason}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            checkbox
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               <FormField
@@ -265,6 +310,30 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
                   </FormItem>
                 )}
               />
+
+              {showBearerColumn && (
+                <FormField
+                  control={control}
+                  name={
+                    `${fieldNamePrefix}.${index}.${bearerPrefixFieldName}` as FieldPath<TFieldValues>
+                  }
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <div className="flex items-center h-10">
+                          <Checkbox
+                            checked={Boolean(field.value)}
+                            onCheckedChange={(checked) =>
+                              field.onChange(Boolean(checked))
+                            }
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {promptOnInstallation ? (
                 <div className="flex items-center h-10">

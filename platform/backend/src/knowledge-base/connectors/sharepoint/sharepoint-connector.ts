@@ -26,6 +26,7 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
+import { parsePdfBuffer } from "../pdf-utils";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 const DEFAULT_BATCH_SIZE = 50;
@@ -1199,10 +1200,7 @@ async function extractTextFromBinary(
       return result.value;
     }
     case ".pdf": {
-      // Lazy import: pdf-parse v1 tries to load a test file at import time
-      const pdfParse = (await import("pdf-parse")).default;
-      const result = await pdfParse(buffer);
-      return result.text;
+      return parsePdfBuffer(buffer);
     }
     case ".pptx": {
       return extractTextFromPptx(buffer);

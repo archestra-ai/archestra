@@ -1,7 +1,7 @@
 ---
 title: Authentication
 category: LLM Proxy
-order: 2
+order: 3
 description: Authentication methods for the LLM Proxy
 lastUpdated: 2026-02-20
 ---

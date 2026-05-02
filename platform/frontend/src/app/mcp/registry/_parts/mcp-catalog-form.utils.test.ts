@@ -456,6 +456,7 @@ describe("transformFormToApiData", () => {
         required: false,
         value: "tenant-42",
         description: "Tenant ID",
+        includeBearerPrefix: false,
       },
     ]);
   });

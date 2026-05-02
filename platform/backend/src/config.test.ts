@@ -19,6 +19,7 @@ import {
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
+  parseMetricsPort,
   parseProcessType,
   parseSampleRate,
   parseTrustProxy,
@@ -783,6 +784,61 @@ describe("parseContentMaxLength", () => {
     expect(parseContentMaxLength("-100")).toBe(10_000);
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
+    );
+  });
+});
+
+describe("parseMetricsPort", () => {
+  test("should return default 9050 when no value provided", () => {
+    expect(parseMetricsPort(undefined)).toBe(9050);
+  });
+
+  test("should return default when empty string provided", () => {
+    expect(parseMetricsPort("")).toBe(9050);
+  });
+
+  test("should return default when whitespace-only string provided", () => {
+    expect(parseMetricsPort("   ")).toBe(9050);
+  });
+
+  test("should parse valid port value", () => {
+    expect(parseMetricsPort("9051")).toBe(9051);
+  });
+
+  test("should accept boundary ports", () => {
+    expect(parseMetricsPort("1")).toBe(1);
+    expect(parseMetricsPort("65535")).toBe(65535);
+  });
+
+  test("should trim whitespace and parse value", () => {
+    expect(parseMetricsPort("  9100  ")).toBe(9100);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseMetricsPort("abc")).toBe(9050);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_METRICS_PORT value "abc", using default 9050',
+    );
+  });
+
+  test("should return default and warn for zero", () => {
+    expect(parseMetricsPort("0")).toBe(9050);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_METRICS_PORT value "0", using default 9050',
+    );
+  });
+
+  test("should return default and warn for out-of-range port", () => {
+    expect(parseMetricsPort("65536")).toBe(9050);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_METRICS_PORT value "65536", using default 9050',
+    );
+  });
+
+  test("should return default and warn for negative value", () => {
+    expect(parseMetricsPort("-1")).toBe(9050);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_METRICS_PORT value "-1", using default 9050',
     );
   });
 });

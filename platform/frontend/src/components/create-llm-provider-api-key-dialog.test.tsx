@@ -7,6 +7,7 @@ const mutateAsync = vi.fn();
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
+  serializeExtraHeaders: () => null,
   LlmProviderApiKeyForm: ({
     form,
   }: {
@@ -63,6 +64,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       provider: "anthropic",
       apiKey: "sk-test",
       baseUrl: undefined,
+      extraHeaders: undefined,
       scope: "personal",
       teamId: undefined,
       isPrimary: false,

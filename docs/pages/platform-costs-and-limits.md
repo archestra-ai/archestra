@@ -1,7 +1,7 @@
 ---
 title: Costs & Limits
 category: LLM Proxy
-order: 2
+order: 4
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -85,11 +85,3 @@ You can enable TOON compression at:
 - team level when only certain teams should use it
 
 See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
-
-## Related Documentation
-
-- [Dual LLM Agent](platform-dual-llm)
-- [Tool Policy Configuration Agent](platform-built-in-agents-policy-config)
-- [Profiles Configuration](platform-profiles)
-- [Observability](platform-observability)
-- [Deployment](platform-deployment)

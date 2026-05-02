@@ -3,6 +3,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
   CreateAgent: "createAgent",
+  CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetDefaultLlmProxy: "getDefaultLlmProxy",

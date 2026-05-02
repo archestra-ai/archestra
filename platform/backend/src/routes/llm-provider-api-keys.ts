@@ -7,6 +7,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
+import config from "@/config";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -37,6 +38,40 @@ import {
   type SelectSecret,
 } from "@/types";
 
+/**
+ * Returns a Docker connectivity hint when the effective URL is localhost and
+ * the error looks like a connection failure. Helps users running Archestra in
+ * Docker understand that `localhost` inside the container resolves to the
+ * container itself, not the host machine.
+ */
+function getDockerConnectionHint(
+  baseUrl: string | null | undefined,
+  provider: SupportedProvider,
+  errorMessage: string,
+): string | null {
+  const isConnectionError =
+    errorMessage.includes("ECONNREFUSED") ||
+    errorMessage.includes("fetch failed") ||
+    errorMessage.includes("ETIMEDOUT") ||
+    errorMessage.includes("ENOTFOUND");
+  if (!isConnectionError) return null;
+
+  // Use the explicit URL or fall back to the provider's configured default.
+  const effectiveUrl =
+    baseUrl ??
+    (provider === "ollama" ? (config.llm.ollama.baseUrl ?? null) : null);
+  if (!effectiveUrl) return null;
+
+  const isLocalhostUrl =
+    effectiveUrl.includes("localhost") || effectiveUrl.includes("127.0.0.1");
+  if (!isLocalhostUrl) return null;
+
+  const suggestedUrl = effectiveUrl
+    .replace(/localhost/g, "host.docker.internal")
+    .replace(/127\.0\.0\.1/g, "host.docker.internal");
+  return `If Archestra is running in Docker, try changing the URL to: ${suggestedUrl}`;
+}
+
 async function testApiKeyOrThrow(
   provider: SupportedProvider,
   apiKey: string,
@@ -46,9 +81,36 @@ async function testApiKeyOrThrow(
   try {
     await testProviderApiKey(provider, apiKey, baseUrl, extraHeaders);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const hint = getDockerConnectionHint(baseUrl, provider, message);
     throw new ApiError(
       400,
-      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${error instanceof Error ? error.message : String(error)}`,
+      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${message}${hint ? ` ${hint}` : ""}`,
+    );
+  }
+}
+
+/**
+ * Tests connectivity for providers that don't require an API key (Ollama, vLLM).
+ * Unlike `testApiKeyOrThrow`, an empty model list is treated as success — the
+ * server is reachable, the user just hasn't pulled any models yet.
+ */
+async function testConnectivityOrThrow(
+  provider: SupportedProvider,
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey(provider, "", baseUrl, extraHeaders);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // "Models list is empty" means we connected successfully but the user
+    // hasn't pulled any models yet — that's fine, don't block key creation.
+    if (message.includes("Models list is empty")) return;
+    const hint = getDockerConnectionHint(baseUrl, provider, message);
+    throw new ApiError(
+      400,
+      `Failed to connect to ${capitalize(provider)}: ${message}${hint ? ` ${hint}` : ""}`,
     );
   }
 }
@@ -264,6 +326,15 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             teamId: body.teamId ?? null,
             userId: user.id,
           }),
+        );
+      } else if (PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
+        // No API key provided for an optional-key provider (e.g. Ollama, vLLM).
+        // Still test connectivity so connection errors (e.g. Docker localhost)
+        // are surfaced to the user instead of failing silently.
+        await testConnectivityOrThrow(
+          body.provider,
+          body.baseUrl,
+          body.extraHeaders,
         );
       }
 
@@ -545,6 +616,14 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(
             400,
             "Cannot update Base URL or extra headers without existing API key",
+          );
+        } else {
+          // Optional-key provider with no stored API key — test connectivity
+          // only so errors (e.g. Docker localhost) are surfaced to the user.
+          await testConnectivityOrThrow(
+            apiKeyFromDB.provider,
+            testBaseUrl,
+            testExtraHeaders,
           );
         }
       }

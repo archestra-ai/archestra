@@ -657,6 +657,17 @@ export function LlmProviderApiKeyForm({
             Override the default API endpoint. Useful for self-hosted or proxy
             setups.
           </p>
+          {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) && (
+            <p className="text-xs text-muted-foreground">
+              If Archestra is running in Docker, use{" "}
+              <code className="font-mono">host.docker.internal</code> instead
+              of <code className="font-mono">localhost</code> (e.g.{" "}
+              <code className="font-mono">
+                http://host.docker.internal:11434
+              </code>
+              ).
+            </p>
+          )}
           <Input
             id="llm-provider-api-key-base-url"
             type="url"

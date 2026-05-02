@@ -46,8 +46,13 @@ import {
   CHATOPS_MESSAGE_RETENTION,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
+import GenericChatOpsProvider from "./generic-provider";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
+import {
+  type BundledGenericAdapterRuntimeManager,
+  bundledGenericAdapterRuntimeManager,
+} from "./bundled-generic-adapter-runtime-manager";
 import { errorMessage, isSlackDmChannel } from "./utils";
 
 /**
@@ -57,13 +62,20 @@ import { errorMessage, isSlackDmChannel } from "./utils";
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  private genericProvider: GenericChatOpsProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
+  private readonly bundledGenericAdapterRuntimeManager: BundledGenericAdapterRuntimeManager;
 
-  constructor() {
+  constructor(options?: {
+    bundledGenericAdapterRuntimeManager?: BundledGenericAdapterRuntimeManager;
+  }) {
     this.a2aManager = new A2AManager({
       stateless: true,
     });
+    this.bundledGenericAdapterRuntimeManager =
+      options?.bundledGenericAdapterRuntimeManager ??
+      bundledGenericAdapterRuntimeManager;
   }
 
   getMSTeamsProvider(): MSTeamsProvider | null {
@@ -74,6 +86,10 @@ export class ChatOpsManager {
     return this.slackProvider;
   }
 
+  getGenericProvider(): GenericChatOpsProvider | null {
+    return this.genericProvider;
+  }
+
   getChatOpsProvider(
     providerType: ChatOpsProviderType,
   ): ChatOpsProvider | null {
@@ -82,6 +98,8 @@ export class ChatOpsManager {
         return this.getMSTeamsProvider();
       case "slack":
         return this.getSlackProvider();
+      case "generic":
+        return this.getGenericProvider();
     }
   }
 
@@ -140,7 +158,8 @@ export class ChatOpsManager {
   isAnyProviderConfigured(): boolean {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
-      (this.slackProvider?.isConfigured() ?? false)
+      (this.slackProvider?.isConfigured() ?? false) ||
+      (this.genericProvider?.isConfigured() ?? false)
     );
   }
 
@@ -255,6 +274,8 @@ export class ChatOpsManager {
       this.slackProvider.setEventHandler(this);
     }
 
+    await this.refreshGenericProvider();
+
     if (!this.isAnyProviderConfigured()) {
       return;
     }
@@ -262,6 +283,7 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      { name: "Generic", provider: this.genericProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -314,7 +336,72 @@ export class ChatOpsManager {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
     }
+    if (this.genericProvider) {
+      await this.genericProvider.cleanup();
+      this.genericProvider = null;
+    }
     this.stopCleanupInterval();
+  }
+
+  async refreshGenericProvider(): Promise<void> {
+    const runningAdapters = this.bundledGenericAdapterRuntimeManager
+      .listSummaries()
+      .filter((s) => s.status === "running");
+
+    if (runningAdapters.length === 0) {
+      if (this.genericProvider) {
+        await this.genericProvider.cleanup();
+        this.genericProvider = null;
+      }
+      return;
+    }
+
+    const adapter = runningAdapters[0];
+    const connectionConfig =
+      this.bundledGenericAdapterRuntimeManager.getConnectionPageConfig(
+        adapter.adapterId,
+      );
+
+    if (!connectionConfig) {
+      logger.warn(
+        { adapterId: adapter.adapterId },
+        "[ChatOps] Running adapter has no connection page config, skipping generic provider creation",
+      );
+      return;
+    }
+
+    if (this.genericProvider?.getAdapterId() === adapter.adapterId) {
+      return;
+    }
+
+    if (this.genericProvider) {
+      await this.genericProvider.cleanup();
+    }
+
+    const entry = this.bundledGenericAdapterRuntimeManager.getCatalogEntry(
+      adapter.adapterId,
+    );
+
+    this.genericProvider = new GenericChatOpsProvider({
+      adapterId: adapter.adapterId,
+      baseUrl: `http://localhost:${connectionConfig.port}`,
+      displayName: entry.displayName,
+    });
+    this.genericProvider.setEventHandler(this);
+
+    try {
+      await this.genericProvider.initialize();
+      logger.info(
+        { adapterId: adapter.adapterId },
+        "[ChatOps] Generic provider created for running bundled adapter",
+      );
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to initialize generic provider",
+      );
+      this.genericProvider = null;
+    }
   }
 
   stopCleanupInterval(): void {
@@ -1494,12 +1581,23 @@ export class ChatOpsManager {
     const effectiveThreadId =
       message.threadId ?? message.channelId ?? message.messageId;
 
-    const request = buildSendMessageRequest({
-      parts: [
-        { text: fullMessage },
-        ...buildAttachmentsMessageParts(message.attachments || []),
-      ],
-    });
+    const approvalDecisions = message.metadata?.approvalDecisions as
+      | Array<{ approvalId: string; approved: boolean }>
+      | undefined;
+    const taskId = message.metadata?.taskId as string | undefined;
+
+    const request =
+      Array.isArray(approvalDecisions) && taskId
+        ? buildApprovalDecisionSendMessageRequest({
+            taskId,
+            approvalDecisions,
+          })
+        : buildSendMessageRequest({
+            parts: [
+              { text: fullMessage },
+              ...buildAttachmentsMessageParts(message.attachments || []),
+            ],
+          });
     const source: InteractionSource =
       provider.providerId === "slack" ? "chatops:slack" : "chatops:ms-teams";
     const systemParams = {

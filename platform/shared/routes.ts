@@ -418,6 +418,9 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  GenericWebhookMessages: "genericWebhookMessages",
+  GenericWebhookInteractive: "genericWebhookInteractive",
+  GenericWebhookChannelsSync: "genericWebhookChannelsSync",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes

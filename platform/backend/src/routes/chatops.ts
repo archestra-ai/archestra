@@ -1664,6 +1664,14 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
             : undefined,
       };
     }
+    case "generic": {
+      const provider = chatOpsManager.getGenericProvider();
+      return {
+        id: "generic",
+        displayName: provider?.displayName ?? "Generic",
+        configured: provider?.isConfigured() ?? false,
+      };
+    }
   }
 }
 

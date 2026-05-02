@@ -51,14 +51,14 @@ helm_remote(
     'redis',
     repo_url='https://charts.bitnami.com/bitnami',
     namespace='archestra-dev',
-    create_namespace=True,
+    create_namespace=False,
     set=[
         'architecture=standalone',
         'auth.enabled=false',
     ]
 )
 
-k8s_resource('redis', port_forwards=['6379:6379'], labels=['database'])
+k8s_resource('redis-master', port_forwards=['6379:6379'], labels=['database'])
 
 # Database cleanup button (manual trigger only, for development)
 local_resource(

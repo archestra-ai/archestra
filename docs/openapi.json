@@ -69995,6 +69995,929 @@
         }
       }
     },
+    "/api/webhooks/chatops/generic/{adapterId}/messages": {
+      "post": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "Generic adapter incoming message webhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "string",
+                    "enum": [
+                      "v1"
+                    ]
+                  },
+                  "messageId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sender": {
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "format": "email",
+                        "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId",
+                      "name"
+                    ]
+                  },
+                  "channel": {
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "dm",
+                          "channel",
+                          "group"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "externalId",
+                      "kind"
+                    ]
+                  },
+                  "workspace": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId"
+                    ]
+                  },
+                  "thread": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "rawText": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "isThreadReply": {
+                    "type": "boolean"
+                  },
+                  "replyContext": {},
+                  "attachments": {
+                    "default": [],
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "contentType": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "contentBase64": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 256
+                        }
+                      },
+                      "required": [
+                        "contentType",
+                        "contentBase64"
+                      ]
+                    }
+                  },
+                  "threadHistory": {
+                    "default": [],
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "senderId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "senderName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "isFromBot": {
+                          "type": "boolean"
+                        },
+                        "files": {
+                          "default": [],
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "fileId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "mimeType": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "name": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "size": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "fileId",
+                              "mimeType"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "senderId",
+                        "senderName",
+                        "text",
+                        "timestamp",
+                        "isFromBot"
+                      ]
+                    }
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "messageId",
+                  "sender",
+                  "channel",
+                  "text",
+                  "rawText",
+                  "timestamp",
+                  "isThreadReply",
+                  "replyContext"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "adapterId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "asynchronous": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "accepted",
+                    "asynchronous"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/webhooks/chatops/generic/{adapterId}/interactive": {
+      "post": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "Generic adapter interactive event webhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "string",
+                    "enum": [
+                      "v1"
+                    ]
+                  },
+                  "eventId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "select-agent"
+                    ]
+                  },
+                  "agentId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "sender": {
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "format": "email",
+                        "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId",
+                      "name"
+                    ]
+                  },
+                  "channel": {
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "dm",
+                          "channel",
+                          "group"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "externalId",
+                      "kind"
+                    ]
+                  },
+                  "workspace": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId"
+                    ]
+                  },
+                  "thread": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId"
+                    ]
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "replyContext": {},
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "eventId",
+                  "action",
+                  "agentId",
+                  "sender",
+                  "channel",
+                  "timestamp",
+                  "replyContext"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "adapterId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "asynchronous": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "accepted",
+                    "asynchronous"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/webhooks/chatops/generic/{adapterId}/channels/sync": {
+      "post": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "Generic adapter channel sync webhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "string",
+                    "enum": [
+                      "v1"
+                    ]
+                  },
+                  "syncMode": {
+                    "type": "string",
+                    "enum": [
+                      "full"
+                    ]
+                  },
+                  "workspace": {
+                    "type": "object",
+                    "properties": {
+                      "externalId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "externalId"
+                    ]
+                  },
+                  "channels": {
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "externalId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "dm",
+                            "channel",
+                            "group"
+                          ]
+                        },
+                        "dmOwnerEmail": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 256,
+                          "format": "email",
+                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                        }
+                      },
+                      "required": [
+                        "externalId",
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "syncMode",
+                  "workspace",
+                  "channels"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "adapterId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "upserted": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "deleted": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "deduplicated": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "upserted",
+                    "deleted",
+                    "deduplicated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/webhooks/chatops/ms-teams": {
       "post": {
         "tags": [
@@ -70507,6 +71430,7 @@
                           "id": {
                             "type": "string",
                             "enum": [
+                              "generic",
                               "ms-teams",
                               "slack"
                             ]
@@ -71834,13 +72758,13 @@
         }
       }
     },
-    "/api/chatops/generic/builtin-adapters/{adapterId}/connection-page/{*}": {
-      "get": {
-        "operationId": "getBundledChatOpsAdapterConnectionPage",
+    "/api/chatops/generic/builtin-adapters/{adapterId}/connection-page/unlink": {
+      "post": {
+        "operationId": "unlinkBundledChatOpsAdapter",
         "tags": [
           "ChatOps"
         ],
-        "description": "Proxy connection page sub-requests from a bundled ChatOps adapter\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:read`: View agent trigger configurations (Slack, MS Teams, email)",
+        "description": "Unlink a bundled ChatOps adapter device via connection page\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentTrigger:update`: Modify agent trigger configurations",
         "parameters": [
           {
             "schema": {
@@ -71852,14 +72776,6 @@
             "in": "path",
             "name": "adapterId",
             "required": true
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "*",
-            "required": true
           }
         ],
         "responses": {
@@ -71870,7 +72786,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentTrigger:read"
+            "agentTrigger:update"
           ]
         }
       }
@@ -71887,6 +72803,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "generic",
                 "ms-teams",
                 "slack"
               ]
@@ -71995,6 +72912,7 @@
                           "provider": {
                             "type": "string",
                             "enum": [
+                              "generic",
                               "ms-teams",
                               "slack"
                             ]
@@ -72446,6 +73364,7 @@
                       "provider": {
                         "type": "string",
                         "enum": [
+                          "generic",
                           "ms-teams",
                           "slack"
                         ]
@@ -73081,6 +74000,7 @@
                     "provider": {
                       "type": "string",
                       "enum": [
+                        "generic",
                         "ms-teams",
                         "slack"
                       ]
@@ -73402,6 +74322,7 @@
                   "provider": {
                     "type": "string",
                     "enum": [
+                      "generic",
                       "ms-teams",
                       "slack"
                     ]
@@ -73440,6 +74361,7 @@
                     "provider": {
                       "type": "string",
                       "enum": [
+                        "generic",
                         "ms-teams",
                         "slack"
                       ]
@@ -74357,6 +75279,7 @@
                   "provider": {
                     "type": "string",
                     "enum": [
+                      "generic",
                       "ms-teams",
                       "slack"
                     ]
@@ -79541,6 +80464,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -79835,6 +80759,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -80552,6 +81477,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -80960,6 +81886,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -81254,6 +82181,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -81548,6 +82476,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -83554,6 +84483,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -83848,6 +84778,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -84142,6 +85073,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -84436,6 +85368,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -84730,6 +85663,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -85024,6 +85958,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -85318,6 +86253,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -85601,6 +86537,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -85884,6 +86821,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -86178,6 +87116,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -86472,6 +87411,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -86766,6 +87706,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -87060,6 +88001,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -87580,6 +88522,7 @@
                                   "chat",
                                   "chatops:slack",
                                   "chatops:ms-teams",
+                                  "chatops:generic",
                                   "email",
                                   "schedule-trigger",
                                   "knowledge:embedding",
@@ -88581,6 +89524,7 @@
                 "chat",
                 "chatops:slack",
                 "chatops:ms-teams",
+                "chatops:generic",
                 "email",
                 "schedule-trigger",
                 "knowledge:embedding",
@@ -88686,6 +89630,7 @@
                               "chat",
                               "chatops:slack",
                               "chatops:ms-teams",
+                              "chatops:generic",
                               "email",
                               "schedule-trigger",
                               "knowledge:embedding",
@@ -89748,6 +90693,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -90042,6 +90988,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -90759,6 +91706,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -91167,6 +92115,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -91461,6 +92410,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -91755,6 +92705,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -93761,6 +94712,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -94055,6 +95007,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -94349,6 +95302,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -94643,6 +95597,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -94937,6 +95892,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -95231,6 +96187,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -95525,6 +96482,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -95808,6 +96766,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -96091,6 +97050,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -96385,6 +97345,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -96679,6 +97640,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -96973,6 +97935,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -97267,6 +98230,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",
@@ -97787,6 +98751,7 @@
                             "chat",
                             "chatops:slack",
                             "chatops:ms-teams",
+                            "chatops:generic",
                             "email",
                             "schedule-trigger",
                             "knowledge:embedding",

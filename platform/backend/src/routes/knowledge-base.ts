@@ -208,7 +208,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBase,
         description: "Get a knowledge base by ID",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
     },
@@ -229,10 +229,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBaseDocuments,
         description: "List documents for a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
-          connectorId: z.string().optional(),
+          connectorId: z.uuid().optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
@@ -285,7 +285,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBaseDocument,
         description: "Get a single knowledge base document",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string(), docId: z.string() }),
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
         response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
       },
     },
@@ -316,7 +316,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateKnowledgeBase,
         description: "Update a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -348,7 +348,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Delete a knowledge base and remove its connector assignments",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -375,7 +375,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteKnowledgeBaseDocument,
         description: "Delete a knowledge base document",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string(), docId: z.string() }),
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -407,7 +407,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBaseHealth,
         description: "Check the health of a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             status: z.enum(["healthy", "unhealthy"]),
@@ -691,7 +691,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnector,
         description: "Get a connector by ID",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           SelectKnowledgeBaseConnectorSchema.extend({
             totalDocsIngested: z.number(),
@@ -717,7 +717,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateConnector,
         description: "Update a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -809,7 +809,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteConnector,
         description: "Delete a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -851,7 +851,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SyncConnector,
         description: "Manually trigger a connector sync",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -900,7 +900,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -955,7 +955,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.TestConnectorConnection,
         description: "Test a connector connection",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             success: z.boolean(),
@@ -994,7 +994,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.AssignConnectorToKnowledgeBases,
         description: "Assign a connector to one or more knowledge bases",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           knowledgeBaseIds: z.array(z.string()).min(1),
         }),
@@ -1028,7 +1028,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UnassignConnectorFromKnowledgeBase,
         description: "Unassign a connector from a knowledge base",
         tags: ["Connectors"],
-        params: z.object({ id: z.string(), kbId: z.string() }),
+        params: z.object({ id: z.uuid(), kbId: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -1061,7 +1061,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorKnowledgeBases,
         description: "List knowledge bases assigned to a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             data: z.array(SelectKnowledgeBaseSchema),
@@ -1108,7 +1108,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorRuns,
         description: "List connector runs",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectConnectorRunListSchema),
@@ -1159,8 +1159,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a single connector run (including logs)",
         tags: ["Connectors"],
         params: z.object({
-          id: z.string(),
-          runId: z.string(),
+          id: z.uuid(),
+          runId: z.uuid(),
         }),
         response: constructResponseSchema(SelectConnectorRunSchema),
       },

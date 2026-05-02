@@ -53,7 +53,7 @@ export function useKnowledgeBaseDocuments(params: {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return data;
     },
@@ -74,7 +74,7 @@ export function useKnowledgeBaseDocument(params: {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return data;
     },
@@ -97,7 +97,7 @@ export function useDeleteKnowledgeBaseDocument() {
       });
       if (error) {
         handleApiError(error);
-        return null;
+        throw error;
       }
       return data;
     },

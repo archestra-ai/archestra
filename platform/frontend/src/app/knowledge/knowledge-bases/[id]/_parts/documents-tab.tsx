@@ -62,7 +62,11 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     enabled: selectedPreviewDoc !== null,
   });
 
-  const { data: documentsResponse, isPending } = useKnowledgeBaseDocuments({
+  const {
+    data: documentsResponse,
+    isPending,
+    isError,
+  } = useKnowledgeBaseDocuments({
     knowledgeBaseId,
     limit: pageSize,
     offset,
@@ -71,7 +75,7 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
   });
   const deleteDocumentMutation = useDeleteKnowledgeBaseDocument();
 
-  const hasLoadError = documentsResponse === null;
+  const hasLoadError = isError;
 
   const documents = documentsResponse?.data ?? [];
   const paginationMeta: PaginationMeta | null =

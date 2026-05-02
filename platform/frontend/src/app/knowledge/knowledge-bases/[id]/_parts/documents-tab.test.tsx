@@ -8,17 +8,6 @@ const mockUpdateQueryParams = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockPush = vi.fn();
 
-class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-
-const globalWithResizeObserver = globalThis as typeof globalThis & {
-  ResizeObserver: typeof ResizeObserver;
-};
-globalWithResizeObserver.ResizeObserver = ResizeObserver;
-
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
   useSearchParams: () => new URLSearchParams(""),

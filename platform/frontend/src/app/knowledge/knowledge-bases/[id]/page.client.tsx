@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { ArrowLeft, Check, Heart, Link2, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -54,6 +54,8 @@ export default function KnowledgeBaseDetailPage({ id }: { id: string }) {
 
 function KnowledgeBaseDetail({ id }: { id: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { data: knowledgeBase, isPending } = useKnowledgeBase(id);
   const {
     data: healthData,
@@ -67,6 +69,17 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
   const [isAddConnectorOpen, setIsAddConnectorOpen] = useState(false);
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
+  );
+
+  const currentTab = searchParams.get("tab") || "connectors";
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.set("tab", value);
+      router.replace(`${pathname}?${newParams.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams],
   );
 
   type ConnectorItem =
@@ -258,7 +271,11 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
           )}
         </Card>
 
-        <Tabs defaultValue="connectors" className="w-full">
+        <Tabs
+          value={currentTab}
+          onValueChange={handleTabChange}
+          className="w-full"
+        >
           <TabsList>
             <TabsTrigger value="connectors">Connectors</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>

@@ -7,10 +7,19 @@ type HitlPending = {
   adapterId: string
 }
 
+type ThinkingKey = {
+  id: string
+  remoteJid: string
+  fromMe?: boolean
+  participant?: string
+}
+
 const AGENT_KEY_PREFIX = 'wa:agent:'
 const HITL_KEY_PREFIX = 'wa:hitl:'
+const THINKING_KEY_PREFIX = 'wa:thinking:'
 const AGENT_TTL_SECONDS = 30 * 24 * 60 * 60
 const HITL_TTL_SECONDS = 24 * 60 * 60
+const THINKING_TTL_SECONDS = 24 * 60 * 60
 
 class BotState {
   private redis: Redis
@@ -40,10 +49,22 @@ class BotState {
     return JSON.parse(raw as string) as HitlPending
   }
 
+  async pushThinking(jid: string, msgKey: ThinkingKey): Promise<void> {
+    const key = THINKING_KEY_PREFIX + jid
+    await this.redis.rpush(key, JSON.stringify(msgKey))
+    await this.redis.expire(key, THINKING_TTL_SECONDS)
+  }
+
+  async popThinking(jid: string): Promise<ThinkingKey | null> {
+    const raw = await this.redis.lpop(THINKING_KEY_PREFIX + jid)
+    if (!raw) return null
+    return JSON.parse(raw) as ThinkingKey
+  }
+
   async cleanup(): Promise<void> {
     await this.redis.quit()
   }
 }
 
 export { BotState }
-export type { HitlPending }
+export type { HitlPending, ThinkingKey }

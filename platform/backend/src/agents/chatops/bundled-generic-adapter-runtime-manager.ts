@@ -3,6 +3,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import config from "@/config";
 import logger from "@/logging";
 import {
   ApiError,
@@ -21,6 +22,7 @@ const PROCESS_EXIT_TIMEOUT_MS = 1000;
 type FileAccess = typeof access;
 type PackageFileRead = typeof readFile;
 type SpawnProcess = typeof spawn;
+type KillProcess = (pid: number, signal: number | NodeJS.Signals) => void;
 
 interface RuntimeState {
   status: BundledChatOpsAdapterRuntimeStatus;
@@ -74,9 +76,11 @@ const DEFAULT_PLATFORM_ROOT = resolvePlatformRootFrom(__dirname);
 export class BundledGenericAdapterRuntimeManager {
   private readonly catalog: readonly BundledGenericAdapterCatalogEntry[];
   private readonly workspaceRootPath: string;
+  private readonly prebuiltMode: boolean;
   private readonly fileAccess: FileAccess;
   private readonly packageFileRead: PackageFileRead;
   private readonly spawnProcess: SpawnProcess;
+  private readonly killProcess: KillProcess;
   private readonly runtimeStates = new Map<
     BundledChatOpsAdapterId,
     RuntimeState
@@ -89,16 +93,22 @@ export class BundledGenericAdapterRuntimeManager {
   constructor(options?: {
     catalog?: readonly BundledGenericAdapterCatalogEntry[];
     workspaceRootPath?: string;
+    prebuiltMode?: boolean;
     fileAccess?: FileAccess;
     packageFileRead?: PackageFileRead;
     spawnProcess?: SpawnProcess;
+    killProcess?: KillProcess;
   }) {
     this.catalog = options?.catalog ?? bundledGenericAdapterCatalog;
+    this.prebuiltMode = options?.prebuiltMode ?? Boolean(config.chatops.bundledAdaptersDir);
     this.workspaceRootPath =
-      options?.workspaceRootPath ?? DEFAULT_PLATFORM_ROOT;
+      options?.workspaceRootPath
+      ?? config.chatops.bundledAdaptersDir
+      ?? DEFAULT_PLATFORM_ROOT;
     this.fileAccess = options?.fileAccess ?? access;
     this.packageFileRead = options?.packageFileRead ?? readFile;
     this.spawnProcess = options?.spawnProcess ?? spawn;
+    this.killProcess = options?.killProcess ?? process.kill;
   }
 
   async initialize(): Promise<void> {
@@ -154,17 +164,31 @@ export class BundledGenericAdapterRuntimeManager {
       return this.getSummary(adapterId);
     }
 
+    if (entry.connectionPage) {
+      await this.killOrphanOnPort(entry.connectionPage.port);
+    }
+
     const workingDirectory = this.resolvePackagePath(entry);
     const entrypointPath = path.resolve(
       workingDirectory,
       entry.launch.entrypointRelativePath,
     );
 
-    await this.ensureEntrypointAvailable(
-      entry,
-      workingDirectory,
-      entrypointPath,
-    );
+    if (this.prebuiltMode) {
+      if (!(await this.entrypointExists(entrypointPath))) {
+        throw new ApiError(
+          409,
+          `Bundled adapter ${entry.adapterId} entrypoint not found at ${entrypointPath}. ` +
+          `Ensure the adapter was built during image creation.`,
+        );
+      }
+    } else {
+      await this.ensureEntrypointAvailable(
+        entry,
+        workingDirectory,
+        entrypointPath,
+      );
+    }
 
     this.updateRuntimeState(adapterId, {
       status: "starting",
@@ -617,6 +641,41 @@ export class BundledGenericAdapterRuntimeManager {
     throw new Error(
       `Timed out waiting for connection page health on port ${port}`,
     );
+  }
+
+  private async killOrphanOnPort(port: number): Promise<void> {
+    try {
+      const res = await fetch(`http://localhost:${port}/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { pid?: number };
+      if (!body.pid) return;
+      try {
+        this.killProcess(body.pid, "SIGTERM");
+      } catch {
+        return;
+      }
+      await this.waitForProcessExit(body.pid, PROCESS_EXIT_TIMEOUT_MS);
+    } catch {}
+  }
+
+  private async waitForProcessExit(
+    pid: number,
+    timeoutMs: number,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        this.killProcess(pid, 0);
+        await new Promise((r) => setTimeout(r, 100));
+      } catch {
+        return;
+      }
+    }
+    try {
+      this.killProcess(pid, "SIGKILL");
+    } catch {}
   }
 }
 

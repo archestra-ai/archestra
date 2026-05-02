@@ -533,10 +533,14 @@ export class ChatOpsManager {
       }
     }
 
-    if (!binding || !binding.agentId) {
+    {
       const metadataAgentId = message.metadata?.agentId as string | undefined;
+      const needsAgent =
+        !binding ||
+        !binding.agentId ||
+        (metadataAgentId && metadataAgentId !== binding.agentId);
 
-      if (metadataAgentId) {
+      if (needsAgent && metadataAgentId) {
         const agent = await AgentModel.findById(metadataAgentId);
         if (agent && agent.agentType === "agent") {
           const channelName = isDm
@@ -554,6 +558,20 @@ export class ChatOpsManager {
             dmOwnerEmail: isDm ? message.senderEmail : undefined,
             agentId: metadataAgentId,
           });
+          if (binding && binding.agentId === metadataAgentId) {
+            logger.info(
+              {
+                bindingId: binding.id,
+                previousAgentId:
+                  binding.agentId !== metadataAgentId
+                    ? binding.agentId
+                    : undefined,
+                newAgentId: metadataAgentId,
+                channelId: message.channelId,
+              },
+              "[ChatOps] Updated channel binding agent from metadata",
+            );
+          }
         }
       }
 
@@ -789,14 +807,6 @@ export class ChatOpsManager {
         messageText: message.text,
         defaultAgent: resolvedAgent,
       });
-
-    const metadataAgentId = message.metadata?.agentId as string | undefined;
-    if (metadataAgentId && metadataAgentId !== agentToUse.id) {
-      const metadataAgent = await AgentModel.findById(metadataAgentId);
-      if (metadataAgent && metadataAgent.agentType === "agent") {
-        agentToUse = metadataAgent;
-      }
-    }
 
     // Security: Validate user has access to the agent
     logger.debug(

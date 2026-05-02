@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "@/test";
+import { ApiError } from "@/types";
 import type { BundledGenericAdapterCatalogEntry } from "./bundled-generic-adapter-catalog";
 import {
   BundledGenericAdapterRuntimeManager,
@@ -27,6 +28,20 @@ const testCatalog = [
       packageRelativePath: "integrations/chatops/baileys-whatsapp",
       entrypointRelativePath: "dist/bot.js",
     },
+  },
+] satisfies readonly BundledGenericAdapterCatalogEntry[];
+
+const testCatalogWithConnectionPage = [
+  {
+    adapterId: "whatsapp",
+    displayName: "WhatsApp",
+    description: "Run the bundled WhatsApp ChatOps adapter process.",
+    launch: {
+      kind: "node-process",
+      packageRelativePath: "integrations/chatops/baileys-whatsapp",
+      entrypointRelativePath: "dist/bot.js",
+    },
+    connectionPage: { port: 3100 },
   },
 ] satisfies readonly BundledGenericAdapterCatalogEntry[];
 
@@ -118,5 +133,270 @@ describe("BundledGenericAdapterRuntimeManager", () => {
     );
     expect(summary.status).toBe("running");
     expect(summary.pid).toBe(4242);
+  });
+
+  test("kills orphan process occupying the port before starting", async () => {
+    const fileAccess = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("missing"))
+      .mockResolvedValueOnce(undefined);
+    const packageFileRead = vi.fn().mockResolvedValue(`{
+            "scripts": {
+                "build": "tsc -p tsconfig.json"
+            }
+        }`);
+
+    const killProcess = vi
+      .fn<(pid: number, signal: number | NodeJS.Signals) => void>()
+      .mockImplementation((pid, signal) => {
+        if (pid === 99999 && signal === 0) throw new Error("ESRCH");
+      });
+
+    vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ pid: 99999 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    const buildProcess = new FakeChildProcess();
+    const runtimeProcess = new FakeChildProcess();
+    runtimeProcess.pid = 4242;
+
+    const spawnProcess = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          buildProcess.emit("exit", 0, null);
+        });
+        return buildProcess as unknown as ChildProcess;
+      })
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          runtimeProcess.emit("spawn");
+        });
+        return runtimeProcess as unknown as ChildProcess;
+      });
+
+    const manager = new BundledGenericAdapterRuntimeManager({
+      catalog: testCatalogWithConnectionPage,
+      workspaceRootPath: "/workspace/platform",
+      fileAccess,
+      packageFileRead,
+      spawnProcess,
+      killProcess,
+    });
+
+    await manager.initialize();
+    const summary = await manager.startAdapter("whatsapp");
+
+    expect(killProcess).toHaveBeenCalledWith(99999, "SIGTERM");
+    expect(summary.status).toBe("running");
+    expect(summary.pid).toBe(4242);
+  });
+
+  test("skips orphan kill when port is free (ECONNREFUSED)", async () => {
+    const fileAccess = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("missing"))
+      .mockResolvedValueOnce(undefined);
+    const packageFileRead = vi.fn().mockResolvedValue(`{
+            "scripts": {
+                "build": "tsc -p tsconfig.json"
+            }
+        }`);
+
+    const killProcess = vi.fn();
+
+    vi.spyOn(global, "fetch")
+      .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    const buildProcess = new FakeChildProcess();
+    const runtimeProcess = new FakeChildProcess();
+    runtimeProcess.pid = 4242;
+
+    const spawnProcess = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          buildProcess.emit("exit", 0, null);
+        });
+        return buildProcess as unknown as ChildProcess;
+      })
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          runtimeProcess.emit("spawn");
+        });
+        return runtimeProcess as unknown as ChildProcess;
+      });
+
+    const manager = new BundledGenericAdapterRuntimeManager({
+      catalog: testCatalogWithConnectionPage,
+      workspaceRootPath: "/workspace/platform",
+      fileAccess,
+      packageFileRead,
+      spawnProcess,
+      killProcess,
+    });
+
+    await manager.initialize();
+    const summary = await manager.startAdapter("whatsapp");
+
+    expect(killProcess).not.toHaveBeenCalled();
+    expect(summary.status).toBe("running");
+    expect(summary.pid).toBe(4242);
+  });
+
+  test("force-kills orphan with SIGKILL after timeout", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const fileAccess = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("missing"))
+        .mockResolvedValueOnce(undefined);
+      const packageFileRead = vi.fn().mockResolvedValue(`{
+            "scripts": {
+                "build": "tsc -p tsconfig.json"
+            }
+        }`);
+
+      const killProcess = vi.fn();
+
+      vi.spyOn(global, "fetch")
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ pid: 99999 }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      const buildProcess = new FakeChildProcess();
+      const runtimeProcess = new FakeChildProcess();
+      runtimeProcess.pid = 4242;
+
+      const spawnProcess = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          queueMicrotask(() => {
+            buildProcess.emit("exit", 0, null);
+          });
+          return buildProcess as unknown as ChildProcess;
+        })
+        .mockImplementationOnce(() => {
+          queueMicrotask(() => {
+            runtimeProcess.emit("spawn");
+          });
+          return runtimeProcess as unknown as ChildProcess;
+        });
+
+      const manager = new BundledGenericAdapterRuntimeManager({
+        catalog: testCatalogWithConnectionPage,
+        workspaceRootPath: "/workspace/platform",
+        fileAccess,
+        packageFileRead,
+        spawnProcess,
+        killProcess,
+      });
+
+      await manager.initialize();
+      const startPromise = manager.startAdapter("whatsapp");
+
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const summary = await startPromise;
+
+      expect(killProcess).toHaveBeenCalledWith(99999, "SIGTERM");
+      expect(killProcess).toHaveBeenCalledWith(99999, "SIGKILL");
+      expect(summary.status).toBe("running");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe("prebuilt mode", () => {
+    test("starts adapter without build when prebuilt entrypoint exists", async () => {
+      const fileAccess = vi.fn().mockResolvedValueOnce(undefined);
+      const packageFileRead = vi.fn();
+
+      const runtimeProcess = new FakeChildProcess();
+      runtimeProcess.pid = 5555;
+
+      const spawnProcess = vi.fn().mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          runtimeProcess.emit("spawn");
+        });
+        return runtimeProcess as unknown as ChildProcess;
+      });
+
+      const manager = new BundledGenericAdapterRuntimeManager({
+        catalog: testCatalog,
+        workspaceRootPath: "/prebuilt/adapters",
+        prebuiltMode: true,
+        fileAccess,
+        packageFileRead,
+        spawnProcess,
+      });
+
+      await manager.initialize();
+      const summary = await manager.startAdapter("whatsapp");
+
+      expect(fileAccess).toHaveBeenCalledTimes(1);
+      expect(fileAccess).toHaveBeenCalledWith(
+        "/prebuilt/adapters/integrations/chatops/baileys-whatsapp/dist/bot.js",
+      );
+      expect(packageFileRead).not.toHaveBeenCalled();
+      expect(spawnProcess).toHaveBeenCalledTimes(1);
+      expect(spawnProcess).toHaveBeenCalledWith(
+        process.execPath,
+        [
+          "--enable-source-maps",
+          "/prebuilt/adapters/integrations/chatops/baileys-whatsapp/dist/bot.js",
+        ],
+        expect.objectContaining({
+          cwd: "/prebuilt/adapters/integrations/chatops/baileys-whatsapp",
+        }),
+      );
+      expect(summary.status).toBe("running");
+      expect(summary.pid).toBe(5555);
+    });
+
+    test("throws clear error when prebuilt entrypoint is missing", async () => {
+      const fileAccess = vi.fn().mockRejectedValueOnce(new Error("ENOENT"));
+      const packageFileRead = vi.fn();
+      const spawnProcess = vi.fn();
+
+      const manager = new BundledGenericAdapterRuntimeManager({
+        catalog: testCatalog,
+        workspaceRootPath: "/prebuilt/adapters",
+        prebuiltMode: true,
+        fileAccess,
+        packageFileRead,
+        spawnProcess,
+      });
+
+      await manager.initialize();
+
+      try {
+        await manager.startAdapter("whatsapp");
+        expect.unreachable("should have thrown");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).statusCode).toBe(409);
+        expect((error as ApiError).message).toContain(
+          "/prebuilt/adapters/integrations/chatops/baileys-whatsapp/dist/bot.js",
+        );
+        expect((error as ApiError).message).toContain(
+          "built during image creation",
+        );
+      }
+
+      expect(packageFileRead).not.toHaveBeenCalled();
+      expect(spawnProcess).not.toHaveBeenCalled();
+    });
   });
 });

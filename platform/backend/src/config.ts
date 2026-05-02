@@ -770,6 +770,10 @@ const config = {
         "cluster.local",
     },
   },
+  chatops: {
+    bundledAdaptersDir:
+      process.env.ARCHESTRA_CHATOPS_BUNDLED_ADAPTERS_DIR || null,
+  },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },

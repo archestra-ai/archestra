@@ -160,6 +160,7 @@ ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
+ENV ARCHESTRA_CHATOPS_BUNDLED_ADAPTERS_DIR="/app"
 
 # Cloud database CA bundle for SSL certificate validation
 # This allows sslmode=require to work with AWS RDS and Google Cloud SQL
@@ -229,7 +230,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
-COPY integrations/chatops ./integrations/chatops
+COPY integrations/chatops/baileys-whatsapp/package.json ./integrations/chatops/baileys-whatsapp/package.json
 COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
@@ -260,7 +261,7 @@ COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built bundled ChatOps adapters
-COPY --from=builder /app/integrations ./integrations
+COPY --from=builder /app/integrations/chatops/baileys-whatsapp/dist ./integrations/chatops/baileys-whatsapp/dist
 
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public

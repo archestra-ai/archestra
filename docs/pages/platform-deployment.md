@@ -1066,6 +1066,14 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
+#### Adapter Bundling
+
+- **`ARCHESTRA_CHATOPS_BUNDLED_ADAPTERS_DIR`** - Directory path containing pre-built ChatOps adapters. When set, the ChatOps runtime operates in "prebuilt mode" and skips adapter auto-build logic, only verifying the entrypoint exists.
+  - Default: Not set (adapters are built on demand)
+  - Example: `/app`
+  - Automatically set in the Docker image; no manual configuration needed when deploying via Docker or Helm
+  - Use when deploying to Docker or Kubernetes where adapters are pre-built during image creation
+
 ### Knowledge Base Configuration
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.

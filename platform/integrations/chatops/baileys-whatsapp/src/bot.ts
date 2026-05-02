@@ -123,7 +123,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end('{}')
+    res.end(JSON.stringify({ pid: process.pid, adapterId: ADAPTER_ID }))
     return
   }
 
@@ -180,7 +180,7 @@ const server = http.createServer(async (req, res) => {
       const approvalRequest = body.metadata?.approvalRequest
       let text = body.footer ? `${body.text}\n\n${body.footer}` : body.text
       if (approvalRequest) {
-        text = `🔧 Tool: ${approvalRequest.toolName ?? 'unknown'}\n👍 = Approve, 👎 = Reject`
+        text = `🔧 Tool: ${approvalRequest.toolName ?? 'unknown'}\n\n⚠️ Approval required — react to this message:\n👍 — Approve\n👎 — Reject`
       }
       const sent = await sendText(jid, text)
       if (sent?.key?.id && approvalRequest) {
@@ -190,6 +190,11 @@ const server = http.createServer(async (req, res) => {
           replyContext: body.replyContext,
           adapterId: ADAPTER_ID,
         })
+      }
+      const thinkingKey = await botState?.popThinking(jid)
+      if (thinkingKey && activeSock) {
+        await activeSock.sendMessage(jid, { react: { key: thinkingKey, text: '' } })
+          .catch(() => {})
       }
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))
@@ -428,6 +433,11 @@ async function startSock() {
         }
       }
 
+      if (!selectedAgentId) {
+        await sendText(jid, `❌ Агент не выбран.\n\nОтправьте "ИмяАгента > " чтобы установить текущего агента.\nНапример: "Assistant > "\n\nОтправьте @${BOT_NAME} чтобы увидеть список доступных агентов.`)
+        continue
+      }
+
       const params = normalizeBaileysMessage({
         msg,
         text: messageText,
@@ -440,6 +450,13 @@ async function startSock() {
       try {
         await genericClient.sendMessage(params)
         console.log(`[Agent Message] from=${jid} text="${messageText}"`)
+        await activeSock!.sendMessage(jid, { react: { key: msg.key, text: '💭' } })
+        await botState?.pushThinking(jid, {
+          id: msg.key.id!,
+          remoteJid: msg.key.remoteJid!,
+          fromMe: msg.key.fromMe ?? false,
+          participant: msg.key.participant ?? undefined,
+        })
       } catch (err) {
         console.error(`[Agent Message] failed: ${err instanceof Error ? err.message : err}`)
       }

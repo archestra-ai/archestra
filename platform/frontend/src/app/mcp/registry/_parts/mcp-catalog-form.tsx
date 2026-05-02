@@ -9,7 +9,6 @@ import {
   ExternalLink,
   Globe,
   IdCard,
-  Info,
   KeyRound,
   Lock,
   Plus,
@@ -35,10 +34,16 @@ import {
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogStickyFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -450,6 +455,22 @@ export function McpCatalogForm({
   const isTransportTypeDirty = deploymentField("transportType");
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
+
+  // True when any field that triggers `requiresNewUserInputForReinstall=true`
+  // on the backend is dirty. Saving with this true will flag every existing
+  // installation as requiring a manual reinstall.
+  const willRequireManualReinstall =
+    isNameDirty ||
+    isServerUrlDirty ||
+    isAuthDirty ||
+    isEnvDirty ||
+    isHeadersDirty ||
+    isCommandDirty ||
+    isArgumentsDirty ||
+    isDockerImageDirty ||
+    isTransportTypeDirty ||
+    isHttpPortDirty ||
+    isHttpPathDirty;
   const areLabelsChanged = useMemo(() => {
     if (labels.length !== labelsBaseline.length) return true;
     return labels.some(
@@ -615,7 +636,10 @@ export function McpCatalogForm({
     }
   }, [initialValues, localConfigSecret, form]);
 
-  const handleSubmit = async (values: McpCatalogFormValues) => {
+  const [pendingSubmit, setPendingSubmit] =
+    useState<McpCatalogFormValues | null>(null);
+
+  const performSubmit = async (values: McpCatalogFormValues) => {
     // Save any unsaved label before submitting
     const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
     const submittedValues = { ...values, labels: updatedLabels };
@@ -628,7 +652,20 @@ export function McpCatalogForm({
     setLabelsBaseline(updatedLabels);
   };
 
+  const handleSubmit = async (values: McpCatalogFormValues) => {
+    // In edit mode, if any change will trigger a reinstall on existing
+    // installations, surface a confirmation step so the admin understands the
+    // consequences before fan-out (single-tenant) or shared-pod restart
+    // (multitenant).
+    if (mode === "edit" && willRequireManualReinstall) {
+      setPendingSubmit(values);
+      return;
+    }
+    await performSubmit(values);
+  };
+
   return (
+    <>
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(handleSubmit)}
@@ -2065,6 +2102,105 @@ export function McpCatalogForm({
           : footer}
       </form>
     </Form>
+    <ConfirmReinstallFanoutDialog
+      open={pendingSubmit !== null}
+      isMultitenant={isMultitenant}
+      onCancel={() => setPendingSubmit(null)}
+      onConfirm={async () => {
+        const values = pendingSubmit;
+        setPendingSubmit(null);
+        if (values) await performSubmit(values);
+      }}
+    />
+    </>
+  );
+}
+
+function ConfirmReinstallFanoutDialog({
+  open,
+  isMultitenant,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  isMultitenant: boolean;
+  onCancel: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {isMultitenant
+              ? "Shared deployment will be flagged for reinstall"
+              : "Existing installations will need to reinstall"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          {isMultitenant ? (
+            <>
+              <p>
+                This is a multitenant catalog — one shared deployment serves
+                all callers. Saving these changes will{" "}
+                <strong>flag the shared deployment for reinstall</strong>, but
+                it won&apos;t restart automatically.
+              </p>
+              <p>
+                <strong>What happens next:</strong>
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>
+                  The deployment keeps running with its current config until
+                  someone clicks <strong>Reinstall</strong> on the server in{" "}
+                  <code>/mcp/registry</code>.
+                </li>
+                <li>
+                  When Reinstall is clicked, the pod restarts and picks up the
+                  new config — expect a brief window where requests fail until
+                  it&apos;s ready again.
+                </li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p>
+                Saving these changes will{" "}
+                <strong>flag every existing installation</strong> of this
+                catalog item as requiring a reinstall.
+              </p>
+              <p>
+                <strong>What happens next:</strong>
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>
+                  Each install owner will see a <strong>Reinstall</strong>{" "}
+                  button on their server card in <code>/mcp/registry</code>.
+                </li>
+                <li>
+                  Until they click Reinstall and re-enter any new credentials,
+                  the server keeps running with its current config — nothing
+                  breaks immediately.
+                </li>
+                <li>No pods are restarted automatically by this save.</li>
+              </ul>
+              <p className="text-muted-foreground">
+                Other servers (with non-prompted changes only) reinstall in
+                the background without owner action.
+              </p>
+            </>
+          )}
+        </div>
+        <DialogStickyFooter>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => onConfirm()}>
+            Save and flag for reinstall
+          </Button>
+        </DialogStickyFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

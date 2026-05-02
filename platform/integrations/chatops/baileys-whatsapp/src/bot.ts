@@ -89,8 +89,9 @@ function buildAgentListText(agents: AgentOption[], currentAgentId: string | null
 async function findAgentByName(name: string, jid: string): Promise<AgentOption | null> {
   const now = Date.now()
   const cached = agentCache.get(jid)
+  const isDm = !jid.includes('@g.us')
   if (!cached || now - cached.fetchedAt > AGENT_CACHE_TTL_MS) {
-    const agents = await genericClient.listAgents({ senderExternalId: jid.split('@')[0] })
+    const agents = await genericClient.listAgents({ senderExternalId: await resolvePhone(jid), isDm })
     if (agents.length === 0) return null
     agentCache.set(jid, { agents, fetchedAt: now })
   }
@@ -384,7 +385,7 @@ async function startSock() {
       if (trimmedRaw === mentionTrigger) {
         try {
           console.log(`[@${BOT_NAME}] mention detected from=${jid}`)
-    const agents = await genericClient.listAgents({ senderExternalId: await resolvePhone(jid) })
+    const agents = await genericClient.listAgents({ senderExternalId: await resolvePhone(jid), isDm: !jid.includes('@g.us') })
           console.log(`[@${BOT_NAME}] listAgents returned ${agents.length} agents`)
           if (agents.length === 0) {
             await sendText(jid, 'Ваш номер не привязан к аккаунту. Обратитесь к администратору для привязки.')
@@ -405,6 +406,7 @@ async function startSock() {
         processedText = rawText.trim().slice(mentionTrigger.length + 1).trim()
       }
 
+      let selectedAgentId: string | null = await botState?.getAgentForJid(jid) ?? null
       let messageText = processedText
 
       const delimiterIndex = rawText.indexOf('>')
@@ -421,6 +423,7 @@ async function startSock() {
               continue
             }
             messageText = afterDelimiter
+            selectedAgentId = agent.id
           }
         }
       }
@@ -430,6 +433,9 @@ async function startSock() {
         text: messageText,
         senderExternalId: await resolvePhone(jid),
       })
+      if (selectedAgentId) {
+        params.metadata = { agentId: selectedAgentId }
+      }
 
       try {
         await genericClient.sendMessage(params)

@@ -534,32 +534,55 @@ export class ChatOpsManager {
     }
 
     if (!binding || !binding.agentId) {
-      // Create binding early (without agent) so the DM/channel appears in the UI
-      if (!binding) {
-        const channelName = isDm
-          ? `Direct Message - ${message.senderEmail}`
-          : await provider.getChannelName(message.channelId);
-        const organizationId = await getDefaultOrganizationId();
-        await ChatOpsChannelBindingModel.upsertByChannel({
-          organizationId,
-          provider: provider.providerId,
-          channelId: message.channelId,
-          workspaceId: message.workspaceId,
-          workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: channelName ?? undefined,
-          isDm,
-          dmOwnerEmail: isDm ? message.senderEmail : undefined,
-        });
+      const metadataAgentId = message.metadata?.agentId as string | undefined;
+
+      if (metadataAgentId) {
+        const agent = await AgentModel.findById(metadataAgentId);
+        if (agent && agent.agentType === "agent") {
+          const channelName = isDm
+            ? `Direct Message - ${message.senderEmail}`
+            : await provider.getChannelName(message.channelId);
+          const organizationId = await getDefaultOrganizationId();
+          binding = await ChatOpsChannelBindingModel.upsertByChannel({
+            organizationId,
+            provider: provider.providerId,
+            channelId: message.channelId,
+            workspaceId: message.workspaceId,
+            workspaceName: provider.getWorkspaceName() ?? undefined,
+            channelName: channelName ?? undefined,
+            isDm,
+            dmOwnerEmail: isDm ? message.senderEmail : undefined,
+            agentId: metadataAgentId,
+          });
+        }
       }
 
-      // Show agent selection
-      await this.sendAgentSelectionCard({
-        provider,
-        message,
-        isWelcome: true,
-        isDm,
-      });
-      return;
+      if (!binding || !binding.agentId) {
+        if (!binding) {
+          const channelName = isDm
+            ? `Direct Message - ${message.senderEmail}`
+            : await provider.getChannelName(message.channelId);
+          const organizationId = await getDefaultOrganizationId();
+          await ChatOpsChannelBindingModel.upsertByChannel({
+            organizationId,
+            provider: provider.providerId,
+            channelId: message.channelId,
+            workspaceId: message.workspaceId,
+            workspaceName: provider.getWorkspaceName() ?? undefined,
+            channelName: channelName ?? undefined,
+            isDm,
+            dmOwnerEmail: isDm ? message.senderEmail : undefined,
+          });
+        }
+
+        await this.sendAgentSelectionCard({
+          provider,
+          message,
+          isWelcome: true,
+          isDm,
+        });
+        return;
+      }
     }
 
     // Always reply to empty Slack app mentions so users get a response even
@@ -761,11 +784,19 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText } =
+    let { agentToUse, cleanedMessageText } =
       await this.resolveInlineAgentMention({
         messageText: message.text,
         defaultAgent: resolvedAgent,
       });
+
+    const metadataAgentId = message.metadata?.agentId as string | undefined;
+    if (metadataAgentId && metadataAgentId !== agentToUse.id) {
+      const metadataAgent = await AgentModel.findById(metadataAgentId);
+      if (metadataAgent && metadataAgent.agentType === "agent") {
+        agentToUse = metadataAgent;
+      }
+    }
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -1405,13 +1436,10 @@ export class ChatOpsManager {
 
       if (sendReply) {
         const errMsg = errorMessage(error);
-        // Show truncated error details as a subtle footer (max 500 chars)
-        const errorDetail =
-          errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
+        const userMessage = mapLlmErrorToUserMessage(errMsg);
         await provider.sendReply({
           originalMessage: message,
-          text: "Sorry, I encountered an error processing your request.",
-          footer: errorDetail,
+          text: userMessage,
           conversationReference: message.metadata?.conversationReference,
         });
       }
@@ -1957,4 +1985,21 @@ export function findTolerantMatchLength(
   }
 
   return null;
+}
+
+function mapLlmErrorToUserMessage(errMsg: string): string {
+  const lower = errMsg.toLowerCase();
+  if (lower.includes("more credits") || lower.includes("insufficient") || lower.includes("402")) {
+    return "Error: LLM API credits exhausted. Please contact your administrator to top up the balance.";
+  }
+  if (lower.includes("rate limit") || lower.includes("429") || lower.includes("too many requests")) {
+    return "Error: Rate limit exceeded. Please try again in a few seconds.";
+  }
+  if (lower.includes("invalid api key") || lower.includes("401") || lower.includes("unauthorized")) {
+    return "Error: LLM API authentication failed. Please contact your administrator.";
+  }
+  if (lower.includes("quota") || lower.includes("capacity")) {
+    return "Error: LLM API quota exceeded. Please contact your administrator.";
+  }
+  return "Sorry, I encountered an error processing your request. Please try again later.";
 }

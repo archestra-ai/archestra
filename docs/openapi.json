@@ -16814,6 +16814,9 @@
           },
           "headerName": {
             "type": "string"
+          },
+          "valuePrefix": {
+            "type": "string"
           }
         },
         "required": [
@@ -34396,6 +34399,9 @@
             "type": "number"
           },
           "headerName": {
+            "type": "string"
+          },
+          "valuePrefix": {
             "type": "string"
           }
         },
@@ -96546,6 +96552,9 @@
                           "builtin"
                         ]
                       },
+                      "multitenant": {
+                        "type": "boolean"
+                      },
                       "serverUrl": {
                         "nullable": true,
                         "type": "string"
@@ -97034,6 +97043,7 @@
                       "authDescription",
                       "authFields",
                       "serverType",
+                      "multitenant",
                       "serverUrl",
                       "docsUrl",
                       "clientSecretId",
@@ -97380,6 +97390,9 @@
                       "remote",
                       "builtin"
                     ]
+                  },
+                  "multitenant": {
+                    "type": "boolean"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -97914,6 +97927,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -98402,6 +98418,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -98764,6 +98781,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -99252,6 +99272,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -99592,6 +99613,9 @@
                       "remote",
                       "builtin"
                     ]
+                  },
+                  "multitenant": {
+                    "type": "boolean"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -100134,6 +100158,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -100622,6 +100649,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",

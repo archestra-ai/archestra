@@ -180,3 +180,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @bytepiper
 - @js360000
 - @Aurenv1
+- @mahmoud492
+- @EnTech404
+- @lilit-gevorgyan

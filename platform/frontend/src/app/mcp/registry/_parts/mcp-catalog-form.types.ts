@@ -20,6 +20,7 @@ const additionalHeaderSchema = z.object({
   required: z.boolean(),
   value: z.string().optional(),
   description: z.string().optional().or(z.literal("")),
+  includeBearerPrefix: z.boolean().optional(),
 });
 
 // Simplified OAuth config schema
@@ -178,6 +179,7 @@ export const formSchema = z
     description: z.string().optional().or(z.literal("")),
     icon: z.string().nullable().optional(),
     serverType: z.enum(["remote", "local"]),
+    multitenant: z.boolean().optional(),
     serverUrl: z
       .string()
       .url({ error: "Must be a valid URL" })
@@ -186,6 +188,7 @@ export const formSchema = z
     authMethod: z.enum([
       "none",
       "bearer",
+      "auth_header",
       "oauth",
       "oauth_client_credentials",
       "enterprise_managed",

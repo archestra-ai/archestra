@@ -65,11 +65,12 @@ prev-static-assets/*
 !prev-static-assets/.gitkeep
 
 tsconfig.tsbuildinfo
-.playwright-mcp
 benchmark-config.env
 
 # Playwright
 /playwright/
+.playwright-mcp/
+.playwright-cli/
 playwright-report/
 
 # Dolt database files (added by bd init)

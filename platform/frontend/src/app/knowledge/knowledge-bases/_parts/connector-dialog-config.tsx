@@ -670,11 +670,9 @@ const INLINE_CONFIG_FIELDS: Record<
           </FormItem>
         )}
       />
-    ) : (
-      <></>
-    ),
-  gitlab: () => <></>,
-  linear: () => <></>,
+    ) : null,
+  gitlab: () => null,
+  linear: () => null,
   servicenow: ({ form, mode }) => (
     <FormField
       control={form.control}
@@ -790,9 +788,7 @@ const INLINE_CONFIG_FIELDS: Record<
           </FormItem>
         )}
       />
-    ) : (
-      <></>
-    ),
+    ) : null,
   onedrive: ({ form, mode }) => (
     <>
       <FormField

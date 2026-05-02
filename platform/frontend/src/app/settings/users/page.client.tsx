@@ -3,7 +3,7 @@
 import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
+import { Copy, Eye, Link2, Plus, Shield, Trash2, Unlink, UserCog } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -30,6 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDisableInvitations } from "@/lib/config/config.query";
@@ -37,6 +39,12 @@ import {
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
+import {
+  type ExternalIdMapping,
+  useCreateExternalIdMapping,
+  useDeleteExternalIdMapping,
+  useExternalIdMappings,
+} from "@/lib/chatops/chatops-external-id-mapping.query";
 import {
   type Invitation,
   type Member,
@@ -231,6 +239,7 @@ function MembersTab({
     newRole: string;
   } | null>(null);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
+  const [linkingChatOps, setLinkingChatOps] = useState<Member | null>(null);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -312,6 +321,15 @@ function MembersTab({
       ),
     },
     {
+      id: "chatops",
+      header: "ChatOps",
+      cell: ({ row }) => {
+        const member = row.original;
+        if ("provider" in member) return null;
+        return <MemberChatOpsBadges userId={member.userId} />;
+      },
+    },
+    {
       id: "joined",
       header: "Joined",
       cell: ({ row }) =>
@@ -376,6 +394,12 @@ function MembersTab({
                 permissions: { member: ["update"] },
                 onClick: () =>
                   setChangingRole({ member, newRole: member.role }),
+              },
+              {
+                icon: <Link2 className="h-4 w-4" />,
+                label: "Link ChatOps Account",
+                permissions: { member: ["update"] },
+                onClick: () => setLinkingChatOps(member),
               },
               ...(canImpersonateThisUser
                 ? [
@@ -476,6 +500,14 @@ function MembersTab({
           }}
           confirmLabel="Remove"
           pendingLabel="Removing..."
+        />
+      )}
+
+      {linkingChatOps && (
+        <LinkChatOpsDialog
+          member={linkingChatOps}
+          open={!!linkingChatOps}
+          onOpenChange={(open) => !open && setLinkingChatOps(null)}
         />
       )}
     </>
@@ -757,4 +789,141 @@ function getInitials(name: string): string {
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
     .join("");
+}
+
+const ADAPTER_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+};
+
+function truncateExternalId(externalId: string, maxLen = 20): string {
+  if (externalId.length <= maxLen) return externalId;
+  return `${externalId.slice(0, maxLen)}...`;
+}
+
+function MemberChatOpsBadges({ userId }: { userId: string }) {
+  const { data: mappings = [] } = useExternalIdMappings(userId);
+  if (mappings.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {mappings.map((m) => (
+        <Badge key={m.id} variant="secondary" className="text-xs">
+          {ADAPTER_LABELS[m.adapterId] ?? m.adapterId}:{" "}
+          {truncateExternalId(m.externalId)}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+const CHATOPS_ADAPTERS = [{ id: "whatsapp", name: "WhatsApp" }];
+
+function LinkChatOpsDialog({
+  member,
+  open,
+  onOpenChange,
+}: {
+  member: Member;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [adapterId, setAdapterId] = useState(CHATOPS_ADAPTERS[0].id);
+  const [externalId, setExternalId] = useState("");
+  const { data: mappings = [], isPending: isLoadingMappings } =
+    useExternalIdMappings(member.userId);
+  const createMapping = useCreateExternalIdMapping();
+  const deleteMapping = useDeleteExternalIdMapping();
+
+  const handleSubmit = async () => {
+    if (!externalId.trim()) return;
+    await createMapping.mutateAsync({
+      userId: member.userId,
+      adapterId,
+      externalId: externalId.trim(),
+    });
+    setExternalId("");
+  };
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Link ChatOps Account"
+      description={
+        <>
+          Manage ChatOps linked accounts for{" "}
+          <span className="font-medium text-foreground">
+            {member.name || member.email}
+          </span>
+        </>
+      }
+      size="small"
+    >
+      <DialogBody className="space-y-4">
+        <div className="space-y-2">
+          <Label>Adapter</Label>
+          <Select value={adapterId} onValueChange={setAdapterId}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CHATOPS_ADAPTERS.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Phone number</Label>
+          <Input
+            placeholder="79991234567"
+            value={externalId}
+            onChange={(e) => setExternalId(e.target.value)}
+          />
+        </div>
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={createMapping.isPending || !externalId.trim()}
+        >
+          {createMapping.isPending ? "Linking..." : "Link Account"}
+        </Button>
+
+        {isLoadingMappings ? null : mappings.length > 0 ? (
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-muted-foreground">Linked Accounts</Label>
+            <div className="space-y-1">
+              {mappings.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                >
+                  <span className="text-sm truncate">
+                    <span className="font-medium">
+                      {ADAPTER_LABELS[m.adapterId] ?? m.adapterId}
+                    </span>
+                    : {m.externalId}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={deleteMapping.isPending}
+                    onClick={() => deleteMapping.mutate(m.id)}
+                  >
+                    <Unlink className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </DialogBody>
+      <DialogStickyFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
+  );
 }

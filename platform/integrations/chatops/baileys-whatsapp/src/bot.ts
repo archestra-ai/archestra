@@ -54,9 +54,19 @@ let authRedisInstance: Redis | null = null
 let botState: BotState | null = null
 
 const AGENT_CACHE_TTL_MS = 5 * 60 * 1000
-let agentCache: { agents: AgentOption[]; fetchedAt: number } | null = null
+const agentCache = new Map<string, { agents: AgentOption[]; fetchedAt: number }>()
 
 const BOT_NAME = process.env.ARCHESTRA_BOT_NAME ?? 'Archestra'
+
+async function resolvePhone(jid: string): Promise<string> {
+  if (jid.endsWith('@lid') && activeSock?.signalRepository?.lidMapping) {
+    try {
+      const pn = await activeSock.signalRepository.lidMapping.getPNForLID(jid)
+      if (pn) return pn.split('@')[0].split(':')[0]
+    } catch {}
+  }
+  return jid.split('@')[0]
+}
 
 function sendText(jid: string, text: string) {
   const result = activeSock!.sendMessage(jid, { text })
@@ -76,14 +86,16 @@ function buildAgentListText(agents: AgentOption[], currentAgentId: string | null
   return header + lines.join('\n') + (agents.length > 0 ? footer : '')
 }
 
-async function findAgentByName(name: string): Promise<AgentOption | null> {
+async function findAgentByName(name: string, jid: string): Promise<AgentOption | null> {
   const now = Date.now()
-  if (!agentCache || now - agentCache.fetchedAt > AGENT_CACHE_TTL_MS) {
-    const agents = await genericClient.listAgents()
-    agentCache = { agents, fetchedAt: now }
+  const cached = agentCache.get(jid)
+  if (!cached || now - cached.fetchedAt > AGENT_CACHE_TTL_MS) {
+    const agents = await genericClient.listAgents({ senderExternalId: jid.split('@')[0] })
+    if (agents.length === 0) return null
+    agentCache.set(jid, { agents, fetchedAt: now })
   }
   const normalized = name.toLowerCase().replace(/\s+/g, '')
-  for (const agent of agentCache.agents) {
+  for (const agent of agentCache.get(jid)!.agents) {
     if (agent.name.toLowerCase().replace(/\s+/g, '') === normalized) {
       return agent
     }
@@ -328,8 +340,7 @@ async function startSock() {
                 await genericClient.sendApprovalDecision({
                   messageId: `hitl-${Date.now()}`,
                   sender: {
-                    externalId: jid.split('@')[0],
-                    email: '',
+                    externalId: await resolvePhone(jid),
                     name: msg.pushName ?? '',
                   },
                   channel: {
@@ -373,8 +384,12 @@ async function startSock() {
       if (trimmedRaw === mentionTrigger) {
         try {
           console.log(`[@${BOT_NAME}] mention detected from=${jid}`)
-          const agents = await genericClient.listAgents()
+    const agents = await genericClient.listAgents({ senderExternalId: await resolvePhone(jid) })
           console.log(`[@${BOT_NAME}] listAgents returned ${agents.length} agents`)
+          if (agents.length === 0) {
+            await sendText(jid, 'Ваш номер не привязан к аккаунту. Обратитесь к администратору для привязки.')
+            continue
+          }
           const currentAgentId = await botState?.getAgentForJid(jid) ?? null
           const text = buildAgentListText(agents, currentAgentId)
           await sendText(jid, text)
@@ -398,7 +413,7 @@ async function startSock() {
         const afterDelimiter = rawText.slice(delimiterIndex + 1).trim()
 
         if (potentialAgentName) {
-          const agent = await findAgentByName(potentialAgentName)
+          const agent = await findAgentByName(potentialAgentName, jid)
           if (agent) {
             await botState?.setAgentForJid(jid, agent.id)
             if (!afterDelimiter) {
@@ -412,8 +427,8 @@ async function startSock() {
 
       const params = normalizeBaileysMessage({
         msg,
-        senderEmail: '',
         text: messageText,
+        senderExternalId: await resolvePhone(jid),
       })
 
       try {

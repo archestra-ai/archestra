@@ -22,6 +22,7 @@ import type {
   GenericSendReplyCallback,
   GenericTypingCallback,
 } from "@/types/chatops-generic";
+import { ChatOpsExternalIdMappingModel, UserModel } from "@/models";
 import { errorMessage } from "./utils";
 
 const REPLY_CONTEXT_TTL_MS = 15 * 60 * 1000;
@@ -50,6 +51,7 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     { name: string | null; workspaceId: string; workspaceName: string | null }
   >();
   private readonly senderNameCache = new Map<string, string>();
+  private readonly senderExternalIdCache = new Map<string, string>();
   private eventHandler: ChatOpsEventHandler | null = null;
 
   constructor(config: {
@@ -86,6 +88,7 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     this.threadHistoryCache.clear();
     this.channelCache.clear();
     this.senderNameCache.clear();
+    this.senderExternalIdCache.clear();
     this.eventHandler = null;
     logger.info(
       { adapterId: this.adapterId },
@@ -154,6 +157,7 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     }
 
     this.senderNameCache.set(namespacedSenderId, body.sender.name);
+    this.senderExternalIdCache.set(namespacedSenderId, body.sender.externalId);
 
     return {
       messageId: namespacedMessageId,
@@ -246,8 +250,17 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     await this.postCallback("/agent-selection", callbackBody);
   }
 
-  async getUserEmail(_userId: string): Promise<string | null> {
-    return null;
+  async getUserEmail(namespacedSenderId: string): Promise<string | null> {
+    const externalId = this.senderExternalIdCache.get(namespacedSenderId);
+    if (!externalId) return null;
+    const mapping =
+      await ChatOpsExternalIdMappingModel.findByExternalId(
+        this.adapterId,
+        externalId,
+      );
+    if (!mapping) return null;
+    const user = await UserModel.getById(mapping.userId);
+    return user?.email ?? null;
   }
 
   async getUserName(userId: string): Promise<string | null> {

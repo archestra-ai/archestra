@@ -7,7 +7,7 @@ const logger = P({ level: 'silent' })
 
 export interface Sender {
   externalId: string
-  email: string
+  email?: string
   name: string
 }
 
@@ -126,21 +126,22 @@ export function normalizeBaileysMessage(params: {
     message?: unknown
     pushName?: string | null
   }
-  senderEmail: string
+  senderEmail?: string
+  senderExternalId?: string
   text: string
 }): SendMessageParams {
-  const { msg, senderEmail, text } = params
+  const { msg, senderEmail, senderExternalId, text } = params
   const jid = msg.key.remoteJid ?? ''
   const messageId = msg.key.id ?? ''
   const isDm = !jid.includes('@g.us')
   const channelKind: Channel['kind'] = isDm ? 'dm' : 'channel'
-  const senderName = msg.pushName ?? senderEmail
+  const senderName = msg.pushName ?? senderEmail ?? ''
 
   return {
     messageId,
     sender: {
-      externalId: jid.split('@')[0],
-      email: senderEmail,
+      externalId: senderExternalId ?? jid.split('@')[0],
+      ...(senderEmail && { email: senderEmail }),
       name: senderName,
     },
     channel: {
@@ -239,16 +240,23 @@ export class GenericClient {
     })
   }
 
-  async listAgents(senderEmail?: string, isDm?: boolean): Promise<AgentOption[]> {
+  async listAgents(params?: {
+    senderEmail?: string
+    senderExternalId?: string
+    isDm?: boolean
+  }): Promise<AgentOption[]> {
     const url = new URL(
       `/api/webhooks/chatops/generic/${this.adapterId}/agents`,
       this.baseUrl,
     )
-    if (senderEmail) {
-      url.searchParams.set('senderEmail', senderEmail)
+    if (params?.senderEmail) {
+      url.searchParams.set('senderEmail', params.senderEmail)
     }
-    if (isDm !== undefined) {
-      url.searchParams.set('isDm', String(isDm))
+    if (params?.senderExternalId) {
+      url.searchParams.set('senderExternalId', params.senderExternalId)
+    }
+    if (params?.isDm !== undefined) {
+      url.searchParams.set('isDm', String(params.isDm))
     }
 
     try {

@@ -13,6 +13,7 @@ export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
+export { default as chatopsExternalIdMappingTable } from "./chatops-external-id-mapping";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
 export { default as connectorRunsTable } from "./connector-run";

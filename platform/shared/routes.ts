@@ -422,6 +422,9 @@ export const RouteId = {
   GenericWebhookInteractive: "genericWebhookInteractive",
   GenericWebhookChannelsSync: "genericWebhookChannelsSync",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
+  ListChatOpsExternalIdMappings: "listChatOpsExternalIdMappings",
+  CreateChatOpsExternalIdMapping: "createChatOpsExternalIdMapping",
+  DeleteChatOpsExternalIdMapping: "deleteChatOpsExternalIdMapping",
 
   // Knowledge Base Routes
   GetKnowledgeBases: "getKnowledgeBases",

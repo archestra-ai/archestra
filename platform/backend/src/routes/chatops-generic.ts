@@ -8,6 +8,7 @@ import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import { ApiError, type BundledChatOpsAdapterId } from "@/types";
+import { ChatOpsExternalIdMappingModel, UserModel } from "@/models";
 import {
   GenericMessageEventRequestSchema,
   GenericInteractiveEventRequestSchema,
@@ -262,6 +263,7 @@ const chatopsGenericRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         querystring: z.object({
           senderEmail: z.string().email().optional(),
+          senderExternalId: z.string().min(1).max(512).optional(),
           isDm: z.enum(["true", "false"]).optional(),
         }),
         response: {
@@ -282,8 +284,22 @@ const chatopsGenericRoutes: FastifyPluginAsyncZod = async (fastify) => {
       resolveAdapterAndProvider(adapterId);
       await checkRateLimit(request.ip || "unknown", `${adapterId}-agents`);
       const isDm = request.query.isDm === "true";
+      let senderEmail = request.query.senderEmail;
+      if (!senderEmail && request.query.senderExternalId) {
+        const mapping = await ChatOpsExternalIdMappingModel.findByExternalId(
+          adapterId,
+          request.query.senderExternalId,
+        );
+        if (mapping) {
+          const user = await UserModel.getById(mapping.userId);
+          senderEmail = user?.email;
+        }
+      }
+      if (request.query.senderExternalId && !senderEmail) {
+        return reply.send({ agents: [] });
+      }
       const agents = await chatOpsManager.getAccessibleChatopsAgents({
-        senderEmail: request.query.senderEmail,
+        senderEmail,
         isDm,
       });
       return reply.send({ agents });

@@ -977,6 +977,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },
+  [RouteId.ListChatOpsExternalIdMappings]: {
+    member: ["read"],
+  },
+  [RouteId.CreateChatOpsExternalIdMapping]: {
+    member: ["update"],
+  },
+  [RouteId.DeleteChatOpsExternalIdMapping]: {
+    member: ["update"],
+  },
   // Schedule Trigger Routes
   [RouteId.GetScheduleTriggers]: {
     scheduledTask: ["read"],

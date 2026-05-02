@@ -11,6 +11,8 @@ const {
   handleInteractiveSelectionMock,
   isRateLimitedMock,
   getAccessibleChatopsAgentsMock,
+  findByExternalIdMock,
+  getUserByIdMock,
 } = vi.hoisted(() => ({
   getCatalogEntryMock: vi.fn(),
   getSummaryMock: vi.fn(),
@@ -18,6 +20,8 @@ const {
   handleInteractiveSelectionMock: vi.fn(),
   isRateLimitedMock: vi.fn().mockResolvedValue(false),
   getAccessibleChatopsAgentsMock: vi.fn().mockResolvedValue([]),
+  findByExternalIdMock: vi.fn().mockResolvedValue(null),
+  getUserByIdMock: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock(
@@ -46,6 +50,15 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
 
 vi.mock("@/agents/utils", () => ({
   isRateLimited: isRateLimitedMock,
+}));
+
+vi.mock("@/models", () => ({
+  ChatOpsExternalIdMappingModel: {
+    findByExternalId: findByExternalIdMock,
+  },
+  UserModel: {
+    getById: getUserByIdMock,
+  },
 }));
 
 function setupRunningAdapter(adapterId = "whatsapp") {
@@ -435,6 +448,85 @@ describe("ChatOps generic webhook routes", () => {
     });
 
     expect(response.statusCode).toBe(429);
+
+    await app.close();
+  });
+
+  test("GET /agents resolves senderExternalId to senderEmail via mapping", async () => {
+    setupRunningAdapter();
+    findByExternalIdMock.mockResolvedValueOnce({
+      id: "mapping-1",
+      adapterId: "whatsapp",
+      externalId: "79123456789@s.whatsapp.net",
+      userId: "user-1",
+    });
+    getUserByIdMock.mockResolvedValueOnce({ id: "user-1", email: "alice@example.com" });
+    getAccessibleChatopsAgentsMock.mockResolvedValueOnce([
+      { id: "agent-1", name: "Agent Alpha" },
+    ]);
+
+    const app = createFastifyInstance();
+    await app.register(chatopsGenericRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/webhooks/chatops/generic/whatsapp/agents?senderExternalId=79123456789@s.whatsapp.net&isDm=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      agents: [{ id: "agent-1", name: "Agent Alpha" }],
+    });
+    expect(findByExternalIdMock).toHaveBeenCalledWith(
+      "whatsapp",
+      "79123456789@s.whatsapp.net",
+    );
+    expect(getUserByIdMock).toHaveBeenCalledWith("user-1");
+    expect(getAccessibleChatopsAgentsMock).toHaveBeenCalledWith({
+      senderEmail: "alice@example.com",
+      isDm: true,
+    });
+
+    await app.close();
+  });
+
+  test("GET /agents returns empty agents when senderExternalId mapping not found", async () => {
+    setupRunningAdapter();
+    findByExternalIdMock.mockResolvedValueOnce(null);
+
+    const app = createFastifyInstance();
+    await app.register(chatopsGenericRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/webhooks/chatops/generic/whatsapp/agents?senderExternalId=unknown@s.whatsapp.net",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ agents: [] });
+    expect(getAccessibleChatopsAgentsMock).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+
+  test("GET /agents prefers senderEmail over senderExternalId when both provided", async () => {
+    setupRunningAdapter();
+    getAccessibleChatopsAgentsMock.mockResolvedValueOnce([]);
+
+    const app = createFastifyInstance();
+    await app.register(chatopsGenericRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/webhooks/chatops/generic/whatsapp/agents?senderEmail=direct@example.com&senderExternalId=79123456789@s.whatsapp.net",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(findByExternalIdMock).not.toHaveBeenCalled();
+    expect(getAccessibleChatopsAgentsMock).toHaveBeenCalledWith({
+      senderEmail: "direct@example.com",
+      isDm: false,
+    });
 
     await app.close();
   });

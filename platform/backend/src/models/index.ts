@@ -11,6 +11,7 @@ export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
+export { default as ChatOpsExternalIdMappingModel } from "./chatops-external-id-mapping";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ChatOpsThreadAgentOverrideModel } from "./chatops-thread-agent-override";

@@ -97,6 +97,7 @@ interface TestFixtures {
   makeOAuthClient: typeof makeOAuthClient;
   makeOAuthAccessToken: typeof makeOAuthAccessToken;
   makeOAuthRefreshToken: typeof makeOAuthRefreshToken;
+  makeExternalIdMapping: typeof makeExternalIdMapping;
   seedAndAssignArchestraTools: typeof seedAndAssignArchestraTools;
 }
 
@@ -1024,6 +1025,33 @@ async function makeConnectorRun(
  * Creates the Archestra catalog entry if it doesn't exist, then seeds tools.
  * This is useful for tests that need Archestra tools to be available.
  */
+async function makeExternalIdMapping(
+  overrides: Partial<{
+    id: string;
+    adapterId: string;
+    externalId: string;
+    userId: string;
+  }> = {},
+) {
+  let userId = overrides.userId;
+  if (!userId) {
+    const user = await makeUser();
+    userId = user.id;
+  }
+
+  const [mapping] = await db
+    .insert(schema.chatopsExternalIdMappingTable)
+    .values({
+      id: overrides.id ?? crypto.randomUUID(),
+      adapterId: overrides.adapterId ?? "whatsapp",
+      externalId:
+        overrides.externalId ?? `ext-${crypto.randomUUID().substring(0, 8)}`,
+      userId,
+    })
+    .returning();
+  return mapping;
+}
+
 async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
   // Create Archestra catalog entry if it doesn't exist
   const existing = await InternalMcpCatalogModel.findById(
@@ -1143,6 +1171,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeOAuthRefreshToken: async ({}, use) => {
     await use(makeOAuthRefreshToken);
+  },
+  makeExternalIdMapping: async ({}, use) => {
+    await use(makeExternalIdMapping);
   },
   seedAndAssignArchestraTools: async ({}, use) => {
     await use(seedAndAssignArchestraTools);

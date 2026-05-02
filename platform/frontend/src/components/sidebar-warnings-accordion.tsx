@@ -70,7 +70,7 @@ export function SidebarWarningsAccordion() {
   const isCollapsed = sidebarState === "collapsed";
 
   return (
-    <SidebarGroup className="py-0 group-data-[collapsible=icon]:p-0">
+    <SidebarGroup className="p-0 ">
       <SidebarGroupContent>
         <SidebarMenu>
           {isCollapsed ? (
@@ -82,9 +82,13 @@ export function SidebarWarningsAccordion() {
                     <span>Security warnings</span>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="center">
+                <DropdownMenuContent side="right" align="end">
                   {warnings.map((w) => (
-                    <DropdownMenuItem asChild key={w.label}>
+                    <DropdownMenuItem
+                      asChild
+                      key={w.label}
+                      className="cursor-pointer"
+                    >
                       <Link href={w.href}>{w.label}</Link>
                     </DropdownMenuItem>
                   ))}

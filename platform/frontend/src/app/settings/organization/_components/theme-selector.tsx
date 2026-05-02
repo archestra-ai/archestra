@@ -17,10 +17,6 @@ export function ThemeSelector({
   selectedTheme,
   onThemeSelect,
 }: ThemeSelectorProps) {
-  function handleThemeSelect(themeMetadata: ThemeMetadata) {
-    onThemeSelect(themeMetadata.id);
-  }
-
   return (
     <Card>
       <SettingsCardHeader
@@ -29,18 +25,18 @@ export function ThemeSelector({
       />
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {themes.map((themeItem) => (
-            <div key={themeItem.id} className="flex-1">
+          {themes.map((theme) => (
+            <div key={theme.id} className="flex-1">
               <WithPermissions
                 permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
-                key={themeItem.id}
+                key={theme.id}
               >
                 {({ hasPermission }) => (
                   <ThemeOption
-                    theme={themeItem}
-                    isSelected={selectedTheme === themeItem.id}
-                    onClick={() => handleThemeSelect(themeItem)}
+                    theme={theme}
+                    isSelected={selectedTheme === theme.id}
+                    onClick={() => onThemeSelect(theme.id)}
                     disabled={!hasPermission}
                   />
                 )}

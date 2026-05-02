@@ -411,16 +411,13 @@ describe("mcp-reinstall", () => {
 
       test("returns true when a required header userConfig field is ADDED", () => {
         const oldConfig = createLocalCatalog([], {});
-        const newConfig = createLocalCatalog(
-          [],
-          {
-            db_url: {
-              type: "string",
-              required: true,
-              headerName: "x-db-url",
-            },
+        const newConfig = createLocalCatalog([], {
+          db_url: {
+            type: "string",
+            required: true,
+            headerName: "x-db-url",
           },
-        );
+        });
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
@@ -429,16 +426,13 @@ describe("mcp-reinstall", () => {
 
       test("returns false when an OPTIONAL userConfig field is added", () => {
         const oldConfig = createLocalCatalog([], {});
-        const newConfig = createLocalCatalog(
-          [],
-          {
-            tenant_id: {
-              type: "string",
-              required: false,
-              headerName: "x-tenant-id",
-            },
+        const newConfig = createLocalCatalog([], {
+          tenant_id: {
+            type: "string",
+            required: false,
+            headerName: "x-tenant-id",
           },
-        );
+        });
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 

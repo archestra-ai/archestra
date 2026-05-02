@@ -5256,6 +5256,7 @@ export type UserConfigFieldInput = {
     min?: number;
     max?: number;
     headerName?: string;
+    valuePrefix?: string;
 };
 
 export type OpenAiChatCompletionRequest = {
@@ -10510,6 +10511,7 @@ export type UserConfigField = {
     min?: number;
     max?: number;
     headerName?: string;
+    valuePrefix?: string;
 };
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {

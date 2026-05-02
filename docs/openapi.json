@@ -16814,6 +16814,9 @@
           },
           "headerName": {
             "type": "string"
+          },
+          "valuePrefix": {
+            "type": "string"
           }
         },
         "required": [
@@ -34396,6 +34399,9 @@
             "type": "number"
           },
           "headerName": {
+            "type": "string"
+          },
+          "valuePrefix": {
             "type": "string"
           }
         },

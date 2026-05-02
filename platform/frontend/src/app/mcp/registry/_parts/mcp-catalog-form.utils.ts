@@ -269,6 +269,16 @@ export function transformCatalogItemToFormValues(
     item.name.includes("github")
   ) {
     authMethod = "bearer";
+  } else if (
+    Object.entries(item.userConfig ?? {}).some(
+      ([fieldName, config]) =>
+        fieldName !== "access_token" &&
+        fieldName !== "raw_access_token" &&
+        (config as { valuePrefix?: string } | undefined)?.valuePrefix ===
+          "Bearer ",
+    )
+  ) {
+    authMethod = "auth_header";
   }
 
   // Check if OAuth client_secret is a BYOS vault reference
@@ -430,6 +440,7 @@ export function transformCatalogItemToFormValues(
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
       description: config.description ?? "",
+      includeBearerPrefix: config.valuePrefix === "Bearer ",
     }));
 
   return {
@@ -437,6 +448,7 @@ export function transformCatalogItemToFormValues(
     description: item.description || "",
     icon: item.icon ?? null,
     serverType: item.serverType as "remote" | "local",
+    multitenant: item.serverType === "local" && authMethod !== "none",
     serverUrl: item.serverUrl || "",
     authMethod,
     includeBearerPrefix,
@@ -689,6 +701,7 @@ export function transformExternalCatalogToFormValues(
     description: server.description || "",
     icon: server.icon ?? null,
     serverType: server.server.type as "remote" | "local",
+    multitenant: server.server.type === "local" && authMethod !== "none",
     serverUrl: server.server.type === "remote" ? server.server.url : "",
     authMethod,
     includeBearerPrefix,
@@ -708,6 +721,7 @@ export function transformExternalCatalogToFormValues(
         required: config.required ?? false,
         value: typeof config.default === "string" ? config.default : undefined,
         description: config.description ?? "",
+        includeBearerPrefix: config.valuePrefix === "Bearer ",
       })),
     oauthConfig: oauthConfig ?? {
       client_id: "",
@@ -781,9 +795,13 @@ function buildStaticHeaderUserConfig(
       default:
         !header.promptOnInstallation && header.value ? header.value : undefined,
       description:
-        header.description || `Additional header sent as ${header.headerName}`,
+        header.description ||
+        (header.includeBearerPrefix
+          ? `Sent as ${header.headerName} with a "Bearer " prefix`
+          : `Sent as ${header.headerName}`),
       sensitive: false,
       headerName: header.headerName,
+      valuePrefix: header.includeBearerPrefix ? "Bearer " : undefined,
     };
   }
 
@@ -830,6 +848,7 @@ function getHeaderMappedUserConfigEntries(
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     description?: string;
+    valuePrefix?: string;
   }
 > {
   return Object.fromEntries(
@@ -847,6 +866,7 @@ function getHeaderMappedUserConfigEntries(
           required?: boolean;
           default?: string | number | boolean | Array<string>;
           description?: string;
+          valuePrefix?: string;
         };
         return [
           fieldName,
@@ -857,6 +877,7 @@ function getHeaderMappedUserConfigEntries(
             required: userConfigField.required,
             default: userConfigField.default,
             description: userConfigField.description,
+            valuePrefix: userConfigField.valuePrefix,
           },
         ];
       }),

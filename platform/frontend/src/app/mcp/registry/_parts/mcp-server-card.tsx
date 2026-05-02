@@ -290,9 +290,6 @@ export function McpServerCard({
     : null;
   const isDeploymentFailed = installedDeploymentStatus?.state === "failed";
 
-  const hasError = installedServer?.localInstallationStatus === "error";
-  const errorMessage =
-    installedServer?.localInstallationError || installedDeploymentStatus?.error;
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
   // Check for OAuth refresh errors on any credential the user can see
@@ -403,13 +400,39 @@ export function McpServerCard({
 
   const toolsCount = tools?.length ?? 0;
 
+  const showAuthorAvatar =
+    item.scope === "personal" && Boolean(item.authorName);
+
   const hasCompactInfoContent =
+    showAuthorAvatar ||
     toolsCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
 
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
+      {showAuthorAvatar && (
+        <>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Avatar className="size-6 border-2 border-background">
+                  <AvatarFallback className="text-[10px]">
+                    {item.authorName?.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              </TooltipTrigger>
+              <TooltipContent>Author: {item.authorName}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {(toolsCount > 0 ||
+            (variant === "local" && deploymentServerIds.length > 0) ||
+            (!isBuiltinVariant &&
+              (connectionAvatars.length > 0 || hasOrgConnection))) && (
+            <div className="h-4 w-px bg-border" />
+          )}
+        </>
+      )}
       {toolsCount > 0 && (
         <>
           <div className="flex items-center gap-1">
@@ -462,7 +485,7 @@ export function McpServerCard({
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              Installed organization-wide. Manage connections to review.
+              Installed organization-wide. Manage credentials to review.
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -522,7 +545,7 @@ export function McpServerCard({
                     </AvatarFallback>
                   </Avatar>
                 </TooltipTrigger>
-                <TooltipContent>Manage connections</TooltipContent>
+                <TooltipContent>Manage credentials</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </AvatarGroup>
@@ -546,8 +569,6 @@ export function McpServerCard({
     </div>
   ) : null;
 
-  const shouldShowErrorBanner = hasError || isDeploymentFailed;
-
   const remoteCardContent = (
     <>
       <div className="flex flex-wrap gap-2">
@@ -561,7 +582,7 @@ export function McpServerCard({
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Reconnect
+            Reinstall
           </PermissionButton>
         )}
         {!isInstalling &&
@@ -579,7 +600,7 @@ export function McpServerCard({
                 }
               }}
             >
-              Disconnect
+              Uninstall
             </Button>
           ) : (
             <PermissionButton
@@ -590,7 +611,7 @@ export function McpServerCard({
               className="flex-1"
             >
               <User className="mr-2 h-4 w-4" />
-              Connect
+              Install
             </PermissionButton>
           ))}
       </div>
@@ -806,57 +827,26 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
-        {variant === "local" && (isInstalling || shouldShowErrorBanner) && (
+        {variant === "local" && isInstalling && (
           <div className="bg-muted/50 rounded-md overflow-hidden">
-            {isInstalling ? (
-              <div className="px-3 py-2">
-                <InstallationProgress
-                  status={
-                    installationStatus === "error"
-                      ? null
-                      : (installationStatus ?? null)
+            <div className="px-3 py-2">
+              <InstallationProgress
+                status={
+                  installationStatus === "error"
+                    ? null
+                    : (installationStatus ?? null)
+                }
+                serverId={installedServer?.id}
+                deploymentStatuses={deploymentStatuses}
+                onMoreDetails={() => {
+                  setSettingsInitialPage("debug-logs");
+                  if (installedServer?.id) {
+                    setLogsInitialServerId(installedServer.id);
                   }
-                  serverId={installedServer?.id}
-                  deploymentStatuses={deploymentStatuses}
-                  onMoreDetails={() => {
-                    setSettingsInitialPage("debug-logs");
-                    if (installedServer?.id) {
-                      setLogsInitialServerId(installedServer.id);
-                    }
-                    setSettingsDialogOpen(true);
-                  }}
-                />
-              </div>
-            ) : isCurrentUserAuthenticated &&
-              shouldShowErrorBanner &&
-              errorMessage ? (
-              <div className="flex items-center justify-between px-3 py-2 text-sm">
-                <span
-                  className="text-destructive"
-                  data-testid={`${E2eTestId.McpServerError}-${item.name}`}
-                >
-                  Failed to start MCP server,{" "}
-                  <button
-                    type="button"
-                    onClick={() => openSettingsPage("debug-logs")}
-                    className="text-primary hover:underline cursor-pointer"
-                    data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
-                  >
-                    view the logs
-                  </button>{" "}
-                  or{" "}
-                  <button
-                    type="button"
-                    onClick={() => openSettingsPage("configuration")}
-                    className="text-primary hover:underline cursor-pointer"
-                    data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
-                  >
-                    edit your config
-                  </button>
-                  .
-                </span>
-              </div>
-            ) : null}
+                  setSettingsDialogOpen(true);
+                }}
+              />
+            </div>
           </div>
         )}
         <div className="mt-auto flex flex-col gap-4">

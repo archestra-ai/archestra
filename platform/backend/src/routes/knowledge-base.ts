@@ -61,7 +61,13 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   assignedAgents: z.array(AssignedAgentSummarySchema),
 });
 
-const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.extend({
+const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
+  content: true,
+}).extend({
+  connectorType: ConnectorTypeSchema,
+});
+
+const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.extend({
   connectorType: ConnectorTypeSchema,
 });
 
@@ -251,6 +257,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [data, total] = await Promise.all([
         KbDocumentModel.findListItemsByKnowledgeBase({
           knowledgeBaseId: id,
+          organizationId,
           limit,
           offset,
           search,
@@ -258,6 +265,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         KbDocumentModel.countByKnowledgeBaseWithSearch({
           knowledgeBaseId: id,
+          organizationId,
           search,
           connectorId,
         }),
@@ -267,6 +275,37 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data,
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
+    },
+  );
+
+  fastify.get(
+    "/api/knowledge-bases/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.GetKnowledgeBaseDocument,
+        description: "Get a single knowledge base document",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.string(), docId: z.string() }),
+        response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndKnowledgeBase({
+        documentId: docId,
+        knowledgeBaseId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      return reply.send(existing);
     },
   );
 
@@ -347,11 +386,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const existing = await KbDocumentModel.findByIdAndKnowledgeBase({
+      const existing = await KbDocumentModel.findListItemByIdAndKnowledgeBase({
         documentId: docId,
         knowledgeBaseId: id,
+        organizationId,
       });
-      if (!existing || existing.organizationId !== organizationId) {
+      if (!existing) {
         throw new ApiError(404, "Document not found");
       }
 

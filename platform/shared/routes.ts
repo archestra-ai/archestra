@@ -412,6 +412,7 @@ export const RouteId = {
   CreateKnowledgeBase: "createKnowledgeBase",
   GetKnowledgeBase: "getKnowledgeBase",
   GetKnowledgeBaseDocuments: "getKnowledgeBaseDocuments",
+  GetKnowledgeBaseDocument: "getKnowledgeBaseDocument",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
   DeleteKnowledgeBaseDocument: "deleteKnowledgeBaseDocument",

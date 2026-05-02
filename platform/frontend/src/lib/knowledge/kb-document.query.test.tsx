@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetKnowledgeBaseDocuments = vi.fn();
+const mockGetKnowledgeBaseDocument = vi.fn();
 const mockDeleteKnowledgeBaseDocument = vi.fn();
 const mockHandleApiError = vi.fn();
 const mockToastSuccess = vi.fn();
@@ -11,6 +12,8 @@ vi.mock("@shared", () => ({
   archestraApiSdk: {
     getKnowledgeBaseDocuments: (...args: unknown[]) =>
       mockGetKnowledgeBaseDocuments(...args),
+    getKnowledgeBaseDocument: (...args: unknown[]) =>
+      mockGetKnowledgeBaseDocument(...args),
     deleteKnowledgeBaseDocument: (...args: unknown[]) =>
       mockDeleteKnowledgeBaseDocument(...args),
   },
@@ -28,6 +31,7 @@ vi.mock("sonner", () => ({
 
 import {
   useDeleteKnowledgeBaseDocument,
+  useKnowledgeBaseDocument,
   useKnowledgeBaseDocuments,
 } from "./kb-document.query";
 
@@ -53,7 +57,6 @@ describe("kb-document query hooks", () => {
             organizationId: "org-1",
             sourceId: "source-1",
             title: "Budget Plan",
-            content: "content",
             contentHash: "hash",
             sourceUrl: "https://example.com",
             acl: ["org:*"],
@@ -101,6 +104,49 @@ describe("kb-document query hooks", () => {
         offset: 0,
         search: "budget",
       },
+    });
+  });
+
+  it("fetches a knowledge base document detail", async () => {
+    mockGetKnowledgeBaseDocument.mockResolvedValue({
+      data: {
+        id: "doc-1",
+        connectorId: "connector-1",
+        connectorType: "jira",
+        organizationId: "org-1",
+        sourceId: "source-1",
+        title: "Budget Plan",
+        content: "full content",
+        contentHash: "hash",
+        sourceUrl: "https://example.com",
+        acl: ["org:*"],
+        metadata: {},
+        embeddingStatus: "completed",
+        chunkCount: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      error: null,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(
+      () =>
+        useKnowledgeBaseDocument({
+          knowledgeBaseId: "kb-1",
+          docId: "doc-1",
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.content).toBe("full content");
+    });
+
+    expect(mockGetKnowledgeBaseDocument).toHaveBeenCalledWith({
+      path: { id: "kb-1", docId: "doc-1" },
     });
   });
 

@@ -419,7 +419,7 @@ describe("KbDocumentModel", () => {
   });
 
   describe("countByKnowledgeBase", () => {
-    test("returns the count of documents in a knowledge base", async ({
+    test("counts documents for a knowledge base", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -427,21 +427,32 @@ describe("KbDocumentModel", () => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
 
-      const count = await KbDocumentModel.countByKnowledgeBase(kb.id);
-      expect(count).toBe(2);
+      const _doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          title: "My Document",
+          content: "Document content here",
+        }),
+      );
+
+      const count = await KbDocumentModel.countByKnowledgeBase({
+        knowledgeBaseId: kb.id,
+        organizationId: org.id,
+      });
+      expect(count).toBe(1);
     });
 
-    test("returns 0 when no documents exist", async ({
+    test("returns 0 when knowledge base has no documents", async ({
       makeOrganization,
       makeKnowledgeBase,
     }) => {
       const org = await makeOrganization();
       const kb = await makeKnowledgeBase(org.id);
 
-      const count = await KbDocumentModel.countByKnowledgeBase(kb.id);
+      const count = await KbDocumentModel.countByKnowledgeBase({
+        knowledgeBaseId: kb.id,
+        organizationId: org.id,
+      });
       expect(count).toBe(0);
     });
 
@@ -459,7 +470,10 @@ describe("KbDocumentModel", () => {
       await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
       await KbDocumentModel.create(createDocumentData(connector2.id, org.id));
 
-      const count = await KbDocumentModel.countByKnowledgeBase(kb1.id);
+      const count = await KbDocumentModel.countByKnowledgeBase({
+        knowledgeBaseId: kb1.id,
+        organizationId: org.id,
+      });
       expect(count).toBe(2);
     });
   });

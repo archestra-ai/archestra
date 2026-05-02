@@ -5,8 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
-const { getKnowledgeBaseDocuments, deleteKnowledgeBaseDocument } =
-  archestraApiSdk;
+const {
+  getKnowledgeBaseDocuments,
+  getKnowledgeBaseDocument,
+  deleteKnowledgeBaseDocument,
+} = archestraApiSdk;
 
 type KnowledgeBaseDocumentsQuery = NonNullable<
   archestraApiTypes.GetKnowledgeBaseDocumentsData["query"]
@@ -14,6 +17,9 @@ type KnowledgeBaseDocumentsQuery = NonNullable<
 
 export type KnowledgeBaseDocumentListItem =
   archestraApiTypes.GetKnowledgeBaseDocumentsResponses["200"]["data"][number];
+
+export type KnowledgeBaseDocumentDetail =
+  archestraApiTypes.GetKnowledgeBaseDocumentResponses["200"];
 
 export function useKnowledgeBaseDocuments(params: {
   knowledgeBaseId: string;
@@ -55,6 +61,30 @@ export function useKnowledgeBaseDocuments(params: {
   });
 }
 
+export function useKnowledgeBaseDocument(params: {
+  knowledgeBaseId: string;
+  docId: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["knowledge-base-document", params.knowledgeBaseId, params.docId],
+    queryFn: async () => {
+      const { data, error } = await getKnowledgeBaseDocument({
+        path: { id: params.knowledgeBaseId, docId: params.docId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    enabled:
+      Boolean(params.knowledgeBaseId) &&
+      Boolean(params.docId) &&
+      (params.enabled ?? true),
+  });
+}
+
 export function useDeleteKnowledgeBaseDocument() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -75,6 +105,9 @@ export function useDeleteKnowledgeBaseDocument() {
       if (!data) return;
       queryClient.invalidateQueries({
         queryKey: ["knowledge-base-documents", variables.knowledgeBaseId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["knowledge-base-document", variables.knowledgeBaseId],
       });
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Document deleted successfully");

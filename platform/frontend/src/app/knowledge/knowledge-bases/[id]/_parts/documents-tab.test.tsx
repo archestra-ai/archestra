@@ -32,7 +32,6 @@ const mockDocument = {
   connectorId: "connector-1",
   connectorType: "jira",
   title: "Quarterly Plan",
-  content: "Detailed content preview",
   contentHash: "hash-1",
   sourceUrl: "https://example.com/quarterly-plan",
   acl: ["org:*"],
@@ -43,19 +42,10 @@ const mockDocument = {
   updatedAt: new Date("2026-04-02T00:00:00.000Z").toISOString(),
 };
 
-const mockUntitledDocument = {
-  ...mockDocument,
-  id: "doc-2",
-  title: null,
-  content: null,
-  sourceUrl: null,
-};
-
 const mockLongContentDocument = {
   ...mockDocument,
-  id: "doc-3",
+  id: "doc-2",
   title: "Long Doc",
-  content: "a".repeat(25_000),
 };
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -72,17 +62,29 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 vi.mock("@/lib/knowledge/kb-document.query", () => ({
   useKnowledgeBaseDocuments: () => ({
     data: {
-      data: [mockDocument, mockUntitledDocument, mockLongContentDocument],
+      data: [mockDocument, mockLongContentDocument],
       pagination: {
         currentPage: 1,
         limit: 10,
-        total: 3,
+        total: 2,
         totalPages: 1,
         hasNext: false,
         hasPrev: false,
       },
     },
     isPending: false,
+  }),
+  useKnowledgeBaseDocument: ({ docId }: { docId: string }) => ({
+    data:
+      docId === "doc-2"
+        ? {
+            id: "doc-2",
+            content: "a".repeat(25_000),
+          }
+        : {
+            id: "doc-1",
+            content: "Detailed content preview",
+          },
   }),
   useDeleteKnowledgeBaseDocument: () => ({
     mutateAsync: mockDeleteMutateAsync,
@@ -104,7 +106,7 @@ describe("DocumentsTab", () => {
     render(<DocumentsTab knowledgeBaseId="kb-1" />);
     expect(screen.getByText("Quarterly Plan")).toBeInTheDocument();
     expect(screen.getAllByText("jira").length).toBeGreaterThan(0);
-    expect(screen.getByText("(untitled)")).toBeInTheDocument();
+    expect(screen.getByText("Long Doc")).toBeInTheDocument();
   });
 
   it("opens preview dialog from row action", async () => {

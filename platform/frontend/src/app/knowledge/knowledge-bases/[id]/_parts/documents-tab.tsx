@@ -27,6 +27,7 @@ import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
   useDeleteKnowledgeBaseDocument,
+  useKnowledgeBaseDocument,
   useKnowledgeBaseDocuments,
 } from "@/lib/knowledge/kb-document.query";
 import { formatDate } from "@/lib/utils";
@@ -54,6 +55,12 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
     useState<KnowledgeBaseDocumentListItem | null>(null);
   const [deletingDoc, setDeletingDoc] =
     useState<KnowledgeBaseDocumentListItem | null>(null);
+
+  const { data: previewDocDetail } = useKnowledgeBaseDocument({
+    knowledgeBaseId,
+    docId: selectedPreviewDoc?.id ?? "",
+    enabled: selectedPreviewDoc !== null,
+  });
 
   const { data: documentsResponse, isPending } = useKnowledgeBaseDocuments({
     knowledgeBaseId,
@@ -89,9 +96,9 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
                 event.stopPropagation();
                 setSelectedPreviewDoc(row.original);
               }}
-              title={row.original.title ?? undefined}
+              title={row.original.title}
             >
-              {row.original.title ?? "(untitled)"}
+              {row.original.title}
             </button>
           </div>
         ),
@@ -257,16 +264,17 @@ export function DocumentsTab({ knowledgeBaseId }: { knowledgeBaseId: string }) {
       >
         {selectedPreviewDoc ? (
           <div className="space-y-2">
-            {selectedPreviewDoc.content &&
-            selectedPreviewDoc.content.length > MAX_PREVIEW_CHARS ? (
-              <div className="text-xs text-muted-foreground">
-                Preview truncated to {MAX_PREVIEW_CHARS.toLocaleString()}{" "}
-                characters.
-              </div>
+            {previewDocDetail?.content.length ? (
+              previewDocDetail.content.length > MAX_PREVIEW_CHARS ? (
+                <div className="text-xs text-muted-foreground">
+                  Preview truncated to {MAX_PREVIEW_CHARS.toLocaleString()}{" "}
+                  characters.
+                </div>
+              ) : null
             ) : null}
             <pre className="max-h-[60vh] overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
               <code>
-                {(selectedPreviewDoc.content ?? "").slice(0, MAX_PREVIEW_CHARS)}
+                {(previewDocDetail?.content ?? "").slice(0, MAX_PREVIEW_CHARS)}
               </code>
             </pre>
           </div>

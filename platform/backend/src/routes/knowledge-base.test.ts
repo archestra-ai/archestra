@@ -192,6 +192,7 @@ describe("knowledge base routes", () => {
       };
       expect(body.data).toHaveLength(1);
       expect(body.data[0]).toHaveProperty("connectorType", "jira");
+      expect(body.data[0]).not.toHaveProperty("content");
       expect(body.pagination.total).toBe(2);
       expect(body.pagination.hasNext).toBe(true);
     });
@@ -383,6 +384,7 @@ describe("knowledge base routes", () => {
       expect(body.pagination.total).toBe(1);
       expect(body.data[0]?.title).toBe("Connector A Doc");
       expect(body.data[0]?.connectorId).toBe(connectorA.id);
+      expect(body.data[0]).not.toHaveProperty("content");
     });
 
     test("returns empty list when filtering by connectorId not assigned to the knowledge base", async () => {
@@ -454,6 +456,113 @@ describe("knowledge base routes", () => {
       const response = await app.inject({
         method: "GET",
         url: `/api/knowledge-bases/${crypto.randomUUID()}/documents?limit=10&offset=0`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("GET /api/knowledge-bases/:id/documents/:docId", () => {
+    test("gets a single knowledge base document including content", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Doc Detail KB",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Doc Detail Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://detail.atlassian.net",
+          isCloud: true,
+          projectKey: "DET",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connector.id,
+        kb.id,
+      );
+
+      const doc = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "detail-source-1",
+        connectorId: connector.id,
+        title: "Detail Doc",
+        content: "detail-content",
+        contentHash: "hash-detail",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kb.id}/documents/${doc.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        id: string;
+        content: string;
+        connectorType: string;
+      };
+      expect(body.id).toBe(doc.id);
+      expect(body.content).toBe("detail-content");
+      expect(body.connectorType).toBe("jira");
+    });
+
+    test("returns 404 when document does not belong to the knowledge base", async () => {
+      const kbA = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Detail KB A",
+      });
+      const kbB = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Detail KB B",
+      });
+      const connectorA = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Detail Connector A",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://detail-a.atlassian.net",
+          isCloud: true,
+          projectKey: "DA",
+        },
+      });
+      const connectorB = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Detail Connector B",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://detail-b.atlassian.net",
+          isCloud: true,
+          projectKey: "DB",
+        },
+      });
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connectorA.id,
+        kbA.id,
+      );
+      await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+        connectorB.id,
+        kbB.id,
+      );
+
+      const docInKbB = await KbDocumentModel.create({
+        organizationId,
+        sourceId: "detail-kb-b-doc",
+        connectorId: connectorB.id,
+        title: "KB B Doc",
+        content: "kb-b-content",
+        contentHash: "hash-kb-b",
+        acl: ["org:*"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases/${kbA.id}/documents/${docInKbB.id}`,
       });
 
       expect(response.statusCode).toBe(404);
@@ -1733,6 +1842,11 @@ describe("knowledge base permission configuration", () => {
       knowledgeSource: ["read"],
     });
     expect(
+      requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseDocument],
+    ).toEqual({
+      knowledgeSource: ["read"],
+    });
+    expect(
       requiredEndpointPermissionsMap[RouteId.GetKnowledgeBaseHealth],
     ).toEqual({ knowledgeSource: ["read"] });
 
@@ -1814,6 +1928,7 @@ describe("knowledge base permission configuration", () => {
       RouteId.GetKnowledgeBases,
       RouteId.GetKnowledgeBase,
       RouteId.GetKnowledgeBaseDocuments,
+      RouteId.GetKnowledgeBaseDocument,
       RouteId.GetKnowledgeBaseHealth,
       RouteId.GetConnectors,
       RouteId.GetConnector,

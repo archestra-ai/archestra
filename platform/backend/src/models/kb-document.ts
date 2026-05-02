@@ -12,6 +12,8 @@ type KbDocumentListItem = KbDocument & {
   connectorType: ConnectorType;
 };
 
+type KbDocumentListItemWithoutContent = Omit<KbDocumentListItem, "content">;
+
 class KbDocumentModel {
   static async findById(id: string): Promise<KbDocument | null> {
     const [result] = await db
@@ -87,15 +89,12 @@ class KbDocumentModel {
     return await query;
   }
 
-  static async findListItemsByKnowledgeBase(params: {
+  static async findListItemByIdAndKnowledgeBase(params: {
+    documentId: string;
     knowledgeBaseId: string;
-    limit?: number;
-    offset?: number;
-    search?: string;
-    connectorId?: string;
-  }): Promise<KbDocumentListItem[]> {
-    const normalizedSearch = params.search?.trim();
-    let query = db
+    organizationId: string;
+  }): Promise<KbDocumentListItem | null> {
+    const [result] = await db
       .select({
         id: schema.kbDocumentsTable.id,
         organizationId: schema.kbDocumentsTable.organizationId,
@@ -130,9 +129,74 @@ class KbDocumentModel {
       )
       .where(
         and(
+          eq(schema.kbDocumentsTable.id, params.documentId),
           eq(
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             params.knowledgeBaseId,
+          ),
+          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      )
+      .limit(1);
+
+    return result ?? null;
+  }
+
+  static async findListItemsByKnowledgeBase(params: {
+    knowledgeBaseId: string;
+    organizationId: string;
+    limit?: number;
+    offset?: number;
+    search?: string;
+    connectorId?: string;
+  }): Promise<KbDocumentListItemWithoutContent[]> {
+    const normalizedSearch = params.search?.trim();
+    let query = db
+      .select({
+        id: schema.kbDocumentsTable.id,
+        organizationId: schema.kbDocumentsTable.organizationId,
+        sourceId: schema.kbDocumentsTable.sourceId,
+        connectorId: schema.kbDocumentsTable.connectorId,
+        connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
+        title: schema.kbDocumentsTable.title,
+        contentHash: schema.kbDocumentsTable.contentHash,
+        sourceUrl: schema.kbDocumentsTable.sourceUrl,
+        acl: schema.kbDocumentsTable.acl,
+        metadata: schema.kbDocumentsTable.metadata,
+        embeddingStatus: schema.kbDocumentsTable.embeddingStatus,
+        chunkCount: schema.kbDocumentsTable.chunkCount,
+        createdAt: schema.kbDocumentsTable.createdAt,
+        updatedAt: schema.kbDocumentsTable.updatedAt,
+      })
+      .from(schema.kbDocumentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorAssignmentsTable,
+        eq(
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorsTable.id,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            params.knowledgeBaseId,
+          ),
+          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
           ),
           normalizedSearch
             ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
@@ -211,14 +275,19 @@ class KbDocumentModel {
     return result?.count ?? 0;
   }
 
-  static async countByKnowledgeBase(knowledgeBaseId: string): Promise<number> {
+  static async countByKnowledgeBase(params: {
+    knowledgeBaseId: string;
+    organizationId: string;
+  }): Promise<number> {
     return KbDocumentModel.countByKnowledgeBaseWithSearch({
-      knowledgeBaseId,
+      knowledgeBaseId: params.knowledgeBaseId,
+      organizationId: params.organizationId,
     });
   }
 
   static async countByKnowledgeBaseWithSearch(params: {
     knowledgeBaseId: string;
+    organizationId: string;
     search?: string;
     connectorId?: string;
   }): Promise<number> {
@@ -233,11 +302,23 @@ class KbDocumentModel {
           schema.kbDocumentsTable.connectorId,
         ),
       )
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorsTable.id,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
       .where(
         and(
           eq(
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             params.knowledgeBaseId,
+          ),
+          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
           ),
           normalizedSearch
             ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
@@ -254,6 +335,7 @@ class KbDocumentModel {
   static async findByIdAndKnowledgeBase(params: {
     documentId: string;
     knowledgeBaseId: string;
+    organizationId: string;
   }): Promise<KbDocument | null> {
     const [result] = await db
       .select({
@@ -280,12 +362,24 @@ class KbDocumentModel {
           schema.kbDocumentsTable.connectorId,
         ),
       )
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorsTable.id,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
       .where(
         and(
           eq(schema.kbDocumentsTable.id, params.documentId),
           eq(
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             params.knowledgeBaseId,
+          ),
+          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
           ),
         ),
       )

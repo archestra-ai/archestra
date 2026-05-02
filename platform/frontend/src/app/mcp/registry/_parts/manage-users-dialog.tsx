@@ -498,6 +498,30 @@ function UnifiedConnectionsTable({
     (r) => deploymentStatuses[r.server.id],
   );
 
+  // Multi-tenant catalogs alias one pod across N caller rows. Each row's
+  // K8sDeployment instance tracks its own state independently, so the row
+  // that didn't observe the pod first stays "pending" while the other goes
+  // "failed". Pick a canonical state per podName so all rows agree.
+  const STATE_PRIORITY: Record<string, number> = {
+    failed: 4,
+    running: 3,
+    succeeded: 3,
+    pending: 2,
+    not_created: 1,
+  };
+  const canonicalStateByPod = new Map<string, string>();
+  for (const { server } of rows) {
+    const entry = deploymentStatuses[server.id];
+    if (!entry?.podName) continue;
+    const current = canonicalStateByPod.get(entry.podName);
+    if (
+      !current ||
+      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
+    ) {
+      canonicalStateByPod.set(entry.podName, entry.state);
+    }
+  }
+
   const teamItems =
     onAddForTeam && availableTeamsForShared.length > 0
       ? availableTeamsForShared.map((team) => ({
@@ -665,13 +689,16 @@ function UnifiedConnectionsTable({
                         return <span className="text-muted-foreground">—</span>;
                       }
                       const podName = status.podName;
+                      const effectiveState =
+                        (podName && canonicalStateByPod.get(podName)) ||
+                        status.state;
                       const dot = (
                         <DeploymentStatusDot
                           state={
-                            (status.state === "not_created" ||
-                            status.state === "succeeded"
+                            (effectiveState === "not_created" ||
+                            effectiveState === "succeeded"
                               ? "running"
-                              : status.state) as DeploymentState
+                              : effectiveState) as DeploymentState
                           }
                         />
                       );

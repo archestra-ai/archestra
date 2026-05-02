@@ -215,16 +215,6 @@ export default class K8sDeployment {
   private k8sExec: Exec;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
-
-  /** Catalog-stable deployment name; same across all callers for multi-tenant. */
-  get k8sDeploymentName(): string {
-    return this.deploymentName;
-  }
-
-  /** Last observed pod name (or null if not yet reported). */
-  get podName(): string | null {
-    return this.cachedPodName;
-  }
   private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
   /** Count of consecutive polls where a running deployment appeared unavailable.

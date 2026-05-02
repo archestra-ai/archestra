@@ -321,9 +321,49 @@ export function McpServerCard({
   const deploymentServerIds = (allMcpServers ?? [])
     .filter((s) => s.catalogId === item.id && s.serverType === "local")
     .map((s) => s.id);
+
+  // Multi-tenant catalogs alias one K8s pod across many mcp_server rows.
+  // Each row's K8sDeployment instance reports its own state independently
+  // (one stays "pending" while another flips to "failed"), so before any
+  // summary or per-row dot is computed, canonicalize the state per podName
+  // by picking the highest-priority observation. All rows then agree.
+  const STATE_PRIORITY: Record<string, number> = {
+    failed: 4,
+    running: 3,
+    succeeded: 3,
+    pending: 2,
+    not_created: 1,
+  };
+  const effectiveDeploymentStatuses = (() => {
+    if (!item.multitenant) return deploymentStatuses;
+    const canonicalByPod = new Map<string, string>();
+    for (const id of deploymentServerIds) {
+      const entry = deploymentStatuses[id];
+      if (!entry?.podName) continue;
+      const current = canonicalByPod.get(entry.podName);
+      if (
+        !current ||
+        (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
+      ) {
+        canonicalByPod.set(entry.podName, entry.state);
+      }
+    }
+    if (canonicalByPod.size === 0) return deploymentStatuses;
+    const next: typeof deploymentStatuses = { ...deploymentStatuses };
+    for (const id of deploymentServerIds) {
+      const entry = next[id];
+      if (!entry?.podName) continue;
+      const canonical = canonicalByPod.get(entry.podName);
+      if (canonical && canonical !== entry.state) {
+        next[id] = { ...entry, state: canonical as typeof entry.state };
+      }
+    }
+    return next;
+  })();
+
   const deploymentSummary = computeDeploymentStatusSummary(
     deploymentServerIds,
-    deploymentStatuses,
+    effectiveDeploymentStatuses,
   );
 
   const chatButton =
@@ -496,7 +536,7 @@ export function McpServerCard({
             {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
               const connDeployment = computeDeploymentStatusSummary(
                 entry.serverIds,
-                deploymentStatuses,
+                effectiveDeploymentStatuses,
               );
               const borderClass = connDeployment
                 ? {

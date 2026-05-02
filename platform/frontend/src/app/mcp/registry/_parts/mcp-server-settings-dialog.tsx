@@ -384,7 +384,28 @@ export function McpServerSettingsDialog({
                     <McpLogsContent
                       isActive={open && isDebugPage}
                       serverName={item.label || item.name}
-                      installs={installs}
+                      installs={
+                        item.multitenant
+                          ? // Multi-tenant catalogs alias one pod; pick the
+                            // install whose deployment status is reported,
+                            // otherwise the first row, and label by catalog.
+                            (() => {
+                              const reporting =
+                                installs.find(
+                                  (i) => deploymentStatuses[i.id]?.podName,
+                                ) ?? installs[0];
+                              return [
+                                {
+                                  ...reporting,
+                                  name: item.label || item.name,
+                                  ownerEmail: null,
+                                  teamDetails: null,
+                                  scope: null,
+                                },
+                              ];
+                            })()
+                          : installs
+                      }
                       deploymentStatuses={deploymentStatuses}
                       hideHeader
                       hideTabBar

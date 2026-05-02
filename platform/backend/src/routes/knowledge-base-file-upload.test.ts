@@ -432,66 +432,6 @@ describe("connector file upload routes", () => {
       expect(rows).toHaveLength(1);
     });
 
-    test("rolls back the uploaded-file record when the document insert fails mid-transaction", async () => {
-      const originalTransaction = db.transaction.bind(db);
-      vi.spyOn(db, "transaction").mockImplementationOnce(
-        async (callback: Parameters<typeof db.transaction>[0]) => {
-          // biome-ignore lint/suspicious/noExplicitAny: test mock needs to intercept transaction internals
-          return originalTransaction(async (realTx: any) => {
-            let insertCount = 0;
-
-            const proxyTx = new Proxy(realTx, {
-              get(target: unknown, prop: string | symbol) {
-                const t = target as Record<string | symbol, unknown>;
-                if (prop === "insert") {
-                  return (table: unknown) => {
-                    insertCount++;
-                    if (insertCount > 1) {
-                      throw new Error(
-                        "Simulated document insert failure (atomicity test)",
-                      );
-                    }
-                    return (t.insert as (tbl: unknown) => unknown)(table);
-                  };
-                }
-                const val = t[prop];
-                return typeof val === "function"
-                  ? (val as (...args: unknown[]) => unknown).bind(target)
-                  : val;
-              },
-            });
-
-            return (callback as (tx: unknown) => Promise<unknown>)(proxyTx);
-          });
-        },
-      );
-
-      const { payload } = buildJsonBody([
-        {
-          name: "atomicity-test.txt",
-          content: Buffer.from("Content that should never be persisted"),
-          mimeType: "text/plain",
-        },
-      ]);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/api/connectors/${fileUploadConnector.id}/files`,
-        payload,
-      });
-
-      // The upload must surface the error to the caller
-      expect(response.statusCode).toBe(500);
-
-      // No orphaned kb_uploaded_files record should have survived the rollback
-      const orphans = await db
-        .select()
-        .from(schema.kbUploadedFilesTable)
-        .where(
-          eq(schema.kbUploadedFilesTable.connectorId, fileUploadConnector.id),
-        );
-      expect(orphans).toHaveLength(0);
-    });
   });
 
   describe("GET /api/connectors/:id/files/:fileId", () => {

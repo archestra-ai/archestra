@@ -261,6 +261,7 @@ export function McpCatalogForm({
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
+  const isTenancyLocked = Boolean(initialValues);
   const selectedIdentityProviderId = form.watch(
     "enterpriseManagedConfig.identityProviderId",
   );
@@ -417,7 +418,38 @@ export function McpCatalogForm({
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
   // Report dirty state to parent (includes label changes)
-  const { isDirty: isFormDirty } = form.formState;
+  const { isDirty: isFormDirty, dirtyFields } = form.formState;
+
+  // Granular dirty flags used to show contextual reinstall hints in edit mode.
+  // Editing any of these on a deployed catalog item invalidates existing install
+  // credentials or redeploys the pod — admins must reinstall + re-enter creds.
+  const isNameDirty = mode === "edit" && Boolean(dirtyFields.name);
+  const isServerUrlDirty = mode === "edit" && Boolean(dirtyFields.serverUrl);
+  const isAuthDirty =
+    mode === "edit" &&
+    (Boolean(dirtyFields.authMethod) ||
+      Boolean(dirtyFields.authHeaderName) ||
+      Boolean(dirtyFields.includeBearerPrefix) ||
+      Boolean(dirtyFields.oauthConfig) ||
+      Boolean(dirtyFields.enterpriseManagedConfig));
+  const isEnvDirty =
+    mode === "edit" && Boolean(dirtyFields.localConfig?.environment);
+  const isHeadersDirty =
+    mode === "edit" && Boolean(dirtyFields.additionalHeaders);
+  // Per-field deployment dirty flags. Each of these maps to a field in the
+  // backend's `localExecutionConfigChanged` heuristic
+  // (backend/src/services/mcp-reinstall.ts).
+  const localConfigDirty = dirtyFields.localConfig as
+    | Record<string, unknown>
+    | undefined;
+  const deploymentField = (key: string) =>
+    mode === "edit" && Boolean(localConfigDirty?.[key]);
+  const isCommandDirty = deploymentField("command");
+  const isArgumentsDirty = deploymentField("arguments");
+  const isDockerImageDirty = deploymentField("dockerImage");
+  const isTransportTypeDirty = deploymentField("transportType");
+  const isHttpPortDirty = deploymentField("httpPort");
+  const isHttpPathDirty = deploymentField("httpPath");
   const areLabelsChanged = useMemo(() => {
     if (labels.length !== labelsBaseline.length) return true;
     return labels.some(
@@ -607,18 +639,6 @@ export function McpCatalogForm({
         <div
           className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
         >
-          {mode === "edit" && (
-            <Alert variant="info">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Changes to {nameDisabled ? "" : "Name, "}Server URL,
-                Authentication, prompted Environment Variables, or Headers will
-                require existing installations to be reinstalled (and their
-                credentials updated) before the new values take effect.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {catalogButton}
 
           <div className="space-y-4">
@@ -639,6 +659,7 @@ export function McpCatalogForm({
                   <FormItem className="flex-1">
                     <FormLabel>
                       Name <span className="text-destructive">*</span>
+                      <ReinstallHint show={isNameDirty} />
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -783,40 +804,70 @@ export function McpCatalogForm({
             {currentServerType === "local" && (
               <div className="space-y-2">
                 <Label>Tenancy</Label>
-                <div className="flex rounded-lg border border-border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => handleMultitenantChange(false)}
-                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
-                      !isMultitenant
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <span>Single-tenant</span>
-                    <span
-                      className={`text-xs font-normal ${!isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`flex rounded-lg border border-border overflow-hidden ${
+                        isTenancyLocked ? "opacity-60" : ""
+                      }`}
                     >
-                      Dedicated deployment per installation
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMultitenantChange(true)}
-                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
-                      isMultitenant
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <span>Multi-tenant</span>
-                    <span
-                      className={`text-xs font-normal ${isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                    >
-                      Shared deployment, Gateway adds caller identity
-                    </span>
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        disabled={isTenancyLocked}
+                        onClick={() => handleMultitenantChange(false)}
+                        className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
+                          isTenancyLocked ? "cursor-not-allowed" : ""
+                        } ${
+                          !isMultitenant
+                            ? "bg-primary text-primary-foreground"
+                            : `bg-background text-muted-foreground ${
+                                isTenancyLocked
+                                  ? ""
+                                  : "hover:text-foreground hover:bg-muted"
+                              }`
+                        }`}
+                      >
+                        <span>Single-tenant</span>
+                        <span
+                          className={`text-xs font-normal ${!isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                        >
+                          Dedicated deployment per installation
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isTenancyLocked}
+                        onClick={() => handleMultitenantChange(true)}
+                        className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
+                          isTenancyLocked ? "cursor-not-allowed" : ""
+                        } ${
+                          isMultitenant
+                            ? "bg-primary text-primary-foreground"
+                            : `bg-background text-muted-foreground ${
+                                isTenancyLocked
+                                  ? ""
+                                  : "hover:text-foreground hover:bg-muted"
+                              }`
+                        }`}
+                      >
+                        <span>Multi-tenant</span>
+                        <span
+                          className={`text-xs font-normal ${isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                        >
+                          Shared deployment, Gateway adds caller identity
+                        </span>
+                      </button>
+                    </div>
+                  </TooltipTrigger>
+                  {isTenancyLocked && (
+                    <TooltipContent>
+                      <p className="max-w-xs">
+                        Tenancy cannot be changed after the server is created.
+                        Delete and recreate the server to switch tenancy mode.
+                      </p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               </div>
             )}
           </div>
@@ -841,6 +892,7 @@ export function McpCatalogForm({
                   <FormItem>
                     <FormLabel>
                       Server URL <span className="text-destructive">*</span>
+                      <ReinstallHint show={isServerUrlDirty} />
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -863,7 +915,10 @@ export function McpCatalogForm({
                   name="localConfig.command"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Command</FormLabel>
+                      <FormLabel>
+                        Command
+                        <ReinstallHint show={isCommandDirty} />
+                      </FormLabel>
                       <FormControl>
                         <Input
                           placeholder="node"
@@ -886,7 +941,10 @@ export function McpCatalogForm({
                   name="localConfig.arguments"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Arguments (one per line)</FormLabel>
+                      <FormLabel>
+                        Arguments (one per line)
+                        <ReinstallHint show={isArgumentsDirty} />
+                      </FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder={`/path/to/server.js\n--verbose`}
@@ -904,7 +962,10 @@ export function McpCatalogForm({
                   name="localConfig.transportType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Transport Type</FormLabel>
+                      <FormLabel>
+                        Transport Type
+                        <ReinstallHint show={isTransportTypeDirty} />
+                      </FormLabel>
                       <FormControl>
                         <RadioGroup
                           onValueChange={field.onChange}
@@ -950,7 +1011,10 @@ export function McpCatalogForm({
                       name="localConfig.httpPort"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>HTTP Port (optional)</FormLabel>
+                          <FormLabel>
+                            HTTP Port (optional)
+                            <ReinstallHint show={isHttpPortDirty} />
+                          </FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -968,7 +1032,10 @@ export function McpCatalogForm({
                       name="localConfig.httpPath"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>HTTP Path (optional)</FormLabel>
+                          <FormLabel>
+                            HTTP Path (optional)
+                            <ReinstallHint show={isHttpPathDirty} />
+                          </FormLabel>
                           <FormControl>
                             <Input
                               placeholder="/mcp"
@@ -999,6 +1066,7 @@ export function McpCatalogForm({
                 secretKeysWithStoredValue={storedSecretKeys}
                 disablePromptOnInstallation={isMultitenant}
                 disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
+                labelSuffix={<ReinstallHint show={isEnvDirty} />}
                 envFrom={{
                   fields: envFromFields,
                   append: appendEnvFrom,
@@ -1021,7 +1089,10 @@ export function McpCatalogForm({
                 name="localConfig.dockerImage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Image (optional)</FormLabel>
+                    <FormLabel>
+                      Image (optional)
+                      <ReinstallHint show={isDockerImageDirty} />
+                    </FormLabel>
                     <FormControl>
                       <Input
                         placeholder={mcpServerBaseImage}
@@ -1210,7 +1281,10 @@ export function McpCatalogForm({
             (currentServerType === "local" && isMultitenant)) && (
             <div className="space-y-4">
               <div className="space-y-1">
-                <h3 className="font-semibold text-base">Authentication</h3>
+                <h3 className="font-semibold text-base">
+                  Authentication
+                  <ReinstallHint show={isAuthDirty} />
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   If your MCP server is multitenant, MCP Gateway will use these
                   ways to prove the caller&apos;s identity.
@@ -1888,7 +1962,10 @@ export function McpCatalogForm({
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <h3 className="font-semibold text-base">Headers</h3>
+                  <h3 className="font-semibold text-base">
+                    Headers
+                    <ReinstallHint show={isHeadersDirty} />
+                  </h3>
                   <p className="text-sm text-muted-foreground">
                     Sent on every request — for tenant IDs, regions, or other
                     upstream metadata.
@@ -1988,6 +2065,15 @@ export function McpCatalogForm({
           : footer}
       </form>
     </Form>
+  );
+}
+
+function ReinstallHint({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <Badge variant="outline" className="ml-2 font-normal">
+      requires reinstall
+    </Badge>
   );
 }
 

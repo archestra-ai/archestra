@@ -77,6 +77,8 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   };
   showLabel?: boolean;
   showDescription?: boolean;
+  /** Optional inline content rendered after the "Environment Variables" heading. */
+  labelSuffix?: React.ReactNode;
   /** When true, non-prompted secret values will be sourced from external secrets manager (Vault) */
   useExternalSecretsManager?: boolean;
   /**
@@ -125,6 +127,7 @@ export function EnvironmentVariablesFormField<
   form,
   showLabel = true,
   showDescription = true,
+  labelSuffix,
   useExternalSecretsManager = false,
   secretKeysWithStoredValue,
   disablePromptOnInstallation = false,
@@ -159,7 +162,10 @@ export function EnvironmentVariablesFormField<
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         {showLabel && (
-          <h3 className="font-semibold text-base">Environment Variables</h3>
+          <h3 className="font-semibold text-base">
+            Environment Variables
+            {labelSuffix}
+          </h3>
         )}
         <Button
           type="button"

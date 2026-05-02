@@ -75,3 +75,25 @@ export const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
   "vllm",
 ]);
+
+/**
+ * True when URL points at the host loopback interface. Used to flag
+ * misconfiguration when a containerised Archestra tries to reach a service
+ * running on the host (e.g. Ollama) via "localhost".
+ */
+export function isLocalhostUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "0.0.0.0" ||
+      hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export const OLLAMA_DOCKER_HOST_URL = "http://host.docker.internal:11434/";

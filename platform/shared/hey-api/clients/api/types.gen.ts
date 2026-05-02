@@ -21352,6 +21352,7 @@ export type GetConfigResponses = {
             mcpServerBaseImage: string;
             orchestratorK8sNamespace: string;
             isQuickstart: boolean;
+            runningInContainer: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
             mcpSandboxDomain: string | null;

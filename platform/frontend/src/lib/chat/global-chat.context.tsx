@@ -413,8 +413,10 @@ function ChatSessionHook({
       }, 500);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
-        errorName: chatError.name,
-        errorMessage: chatError.message,
+        errorName: chatError?.name,
+        errorMessage: chatError?.message,
+        errorString: String(chatError),
+        errorCause: (chatError as { cause?: unknown })?.cause,
         retryCount: retryCountRef.current,
       });
 

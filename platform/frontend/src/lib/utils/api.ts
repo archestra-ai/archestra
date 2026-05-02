@@ -49,5 +49,21 @@ export function handleApiError(error: ApiSdkError) {
       ? error.error
       : new Error(getApiErrorMessage(error));
   Sentry.captureException(sentryError, { extra: { originalError: error } });
-  console.error(error);
+  console.error("API error:", getApiErrorMessage(error), {
+    error,
+    asString: String(error),
+    asJson: safeJson(error),
+  });
+}
+
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(
+      value,
+      Object.getOwnPropertyNames(value as object),
+      2,
+    );
+  } catch {
+    return String(value);
+  }
 }

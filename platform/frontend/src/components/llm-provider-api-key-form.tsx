@@ -4,11 +4,20 @@ import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
+  isLocalhostUrl,
+  OLLAMA_DOCKER_HOST_URL,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
-import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  Info,
+  Trash2,
+  User,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -20,6 +29,7 @@ import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
 import { LlmProviderSelectItems } from "./llm-provider-options";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -286,6 +296,7 @@ export function LlmProviderApiKeyForm({
 }: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
+  const runningInContainer = useFeature("runningInContainer");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -296,8 +307,25 @@ export function LlmProviderApiKeyForm({
 
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
+  const baseUrl = form.watch("baseUrl");
   const scope = form.watch("scope");
   const teamId = form.watch("teamId");
+
+  const isOptionalKeyProvider = PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
+  const baseUrlIsLocalhost = isLocalhostUrl(baseUrl ?? undefined);
+  // For self-hosted providers (Ollama, vLLM), the user opts in to "remote
+  // server" mode. Off by default (local self-host = no auth, no key field).
+  // When existing key has an apiKey or non-localhost baseUrl, treat as remote.
+  const [requiresAuth, setRequiresAuth] = useState<boolean>(() => {
+    if (!isOptionalKeyProvider) return false;
+    const initialApiKey = form.getValues("apiKey");
+    return Boolean(initialApiKey && initialApiKey !== "");
+  });
+  const showApiKeyInput = !isOptionalKeyProvider || requiresAuth;
+  const showDockerHostHint =
+    provider === "ollama" &&
+    runningInContainer === true &&
+    baseUrlIsLocalhost;
 
   const extraHeadersFieldArray = useFieldArray({
     control: form.control,
@@ -506,6 +534,32 @@ export function LlmProviderApiKeyForm({
           )}
         </div>
 
+        {isOptionalKeyProvider && !byosEnabled && (
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="llm-provider-api-key-requires-auth">
+                Server requires authentication
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {providerConfig.name} itself does not require auth, but a
+                reverse proxy or managed gateway in front of it might. Toggle
+                on to add an API key or Bearer token.
+              </p>
+            </div>
+            <Switch
+              id="llm-provider-api-key-requires-auth"
+              checked={requiresAuth}
+              onCheckedChange={(checked) => {
+                setRequiresAuth(checked);
+                if (!checked) {
+                  form.setValue("apiKey", null, { shouldDirty: true });
+                }
+              }}
+              disabled={isPending}
+            />
+          </div>
+        )}
+
         {byosEnabled ? (
           <Suspense
             fallback={
@@ -514,11 +568,11 @@ export function LlmProviderApiKeyForm({
           >
             {vaultSecretSelector}
           </Suspense>
-        ) : (
+        ) : !showApiKeyInput ? null : (
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-value">
               API Key{" "}
-              {PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider) ? (
+              {isOptionalKeyProvider ? (
                 <span className="font-normal text-muted-foreground">
                   (optional)
                 </span>
@@ -530,7 +584,7 @@ export function LlmProviderApiKeyForm({
                 )
               )}
             </Label>
-            {providerConfig.description && (
+            {!isOptionalKeyProvider && providerConfig.description && (
               <p className="text-xs text-muted-foreground">
                 {providerConfig.description}
               </p>
@@ -692,6 +746,34 @@ export function LlmProviderApiKeyForm({
               {form.formState.errors.baseUrl.message}
             </p>
           )}
+          {showDockerHostHint && (
+              <Alert variant="info">
+                <Info />
+                <AlertTitle>Running Archestra in Docker?</AlertTitle>
+                <AlertDescription className="space-y-2">
+                  <p>
+                    Inside a container, <code>localhost</code> resolves to the
+                    container itself, not the host running Ollama. Use{" "}
+                    <code>{OLLAMA_DOCKER_HOST_URL}</code> instead so the
+                    backend can reach Ollama on the host machine.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      form.setValue("baseUrl", OLLAMA_DOCKER_HOST_URL, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                    disabled={isPending}
+                  >
+                    Use {OLLAMA_DOCKER_HOST_URL}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
         </div>
 
         <div className="space-y-2">

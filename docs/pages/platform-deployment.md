@@ -775,7 +775,13 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
   - Default: `http://localhost:11434/v1` (Ollama is enabled by default)
   - Set this to override the default if your Ollama server runs on a different host or port
+  - When Archestra runs in a container and Ollama runs on the host, `localhost` resolves to the container itself. Use `http://host.docker.internal:11434/v1` (Docker Desktop, OrbStack) or the host bridge IP (Linux: `http://172.17.0.1:11434/v1`). The UI surfaces a hint with a one-click fix when this misconfiguration is detected.
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
+- **`ARCHESTRA_RUNNING_IN_CONTAINER`** - Override container detection.
+  - Default: auto-detected via `/.dockerenv`, `/proc/1/cgroup`, and `KUBERNETES_SERVICE_HOST`
+  - Set to `true` to force container-aware UI hints (e.g. `host.docker.internal` suggestion when pointing self-hosted providers at `localhost`)
+  - Set to `false` to suppress those hints when running on the host directly
 
 - **`ARCHESTRA_DEEPSEEK_BASE_URL`** - Override the DeepSeek API base URL.
   - Default: `https://api.deepseek.com`

@@ -75,6 +75,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpServerBaseImage: z.string(),
               orchestratorK8sNamespace: z.string(),
               isQuickstart: z.boolean(),
+              runningInContainer: z.boolean(),
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
               mcpSandboxDomain: z.string().nullable(),
@@ -112,6 +113,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
           isQuickstart: config.isQuickstart,
+          runningInContainer: config.runningInContainer,
           ngrokDomain: getNgrokDomain(),
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,

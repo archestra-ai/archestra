@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
@@ -857,6 +858,7 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
+  runningInContainer: detectRunningInContainer(),
   ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
 };
@@ -867,6 +869,33 @@ export const shouldRunWorker = config.processType !== "web";
 export default config;
 
 // ===== Internal helpers =====
+
+/**
+ * Detect whether the backend is running inside a container. Checked once at
+ * startup. Used to surface deployment-aware hints in the UI (e.g. suggest
+ * host.docker.internal when the user points Ollama at localhost from inside
+ * a container, where localhost would resolve to the container itself).
+ *
+ * @public — exported for testability
+ */
+export function detectRunningInContainer(): boolean {
+  if (process.env.ARCHESTRA_RUNNING_IN_CONTAINER === "true") return true;
+  if (process.env.ARCHESTRA_RUNNING_IN_CONTAINER === "false") return false;
+  if (process.env.KUBERNETES_SERVICE_HOST) return true;
+  try {
+    fs.accessSync("/.dockerenv");
+    return true;
+  } catch {
+    // not docker
+  }
+  try {
+    const cgroup = fs.readFileSync("/proc/1/cgroup", "utf8");
+    if (/docker|kubepods|containerd/.test(cgroup)) return true;
+  } catch {
+    // not linux or no access
+  }
+  return false;
+}
 
 /** @public — exported for testability */
 export function parseConnectorSyncMaxDuration(

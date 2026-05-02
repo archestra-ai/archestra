@@ -8,6 +8,7 @@ import {
   test,
 } from "@/test";
 import {
+  detectRunningInContainer,
   getAnalyticsConfig,
   getCorsOrigins,
   getDatabaseUrl,
@@ -1107,5 +1108,36 @@ describe("parseTrustProxy", () => {
 
   test("should filter empty entries from extra commas", () => {
     expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+  });
+});
+
+
+describe("detectRunningInContainer", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_RUNNING_IN_CONTAINER;
+    delete process.env.KUBERNETES_SERVICE_HOST;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("returns true when explicit override is true", () => {
+    process.env.ARCHESTRA_RUNNING_IN_CONTAINER = "true";
+    expect(detectRunningInContainer()).toBe(true);
+  });
+
+  test("returns false when explicit override is false even on k8s", () => {
+    process.env.ARCHESTRA_RUNNING_IN_CONTAINER = "false";
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
+    expect(detectRunningInContainer()).toBe(false);
+  });
+
+  test("returns true when KUBERNETES_SERVICE_HOST is set", () => {
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
+    expect(detectRunningInContainer()).toBe(true);
   });
 });

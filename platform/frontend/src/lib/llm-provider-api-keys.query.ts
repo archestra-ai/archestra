@@ -179,6 +179,12 @@ export function useDeleteLlmProviderApiKey() {
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // Conversation caches may hold the deleted key's id in chatApiKeyId,
+      // which causes the chat selector to PATCH the conversation with a stale
+      // id and surface a 404 "Chat API key not found". Invalidating forces
+      // refetch so the auto-select uses the fresh available-keys list.
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
 }

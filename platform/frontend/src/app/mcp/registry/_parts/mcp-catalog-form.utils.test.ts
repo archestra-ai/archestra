@@ -669,6 +669,79 @@ describe("transformFormToApiData", () => {
     expect(values.includeBearerPrefix).toBe(false);
     expect(values.authHeaderName).toBe("");
   });
+
+  describe("preserves additionalHeaders across all auth methods", () => {
+    const additionalHeaders: McpCatalogFormValues["additionalHeaders"] = [
+      {
+        headerName: "x-api-key",
+        promptOnInstallation: true,
+        required: true,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+      },
+    ];
+
+    const baseValues: McpCatalogFormValues = {
+      name: "Headers MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders,
+      oauthConfig: {
+        client_id: "id",
+        client_secret: "secret",
+        audience: "",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: "",
+        supports_resource_metadata: true,
+        grantType: "authorization_code",
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "https://auth.example.com/token",
+      },
+      enterpriseManagedConfig: {
+        identityProviderId: "idp-1",
+        assertionMode: "exchange",
+      },
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    const cases: McpCatalogFormValues["authMethod"][] = [
+      "oauth",
+      "oauth_client_credentials",
+      "enterprise_managed",
+      "idp_jwt",
+    ];
+
+    for (const authMethod of cases) {
+      it(`keeps additional headers when authMethod is ${authMethod}`, () => {
+        const result = transformFormToApiData({ ...baseValues, authMethod });
+        expect(result.userConfig).toMatchObject({
+          header_x_api_key: expect.objectContaining({
+            headerName: "x-api-key",
+            promptOnInstallation: true,
+          }),
+        });
+      });
+    }
+  });
 });
 
 describe("transformFormToApiData - secret env var preservation", () => {

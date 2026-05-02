@@ -46,11 +46,11 @@ export async function resolveAgent(
 // =========================================================================
 
 export interface VirtualKeyValidationResult {
-  apiKey: string | undefined;
-  baseUrl: string | undefined;
+  apiKey?: string;
+  baseUrl?: string;
   /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
-  chatApiKeyId: string | undefined;
-  virtualKeyId: string;
+  chatApiKeyId?: string;
+  virtualKeyId?: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<

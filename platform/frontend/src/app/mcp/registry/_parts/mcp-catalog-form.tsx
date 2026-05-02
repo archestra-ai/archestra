@@ -146,6 +146,18 @@ export function McpCatalogForm({
   // Fetch local config secrets only for local MCP catalog items.
   const { data: localConfigSecret } = useGetSecret(localConfigSecretId);
 
+  // Pre-existing secret env-var keys, used to render a `••••••••` placeholder.
+  const storedSecretKeys = useMemo(() => {
+    if (initialValues?.serverType !== "local" || !initialValues.localConfig) {
+      return new Set<string>();
+    }
+    return new Set(
+      (initialValues.localConfig.environment ?? [])
+        .filter((env) => env.type === "secret")
+        .map((env) => env.key),
+    );
+  }, [initialValues]);
+
   // Get MCP server base image from backend features endpoint
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
@@ -983,6 +995,7 @@ export function McpCatalogForm({
                 fieldNamePrefix="localConfig.environment"
                 form={form}
                 useExternalSecretsManager={showByosOption}
+                secretKeysWithStoredValue={storedSecretKeys}
                 disablePromptOnInstallation={isMultitenant}
                 disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
                 envFrom={{

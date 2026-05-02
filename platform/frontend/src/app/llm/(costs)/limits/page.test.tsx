@@ -53,6 +53,19 @@ vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: () => ({ data: [] }),
 }));
 
+vi.mock("@/lib/agent.query", () => ({
+  useProfiles: (params?: { filters?: { agentTypes?: string[] } }) => {
+    const agentType = params?.filters?.agentTypes?.[0];
+    if (agentType === "agent") {
+      return { data: [{ id: "agent-1", name: "Test Agent" }] };
+    }
+    if (agentType === "llm_proxy") {
+      return { data: [{ id: "proxy-1", name: "Test LLM Proxy" }] };
+    }
+    return { data: [] };
+  },
+}));
+
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
     searchParams: new URLSearchParams(),
@@ -66,7 +79,41 @@ vi.mock("@/components/loading", () => ({
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
-  DataTable: () => <div>Limits table</div>,
+  DataTable: ({
+    data,
+    columns,
+  }: {
+    data: Array<Record<string, unknown>>;
+    columns: Array<{
+      cell?: (info: {
+        row: { original: Record<string, unknown> };
+      }) => React.ReactNode;
+    }>;
+  }) => (
+    <div>
+      {data.map((row: Record<string, unknown>) => (
+        <div
+          key={String(row.id)}
+          data-testid={`data-table-row-${String(row.id)}`}
+        >
+          {columns.map(
+            (
+              col: {
+                cell?: (info: {
+                  row: { original: Record<string, unknown> };
+                }) => React.ReactNode;
+              },
+              _colIndex: number,
+            ) => (
+              <span key={Math.random()}>
+                {col.cell ? col.cell({ row: { original: row } }) : null}
+              </span>
+            ),
+          )}
+        </div>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ui/select", () => ({
@@ -155,9 +202,13 @@ vi.mock("@/components/ui/alert", () => ({
 }));
 
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children }: { children: React.ReactNode }) => (
-    <span>{children}</span>
-  ),
+  Badge: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => <span {...props}>{children}</span>,
 }));
 
 vi.mock("@/components/ui/checkbox", () => ({
@@ -237,7 +288,8 @@ describe("LimitsPage", () => {
     });
 
     render(<LimitsPage />);
-    expect(screen.getByText("All models")).toBeInTheDocument();
+    const modelsBadge = screen.getByTestId("limits-table-models-badge");
+    expect(modelsBadge).toHaveTextContent("All models");
   });
 
   it("shows multiple model badges for limits with multiple models", () => {
@@ -285,5 +337,83 @@ describe("LimitsPage", () => {
     // The multi-select mock should show "All models" when value is empty
     const multiSelect = screen.getByTestId("multi-select");
     expect(multiSelect).toHaveTextContent("All models");
+  });
+
+  it("shows agent name in table for agent-type limits", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-agent",
+          entityType: "agent",
+          entityId: "agent-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-agent");
+    expect(row).toHaveTextContent("Test Agent");
+  });
+
+  it("shows LLM proxy name in table for llm_proxy-type limits", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-proxy",
+          entityType: "agent",
+          entityId: "proxy-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-proxy");
+    expect(row).toHaveTextContent("Test LLM Proxy");
+  });
+
+  it("shows 'Unknown LLM proxy' when proxy is not found", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-proxy",
+          entityType: "agent",
+          entityId: "unknown-proxy",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-proxy");
+    expect(row).toHaveTextContent("Unknown LLM proxy");
   });
 });

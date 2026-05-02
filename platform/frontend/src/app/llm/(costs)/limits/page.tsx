@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useCreateLimit,
@@ -58,8 +59,12 @@ type LimitCleanupInterval = NonNullable<
   >["limitCleanupInterval"]
 >;
 
+// llm_proxy is a type of agent
+// It is more convenient and clear to handle it as a separate entity on the frontend
+type LimitFormEntityType = LimitEntityType | "llm_proxy";
+
 type LimitFormState = {
-  entityType: LimitEntityType;
+  entityType: LimitFormEntityType;
   entityId: string;
   limitValue: string;
   models: string[];
@@ -101,8 +106,14 @@ export default function LimitsPage() {
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
   const { data: members = [] } = useOrganizationMembers();
-  const { data: virtualKeysData } = useAllVirtualApiKeys({ limit: 100 });
+  const { data: virtualKeysData } = useAllVirtualApiKeys();
   const virtualKeys = virtualKeysData?.data ?? [];
+  const { data: agents = [] } = useProfiles({
+    filters: { agentTypes: ["agent"] },
+  });
+  const { data: llmProxies = [] } = useProfiles({
+    filters: { agentTypes: ["llm_proxy"] },
+  });
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
@@ -155,19 +166,34 @@ export default function LimitsPage() {
     return () => setActionButton(null);
   }, [handleCreateOpen, setActionButton]);
 
-  const handleEditOpen = useCallback((limit: LimitData) => {
-    setEditingLimit(limit);
-    const models = getLimitModels(limit);
-    const isAllModels = models.length === 0 && limit.limitType === "token_cost";
-    setFormState({
-      entityType: limit.entityType as LimitEntityType,
-      entityId: limit.entityType === "organization" ? "" : limit.entityId,
-      limitValue: String(limit.limitValue),
-      models: isAllModels ? [] : models,
-      isAllModels,
-    });
-    setIsDialogOpen(true);
-  }, []);
+  const handleEditOpen = useCallback(
+    (limit: LimitData) => {
+      setEditingLimit(limit);
+      const models = getLimitModels(limit);
+      const isAllModels =
+        models.length === 0 && limit.limitType === "token_cost";
+
+      let entityType: LimitFormEntityType = limit.entityType;
+      if (limit.entityType === "agent") {
+        const isLlmProxy = llmProxies.some(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        if (isLlmProxy) {
+          entityType = "llm_proxy";
+        }
+      }
+
+      setFormState({
+        entityType,
+        entityId: limit.entityType === "organization" ? "" : limit.entityId,
+        limitValue: String(limit.limitValue),
+        models: isAllModels ? [] : models,
+        isAllModels,
+      });
+      setIsDialogOpen(true);
+    },
+    [llmProxies],
+  );
 
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
@@ -190,9 +216,21 @@ export default function LimitsPage() {
         );
         return key?.name ?? "Unknown key";
       }
+      if (limit.entityType === "agent") {
+        const agent = agents.find(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        if (agent) {
+          return agent.name ?? "Unknown agent";
+        }
+        const proxy = llmProxies.find(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        return proxy?.name ?? "Unknown LLM proxy";
+      }
       return "Unknown";
     },
-    [teams, members, virtualKeys],
+    [teams, members, virtualKeys, agents, llmProxies],
   );
 
   const getUsageStatus = useCallback(
@@ -228,7 +266,16 @@ export default function LimitsPage() {
       const matchesStatus =
         statusFilter === "all" || usageStatus === statusFilter;
       const matchesAppliedTo =
-        appliedToFilter === "all" || limit.entityType === appliedToFilter;
+        appliedToFilter === "all" ||
+        (appliedToFilter === "agent" &&
+          limit.entityType === "agent" &&
+          agents.some((candidate) => candidate.id === limit.entityId)) ||
+        (appliedToFilter === "llm_proxy" &&
+          limit.entityType === "agent" &&
+          llmProxies.some((candidate) => candidate.id === limit.entityId)) ||
+        (appliedToFilter !== "agent" &&
+          appliedToFilter !== "llm_proxy" &&
+          limit.entityType === appliedToFilter);
       const isAllModelsLimit =
         limit.limitType === "token_cost" &&
         (!limit.model ||
@@ -240,7 +287,15 @@ export default function LimitsPage() {
 
       return matchesStatus && matchesAppliedTo && matchesModel;
     });
-  }, [appliedToFilter, llmLimits, modelFilter, statusFilter, getUsageStatus]);
+  }, [
+    appliedToFilter,
+    llmLimits,
+    modelFilter,
+    statusFilter,
+    getUsageStatus,
+    agents,
+    llmProxies,
+  ]);
 
   const columns = useMemo<ColumnDef<LimitData>[]>(
     () => [
@@ -283,15 +338,25 @@ export default function LimitsPage() {
           return (
             <div className="flex flex-wrap gap-1">
               {isAllModels && (
-                <Badge variant="outline" className="text-xs">
+                <Badge
+                  variant="outline"
+                  className="text-xs"
+                  data-testid="limits-table-models-badge"
+                >
                   All models
                 </Badge>
               )}
-              {models.map((model) => (
-                <Badge key={model} variant="outline" className="text-xs">
-                  {model}
-                </Badge>
-              ))}
+              {!isAllModels &&
+                models.map((model) => (
+                  <Badge
+                    key={model}
+                    variant="outline"
+                    className="text-xs"
+                    data-testid="limits-table-models-badge"
+                  >
+                    {model}
+                  </Badge>
+                ))}
             </div>
           );
         },
@@ -355,8 +420,10 @@ export default function LimitsPage() {
     ];
 
   async function handleSubmit() {
+    const entityType =
+      formState.entityType === "llm_proxy" ? "agent" : formState.entityType;
     const body = {
-      entityType: formState.entityType,
+      entityType,
       entityId:
         formState.entityType === "organization"
           ? (organization?.id ?? "")
@@ -446,6 +513,8 @@ export default function LimitsPage() {
             <SelectItem value="all">All applied to</SelectItem>
             <SelectItem value="organization">Organization</SelectItem>
             <SelectItem value="team">Team</SelectItem>
+            <SelectItem value="agent">Agent</SelectItem>
+            <SelectItem value="llm_proxy">LLM Proxy</SelectItem>
             <SelectItem value="user">User</SelectItem>
             <SelectItem value="virtual_key">Virtual Key</SelectItem>
           </SelectContent>
@@ -515,6 +584,8 @@ export default function LimitsPage() {
                   <SelectContent>
                     <SelectItem value="organization">Organization</SelectItem>
                     <SelectItem value="team">Team</SelectItem>
+                    <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="llm_proxy">LLM Proxy</SelectItem>
                     <SelectItem value="user">User</SelectItem>
                     <SelectItem value="virtual_key">Virtual Key</SelectItem>
                   </SelectContent>
@@ -569,6 +640,42 @@ export default function LimitsPage() {
                     items={virtualKeys.map((key) => ({
                       value: key.id,
                       label: key.name,
+                    }))}
+                    className="w-full sm:flex-1"
+                  />
+                )}
+
+                {formState.entityType === "agent" && (
+                  <SearchableSelect
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                    placeholder="Select agent"
+                    items={agents.map((agent) => ({
+                      value: agent.id,
+                      label: agent.name,
+                    }))}
+                    className="w-full sm:flex-1"
+                  />
+                )}
+
+                {formState.entityType === "llm_proxy" && (
+                  <SearchableSelect
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                    placeholder="Select LLM proxy"
+                    items={llmProxies.map((proxy) => ({
+                      value: proxy.id,
+                      label: proxy.name,
                     }))}
                     className="w-full sm:flex-1"
                   />

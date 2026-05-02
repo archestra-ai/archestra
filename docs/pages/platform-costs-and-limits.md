@@ -26,9 +26,9 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses.
 
-Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps. Use user limits to track and control per-user spend. Use virtual key limits to control spend per API key.
+Use organization limits for a shared platform-wide budget. Use team limits when different groups need separate spend caps. Use user limits to track and control per-user spend. Use agent limits to control spend for chat agents, and LLM proxy limits to control spend for LLM proxy profiles. Use virtual key limits to control spend per API key.
 
 Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 

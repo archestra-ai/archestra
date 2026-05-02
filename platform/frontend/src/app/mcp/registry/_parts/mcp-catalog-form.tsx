@@ -599,9 +599,10 @@ export function McpCatalogForm({
             <Alert variant="info">
               <Info className="h-4 w-4" />
               <AlertDescription>
-                Changes to {nameDisabled ? "" : "Name, "}Server URL or
-                Authentication will require reinstalling the server for the
-                changes to take effect.
+                Changes to {nameDisabled ? "" : "Name, "}Server URL,
+                Authentication, prompted Environment Variables, or Headers will
+                require existing installations to be reinstalled (and their
+                credentials updated) before the new values take effect.
               </AlertDescription>
             </Alert>
           )}

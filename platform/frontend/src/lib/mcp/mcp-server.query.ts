@@ -3,6 +3,7 @@ import {
   type archestraApiTypes,
   type McpDeploymentStatusEntry,
   type McpDeploymentStatusesMessage,
+  type McpInstallationStatusMessage,
 } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -203,8 +204,9 @@ export function useMcpServerInstallationStatus(
   installingMcpServerId: string | null,
 ) {
   const queryClient = useQueryClient();
-  return useQuery({
-    queryKey: ["mcp-servers-installation-polling", installingMcpServerId],
+  const queryKey = ["mcp-servers-installation-polling", installingMcpServerId];
+  const query = useQuery({
+    queryKey,
     queryFn: async () => {
       if (!installingMcpServerId) {
         await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
@@ -227,10 +229,12 @@ export function useMcpServerInstallationStatus(
       return result;
     },
     throwOnError: false,
-    refetchInterval: (query) => {
-      const status = query.state.data;
+    // 2s poll is a safety net; the WebSocket subscription below pushes
+    // updates the moment the backend writes to the DB.
+    refetchInterval: (q) => {
+      const status = q.state.data;
       return (
-        !query.state.error &&
+        !q.state.error &&
         (status === "pending" ||
         status === "discovering-tools" ||
         status === null
@@ -240,6 +244,41 @@ export function useMcpServerInstallationStatus(
     },
     enabled: !!installingMcpServerId,
   });
+
+  // Eagerly seed the cache from WS pushes so the UI updates without waiting
+  // for the next 2s poll tick — and so it still updates after the poll has
+  // been disabled (status went success/error and React Query stops polling).
+  useEffect(() => {
+    if (!installingMcpServerId) return;
+    const cacheKey = [
+      "mcp-servers-installation-polling",
+      installingMcpServerId,
+    ];
+    websocketService.connect();
+    const unsubscribe = websocketService.subscribe(
+      "mcp_installation_status",
+      (message: McpInstallationStatusMessage) => {
+        if (message.payload.serverId !== installingMcpServerId) return;
+        const status = message.payload.status;
+        const previous = queryClient.getQueryData<typeof status>(cacheKey);
+        queryClient.setQueryData(cacheKey, status);
+        // Only toast on a genuine transition into a terminal state, so we
+        // don't double-toast when the 2s poll happens to land first.
+        if (status === "success" && previous !== "success") {
+          void queryClient.refetchQueries({
+            queryKey: ["mcp-servers", installingMcpServerId],
+          });
+          toast.success("Successfully installed server");
+        } else if (status === "error" && previous !== "error") {
+          void queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+          toast.error("Failed to install server");
+        }
+      },
+    );
+    return unsubscribe;
+  }, [installingMcpServerId, queryClient]);
+
+  return query;
 }
 
 export function useReauthenticateMcpServer() {

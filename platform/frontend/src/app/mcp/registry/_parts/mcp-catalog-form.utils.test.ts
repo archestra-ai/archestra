@@ -670,3 +670,120 @@ describe("transformFormToApiData", () => {
     expect(values.authHeaderName).toBe("");
   });
 });
+
+describe("transformFormToApiData - secret env var preservation", () => {
+  type LocalEnvironment = NonNullable<
+    McpCatalogFormValues["localConfig"]
+  >["environment"];
+
+  function buildLocalFormValues(
+    environment: LocalEnvironment,
+  ): McpCatalogFormValues {
+    return {
+      name: "secret-preservation-mcp",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: "server.js",
+        environment,
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+  }
+
+  it("emits empty value (not a mask sentinel) for an unedited secret row", () => {
+    const result = transformFormToApiData(
+      buildLocalFormValues([
+        {
+          key: "API_KEY",
+          type: "secret",
+          value: "",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+      ]),
+    );
+
+    const envVar = result.localConfig?.environment?.[0];
+    expect(envVar?.key).toBe("API_KEY");
+    expect(envVar?.type).toBe("secret");
+    // The form must NOT round-trip the masked placeholder back to the API.
+    // Backend preserves stored value when value is empty/undefined.
+    const value = envVar?.value ?? "";
+    expect(value).toBe("");
+    expect(value).not.toMatch(/[•*]/);
+  });
+
+  it("emits the typed value when the user edited the secret row", () => {
+    const result = transformFormToApiData(
+      buildLocalFormValues([
+        {
+          key: "API_KEY",
+          type: "secret",
+          value: "newly-typed-secret",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+      ]),
+    );
+
+    expect(result.localConfig?.environment?.[0]?.value).toBe(
+      "newly-typed-secret",
+    );
+  });
+
+  it("preserves mixed edited / unedited secret rows independently", () => {
+    const result = transformFormToApiData(
+      buildLocalFormValues([
+        {
+          key: "EDITED",
+          type: "secret",
+          value: "fresh",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+        {
+          key: "UNTOUCHED",
+          type: "secret",
+          value: "",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+      ]),
+    );
+
+    const env = result.localConfig?.environment ?? [];
+    expect(env).toHaveLength(2);
+    expect(env[0]).toMatchObject({ key: "EDITED", value: "fresh" });
+    expect(env[1]?.key).toBe("UNTOUCHED");
+    expect(env[1]?.value ?? "").toBe("");
+  });
+});

@@ -73,6 +73,13 @@ interface InstallConfigFieldsTableProps<TFieldValues extends FieldValues> {
   descriptionFieldName?: string;
   valuePlaceholder?: string;
   useExternalSecretsManager?: boolean;
+  /**
+   * Set of env-var keys whose secret value is already stored on the server.
+   * Secret rows in this set render a disabled `••••••••` + Update button
+   * instead of an empty input. The form value stays empty so the backend's
+   * preservation logic keeps the existing secret untouched.
+   */
+  secretKeysWithStoredValue?: Set<string>;
   bearerPrefixFieldName?: string | null;
   disablePromptOnInstallation?: boolean;
   disablePromptOnInstallationReason?: string;
@@ -95,6 +102,7 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
   descriptionFieldName = "description",
   valuePlaceholder = "your-value",
   useExternalSecretsManager = false,
+  secretKeysWithStoredValue,
   bearerPrefixFieldName = null,
   disablePromptOnInstallation = false,
   disablePromptOnInstallationReason,
@@ -335,21 +343,24 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
                 />
               )}
 
-              {promptOnInstallation ? (
-                <div className="flex items-center h-10">
-                  <p className="text-xs text-muted-foreground">
-                    Prompted at installation
-                  </p>
-                </div>
-              ) : useExternalSecretsManager && valueType === "secret" ? (
-                <div className="flex items-center h-10">
-                  {(() => {
-                    const formValue = form.watch(
-                      `${fieldNamePrefix}.${index}.${valueFieldName}` as FieldPath<TFieldValues>,
-                    ) as string | undefined;
+              {(() => {
+                if (promptOnInstallation) {
+                  return (
+                    <div className="flex items-center h-10">
+                      <p className="text-xs text-muted-foreground">
+                        Prompted at installation
+                      </p>
+                    </div>
+                  );
+                }
 
-                    if (formValue) {
-                      return (
+                if (useExternalSecretsManager && valueType === "secret") {
+                  const formValue = form.watch(
+                    `${fieldNamePrefix}.${index}.${valueFieldName}` as FieldPath<TFieldValues>,
+                  ) as string | undefined;
+                  return (
+                    <div className="flex items-center h-10">
+                      {formValue ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -362,91 +373,103 @@ export function InstallConfigFieldsTable<TFieldValues extends FieldValues>({
                             {parseVaultReference(formValue).key}
                           </span>
                         </Button>
-                      );
-                    }
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => setDialogOpenForIndex(index)}
+                        >
+                          <Key className="h-3 w-3 mr-1" />
+                          Set secret
+                        </Button>
+                      )}
+                    </div>
+                  );
+                }
 
-                    return (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() => setDialogOpenForIndex(index)}
-                      >
-                        <Key className="h-3 w-3 mr-1" />
-                        Set secret
-                      </Button>
-                    );
-                  })()}
-                </div>
-              ) : (
-                <FormField
-                  control={control}
-                  name={
-                    `${fieldNamePrefix}.${index}.${valueFieldName}` as FieldPath<TFieldValues>
-                  }
-                  render={({ field }) => {
-                    if (valueType === "boolean") {
-                      const normalizedValue =
-                        field.value === "true" ? "true" : "false";
-                      if (field.value !== normalizedValue) {
-                        field.onChange(normalizedValue);
+                const rowKey = form.watch(
+                  `${fieldNamePrefix}.${index}.${keyFieldName}` as FieldPath<TFieldValues>,
+                ) as string | undefined;
+                const hasStoredSecret =
+                  valueType === "secret" &&
+                  !!rowKey &&
+                  secretKeysWithStoredValue?.has(rowKey) === true;
+
+                return (
+                  <FormField
+                    control={control}
+                    name={
+                      `${fieldNamePrefix}.${index}.${valueFieldName}` as FieldPath<TFieldValues>
+                    }
+                    render={({ field }) => {
+                      if (valueType === "boolean") {
+                        const normalizedValue =
+                          field.value === "true" ? "true" : "false";
+                        if (field.value !== normalizedValue) {
+                          field.onChange(normalizedValue);
+                        }
+
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <div className="flex items-center h-10">
+                                <Checkbox
+                                  checked={normalizedValue === "true"}
+                                  onCheckedChange={(checked) =>
+                                    field.onChange(checked ? "true" : "false")
+                                  }
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
+
+                      if (valueType === "number") {
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
                       }
 
                       return (
                         <FormItem>
                           <FormControl>
-                            <div className="flex items-center h-10">
-                              <Checkbox
-                                checked={normalizedValue === "true"}
-                                onCheckedChange={(checked) =>
-                                  field.onChange(checked ? "true" : "false")
-                                }
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }
-
-                    if (valueType === "number") {
-                      return (
-                        <FormItem>
-                          <FormControl>
                             <Input
-                              type="number"
-                              placeholder="0"
+                              type={
+                                valueType === "secret" ? "password" : "text"
+                              }
+                              placeholder={
+                                hasStoredSecret ? "••••••••" : valuePlaceholder
+                              }
                               className="font-mono"
+                              autoComplete={
+                                valueType === "secret"
+                                  ? MCP_SECRET_AUTOCOMPLETE
+                                  : MCP_CONFIG_AUTOCOMPLETE
+                              }
                               {...field}
                             />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       );
-                    }
-
-                    return (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            type={valueType === "secret" ? "password" : "text"}
-                            placeholder={valuePlaceholder}
-                            className="font-mono"
-                            autoComplete={
-                              valueType === "secret"
-                                ? MCP_SECRET_AUTOCOMPLETE
-                                : MCP_CONFIG_AUTOCOMPLETE
-                            }
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              )}
+                    }}
+                  />
+                );
+              })()}
 
               <FormField
                 control={control}

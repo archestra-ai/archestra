@@ -280,14 +280,16 @@ export class SlackConnector extends BaseConnector {
         hasMore: true,
       };
 
-      previousLastSyncedAt = (await Promise.resolve(
-        buildCheckpoint({
-          type: "slack",
-          itemUpdatedAt: null,
-          previousLastSyncedAt,
-          extra: { channelCursors: { ...channelCursors } },
-        }),
-      )).lastSyncedAt;
+      previousLastSyncedAt = (
+        await Promise.resolve(
+          buildCheckpoint({
+            type: "slack",
+            itemUpdatedAt: null,
+            previousLastSyncedAt,
+            extra: { channelCursors: { ...channelCursors } },
+          }),
+        )
+      ).lastSyncedAt;
     }
 
     // User name resolution cache with LRU eviction and TTL

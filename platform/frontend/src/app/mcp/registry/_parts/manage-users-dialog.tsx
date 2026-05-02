@@ -610,7 +610,9 @@ function UnifiedConnectionsTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[220px]">Owner</TableHead>
-              {hasDeploymentStatuses && <TableHead>Pod</TableHead>}
+              {hasDeploymentStatuses && (
+                <TableHead className="w-[260px]">Pod</TableHead>
+              )}
               <TableHead>Secret Storage</TableHead>
               <TableHead>Created At</TableHead>
               <TableHead>Action</TableHead>
@@ -656,30 +658,44 @@ function UnifiedConnectionsTable({
                   )}
                 </TableCell>
                 {hasDeploymentStatuses && (
-                  <TableCell>
-                    {deploymentStatuses[server.id] ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPodLogs?.(server.id)}
-                        className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
-                      >
+                  <TableCell className="max-w-[260px]">
+                    {(() => {
+                      const status = deploymentStatuses[server.id];
+                      if (!status) {
+                        return <span className="text-muted-foreground">—</span>;
+                      }
+                      const podName = status.podName;
+                      const dot = (
                         <DeploymentStatusDot
                           state={
-                            (deploymentStatuses[server.id].state ===
-                              "not_created" ||
-                            deploymentStatuses[server.id].state === "succeeded"
+                            (status.state === "not_created" ||
+                            status.state === "succeeded"
                               ? "running"
-                              : deploymentStatuses[server.id]
-                                  .state) as DeploymentState
+                              : status.state) as DeploymentState
                           }
                         />
-                        <span className="truncate max-w-[150px]">
-                          {server.name}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                      );
+                      if (!podName) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
+                            {dot}
+                            <span>Pod not reported yet</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPodLogs?.(server.id)}
+                          className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
+                        >
+                          {dot}
+                          <span className="truncate min-w-0 flex-1 text-left">
+                            {podName}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   </TableCell>
                 )}
                 <TableCell className="text-muted-foreground">

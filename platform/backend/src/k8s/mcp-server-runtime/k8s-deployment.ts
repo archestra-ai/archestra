@@ -215,6 +215,16 @@ export default class K8sDeployment {
   private k8sExec: Exec;
   private defaultNamespace: string;
   private deploymentName: string; // Used for deployment name
+
+  /** Catalog-stable deployment name; same across all callers for multi-tenant. */
+  get k8sDeploymentName(): string {
+    return this.deploymentName;
+  }
+
+  /** Last observed pod name (or null if not yet reported). */
+  get podName(): string | null {
+    return this.cachedPodName;
+  }
   private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
   /** Count of consecutive polls where a running deployment appeared unavailable.
@@ -1657,9 +1667,22 @@ export default class K8sDeployment {
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
+      const running = pods.items.find((pod) => pod.status?.phase === "Running");
+      if (running) {
+        return running;
+      }
 
-      // Return the first running pod
-      return pods.items.find((pod) => pod.status?.phase === "Running");
+      // Multi-tenant fallback: the shared deployment's pod was labeled with
+      // the first caller's id, so other callers' label search returns no
+      // pods. Match by deployment name prefix instead.
+      const allPods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+      });
+      return allPods.items.find(
+        (pod) =>
+          pod.status?.phase === "Running" &&
+          (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+      );
     } catch (error) {
       logger.error(
         { err: error },
@@ -1687,9 +1710,20 @@ export default class K8sDeployment {
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
+      if (pods.items.length > 0) {
+        return pods.items[0];
+      }
 
-      // Return the first pod regardless of status
-      return pods.items[0];
+      // Multi-tenant catalogs share one deployment across many mcp_server
+      // rows; the deployment's pod label was baked in at create time using
+      // the first caller's mcp_server.id, so subsequent callers won't match
+      // by label. Fall back to matching pods by deployment name prefix.
+      const allPods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+      });
+      return allPods.items.find((pod) =>
+        (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+      );
     } catch (error) {
       logger.error(
         { err: error },

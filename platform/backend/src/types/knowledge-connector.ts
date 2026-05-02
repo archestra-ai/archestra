@@ -373,7 +373,6 @@ export const SlackConfigSchema = z.object({
   channelIds: z.array(z.string()).min(1, "At least one channel ID is required"),
   syncWindowDays: z.number().int().min(1).max(3650).optional(),
   skipBotMessages: z.boolean().optional(),
-  includeThreadReplies: z.boolean().optional(),
   batchSize: z.number().optional(),
 });
 export type SlackConfig = z.infer<typeof SlackConfigSchema>;

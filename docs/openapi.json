@@ -106521,9 +106521,6 @@
                                   "skipBotMessages": {
                                     "type": "boolean"
                                   },
-                                  "includeThreadReplies": {
-                                    "type": "boolean"
-                                  },
                                   "batchSize": {
                                     "type": "number"
                                   }
@@ -107652,9 +107649,6 @@
                           "skipBotMessages": {
                             "type": "boolean"
                           },
-                          "includeThreadReplies": {
-                            "type": "boolean"
-                          },
                           "batchSize": {
                             "type": "number"
                           }
@@ -108413,9 +108407,6 @@
                               "maximum": 3650
                             },
                             "skipBotMessages": {
-                              "type": "boolean"
-                            },
-                            "includeThreadReplies": {
                               "type": "boolean"
                             },
                             "batchSize": {
@@ -109495,9 +109486,6 @@
                             "skipBotMessages": {
                               "type": "boolean"
                             },
-                            "includeThreadReplies": {
-                              "type": "boolean"
-                            },
                             "batchSize": {
                               "type": "number"
                             }
@@ -110464,9 +110452,6 @@
                           "skipBotMessages": {
                             "type": "boolean"
                           },
-                          "includeThreadReplies": {
-                            "type": "boolean"
-                          },
                           "batchSize": {
                             "type": "number"
                           }
@@ -111223,9 +111208,6 @@
                               "maximum": 3650
                             },
                             "skipBotMessages": {
-                              "type": "boolean"
-                            },
-                            "includeThreadReplies": {
                               "type": "boolean"
                             },
                             "batchSize": {

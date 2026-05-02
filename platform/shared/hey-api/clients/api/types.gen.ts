@@ -28912,7 +28912,6 @@ export type GetConnectorsResponses = {
                 channelIds: Array<string>;
                 syncWindowDays?: number;
                 skipBotMessages?: boolean;
-                includeThreadReplies?: boolean;
                 batchSize?: number;
             } | {
                 type: 'outline';
@@ -29069,7 +29068,6 @@ export type CreateConnectorData = {
             channelIds: Array<string>;
             syncWindowDays?: number;
             skipBotMessages?: boolean;
-            includeThreadReplies?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29279,7 +29277,6 @@ export type CreateConnectorResponses = {
             channelIds: Array<string>;
             syncWindowDays?: number;
             skipBotMessages?: boolean;
-            includeThreadReplies?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29586,7 +29583,6 @@ export type GetConnectorResponses = {
             channelIds: Array<string>;
             syncWindowDays?: number;
             skipBotMessages?: boolean;
-            includeThreadReplies?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29729,7 +29725,6 @@ export type UpdateConnectorData = {
             channelIds: Array<string>;
             syncWindowDays?: number;
             skipBotMessages?: boolean;
-            includeThreadReplies?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';
@@ -29940,7 +29935,6 @@ export type UpdateConnectorResponses = {
             channelIds: Array<string>;
             syncWindowDays?: number;
             skipBotMessages?: boolean;
-            includeThreadReplies?: boolean;
             batchSize?: number;
         } | {
             type: 'outline';

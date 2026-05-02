@@ -117,7 +117,6 @@ describe("SlackConnector", () => {
       const result = await connector.validateConfig({
         channelIds: ["C12345ABC"],
         skipBotMessages: false,
-        includeThreadReplies: true,
       });
       expect(result.valid).toBe(true);
     });
@@ -185,10 +184,17 @@ describe("SlackConnector", () => {
         user: "bot-user",
         bot_id: "B123",
       });
-      mockConversationsList.mockResolvedValueOnce({
-        ok: true,
-        channels: [makeChannel("C001", "general")],
-      });
+      mockConversationsList
+        .mockResolvedValueOnce({
+          ok: true,
+          channels: [makeChannel("C001", "general")],
+          response_metadata: { next_cursor: "" },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          channels: [makeChannel("C001", "general")],
+          response_metadata: { next_cursor: "" },
+        });
 
       const connector = new SlackConnector();
       const result = await connector.testConnection({
@@ -228,6 +234,31 @@ describe("SlackConnector", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("Channel access failed");
       expect(result.error).toContain("channels:read");
+      expect(result.error).toContain("groups:read");
+    });
+
+    it("returns failure when configured channels are not accessible to the bot", async () => {
+      mockAuthTest.mockResolvedValueOnce({ ok: true, team: "ws" });
+      mockConversationsList
+        .mockResolvedValueOnce({
+          ok: true,
+          channels: [makeChannel("C001", "general")],
+          response_metadata: { next_cursor: "" },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          channels: [makeChannel("C001", "general")],
+          response_metadata: { next_cursor: "" },
+        });
+
+      const connector = new SlackConnector();
+      const result = await connector.testConnection({
+        config: { channelIds: ["C999"] },
+        credentials,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not currently a member");
+      expect(result.error).toContain("C999");
     });
 
     it("returns failure when SDK throws network error", async () => {
@@ -636,7 +667,6 @@ describe("SlackConnector", () => {
       for await (const batch of connector.sync({
         config: {
           channelIds: ["C001"],
-          includeThreadReplies: true,
           skipBotMessages: false,
         },
         credentials,
@@ -694,46 +724,6 @@ describe("SlackConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].content).toBe("Parent message");
       expect(batches[0].documents[0].content).not.toContain("Thread replies:");
-    });
-
-    it("does not fetch replies when includeThreadReplies is false", async () => {
-      mockConversationsList.mockResolvedValueOnce({
-        ok: true,
-        channels: [makeChannel("C001", "general")],
-        response_metadata: { next_cursor: "" },
-      });
-
-      mockConversationsHistory.mockResolvedValueOnce({
-        ok: true,
-        messages: [
-          makeMessage("1700000001.000000", "Parent message", {
-            user: "U001",
-            reply_count: 5,
-          }),
-        ],
-        has_more: false,
-      });
-
-      mockUsersInfo.mockResolvedValue({
-        user: { real_name: "Alice", profile: {}, name: "alice" },
-      });
-
-      const connector = new SlackConnector();
-      const batches: ConnectorSyncBatch[] = [];
-      for await (const batch of connector.sync({
-        config: {
-          channelIds: ["C001"],
-          includeThreadReplies: false,
-          skipBotMessages: false,
-        },
-        credentials,
-        checkpoint: null,
-      })) {
-        batches.push(batch);
-      }
-
-      expect(batches[0].documents).toHaveLength(1);
-      expect(mockConversationsReplies).not.toHaveBeenCalled();
     });
   });
 
@@ -1035,6 +1025,9 @@ describe("SlackConnector", () => {
     });
 
     it("uses sync window oldest on first sync when no checkpoint exists", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
       mockConversationsList.mockResolvedValueOnce({
         ok: true,
         channels: [makeChannel("C001", "general")],
@@ -1048,22 +1041,25 @@ describe("SlackConnector", () => {
       });
 
       const connector = new SlackConnector();
-      const beforeSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
       for await (const _batch of connector.sync({
         config: { channelIds: ["C001"], syncWindowDays: 1 },
         credentials,
         checkpoint: null,
       })) {
       }
-      const afterSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+
+      const expectedOldest = String(
+        Math.floor(Date.now() / 1000) - 24 * 60 * 60,
+      );
 
       expect(mockConversationsHistory).toHaveBeenCalledTimes(1);
       const historyArgs = mockConversationsHistory.mock.calls[0][0] as {
         oldest?: string;
       };
-      const oldest = Number.parseFloat(historyArgs.oldest ?? "0");
-      expect(oldest).toBeGreaterThanOrEqual(beforeSeconds - 2);
-      expect(oldest).toBeLessThanOrEqual(afterSeconds + 2);
+
+      expect(historyArgs.oldest).toBe(expectedOldest);
+
+      vi.useRealTimers();
     });
 
     it("prefers newer checkpoint over sync window oldest", async () => {
@@ -1102,6 +1098,9 @@ describe("SlackConnector", () => {
     });
 
     it("prefers sync window oldest over stale checkpoint", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
       mockConversationsList.mockResolvedValueOnce({
         ok: true,
         channels: [makeChannel("C001", "general")],
@@ -1115,7 +1114,6 @@ describe("SlackConnector", () => {
       });
 
       const connector = new SlackConnector();
-      const beforeSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
       for await (const _batch of connector.sync({
         config: { channelIds: ["C001"], syncWindowDays: 1 },
         credentials,
@@ -1125,14 +1123,18 @@ describe("SlackConnector", () => {
         },
       })) {
       }
-      const afterSeconds = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+
+      const expectedOldest = String(
+        Math.floor(Date.now() / 1000) - 24 * 60 * 60,
+      );
 
       const historyArgs = mockConversationsHistory.mock.calls[0][0] as {
         oldest?: string;
       };
-      const oldest = Number.parseFloat(historyArgs.oldest ?? "0");
-      expect(oldest).toBeGreaterThanOrEqual(beforeSeconds - 2);
-      expect(oldest).toBeLessThanOrEqual(afterSeconds + 2);
+
+      expect(historyArgs.oldest).toBe(expectedOldest);
+
+      vi.useRealTimers();
     });
 
     it("yields zero-update batch for no-op incremental sync", async () => {
@@ -1168,6 +1170,42 @@ describe("SlackConnector", () => {
 
   // ===== sync — per-channel failure isolation =====
   describe("sync — failure isolation", () => {
+    it("yields failures for configured channels the bot cannot access", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000000", "Good message", { user: "U001" }),
+        ],
+        has_more: false,
+      });
+      mockUsersInfo.mockResolvedValue({
+        user: { real_name: "Alice", profile: {}, name: "alice" },
+      });
+
+      const connector = new SlackConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001", "C999"] },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches).toHaveLength(2);
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].failures).toHaveLength(1);
+      expect(batches[0].failures?.[0].itemId).toBe("C999");
+      expect(batches[0].hasMore).toBe(true);
+      expect(batches[1].documents).toHaveLength(1);
+    });
+
     it("continues syncing other channels when one channel fails", async () => {
       mockConversationsList.mockResolvedValueOnce({
         ok: true,
@@ -1385,7 +1423,7 @@ describe("SlackConnector", () => {
         checkpoint: null,
       });
       await expect(generator.next()).rejects.toThrow(
-        "Invalid Slack configuration",
+        "Channel IDs are required",
       );
     });
   });

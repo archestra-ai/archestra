@@ -301,7 +301,6 @@ Ingests public channel messages and thread replies from a Slack workspace. Messa
 | Channel IDs | Comma-separated channel IDs to sync (required) |
 | Sync Window (days) | Optional limit for indexing only the last N days of messages per selected channel |
 | Skip Bot Messages | Toggle to exclude messages from other bots and app integrations (default: on) |
-| Include Thread Replies | Toggle to fetch thread replies and append them to the parent message (default: on) |
 
 Authentication uses a **Bot User OAuth Token** (starts with `xoxb-`). To configure:
 
@@ -312,7 +311,6 @@ Authentication uses a **Bot User OAuth Token** (starts with `xoxb-`). To configu
    - `groups:history`
    - `groups:read`
    - `users:read`
-   - `users:read.email`
 3. Install the app to your workspace and copy the Bot User OAuth Token into the API Token field
 4. **Important**: You must explicitly `/invite` your bot to any channel you want it to index
 

@@ -107,6 +107,10 @@ export function SlackConfigFields({ control }: { control: Control<any> }) {
                 step={1}
                 placeholder="90"
                 {...field}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  field.onChange(raw === "" ? undefined : Number(raw));
+                }}
                 value={(field.value as number | string | undefined) ?? ""}
               />
             </FormControl>
@@ -115,27 +119,6 @@ export function SlackConfigFields({ control }: { control: Control<any> }) {
               selected channel.
             </FormDescription>
             <FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField
-        control={control}
-        name="config.includeThreadReplies"
-        render={({ field }) => (
-          <FormItem className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <FormLabel>Include Thread Replies</FormLabel>
-              <FormDescription>
-                Collapse thread replies into the parent message for richer
-                context.
-              </FormDescription>
-            </div>
-            <FormControl>
-              <Switch
-                checked={(field.value as boolean) ?? true}
-                onCheckedChange={field.onChange}
-              />
-            </FormControl>
           </FormItem>
         )}
       />

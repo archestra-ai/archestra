@@ -314,7 +314,7 @@ export function getDefaultConnectorConfig(
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
-    slack: { type, skipBotMessages: true, includeThreadReplies: true },
+    slack: { type, skipBotMessages: true },
   };
 
   return { ...defaultConfigs[type] };

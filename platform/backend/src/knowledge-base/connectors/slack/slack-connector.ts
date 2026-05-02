@@ -3,12 +3,17 @@ import QuickLRU from "quick-lru";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
+  ConnectorItemFailure,
   ConnectorSyncBatch,
   SlackCheckpoint,
   SlackConfig,
 } from "@/types";
 import { SlackConfigSchema } from "@/types";
-import { BaseConnector, extractErrorMessage } from "../base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 100;
 const USER_CACHE_MAX_SIZE = 500;
@@ -91,6 +96,11 @@ export class SlackConnector extends BaseConnector {
     this.log.debug("Testing Slack connection");
 
     try {
+      const parsedConfig = parseSlackConfig(params.config);
+      if (!parsedConfig.success) {
+        return { success: false, error: parsedConfig.error };
+      }
+
       const client = getSlackClient(params.credentials);
 
       // Verify token validity and retrieve workspace info
@@ -111,9 +121,10 @@ export class SlackConnector extends BaseConnector {
         "Slack auth.test successful",
       );
 
-      // Verify channel read scopes by attempting to list one channel
+      // Verify channel read scopes by attempting to list channels across
+      // both public and private channel types.
       const channelResult = await client.conversations.list({
-        types: "public_channel",
+        types: "public_channel,private_channel",
         exclude_archived: true,
         limit: 1,
       });
@@ -121,7 +132,18 @@ export class SlackConnector extends BaseConnector {
       if (!channelResult.ok) {
         return {
           success: false,
-          error: `Channel access failed: ${channelResult.error ?? "unknown error"}. Verify the bot has channels:read scope.`,
+          error: `Channel access failed: ${channelResult.error ?? "unknown error"}. Verify the bot has channels:read and groups:read scopes.`,
+        };
+      }
+
+      const channelDiscovery = await this.discoverChannels(
+        client,
+        parsedConfig.config.channelIds,
+      );
+      if (channelDiscovery.missingRequestedIds.length > 0) {
+        return {
+          success: false,
+          error: `The bot is not currently a member of the configured channel ID(s): ${channelDiscovery.missingRequestedIds.join(", ")}. Invite the bot to those channels and try again.`,
         };
       }
 
@@ -140,15 +162,18 @@ export class SlackConnector extends BaseConnector {
     checkpoint: Record<string, unknown> | null;
   }): Promise<number | null> {
     const parsed = parseSlackConfig(params.config);
-    if (!parsed) return null;
+    if (!parsed.success) return null;
 
     try {
       const client = getSlackClient(params.credentials);
-      const channels = await this.discoverChannels(client, parsed.channelIds);
+      const channels = await this.discoverChannels(
+        client,
+        parsed.config.channelIds,
+      );
 
       // Slack doesn't expose message counts per channel without pagination,
       // so return the channel count as a rough proxy for progress display.
-      return channels.length;
+      return channels.channels.length;
     } catch (error) {
       this.log.warn(
         { error: extractErrorMessage(error) },
@@ -166,52 +191,104 @@ export class SlackConnector extends BaseConnector {
     endTime?: Date;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseSlackConfig(params.config);
-    if (!parsed) {
-      throw new Error("Invalid Slack configuration");
+    if (!parsed.success) {
+      throw new Error(parsed.error);
     }
 
-    if (!parsed.channelIds || parsed.channelIds.length === 0) {
-      throw new Error(
-        "Channel IDs are required. Please specify the Slack channel IDs to sync to avoid indexing an entire workspace.",
-      );
-    }
+    const slackConfig = parsed.config;
 
     // De-duplicate channel IDs to avoid redundant work and confusing logs.
-    parsed.channelIds = Array.from(new Set(parsed.channelIds));
+    slackConfig.channelIds = Array.from(new Set(slackConfig.channelIds));
 
     const checkpoint = (params.checkpoint as SlackCheckpoint | null) ?? {
       type: "slack" as const,
     };
+    let previousLastSyncedAt = checkpoint.lastSyncedAt;
 
-    const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
-    const skipBotMessages = parsed.skipBotMessages ?? true;
-    const includeThreadReplies = parsed.includeThreadReplies ?? true;
+    const batchSize = slackConfig.batchSize ?? DEFAULT_BATCH_SIZE;
+    const skipBotMessages = slackConfig.skipBotMessages ?? true;
     const channelCursors = { ...checkpoint.channelCursors };
     const windowOldestTs =
-      parsed.syncWindowDays !== undefined
-        ? getWindowOldestTs(parsed.syncWindowDays)
+      slackConfig.syncWindowDays !== undefined
+        ? getWindowOldestTs(slackConfig.syncWindowDays)
         : null;
 
     const client = getSlackClient(params.credentials);
 
+    // Used only for constructing stable Slack UI links (no additional scopes required).
+    // If this fails, we still proceed without sourceUrl.
+    let teamId: string | undefined;
+    try {
+      const auth = await client.auth.test();
+      if (auth.ok) {
+        teamId = auth.team_id ?? undefined;
+      }
+    } catch {
+      // ignore
+    }
+
     this.log.debug(
       {
-        channelIds: parsed.channelIds,
+        channelIds: slackConfig.channelIds,
         skipBotMessages,
-        includeThreadReplies,
-        syncWindowDays: parsed.syncWindowDays,
+        includeThreadReplies: true,
+        syncWindowDays: slackConfig.syncWindowDays,
         channelCursorCount: Object.keys(channelCursors).length,
       },
       "Starting Slack sync",
     );
 
     // Resolve target channels
-    const channels = await this.discoverChannels(client, parsed.channelIds);
+    const channelDiscovery = await this.discoverChannels(
+      client,
+      slackConfig.channelIds,
+    );
+    const channels = channelDiscovery.channels;
 
     this.log.debug(
-      { channelCount: channels.length },
+      {
+        channelCount: channels.length,
+        missingRequestedIds: channelDiscovery.missingRequestedIds,
+      },
       "Discovered Slack channels",
     );
+
+    if (channelDiscovery.missingRequestedIds.length > 0) {
+      if (channels.length === 0) {
+        throw new Error(
+          `The bot is not currently a member of the configured channel ID(s): ${channelDiscovery.missingRequestedIds.join(", ")}. Invite the bot to those channels and rerun sync.`,
+        );
+      }
+
+      const missingChannelFailures: ConnectorItemFailure[] =
+        channelDiscovery.missingRequestedIds.map((channelId) => ({
+          itemId: channelId,
+          resource: "channel",
+          error:
+            "Configured channel is not accessible. Ensure the channel exists and the bot has been invited.",
+        }));
+
+      yield {
+        documents: [],
+        failures: missingChannelFailures,
+        checkpoint: buildCheckpoint({
+          type: "slack",
+          itemUpdatedAt: null,
+          previousLastSyncedAt,
+          extra: { channelCursors: { ...channelCursors } },
+        }),
+        hasMore: true,
+      };
+
+      previousLastSyncedAt = (await Promise.resolve(
+        buildCheckpoint({
+          type: "slack",
+          itemUpdatedAt: null,
+          previousLastSyncedAt,
+          extra: { channelCursors: { ...channelCursors } },
+        }),
+      )).lastSyncedAt;
+    }
 
     // User name resolution cache with LRU eviction and TTL
     const userNameCache = new QuickLRU<string, string>({
@@ -259,11 +336,9 @@ export class SlackConnector extends BaseConnector {
           });
 
           if (!historyResult.ok) {
-            this.log.warn(
-              { channelId, error: historyResult.error },
-              "Failed to fetch channel history",
+            throw new Error(
+              `Failed to fetch channel history: ${historyResult.error ?? "unknown"}`,
             );
-            break;
           }
 
           const messages = historyResult.messages ?? [];
@@ -271,6 +346,7 @@ export class SlackConnector extends BaseConnector {
           hasMoreMessages = historyResult.has_more === true && !!cursor;
 
           const documents: ConnectorDocument[] = [];
+          let batchCheckpointAt: Date | undefined;
 
           for (const message of messages) {
             if (!message.ts || !message.text) continue;
@@ -299,11 +375,7 @@ export class SlackConnector extends BaseConnector {
 
             // Resolve thread replies if enabled and message has replies
             let threadContent = "";
-            if (
-              includeThreadReplies &&
-              message.reply_count &&
-              message.reply_count > 0
-            ) {
+            if (message.reply_count && message.reply_count > 0) {
               threadContent = await this.fetchThreadReplies(
                 client,
                 channelId,
@@ -330,7 +402,7 @@ export class SlackConnector extends BaseConnector {
               id: `slack-${channelId}-${message.ts}`,
               title: `#${channelName} — ${authorName} (${messageDate.toISOString().split("T")[0]})`,
               content: contentParts.join("\n"),
-              sourceUrl: undefined,
+              sourceUrl: buildSlackChannelUrl({ teamId, channelId }),
               metadata: {
                 channelId,
                 channelName,
@@ -347,6 +419,10 @@ export class SlackConnector extends BaseConnector {
             };
 
             documents.push(doc);
+
+            if (!batchCheckpointAt || messageDate > batchCheckpointAt) {
+              batchCheckpointAt = messageDate;
+            }
           }
 
           // Update per-channel cursor after the channel is fully paginated
@@ -367,16 +443,21 @@ export class SlackConnector extends BaseConnector {
             "Slack channel batch done",
           );
 
+          const nextCheckpoint = buildCheckpoint({
+            type: "slack",
+            itemUpdatedAt: batchCheckpointAt,
+            previousLastSyncedAt,
+            extra: { channelCursors: { ...channelCursors } },
+          });
+
           yield {
             documents,
             failures: this.flushFailures(),
-            checkpoint: {
-              type: "slack" as const,
-              channelCursors: { ...channelCursors },
-              lastSyncedAt: new Date().toISOString(),
-            },
+            checkpoint: nextCheckpoint,
             hasMore,
           };
+
+          previousLastSyncedAt = nextCheckpoint.lastSyncedAt;
         }
       } catch (error) {
         // Per-channel failure isolation: log the error and continue
@@ -389,6 +470,13 @@ export class SlackConnector extends BaseConnector {
         );
 
         // Yield an empty batch to surface the failure
+        const nextCheckpoint = buildCheckpoint({
+          type: "slack",
+          itemUpdatedAt: null,
+          previousLastSyncedAt,
+          extra: { channelCursors: { ...channelCursors } },
+        });
+
         yield {
           documents: [],
           failures: [
@@ -398,13 +486,11 @@ export class SlackConnector extends BaseConnector {
               error: message,
             },
           ],
-          checkpoint: {
-            type: "slack" as const,
-            channelCursors: { ...channelCursors },
-            lastSyncedAt: new Date().toISOString(),
-          },
+          checkpoint: nextCheckpoint,
           hasMore: !isLastChannel,
         };
+
+        previousLastSyncedAt = nextCheckpoint.lastSyncedAt;
       }
     }
   }
@@ -412,15 +498,20 @@ export class SlackConnector extends BaseConnector {
   // ===== Private methods =====
 
   /**
-   * Discover target channels. If channelIds are specified in config,
-   * filter to those; otherwise return all non-archived channels the
-   * bot is a member of.
+   * Discover channels that are accessible to the bot and identify configured
+   * channel IDs that are missing or inaccessible.
    */
   private async discoverChannels(
     client: WebClient,
-    channelIds?: string[],
-  ): Promise<Array<{ id: string; name?: string }>> {
-    const channels: Array<{ id: string; name?: string }> = [];
+    channelIds: string[],
+  ): Promise<{
+    channels: Array<{ id: string; name?: string }>;
+    missingRequestedIds: string[];
+  }> {
+    const accessibleChannelsById = new Map<
+      string,
+      { id: string; name?: string }
+    >();
     let cursor: string | undefined;
 
     do {
@@ -441,19 +532,26 @@ export class SlackConnector extends BaseConnector {
 
       for (const ch of result.channels ?? []) {
         if (!ch.id || !ch.is_member) continue;
-
-        // If channelIds filter is set, only include matching channels
-        if (channelIds && channelIds.length > 0) {
-          if (!channelIds.includes(ch.id)) continue;
-        }
-
-        channels.push({ id: ch.id, name: ch.name ?? undefined });
+        accessibleChannelsById.set(ch.id, {
+          id: ch.id,
+          name: ch.name ?? undefined,
+        });
       }
 
       cursor = result.response_metadata?.next_cursor || undefined;
     } while (cursor);
 
-    return channels;
+    const channels = channelIds
+      .map((channelId) => accessibleChannelsById.get(channelId))
+      .filter((channel): channel is { id: string; name?: string } =>
+        Boolean(channel),
+      );
+
+    const missingRequestedIds = channelIds.filter(
+      (channelId) => !accessibleChannelsById.has(channelId),
+    );
+
+    return { channels, missingRequestedIds };
   }
 
   /**
@@ -567,9 +665,48 @@ function getSlackClient(credentials: ConnectorCredentials): WebClient {
   return new WebClient(credentials.apiToken);
 }
 
-function parseSlackConfig(config: Record<string, unknown>): SlackConfig | null {
+function buildSlackChannelUrl(params: {
+  teamId: string | undefined;
+  channelId: string;
+}): string {
+  const base = "https://slack.com/app_redirect";
+  const query = new URLSearchParams({ channel: params.channelId });
+  if (params.teamId) {
+    query.set("team", params.teamId);
+  }
+  return `${base}?${query.toString()}`;
+}
+
+function parseSlackConfig(
+  config: Record<string, unknown>,
+): { success: true; config: SlackConfig } | { success: false; error: string } {
   const result = SlackConfigSchema.safeParse({ type: "slack", ...config });
-  return result.success ? result.data : null;
+  if (result.success) {
+    return { success: true, config: result.data };
+  }
+
+  const channelIdsIssue = result.error.issues.find(
+    (issue) => issue.path.length > 0 && issue.path[0] === "channelIds",
+  );
+  if (channelIdsIssue) {
+    return {
+      success: false,
+      error:
+        "Channel IDs are required. Please specify the Slack channel IDs to sync to avoid indexing an entire workspace.",
+    };
+  }
+
+  const syncWindowDaysIssue = result.error.issues.find(
+    (issue) => issue.path.length > 0 && issue.path[0] === "syncWindowDays",
+  );
+  if (syncWindowDaysIssue) {
+    return {
+      success: false,
+      error: "Sync window (days) must be a whole number between 1 and 3650.",
+    };
+  }
+
+  return { success: false, error: "Invalid Slack configuration" };
 }
 
 function getWindowOldestTs(syncWindowDays: number): string {

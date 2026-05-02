@@ -338,7 +338,7 @@ export function CreateConnectorDialog({
 
                 {connectorType === "file_upload" && (
                   <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    No credentials needed. After creating the connector, you can
+                    After creating the connector, you can
                     upload text files or ZIP archives directly from the
                     connector page.
                   </div>

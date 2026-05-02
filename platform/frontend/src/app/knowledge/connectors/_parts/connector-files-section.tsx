@@ -23,6 +23,7 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   formatFileSize,
   type UploadedFile,
+  useConnectorFile,
   useConnectorFilesPaginated,
   useDeleteConnectorFile,
   useUploadConnectorFiles,
@@ -106,6 +107,25 @@ function FileStatusBadge({
       )}
       {labels[embeddingStatus as keyof typeof labels] ?? embeddingStatus}
     </Badge>
+  );
+}
+
+function FileStatusCell({
+  file,
+  connectorId,
+}: {
+  file: UploadedFile;
+  connectorId: string;
+}) {
+  const { data: freshFile } = useConnectorFile(connectorId, file.id);
+  const current = freshFile ?? file;
+
+  return (
+    <FileStatusBadge
+      processingStatus={current.processingStatus}
+      embeddingStatus={current.embeddingStatus}
+      processingError={current.processingError}
+    />
   );
 }
 
@@ -229,11 +249,7 @@ export function ConnectorFilesSection({
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <FileStatusBadge
-          processingStatus={row.original.processingStatus}
-          embeddingStatus={row.original.embeddingStatus}
-          processingError={row.original.processingError}
-        />
+        <FileStatusCell file={row.original} connectorId={connectorId} />
       ),
     },
     {

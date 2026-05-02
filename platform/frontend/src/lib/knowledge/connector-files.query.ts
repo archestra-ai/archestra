@@ -64,20 +64,6 @@ export function useConnectorFilesPaginated(params: {
       );
     },
     enabled: Boolean(params.connectorId),
-    refetchInterval: (query) => {
-      const result = query.state.data;
-      if (!result?.data) return false;
-      const hasActive = result.data.some((f) => {
-        const ps = (f as Record<string, unknown>).processingStatus as
-          | string
-          | undefined;
-        return (
-          (ps && ACTIVE_STATUSES.has(ps)) ||
-          ACTIVE_STATUSES.has(f.embeddingStatus)
-        );
-      });
-      return hasActive ? 5000 : false;
-    },
   });
 }
 
@@ -95,8 +81,7 @@ export function useConnectorFile(connectorId: string, fileId: string) {
     refetchInterval: (query) => {
       const file = query.state.data as UploadedFile | null | undefined;
       if (!file) return false;
-      const processingStatus = (file as Record<string, unknown>)
-        .processingStatus as string | undefined;
+      const processingStatus = file.processingStatus as string | undefined;
       if (processingStatus && ACTIVE_STATUSES.has(processingStatus))
         return 3000;
       if (ACTIVE_STATUSES.has(file.embeddingStatus)) return 3000;

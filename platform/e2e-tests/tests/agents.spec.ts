@@ -43,6 +43,80 @@ test("can create and delete an agent", {
   await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
 });
 
+test("can clone an agent and rename it", {
+  tag: ["@firefox", "@webkit"],
+}, async ({ page, makeRandomString, goToPage }) => {
+  test.setTimeout(120_000);
+
+  const AGENT_NAME = makeRandomString(10, "Test Agent");
+  const CLONE_NAME = makeRandomString(10, "Cloned Agent");
+  await goToPage(page, "/agents");
+
+  await page.waitForLoadState("domcontentloaded");
+
+  // Create initial agent
+  const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
+  await waitForElementWithReload(page, createButton);
+  await createButton.click();
+  await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
+  await page.getByRole("button", { name: "Create" }).click();
+
+  // Wait for the create dialog to close
+  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
+  await page.waitForLoadState("domcontentloaded");
+
+  // Poll for the agent to appear in the table
+  const agentLocator = page
+    .getByTestId(E2eTestId.AgentsTable)
+    .getByTitle(AGENT_NAME);
+
+  await waitForElementWithReload(page, agentLocator, {
+    timeout: 30_000,
+    intervals: [2000, 3000, 5000],
+    checkEnabled: false,
+  });
+
+  // Clone the agent
+  await page.getByTestId(`${E2eTestId.CloneAgentButton}-${AGENT_NAME}`).click();
+
+  // Wait for the edit dialog to open with the cloned agent
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });
+
+  // Rename the cloned agent
+  const nameInput = page.getByRole("textbox", { name: "Name" });
+  await nameInput.clear();
+  await nameInput.fill(CLONE_NAME);
+  await page.getByRole("button", { name: "Update" }).click();
+
+  // Wait for the dialog to close
+  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
+  await page.waitForLoadState("domcontentloaded");
+
+  // Verify the cloned agent appears with the new name
+  const clonedAgentLocator = page
+    .getByTestId(E2eTestId.AgentsTable)
+    .getByTitle(CLONE_NAME);
+
+  await waitForElementWithReload(page, clonedAgentLocator, {
+    timeout: 30_000,
+    intervals: [2000, 3000, 5000],
+    checkEnabled: false,
+  });
+
+  // Clean up: delete both agents
+  await page
+    .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
+    .click();
+  await clickButton({ page, options: { name: "Delete Agent" } });
+  await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
+
+  await page
+    .getByTestId(`${E2eTestId.DeleteAgentButton}-${CLONE_NAME}`)
+    .click();
+  await clickButton({ page, options: { name: "Delete Agent" } });
+  await expect(clonedAgentLocator).not.toBeVisible({ timeout: 10000 });
+});
+
 test("can create and delete an LLM proxy", {
   tag: ["@firefox", "@webkit"],
 }, async ({ page, makeRandomString, goToPage }) => {

@@ -9,6 +9,7 @@ import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
+  serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +70,7 @@ export function CreateLlmProviderApiKeyDialog({
         provider: values.provider,
         apiKey: values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
+        extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
         scope: values.scope,
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
@@ -140,6 +142,7 @@ function getDefaultFormValues(
     provider: "anthropic",
     apiKey: null,
     baseUrl: null,
+    extraHeaders: [],
     scope: "personal",
     teamId: null,
     vaultSecretPath: null,

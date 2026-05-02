@@ -17,12 +17,14 @@ interface GithubConfigFieldsProps {
   form: UseFormReturn<any>;
   prefix?: string;
   hideUrl?: boolean;
+  hideOwner?: boolean;
 }
 
 export function GithubConfigFields({
   form,
   prefix = "config",
   hideUrl = false,
+  hideOwner = false,
 }: GithubConfigFieldsProps) {
   return (
     <div className="space-y-4">
@@ -47,23 +49,25 @@ export function GithubConfigFields({
         />
       )}
 
-      <FormField
-        control={form.control}
-        name={`${prefix}.owner`}
-        rules={{ required: "Owner is required" }}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Owner</FormLabel>
-            <FormControl>
-              <Input placeholder="my-org" {...field} />
-            </FormControl>
-            <FormDescription>
-              GitHub organization or username that owns the repositories.
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      {!hideOwner && (
+        <FormField
+          control={form.control}
+          name={`${prefix}.owner`}
+          rules={{ required: "Owner is required" }}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Owner</FormLabel>
+              <FormControl>
+                <Input placeholder="my-org" {...field} />
+              </FormControl>
+              <FormDescription>
+                GitHub organization or username that owns the repositories.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
 
       <FormField
         control={form.control}

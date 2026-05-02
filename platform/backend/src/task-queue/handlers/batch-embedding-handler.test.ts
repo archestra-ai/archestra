@@ -9,9 +9,13 @@ vi.mock("@/knowledge-base", () => ({
 
 const mockCompleteBatch = vi.hoisted(() => vi.fn());
 const mockUpdateConnector = vi.hoisted(() => vi.fn());
+const mockFindByIdConnector = vi.hoisted(() => vi.fn());
 vi.mock("@/models", () => ({
   ConnectorRunModel: { completeBatch: mockCompleteBatch },
-  KnowledgeBaseConnectorModel: { update: mockUpdateConnector },
+  KnowledgeBaseConnectorModel: {
+    update: mockUpdateConnector,
+    findById: mockFindByIdConnector,
+  },
 }));
 
 vi.mock("@/logging", () => ({
@@ -26,9 +30,14 @@ vi.mock("@/logging", () => ({
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 
 describe("handleBatchEmbedding", () => {
+  const OLD_DATE = new Date("2020-01-01T00:00:00.000Z");
+  const RUN_STARTED_AT = new Date("2026-04-22T10:00:00.000Z");
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcessDocuments.mockResolvedValue(undefined);
+    // Default: connector's lastSyncAt is old → no newer run → update proceeds
+    mockFindByIdConnector.mockResolvedValue({ lastSyncAt: OLD_DATE });
   });
 
   test("processes documents and completes batch", async () => {
@@ -57,6 +66,7 @@ describe("handleBatchEmbedding", () => {
       completedBatches: 3,
       totalBatches: 3,
       status: "success",
+      startedAt: RUN_STARTED_AT,
     });
 
     await handleBatchEmbedding({
@@ -68,6 +78,25 @@ describe("handleBatchEmbedding", () => {
       lastSyncStatus: "success",
       lastSyncAt: expect.any(Date),
     });
+  });
+
+  test("skips connector update when a newer run has started", async () => {
+    const newerDate = new Date(RUN_STARTED_AT.getTime() + 60_000);
+    mockFindByIdConnector.mockResolvedValue({ lastSyncAt: newerDate });
+    mockCompleteBatch.mockResolvedValue({
+      connectorId: "conn-1",
+      completedBatches: 3,
+      totalBatches: 3,
+      status: "success",
+      startedAt: RUN_STARTED_AT,
+    });
+
+    await handleBatchEmbedding({
+      documentIds: ["doc-1"],
+      connectorRunId: "run-1",
+    });
+
+    expect(mockUpdateConnector).not.toHaveBeenCalled();
   });
 
   test("throws when documentIds is missing", async () => {
@@ -92,6 +121,7 @@ describe("handleBatchEmbedding", () => {
       completedBatches: 3,
       totalBatches: 3,
       status: "failed",
+      startedAt: RUN_STARTED_AT,
     });
 
     await handleBatchEmbedding({

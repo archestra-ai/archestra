@@ -57,6 +57,30 @@ describe("provider fetcher registry", () => {
     expect(mockFetch.mock.calls[0][0]).toBe(`${customBaseUrl}/models`);
   });
 
+  test("testProviderApiKey forwards extraHeaders to the fetcher", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: [
+            { id: "gpt-4o", created: 1, object: "model", owned_by: "openai" },
+          ],
+        }),
+    });
+
+    await testProviderApiKey(
+      "openai",
+      "test-key",
+      "https://gateway.example.com/v1",
+      { "kubeflow-userid": "user@example.com" },
+    );
+
+    expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
+      Authorization: "Bearer test-key",
+      "kubeflow-userid": "user@example.com",
+    });
+  });
+
   test("fetchModelsForProvider returns models when provider has an API key", async ({
     makeOrganization,
     makeUser,

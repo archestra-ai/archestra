@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
-import { Eyebrow, UnsupportedPanel } from "./mcp-client-instructions";
+import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 

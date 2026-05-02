@@ -10,6 +10,7 @@ import type { ModelInfo } from "./types";
 export async function fetchAzureModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.azure.baseUrl;
   if (!baseUrl) {
@@ -31,7 +32,10 @@ export async function fetchAzureModels(
     // and returns { data: [{ id, ... }] }, which we map into ModelInfo.
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
     const response = await fetch(url, {
-      headers: { "api-key": normalizedApiKey ?? "" },
+      headers: {
+        ...(extraHeaders ?? {}),
+        "api-key": normalizedApiKey ?? "",
+      },
     });
 
     if (!response.ok) {

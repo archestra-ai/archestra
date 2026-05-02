@@ -168,17 +168,19 @@ export function EditableAssistantMessage({
 
   return (
     <Message from="assistant" className="group/message">
-      <div className="relative flex flex-col items-start pb-2 w-full">
-        <MessageContent>
-          <Response isStreaming={isStreaming}>{text}</Response>
-          {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
-        </MessageContent>
+      <div className="flex max-w-[80%] items-center justify-start gap-2">
+        <div className="min-w-0 flex-1">
+          <MessageContent className="max-w-none">
+            <Response isStreaming={isStreaming}>{text}</Response>
+            {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
+          </MessageContent>
+        </div>
         {showActions && (
           <MessageActions
             textToCopy={text}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
-            className="absolute -bottom-1 left-0 translate-y-full z-10 opacity-0 group-hover/message:opacity-100 transition-opacity"
+            className="shrink-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
           />
         )}
       </div>

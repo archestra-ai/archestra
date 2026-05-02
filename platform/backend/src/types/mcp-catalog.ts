@@ -47,6 +47,7 @@ export const UserConfigFieldSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   headerName: z.string().optional(),
+  valuePrefix: z.string().optional(),
 });
 
 // Define a version of LocalConfigSchema for SELECT operations

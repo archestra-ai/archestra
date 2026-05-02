@@ -4,10 +4,12 @@ export async function fetchModelsWithBearerAuth<T>(params: {
   url: string;
   apiKey: string;
   errorLabel: string;
+  extraHeaders?: Record<string, string> | null;
 }): Promise<T> {
-  const { url, apiKey, errorLabel } = params;
+  const { url, apiKey, errorLabel, extraHeaders } = params;
   const response = await fetch(url, {
     headers: {
+      ...(extraHeaders ?? {}),
       Authorization: `Bearer ${apiKey}`,
     },
   });

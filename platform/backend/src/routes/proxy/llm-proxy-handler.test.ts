@@ -6,6 +6,7 @@
  * 2. recordBlockedToolSpans is called when tool invocation policies block tool calls
  */
 
+import { CHAT_API_KEY_ID_HEADER } from "@shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -14,7 +15,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
-import { ModelModel } from "@/models";
+import { LlmProviderApiKeyModel, ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createAnthropicTestClient,
@@ -825,5 +826,126 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
 
       expect(mockRecordBlockedToolSpans).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+  const createClientSpy = vi.fn();
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    createClientSpy.mockReset();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      (apiKey, options) => {
+        createClientSpy(apiKey, options);
+        return createOpenAiTestClient({}) as never;
+      },
+    );
+
+    testAgent = await makeAgent({ name: "Test Extra Headers Agent" });
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
+
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("loopback request with header forwards per-key extraHeaders to upstream", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const apiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Test key with extra headers",
+      provider: "openai",
+      scope: "org",
+      userId: null,
+      teamId: null,
+      extraHeaders: { "X-Custom-Auth": "abc" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        [CHAT_API_KEY_ID_HEADER]: apiKey.id,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createClientSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        defaultHeaders: expect.objectContaining({ "X-Custom-Auth": "abc" }),
+      }),
+    );
+  });
+
+  test("non-loopback request ignores header (extraHeaders not applied)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const apiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Test key with extra headers",
+      provider: "openai",
+      scope: "org",
+      userId: null,
+      teamId: null,
+      extraHeaders: { "X-Custom-Auth": "abc" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "203.0.113.5",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        [CHAT_API_KEY_ID_HEADER]: apiKey.id,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createClientSpy).toHaveBeenCalled();
+    const [, options] = createClientSpy.mock.calls[0];
+    expect(options.defaultHeaders).toBeUndefined();
   });
 });

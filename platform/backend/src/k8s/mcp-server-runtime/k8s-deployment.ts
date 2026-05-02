@@ -247,6 +247,7 @@ export default class K8sDeployment {
     this.environmentValues = options.environmentValues;
     this.deploymentName = K8sDeployment.constructDeploymentName(
       options.mcpServer,
+      options.catalogItem,
     );
   }
 
@@ -260,9 +261,21 @@ export default class K8sDeployment {
   /**
    * Constructs a valid Kubernetes deployment name for an MCP server.
    *
-   * Creates a deployment name in the format "mcp-<slugified-name>".
+   * Multi-tenant catalogs share one deployment per catalog (named after the
+   * catalog so all caller mcp_server rows alias the same pod). Single-tenant
+   * (default) gets one deployment per mcp_server row.
    */
-  static constructDeploymentName(mcpServer: McpServer): string {
+  static constructDeploymentName(
+    mcpServer: McpServer,
+    catalogItem?: InternalMcpCatalog | null,
+  ): string {
+    if (catalogItem?.multitenant && mcpServer.catalogId) {
+      const slugified = ensureStringIsRfc1123Compliant(catalogItem.name);
+      return `mcp-mt-${mcpServer.catalogId.slice(0, 8)}-${slugified}`.substring(
+        0,
+        253,
+      );
+    }
     const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
     return `mcp-${slugified}`.substring(0, 253);
   }
@@ -270,10 +283,31 @@ export default class K8sDeployment {
   /**
    * Constructs the Kubernetes Secret name for an MCP server.
    *
-   * Creates a secret name in the format "mcp-server-{id}-secrets".
+   * Multi-tenant catalogs share a catalog-stable secret so all callers' pods
+   * reference the same secret (env vars are catalog-level). Single-tenant
+   * gets a per-mcpServer secret.
    */
-  static constructK8sSecretName(mcpServerId: string): string {
+  static constructK8sSecretName(
+    mcpServerId: string,
+    catalogItem?: InternalMcpCatalog | null,
+    catalogId?: string | null,
+  ): string {
+    if (catalogItem?.multitenant && catalogId) {
+      return `mcp-server-mt-${catalogId.slice(0, 8)}-secrets`;
+    }
     return `mcp-server-${mcpServerId}-secrets`;
+  }
+
+  /**
+   * Returns the K8s Secret name for this MCP server, taking multi-tenancy
+   * into account using the cached catalogItem if available.
+   */
+  private getK8sSecretName(): string {
+    return K8sDeployment.constructK8sSecretName(
+      this.mcpServer.id,
+      this.catalogItem,
+      this.mcpServer.catalogId,
+    );
   }
 
   /**
@@ -299,9 +333,7 @@ export default class K8sDeployment {
    * Create or update a Kubernetes Secret for environment variables marked as "secret" type
    */
   async createK8sSecret(secretData: Record<string, string>): Promise<void> {
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     if (Object.keys(secretData).length === 0) {
       logger.debug(
@@ -400,9 +432,7 @@ export default class K8sDeployment {
    * Delete the Kubernetes Secret for this MCP server
    */
   async deleteK8sSecret(): Promise<void> {
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     try {
       await this.k8sApi.deleteNamespacedSecret({
@@ -738,9 +768,7 @@ export default class K8sDeployment {
 
     // Get environment variables and mounted secrets
     const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     // Build volume mounts for mounted secrets (read-only files at /secrets/<key>)
     const volumeMounts: k8s.V1VolumeMount[] = mountedSecrets.map(({ key }) => ({
@@ -814,7 +842,23 @@ export default class K8sDeployment {
                 command: [localConfig.command],
               }
             : {}),
-          args: this.resolveArgs(localConfig.arguments || [], envVars),
+          args: (localConfig.arguments || []).map((arg) => {
+            // Interpolate ${user_config.xxx} placeholders with actual values
+            // Use environmentValues first (for internal catalog), fallback to userConfigValues (for external catalog)
+            if (this.environmentValues || this.userConfigValues) {
+              return arg.replace(
+                /\$\{user_config\.([^}]+)\}/g,
+                (match, configKey) => {
+                  return (
+                    this.environmentValues?.[configKey] ||
+                    this.userConfigValues?.[configKey] ||
+                    match
+                  );
+                },
+              );
+            }
+            return arg;
+          }),
           // For stdio-based MCP servers, we use stdin/stdout
           // For HTTP-based MCP servers, expose port instead
           ...(needsHttp
@@ -891,9 +935,7 @@ export default class K8sDeployment {
     tolerations?: k8s.V1Toleration[] | null,
     resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment | null {
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     // Build env values map for placeholder resolution
     // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
@@ -1126,13 +1168,27 @@ export default class K8sDeployment {
         container.command = [localConfig.command];
       }
 
-      const sourceArgs =
-        container.args && container.args.length > 0
-          ? container.args
-          : localConfig.arguments;
+      if (localConfig.arguments && localConfig.arguments.length > 0) {
+        // Process arguments with placeholder replacement
+        const processedArgs = localConfig.arguments.map((arg) => {
+          if (this.environmentValues || this.userConfigValues) {
+            return arg.replace(
+              /\$\{user_config\.([^}]+)\}/g,
+              (match, configKey) => {
+                return (
+                  this.environmentValues?.[configKey] ||
+                  this.userConfigValues?.[configKey] ||
+                  match
+                );
+              },
+            );
+          }
+          return arg;
+        });
 
-      if (Array.isArray(sourceArgs) && sourceArgs.length > 0) {
-        container.args = this.resolveArgs(sourceArgs, envVars);
+        if (!container.args || container.args.length === 0) {
+          container.args = processedArgs;
+        }
       }
     }
 
@@ -1311,9 +1367,7 @@ export default class K8sDeployment {
         if (!value || value.trim() === "") {
           return;
         }
-        const k8sSecretName = K8sDeployment.constructK8sSecretName(
-          this.mcpServer.id,
-        );
+        const k8sSecretName = this.getK8sSecretName();
         env.push({
           name: key,
           valueFrom: {
@@ -1354,47 +1408,6 @@ export default class K8sDeployment {
     });
 
     return { envVars: env, mountedSecrets };
-  }
-
-  /**
-   * Resolve placeholders inside MCP server argument strings:
-   *   1. ${user_config.xxx} — Archestra-specific config interpolation (existing).
-   *   2. ${VAR} / $VAR — POSIX-shell-style references to env vars defined for
-   *      the server. Lets users write `--token $MY_TOKEN` without wrapping the
-   *      command in `sh -c`.
-   */
-  private resolveArgs(args: string[], envVars: k8s.V1EnvVar[]): string[] {
-    const envMappings: Record<string, string> = {};
-
-    for (const envVar of envVars) {
-      if (envVar.value !== undefined) {
-        envMappings[envVar.name] = envVar.value;
-      }
-    }
-
-    return args.map((arg) => {
-      let result = arg;
-      if (this.environmentValues || this.userConfigValues) {
-        result = result.replace(
-          /\$\{user_config\.([^}]+)\}/g,
-          (match, configKey) => {
-            return (
-              this.environmentValues?.[configKey] ||
-              this.userConfigValues?.[configKey] ||
-              match
-            );
-          },
-        );
-      }
-      result = result
-        .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) =>
-          envMappings[name] != null ? envMappings[name] : match,
-        )
-        .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, name) =>
-          envMappings[name] != null ? envMappings[name] : match,
-        );
-      return result;
-    });
   }
 
   /**
@@ -1644,9 +1657,22 @@ export default class K8sDeployment {
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
+      const running = pods.items.find((pod) => pod.status?.phase === "Running");
+      if (running) {
+        return running;
+      }
 
-      // Return the first running pod
-      return pods.items.find((pod) => pod.status?.phase === "Running");
+      // Multi-tenant fallback: the shared deployment's pod was labeled with
+      // the first caller's id, so other callers' label search returns no
+      // pods. Match by deployment name prefix instead.
+      const allPods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+      });
+      return allPods.items.find(
+        (pod) =>
+          pod.status?.phase === "Running" &&
+          (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+      );
     } catch (error) {
       logger.error(
         { err: error },
@@ -1674,9 +1700,20 @@ export default class K8sDeployment {
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
+      if (pods.items.length > 0) {
+        return pods.items[0];
+      }
 
-      // Return the first pod regardless of status
-      return pods.items[0];
+      // Multi-tenant catalogs share one deployment across many mcp_server
+      // rows; the deployment's pod label was baked in at create time using
+      // the first caller's mcp_server.id, so subsequent callers won't match
+      // by label. Fall back to matching pods by deployment name prefix.
+      const allPods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+      });
+      return allPods.items.find((pod) =>
+        (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+      );
     } catch (error) {
       logger.error(
         { err: error },

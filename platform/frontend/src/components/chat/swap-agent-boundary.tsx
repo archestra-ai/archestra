@@ -17,6 +17,30 @@ export function SwapAgentBoundaryDivider({
   parts,
   getToolShortName,
   hasToolError,
+  suppressLabel,
+}: {
+  parts: ToolPart[];
+  getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
+  hasToolError: (part: ToolPart, allParts: ToolPart[]) => boolean;
+  suppressLabel?: string | null;
+}) {
+  const label = getSwapAgentBoundaryLabel({
+    parts,
+    getToolShortName,
+    hasToolError,
+  });
+
+  if (!label || label === suppressLabel) {
+    return null;
+  }
+
+  return <MessageBoundaryDivider label={label} />;
+}
+
+export function getSwapAgentBoundaryLabel({
+  parts,
+  getToolShortName,
+  hasToolError,
 }: {
   parts: ToolPart[];
   getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
@@ -47,7 +71,7 @@ export function SwapAgentBoundaryDivider({
       ? "default agent"
       : (extractSwapTargetAgentName(part) ?? "another agent");
 
-    return <MessageBoundaryDivider label={`Switched to ${agentName}`} />;
+    return `Switched to ${agentName}`;
   }
 
   return null;

@@ -1,0 +1,1 @@
+ALTER TABLE "connector_runs" ADD COLUMN "items_skipped" integer DEFAULT 0;

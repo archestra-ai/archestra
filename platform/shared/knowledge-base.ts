@@ -43,6 +43,7 @@ export const CONNECTOR_TYPE_LABELS: Record<string, string> = {
   sharepoint: "SharePoint",
   gdrive: "Google Drive",
   dropbox: "Dropbox",
+  onedrive: "OneDrive",
   asana: "Asana",
   linear: "Linear",
   outline: "Outline",

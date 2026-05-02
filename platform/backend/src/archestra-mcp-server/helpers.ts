@@ -3,6 +3,7 @@ import {
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
+  type McpToolError,
 } from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
@@ -211,6 +212,34 @@ export function structuredSuccessResult(
     content: [{ type: "text" as const, text }],
     structuredContent,
     isError: false,
+  };
+}
+
+export function structuredToolErrorResult(params: {
+  error: McpToolError;
+  text?: string;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+}): CallToolResult {
+  // Keep the structured error in both MCP-native fields and text content:
+  // clients may see only streamed text, persisted output, or structured content.
+  const structuredContent = {
+    ...params.structuredContent,
+    archestraError: params.error,
+  };
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: params.text ?? `Error: ${params.error.message}`,
+      },
+    ],
+    structuredContent,
+    _meta: {
+      archestraError: params.error,
+    },
+    isError: params.isError ?? true,
   };
 }
 

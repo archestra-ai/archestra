@@ -6,10 +6,10 @@ import {
   E2eTestId,
   PROVIDERS_WITH_OPTIONAL_API_KEY,
 } from "@shared";
-import { Building2, CheckCircle2, User, Users } from "lucide-react";
+import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo } from "react";
-import type { UseFormReturn } from "react-hook-form";
+import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   type VisibilityOption,
@@ -20,6 +20,7 @@ import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
 import { LlmProviderSelectItems } from "./llm-provider-options";
+import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import {
@@ -50,12 +51,37 @@ export type LlmProviderApiKeyFormValues = {
   provider: CreateLlmProviderApiKeyBody["provider"];
   apiKey: string | null;
   baseUrl: string | null;
+  /** Edited as an array of rows; serialized to Record<string, string> on submit. */
+  extraHeaders: Array<{ name: string; value: string }>;
   scope: NonNullable<CreateLlmProviderApiKeyBody["scope"]>;
   teamId: string | null;
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
   isPrimary: boolean;
 };
+
+/** Convert the form's array shape to the API's Record shape, dropping empty-name rows. */
+export function serializeExtraHeaders(
+  rows: LlmProviderApiKeyFormValues["extraHeaders"],
+): Record<string, string> | null {
+  const trimmed = rows
+    .map((row) => ({ name: row.name.trim(), value: row.value }))
+    .filter((row) => row.name.length > 0);
+  if (trimmed.length === 0) return null;
+  const result: Record<string, string> = {};
+  for (const row of trimmed) {
+    result[row.name] = row.value;
+  }
+  return result;
+}
+
+/** Convert a Record back into the form's array shape, used when editing an existing key. */
+export function deserializeExtraHeaders(
+  record: Record<string, string> | null | undefined,
+): LlmProviderApiKeyFormValues["extraHeaders"] {
+  if (!record) return [];
+  return Object.entries(record).map(([name, value]) => ({ name, value }));
+}
 
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
@@ -272,6 +298,11 @@ export function LlmProviderApiKeyForm({
   const apiKey = form.watch("apiKey");
   const scope = form.watch("scope");
   const teamId = form.watch("teamId");
+
+  const extraHeadersFieldArray = useFieldArray({
+    control: form.control,
+    name: "extraHeaders",
+  });
 
   const hasApiKeyChanged =
     apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER && apiKey !== "";
@@ -661,6 +692,60 @@ export function LlmProviderApiKeyForm({
               {form.formState.errors.baseUrl.message}
             </p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>
+            Extra HTTP headers{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Sent on every request to the provider. Useful for gateways that
+            require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
+          </p>
+          {extraHeadersFieldArray.fields.length > 0 && (
+            <div className="space-y-2">
+              {extraHeadersFieldArray.fields.map((field, index) => (
+                <div key={field.id} className="flex items-start gap-2">
+                  <Input
+                    placeholder="Header name"
+                    disabled={isPending}
+                    className="flex-1"
+                    {...form.register(`extraHeaders.${index}.name` as const)}
+                  />
+                  <Input
+                    placeholder="Header value"
+                    disabled={isPending}
+                    className="flex-1"
+                    {...form.register(`extraHeaders.${index}.value` as const)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={isPending}
+                    onClick={() => extraHeadersFieldArray.remove(index)}
+                    aria-label={`Remove header ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() =>
+              extraHeadersFieldArray.append({ name: "", value: "" })
+            }
+          >
+            Add header
+          </Button>
         </div>
       </div>
     </div>

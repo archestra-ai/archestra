@@ -11,6 +11,7 @@ import { createXai } from "@ai-sdk/xai";
 import { context, propagation } from "@opentelemetry/api";
 import type { InteractionSource } from "@shared";
 import {
+  CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
@@ -162,6 +163,7 @@ export function createLLMModel(params: {
   source?: InteractionSource;
   baseUrl: string | null;
   contextIsTrusted?: boolean;
+  chatApiKeyId?: string;
 }): LLMModel {
   const {
     provider,
@@ -174,6 +176,7 @@ export function createLLMModel(params: {
     source,
     baseUrl,
     contextIsTrusted,
+    chatApiKeyId,
   } = params;
 
   // Build headers for LLM Proxy
@@ -198,6 +201,13 @@ export function createLLMModel(params: {
   }
   if (baseUrl) {
     clientHeaders[PROVIDER_BASE_URL_HEADER] = baseUrl;
+  }
+  // Chat sends the raw provider secret to the proxy, so the proxy can't tie
+  // the call to a chat_api_keys row. Forwarding the row ID here lets the
+  // proxy look up per-key configuration (extraHeaders). Loopback-gated on
+  // the proxy side; see CHAT_API_KEY_ID_HEADER.
+  if (chatApiKeyId) {
+    clientHeaders[CHAT_API_KEY_ID_HEADER] = chatApiKeyId;
   }
 
   const headers =
@@ -258,6 +268,7 @@ export async function createLLMModelForAgent(params: {
     apiKey,
     source: apiKeySource,
     baseUrl,
+    chatApiKeyId,
   } = await resolveProviderApiKey({
     organizationId,
     userId,
@@ -311,6 +322,7 @@ export async function createLLMModelForAgent(params: {
     source,
     baseUrl,
     contextIsTrusted,
+    chatApiKeyId,
   });
 
   return { model, provider, apiKeySource };

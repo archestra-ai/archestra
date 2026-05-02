@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.29"
+    "version": "1.2.31"
   },
   "components": {
     "schemas": {
@@ -16813,6 +16813,9 @@
             "type": "number"
           },
           "headerName": {
+            "type": "string"
+          },
+          "valuePrefix": {
             "type": "string"
           }
         },
@@ -34396,6 +34399,9 @@
             "type": "number"
           },
           "headerName": {
+            "type": "string"
+          },
+          "valuePrefix": {
             "type": "string"
           }
         },
@@ -96546,6 +96552,9 @@
                           "builtin"
                         ]
                       },
+                      "multitenant": {
+                        "type": "boolean"
+                      },
                       "serverUrl": {
                         "nullable": true,
                         "type": "string"
@@ -97034,6 +97043,7 @@
                       "authDescription",
                       "authFields",
                       "serverType",
+                      "multitenant",
                       "serverUrl",
                       "docsUrl",
                       "clientSecretId",
@@ -97380,6 +97390,9 @@
                       "remote",
                       "builtin"
                     ]
+                  },
+                  "multitenant": {
+                    "type": "boolean"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -97914,6 +97927,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -98402,6 +98418,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -98764,6 +98781,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -99252,6 +99272,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -99592,6 +99613,9 @@
                       "remote",
                       "builtin"
                     ]
+                  },
+                  "multitenant": {
+                    "type": "boolean"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -100134,6 +100158,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -100622,6 +100649,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -103849,6 +103877,12 @@
                                     {
                                       "type": "string",
                                       "enum": [
+                                        "onedrive"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
                                         "asana"
                                       ]
                                     },
@@ -105806,6 +105840,12 @@
                 {
                   "type": "string",
                   "enum": [
+                    "onedrive"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
                     "asana"
                   ]
                 },
@@ -105929,6 +105969,12 @@
                                 "type": "string",
                                 "enum": [
                                   "dropbox"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "onedrive"
                                 ]
                               },
                               {
@@ -106327,6 +106373,54 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "onedrive"
+                                    ]
+                                  },
+                                  "tenantId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "userIds": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "folderId": {
+                                    "type": "string"
+                                  },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "tenantId",
+                                  "userIds"
                                 ],
                                 "additionalProperties": false
                               },
@@ -106969,6 +107063,12 @@
                       {
                         "type": "string",
                         "enum": [
+                          "onedrive"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
                           "asana"
                         ]
                       },
@@ -107374,6 +107474,53 @@
                           "type": {
                             "type": "string",
                             "enum": [
+                              "onedrive"
+                            ]
+                          },
+                          "tenantId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "userIds": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderId": {
+                            "type": "string"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "tenantId",
+                          "userIds"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
                               "asana"
                             ]
                           },
@@ -107631,6 +107778,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "onedrive"
                           ]
                         },
                         {
@@ -108029,6 +108182,54 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "onedrive"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "userIds": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "userIds"
                           ],
                           "additionalProperties": false
                         },
@@ -108619,6 +108820,12 @@
                         {
                           "type": "string",
                           "enum": [
+                            "onedrive"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
                             "asana"
                           ]
                         },
@@ -109012,6 +109219,54 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "onedrive"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "userIds": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "userIds"
                           ],
                           "additionalProperties": false
                         },
@@ -109909,6 +110164,53 @@
                           "type": {
                             "type": "string",
                             "enum": [
+                              "onedrive"
+                            ]
+                          },
+                          "tenantId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "userIds": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderId": {
+                            "type": "string"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "tenantId",
+                          "userIds"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
                               "asana"
                             ]
                           },
@@ -110164,6 +110466,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "onedrive"
                           ]
                         },
                         {
@@ -110562,6 +110870,54 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "onedrive"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "userIds": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "userIds"
                           ],
                           "additionalProperties": false
                         },
@@ -113153,6 +113509,12 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "itemsSkipped": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "error": {
                             "nullable": true,
                             "type": "string"
@@ -113207,6 +113569,7 @@
                           "totalBatches",
                           "completedBatches",
                           "itemErrors",
+                          "itemsSkipped",
                           "error",
                           "checkpoint",
                           "createdAt"
@@ -113599,6 +113962,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "itemsSkipped": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "error": {
                       "nullable": true,
                       "type": "string"
@@ -113657,6 +114026,7 @@
                     "totalBatches",
                     "completedBatches",
                     "itemErrors",
+                    "itemsSkipped",
                     "error",
                     "logs",
                     "checkpoint",
@@ -117491,6 +117861,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "extraHeaders": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
                       "isSystem": {
                         "type": "boolean"
                       },
@@ -117548,6 +117925,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "extraHeaders",
                       "isSystem",
                       "isPrimary",
                       "createdAt",
@@ -117843,6 +118221,13 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "extraHeaders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "scope": {
                     "default": "personal",
                     "type": "string",
@@ -117942,6 +118327,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -117967,6 +118359,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",
@@ -118329,6 +118722,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "extraHeaders": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
                       "isSystem": {
                         "type": "boolean"
                       },
@@ -118386,6 +118786,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "extraHeaders",
                       "isSystem",
                       "isPrimary",
                       "createdAt",
@@ -118720,6 +119121,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -118777,6 +119185,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",
@@ -119049,6 +119458,13 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "extraHeaders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "scope": {
                     "type": "string",
                     "enum": [
@@ -119158,6 +119574,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -119183,6 +119606,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",

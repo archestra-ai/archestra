@@ -3171,6 +3171,7 @@ function buildStaticCredentialHeaders(params: {
       fieldName,
       headerName: config.headerName,
       secretValue,
+      valuePrefix: config.valuePrefix,
     });
   }
 
@@ -3306,7 +3307,12 @@ function getStaticCredentialHeaderValue(params: {
   fieldName: string;
   headerName: string;
   secretValue: string;
+  valuePrefix?: string;
 }): string {
+  if (params.valuePrefix) {
+    return `${params.valuePrefix}${params.secretValue}`;
+  }
+
   if (
     params.fieldName === "access_token" &&
     params.headerName.toLowerCase() === "authorization"

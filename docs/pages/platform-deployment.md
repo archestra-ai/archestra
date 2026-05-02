@@ -954,6 +954,10 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
   - Set to `true` to include infrastructure spans for debugging request flows
 
+- **`ARCHESTRA_METRICS_PORT`** - TCP port for the metrics server.
+  - Default: `9050`
+  - Must be an integer between `1` and `65535`; invalid values fall back to the default with a warning
+
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`

@@ -347,13 +347,13 @@ export async function handleLLMProxy<
         perKeyChatApiKeyId = headerValue;
         logger.info(
           { chatApiKeyId: perKeyChatApiKeyId },
-          "proxy: received provider-api-key-id header",
+          `[${providerName}Proxy] received provider-api-key-id header`,
         );
       }
     } else if (headerPresent) {
       logger.warn(
         { ip: request.ip },
-        "proxy: ignoring provider-api-key-id header from non-loopback request",
+        `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
       );
     }
   }
@@ -610,7 +610,7 @@ export async function handleLLMProxy<
       if (!row) {
         logger.warn(
           { chatApiKeyId: perKeyChatApiKeyId },
-          "proxy: chat_api_key row not found for id",
+          `[${providerName}Proxy] chat_api_key row not found for id`,
         );
       } else {
         logger.info(
@@ -618,11 +618,14 @@ export async function handleLLMProxy<
             chatApiKeyId: perKeyChatApiKeyId,
             headers: headerNamePeek(perKeyExtraHeaders),
           },
-          "proxy: loaded extra headers from db",
+          `[${providerName}Proxy] loaded extra headers from db`,
         );
       }
     } else {
-      logger.info({}, "proxy: no chat_api_key id, skipping db header lookup");
+      logger.info(
+        {},
+        `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
+      );
     }
     // Merge per-key extra headers behind any provider-forwarded headers
     // (anthropic-beta etc.) so protocol-level headers always win.
@@ -633,7 +636,7 @@ export async function handleLLMProxy<
     if (Object.keys(mergedHeaders).length > 0) {
       logger.info(
         { headers: headerNamePeek(mergedHeaders) },
-        "proxy: forwarding headers to provider",
+        `[${providerName}Proxy] forwarding headers to provider`,
       );
     }
 

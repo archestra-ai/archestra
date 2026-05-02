@@ -485,11 +485,10 @@ export function getObservableFetch(
   ): Promise<Response> {
     logger.info(
       {
-        provider,
         url: typeof url === "string" ? url : url.toString(),
         headers: extractHeaderNames(init?.headers),
       },
-      "llm proxy: outbound request headers",
+      `[${provider}Proxy] outbound request headers`,
     );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");

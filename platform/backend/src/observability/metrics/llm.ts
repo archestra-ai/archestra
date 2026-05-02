@@ -483,6 +483,14 @@ export function getObservableFetch(
     url: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    logger.info(
+      {
+        provider,
+        url: typeof url === "string" ? url : url.toString(),
+        headers: extractHeaderNames(init?.headers),
+      },
+      "llm proxy: outbound request headers",
+    );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
       return fetch(url, init);
@@ -790,6 +798,27 @@ export function reportKbLlmCall(params: {
       exemplarLabels,
     });
   }
+}
+
+function extractHeaderNames(
+  headers: HeadersInit | undefined,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!headers) return result;
+  const firstChar = (v: unknown) =>
+    typeof v === "string" && v.length > 0 ? v[0] : "";
+  if (headers instanceof Headers) {
+    headers.forEach((v, k) => {
+      result[k] = firstChar(v);
+    });
+    return result;
+  }
+  if (Array.isArray(headers)) {
+    for (const [k, v] of headers) result[k] = firstChar(v);
+    return result;
+  }
+  for (const [k, v] of Object.entries(headers)) result[k] = firstChar(v);
+  return result;
 }
 
 function extractGeminiModel(arg: unknown): string | undefined {

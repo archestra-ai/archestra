@@ -208,7 +208,8 @@ export function createLLMModel(params: {
   // the proxy side; see CHAT_API_KEY_ID_HEADER.
   if (chatApiKeyId) {
     clientHeaders[CHAT_API_KEY_ID_HEADER] = chatApiKeyId;
-  }
+    logger.info({ chatApiKeyId }, "chat: sending provider-api-key-id to proxy");
+  } 
 
   const headers =
     Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined;

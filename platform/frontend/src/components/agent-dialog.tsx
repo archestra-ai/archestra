@@ -506,6 +506,15 @@ interface AgentDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Agent to edit. If null/undefined, creates a new agent */
   agent?: Agent | null;
+  /** Pre-fill values when creating a new agent (ignored when agent is set) */
+  defaults?: {
+    name?: string;
+    description?: string;
+    systemPrompt?: string;
+    icon?: string | null;
+    labels?: Array<{ key: string; value: string }>;
+    llmModel?: string | null;
+  };
   /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
   agentType?: AgentType;
   defaultIconType?: AgentIconVariant;
@@ -521,6 +530,7 @@ export function AgentDialog({
   open,
   onOpenChange,
   agent,
+  defaults,
   agentType = "profile",
   defaultIconType = "agent",
   onCreated,
@@ -608,7 +618,7 @@ export function AgentDialog({
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [suggestedPrompts, setSuggestedPrompts] = useState<
-    Array<{ summaryTitle: string; prompt: string }>
+    Array<{ id: string; summaryTitle: string; prompt: string }>
   >([]);
   const [suggestedPromptsOpen, setSuggestedPromptsOpen] = useState(false);
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
@@ -699,7 +709,12 @@ export function AgentDialog({
         setIcon(agentData.icon);
         setDescription(agentData.description || "");
         setSystemPrompt(agentData.systemPrompt || "");
-        setSuggestedPrompts(agentData.suggestedPrompts);
+        setSuggestedPrompts(
+          (agentData.suggestedPrompts ?? []).map((p) => ({
+            id: crypto.randomUUID(),
+            ...p,
+          })),
+        );
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(agentData.llmApiKeyId);
         setLlmModel(agentData.llmModel);
@@ -728,18 +743,18 @@ export function AgentDialog({
             : "5",
         );
       } else {
-        // Create mode - reset all fields
-        setName("");
-        setIcon(null);
-        setDescription("");
-        setSystemPrompt("");
+        // Create mode - reset all fields (use defaults if provided)
+        setName(defaults?.name ?? "");
+        setIcon(defaults?.icon ?? null);
+        setDescription(defaults?.description ?? "");
+        setSystemPrompt(defaults?.systemPrompt ?? "");
         setSuggestedPrompts([]);
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(null);
-        setLlmModel(null);
+        setLlmModel(defaults?.llmModel ?? null);
         setSelectedDelegationTargetIds([]);
         setAssignedTeamIds([]);
-        setLabels([]);
+        setLabels(defaults?.labels ?? []);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(undefined);
         setKnowledgeBaseIds([]);
@@ -755,7 +770,7 @@ export function AgentDialog({
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
-  }, [open, agent, freshAgent, refetchAgent]);
+  }, [open, agent, freshAgent, refetchAgent, defaults]);
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads
   const currentDelegationIds = currentDelegations.map((a) => a.id).join(",");
@@ -864,6 +879,19 @@ export function AgentDialog({
     },
     [availableApiKeys, currentLlmProvider, modelsByProvider],
   );
+
+  const handleSuggestedPromptChange = useCallback(
+    (id: string, field: "summaryTitle" | "prompt", value: string) => {
+      setSuggestedPrompts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)),
+      );
+    },
+    [],
+  );
+
+  const removeSuggestedPrompt = useCallback((id: string) => {
+    setSuggestedPrompts((prev) => prev.filter((p) => p.id !== id));
+  }, []);
 
   // Non-admin users must select at least one team for team-scoped resources
   const requiresTeamSelection =
@@ -1315,158 +1343,65 @@ export function AgentDialog({
                   className="group"
                 >
                   <div className="rounded-lg border bg-card">
-                    {suggestedPrompts.length > 0 ? (
-                      <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
-                        <div className="text-left">
-                          <h3 className="text-sm font-semibold">
-                            Suggested Prompts
-                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                              ({suggestedPrompts.length})
+                    <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors hover:bg-muted/50">
+                      <div className="text-left">
+                        <h3 className="text-sm font-semibold">
+                          Suggested Prompts
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            ({suggestedPrompts.length})
+                          </span>
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Shown to users when starting a new chat. Max{" "}
+                          {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
+                          {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max{" "}
+                          {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
+                        </p>
+                      </div>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="border-t px-4 py-3 space-y-3">
+                      {suggestedPrompts.map((prompt) => (
+                        <SuggestedPromptRow
+                          key={prompt.id}
+                          prompt={prompt}
+                          onChange={handleSuggestedPromptChange}
+                          onRemove={removeSuggestedPrompt}
+                        />
+                      ))}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                  suggestedPrompts.length >=
+                                  MAX_SUGGESTED_PROMPTS
+                                }
+                                onClick={() => {
+                                  setSuggestedPrompts((prev) => [
+                                    ...prev,
+                                    {
+                                      id: crypto.randomUUID(),
+                                      summaryTitle: "",
+                                      prompt: "",
+                                    },
+                                  ]);
+                                }}
+                              >
+                                <Plus className="size-3.5" />
+                                Add
+                              </Button>
                             </span>
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Shown to users when starting a new chat. Max{" "}
-                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
-                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {suggestedPromptsOpen && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      disabled={
-                                        suggestedPrompts.length >=
-                                        MAX_SUGGESTED_PROMPTS
-                                      }
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSuggestedPrompts((prev) => [
-                                          ...prev,
-                                          { summaryTitle: "", prompt: "" },
-                                        ]);
-                                      }}
-                                    >
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      Add
-                                    </Button>
-                                  </span>
-                                </TooltipTrigger>
-                                {suggestedPrompts.length >=
-                                  MAX_SUGGESTED_PROMPTS && (
-                                  <TooltipContent>
-                                    Maximum of {MAX_SUGGESTED_PROMPTS} suggested
-                                    prompts reached
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
-                        </div>
-                      </CollapsibleTrigger>
-                    ) : (
-                      <div className="flex items-center justify-between p-4">
-                        <div>
-                          <h3 className="text-sm font-semibold">
-                            Suggested Prompts
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Shown to users when starting a new chat. Max{" "}
-                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
-                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSuggestedPrompts([
-                              { summaryTitle: "", prompt: "" },
-                            ]);
-                            setSuggestedPromptsOpen(true);
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                    <CollapsibleContent>
-                      <div className="border-t p-4 space-y-4">
-                        {suggestedPrompts.map((sp, index) => (
-                          <div
-                            // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
-                            key={`sp-${index}`}
-                            className="space-y-2 rounded-md border p-3 relative"
-                          >
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute top-2 right-2 h-6 w-6"
-                              onClick={() => {
-                                setSuggestedPrompts((prev) => {
-                                  const next = prev.filter(
-                                    (_, i) => i !== index,
-                                  );
-                                  if (next.length === 0)
-                                    setSuggestedPromptsOpen(false);
-                                  return next;
-                                });
-                              }}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                            <div className="space-y-1 pr-8">
-                              <Label className="text-xs">Button Label</Label>
-                              <Input
-                                value={sp.summaryTitle}
-                                onChange={(e) =>
-                                  setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
-                                        ? {
-                                            ...p,
-                                            summaryTitle: e.target.value,
-                                          }
-                                        : p,
-                                    ),
-                                  )
-                                }
-                                placeholder="e.g. Summarize recent changes"
-                                maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Prompt</Label>
-                              <Textarea
-                                value={sp.prompt}
-                                onChange={(e) =>
-                                  setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
-                                        ? { ...p, prompt: e.target.value }
-                                        : p,
-                                    ),
-                                  )
-                                }
-                                placeholder="The full prompt sent when clicked"
-                                className="min-h-[60px]"
-                                maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="center">
+                            Add a suggested prompt
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </CollapsibleContent>
                   </div>
                 </Collapsible>
@@ -2232,5 +2167,49 @@ export function AgentDialog({
         </DialogForm>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface SuggestedPromptRowProps {
+  prompt: { id: string; summaryTitle: string; prompt: string };
+  onChange: (
+    id: string,
+    field: "summaryTitle" | "prompt",
+    value: string,
+  ) => void;
+  onRemove: (id: string) => void;
+}
+
+function SuggestedPromptRow({
+  prompt,
+  onChange,
+  onRemove,
+}: SuggestedPromptRowProps) {
+  return (
+    <div className="flex gap-2 items-start">
+      <div className="flex-1 space-y-2">
+        <Input
+          placeholder="Title"
+          value={prompt.summaryTitle}
+          onChange={(e) => onChange(prompt.id, "summaryTitle", e.target.value)}
+          maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+        />
+        <Input
+          placeholder="Prompt text"
+          value={prompt.prompt}
+          onChange={(e) => onChange(prompt.id, "prompt", e.target.value)}
+          maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+        />
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="mt-0.5 size-8 shrink-0"
+        onClick={() => onRemove(prompt.id)}
+      >
+        <X className="size-4" />
+      </Button>
+    </div>
   );
 }

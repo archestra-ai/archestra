@@ -370,6 +370,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+
+  // Agent Template routes — listing templates and checking requirements only needs agent:create permission
+  [RouteId.GetAgentTemplates]: {
+    agent: ["create"],
+  },
+  [RouteId.GetAgentTemplateRequirements]: {
+    agent: ["create"],
+  },
+
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type AgentTemplate,
   type AgentType,
   archestraApiSdk,
   type archestraApiTypes,
@@ -8,7 +9,7 @@ import {
 } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, LayoutTemplate, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +22,9 @@ import {
   ActiveFilterBadges,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { AgentTemplateCatalog } from "@/components/agent-template-catalog";
+import { AgentTemplateCreateFlow } from "@/components/agent-template-create-flow";
+import { AgentTemplateDetailsDialog } from "@/components/agent-template-details-dialog";
 import {
   ConnectDialog,
   ConnectDialogSection,
@@ -33,6 +37,12 @@ import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge"
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
@@ -189,6 +199,23 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editTemplateDefaults, setEditTemplateDefaults] = useState<
+    | {
+        name: string;
+        description: string;
+        systemPrompt: string;
+        icon: string | null;
+        llmModel: string | null;
+        labels: Array<{ key: string; value: string }>;
+      }
+    | undefined
+  >(undefined);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<AgentTemplate | null>(null);
+  const [detailsTemplate, setDetailsTemplate] = useState<AgentTemplate | null>(
+    null,
+  );
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
@@ -484,14 +511,24 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           </p>
         }
         actionButton={
-          <PermissionButton
-            permissions={{ agent: ["create"] }}
-            onClick={() => setIsCreateDialogOpen(true)}
-            data-testid={E2eTestId.CreateAgentButton}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Agent
-          </PermissionButton>
+          <div className="flex gap-2">
+            <PermissionButton
+              permissions={{ agent: ["create"] }}
+              variant="outline"
+              onClick={() => setIsCatalogOpen(true)}
+            >
+              <LayoutTemplate className="mr-2 h-4 w-4" />
+              From Template
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ agent: ["create"] }}
+              onClick={() => setIsCreateDialogOpen(true)}
+              data-testid={E2eTestId.CreateAgentButton}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </PermissionButton>
+          </div>
         }
       >
         <div>
@@ -536,11 +573,70 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             </div>
 
             <AgentDialog
-              open={isCreateDialogOpen}
-              onOpenChange={setIsCreateDialogOpen}
+              open={isCreateDialogOpen || !!editTemplateDefaults}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setIsCreateDialogOpen(false);
+                  setEditTemplateDefaults(undefined);
+                }
+              }}
               agentType="agent"
+              defaults={editTemplateDefaults}
               onCreated={() => {
                 setIsCreateDialogOpen(false);
+                setEditTemplateDefaults(undefined);
+              }}
+            />
+
+            {/* Template Catalog Dialog */}
+            <Dialog open={isCatalogOpen} onOpenChange={setIsCatalogOpen}>
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogHeader>
+                  <DialogTitle>Agent Template Catalog</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto p-6">
+                  <AgentTemplateCatalog
+                    onSelectTemplate={(template) => {
+                      setSelectedTemplate(template);
+                      setIsCatalogOpen(false);
+                    }}
+                    onPreviewTemplate={(template) => {
+                      setDetailsTemplate(template);
+                    }}
+                    onEditTemplate={(template) => {
+                      setIsCatalogOpen(false);
+                      setEditTemplateDefaults({
+                        name: template.name,
+                        description: template.description,
+                        systemPrompt: template.systemPrompt,
+                        icon: template.icon,
+                        llmModel: template.llmModel,
+                        labels: template.labels.map((l) => ({
+                          key: l.key,
+                          value: l.value,
+                        })),
+                      });
+                    }}
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <AgentTemplateCreateFlow
+              template={selectedTemplate}
+              open={!!selectedTemplate}
+              onOpenChange={(open) => {
+                if (!open) setSelectedTemplate(null);
+              }}
+            />
+
+            <AgentTemplateDetailsDialog
+              template={detailsTemplate}
+              open={!!detailsTemplate}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setDetailsTemplate(null);
+                }
               }}
             />
 

@@ -12418,6 +12418,236 @@ export type GetMemberDefaultAgentResponses = {
 
 export type GetMemberDefaultAgentResponse = GetMemberDefaultAgentResponses[keyof GetMemberDefaultAgentResponses];
 
+export type GetAgentTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent_templates';
+};
+
+export type GetAgentTemplatesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentTemplatesError = GetAgentTemplatesErrors[keyof GetAgentTemplatesErrors];
+
+export type GetAgentTemplatesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string;
+        type: string;
+        categories: Array<string>;
+        systemPrompt: string;
+        llmModel: string | null;
+        tools: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+        }>;
+        icon: string | null;
+    }>;
+};
+
+export type GetAgentTemplatesResponse = GetAgentTemplatesResponses[keyof GetAgentTemplatesResponses];
+
+export type GetAgentTemplateRequirementsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agent_templates/{id}/requirements';
+};
+
+export type GetAgentTemplateRequirementsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentTemplateRequirementsError = GetAgentTemplateRequirementsErrors[keyof GetAgentTemplateRequirementsErrors];
+
+export type GetAgentTemplateRequirementsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        templateId: string;
+        agentConfig: {
+            name: string;
+            description: string;
+            systemPrompt: string;
+            llmModel: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+            }>;
+            scope: 'personal';
+            teams: Array<unknown>;
+        };
+        toolAssignments: Array<{
+            toolId: string;
+            catalogId: string | null;
+            credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+            requiresUserConfig: boolean;
+        }>;
+        missingCatalogs: Array<{
+            catalogId: string;
+            catalogName: string;
+            serverType: 'local' | 'remote';
+            requiresOauth: boolean;
+            userConfigFields: Array<{
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                promptOnInstallation?: boolean;
+                required?: boolean;
+                default?: UserConfigFieldDefault;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+                headerName?: string;
+                valuePrefix?: string;
+                key: string;
+            }>;
+            environmentFields: Array<{
+                key: string;
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
+                value?: string;
+                promptOnInstallation: boolean;
+                required?: boolean;
+                description?: string;
+                default?: string | number | boolean;
+                mounted?: boolean;
+            }>;
+            canAutoInstall: boolean;
+        }>;
+    };
+};
+
+export type GetAgentTemplateRequirementsResponse = GetAgentTemplateRequirementsResponses[keyof GetAgentTemplateRequirementsResponses];
+
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;

@@ -55,6 +55,7 @@ export interface RemoteServerInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
+  agentIds?: string[];
   /** Whether metadata contains BYOS vault references in path#key format */
   isByosVault?: boolean;
 }

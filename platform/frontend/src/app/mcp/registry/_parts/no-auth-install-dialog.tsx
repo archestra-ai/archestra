@@ -18,6 +18,7 @@ export interface NoAuthInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
+  agentIds?: string[];
 }
 
 interface NoAuthInstallDialogProps {

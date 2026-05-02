@@ -1,5 +1,10 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { isPlaywrightCatalogItem, RouteId } from "@shared";
+import {
+  archestraCatalogSdk,
+  type archestraCatalogTypes,
+  isPlaywrightCatalogItem,
+  RouteId,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
@@ -7,6 +12,7 @@ import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
+import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -177,13 +183,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
       if (serverData.catalogId) {
-        catalogItem = await InternalMcpCatalogModel.findById(
-          serverData.catalogId,
-        );
+        catalogItem = await findOrImportCatalogForInstallation({
+          catalogId: serverData.catalogId,
+          organizationId,
+          userId: user.id,
+        });
 
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found");
         }
+
+        serverData.catalogId = catalogItem.id;
 
         // Playwright browser preview can only be installed as a personal server
         if (
@@ -2122,4 +2132,96 @@ async function validateScopeAndAuthorization(params: {
       );
     }
   }
+}
+
+async function findOrImportCatalogForInstallation(params: {
+  catalogId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const existing = await InternalMcpCatalogModel.findById(params.catalogId);
+  if (existing) {
+    return existing;
+  }
+
+  const externalCatalogName =
+    TEMPLATE_IMPORT_NAMES_BY_PREVIEW_ID[params.catalogId];
+  if (!externalCatalogName) {
+    return null;
+  }
+
+  const externalServerResponse = await archestraCatalogSdk.getMcpServer({
+    path: { name: externalCatalogName },
+  });
+
+  if (!externalServerResponse.data) {
+    return null;
+  }
+
+  const externalServer = externalServerResponse.data;
+
+  return InternalMcpCatalogModel.create(
+    {
+      name: stripExternalTemplatePrefix(params.catalogId),
+      description: externalServer.description,
+      instructions: externalServer.instructions,
+      serverType: externalServer.server.type,
+      serverUrl:
+        externalServer.server.type === "remote"
+          ? externalServer.server.url
+          : undefined,
+      docsUrl:
+        externalServer.server.type === "remote"
+          ? externalServer.server.docs_url
+          : undefined,
+      localConfig:
+        externalServer.server.type === "local"
+          ? {
+              command: externalServer.server.command,
+              arguments: externalServer.server.args,
+              dockerImage: externalServer.server.docker_image,
+              serviceAccount: externalServer.server.service_account,
+              environment: Object.entries(externalServer.server.env ?? {}).map(
+                ([key, value]) => ({
+                  key,
+                  value: String(value),
+                  type: "plain_text" as const,
+                  promptOnInstallation: false,
+                }),
+              ),
+            }
+          : undefined,
+      userConfig: externalServer.user_config,
+      oauthConfig: rewriteOAuthRedirectUris(externalServer.oauth_config),
+    },
+    { organizationId: params.organizationId, authorId: params.userId },
+  );
+}
+
+function stripExternalTemplatePrefix(catalogId: string) {
+  return catalogId.replace(/^external-template:/, "");
+}
+
+const TEMPLATE_IMPORT_NAMES_BY_PREVIEW_ID: Record<string, string> = {
+  "external-template:github": "githubcopilot__remote-mcp",
+  "external-template:slack": "korotovsky__slack-mcp-server",
+};
+
+function rewriteOAuthRedirectUris(
+  oauthConfig?: archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"],
+):
+  | archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"]
+  | undefined {
+  if (!oauthConfig || oauthConfig.requires_proxy) {
+    return oauthConfig;
+  }
+
+  return {
+    ...oauthConfig,
+    redirect_uris: oauthConfig.redirect_uris?.map((uri) =>
+      uri === "http://localhost:8080/oauth/callback"
+        ? `${config.frontendBaseUrl}/oauth-callback`
+        : uri,
+    ),
+  };
 }

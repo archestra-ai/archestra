@@ -130,7 +130,7 @@ export function useInstallMcpServer() {
     onSuccess: async ({ installedServer, dontShowToast }, variables) => {
       // Show success toast for remote servers (local servers show toast after async tool fetch completes)
       if (!dontShowToast && installedServer) {
-        toast.success(`Successfully installed ${variables.name}`);
+        toast.success(`MCP server "${variables.name}" installed`);
       }
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
@@ -171,7 +171,7 @@ export function useDeleteMcpServer() {
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
       invalidateToolAssignmentQueries(queryClient);
-      toast.success(`Successfully uninstalled ${variables.name}`);
+      toast.success(`MCP server "${variables.name}" uninstalled`);
     },
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
@@ -189,8 +189,6 @@ export function useMcpServerTools(mcpServerId: string | null) {
         path: { id: mcpServerId },
       });
       if (error) {
-        // handleApiError not used to prevent "MCP server not found" error from being shown
-        console.error("Failed to fetch MCP server tools:", error);
         return [];
       }
       return data ?? [];
@@ -218,7 +216,7 @@ export function useMcpServerInstallationStatus(
         await queryClient.refetchQueries({
           queryKey: ["mcp-servers", installingMcpServerId],
         });
-        toast.success(`Successfully installed server`);
+        toast.success(`MCP server installed`);
       }
       if (result === "error") {
         await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
@@ -267,7 +265,7 @@ export function useReauthenticateMcpServer() {
       }
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       invalidateToolAssignmentQueries(queryClient);
-      toast.success(`Successfully re-authenticated ${variables.name}`);
+      toast.success(`MCP server "${variables.name}" re-authenticated`);
     },
     onError: (_error, variables) => {
       toast.error(`Failed to re-authenticate ${variables.name}`);

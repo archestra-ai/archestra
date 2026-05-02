@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { archestraApiSdk } from "@shared";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
@@ -39,6 +40,16 @@ type DialogKey =
   | "no-auth"
   | "manage";
 
+type TemplateInstallPayload = {
+  scope: McpServerInstallScope;
+  teamId?: string | null;
+  agentIds?: string[];
+  userConfigValues?: Record<string, string>;
+  environmentValues?: Record<string, string>;
+  isByosVault?: boolean;
+  serviceAccount?: string;
+};
+
 export function useMcpInstallOrchestrator() {
   const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: installedServers } = useMcpServers({});
@@ -54,12 +65,26 @@ export function useMcpInstallOrchestrator() {
     useState<CatalogItem | null>(null);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
     useState<CatalogItem | null>(null);
+  const localServerCatalogItemRef = useRef<CatalogItem | null>(null);
+  const noAuthCatalogItemRef = useRef<CatalogItem | null>(null);
 
   // Manage dialog state
   const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
 
   // Re-authentication state
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
+  const templateInstallWaitersRef = useRef<
+    Map<
+      string,
+      {
+        resolve: (value: {
+          installedServerId: string | null;
+          completed: boolean;
+        }) => void;
+        installationData: TemplateInstallPayload;
+      }
+    >
+  >(new Map());
 
   const findCatalogItem = useCallback(
     (catalogId: string) => catalogItems?.find((item) => item.id === catalogId),
@@ -133,6 +158,7 @@ export function useMcpInstallOrchestrator() {
           ) || [];
 
         if (promptedEnvVars.length > 0) {
+          localServerCatalogItemRef.current = catalogItem;
           setLocalServerCatalogItem(catalogItem);
           setOAuthPendingAfterEnvVars(true);
           openDialog("local-install");
@@ -154,11 +180,13 @@ export function useMcpInstallOrchestrator() {
         ) ?? false;
 
       if (!hasUserConfig && !hasPromptedEnvVars) {
+        noAuthCatalogItemRef.current = catalogItem;
         setNoAuthCatalogItem(catalogItem);
         openDialog("no-auth");
         return;
       }
 
+      localServerCatalogItemRef.current = catalogItem;
       setLocalServerCatalogItem(catalogItem);
       openDialog("local-install");
     },
@@ -178,6 +206,22 @@ export function useMcpInstallOrchestrator() {
       }
     },
     [findCatalogItem, handleInstallLocalServer, handleInstallRemoteServer],
+  );
+
+  const resolveTemplateInstallWaiter = useCallback(
+    (
+      catalogId: string,
+      value: { installedServerId: string | null; completed: boolean },
+    ) => {
+      const waiter = templateInstallWaitersRef.current.get(catalogId);
+      if (!waiter) {
+        return;
+      }
+
+      templateInstallWaitersRef.current.delete(catalogId);
+      waiter.resolve(value);
+    },
+    [],
   );
 
   /** Trigger re-authentication for a specific server, preserving tool assignments */
@@ -210,6 +254,7 @@ export function useMcpInstallOrchestrator() {
 
       // Non-OAuth servers: open the appropriate dialog in reauth mode
       if (catalogItem.serverType === "local") {
+        localServerCatalogItemRef.current = catalogItem;
         setLocalServerCatalogItem(catalogItem);
         openDialog("local-install");
       } else {
@@ -222,128 +267,163 @@ export function useMcpInstallOrchestrator() {
 
   // --- Confirm handlers ---
 
-  const handleRemoteServerInstallConfirm = async (
-    catalogItem: CatalogItem,
-    result: RemoteServerInstallResult,
-  ) => {
-    const credentialPayload = buildRemoteInstallCredentialPayload(result);
+  const handleRemoteServerInstallConfirm = useCallback(
+    async (catalogItem: CatalogItem, result: RemoteServerInstallResult) => {
+      const credentialPayload = buildRemoteInstallCredentialPayload(result);
 
-    // If in reauth mode, call reauthenticate endpoint instead of install
-    if (reauthServerId) {
-      await reauthMutation.mutateAsync({
-        id: reauthServerId,
-        name: catalogItem.name,
-        ...credentialPayload,
-      });
-
-      closeDialog("remote-install");
-      setSelectedCatalogItem(null);
-      setReauthServerId(null);
-      return;
-    }
-
-    await installMutation.mutateAsync({
-      name: catalogItem.name,
-      catalogId: catalogItem.id,
-      ...credentialPayload,
-      scope: result.scope,
-      teamId:
-        result.scope === "team" ? (result.teamId ?? undefined) : undefined,
-    });
-  };
-
-  const handleLocalServerInstallConfirm = async (
-    installResult: LocalServerInstallResult,
-  ) => {
-    if (!localServerCatalogItem) return;
-
-    // If in reauth mode, call reauthenticate endpoint instead of install
-    if (reauthServerId) {
-      await reauthMutation.mutateAsync({
-        id: reauthServerId,
-        name: localServerCatalogItem.name,
-        environmentValues: installResult.environmentValues,
-        userConfigValues: installResult.userConfigValues,
-        isByosVault: installResult.isByosVault,
-      });
-
-      closeDialog("local-install");
-      setLocalServerCatalogItem(null);
-      setReauthServerId(null);
-      return;
-    }
-
-    if (getOAuthPendingAfterEnvVars() && localServerCatalogItem.oauthConfig) {
-      clearPendingAfterEnvVars();
-      setOAuthServerType("local");
-      if (
-        installResult.environmentValues &&
-        Object.keys(installResult.environmentValues).length > 0
-      ) {
-        const secretKeys = new Set(
-          (localServerCatalogItem.localConfig?.environment ?? [])
-            .filter((e) => e.type === "secret")
-            .map((e) => e.key),
-        );
-        const safeValues = installResult.isByosVault
-          ? installResult.environmentValues
-          : Object.fromEntries(
-              Object.entries(installResult.environmentValues).filter(
-                ([key]) => !secretKeys.has(key),
-              ),
-            );
-        if (Object.keys(safeValues).length > 0) {
-          setOAuthEnvironmentValues(safeValues);
-        }
-      }
-      if (
-        installResult.userConfigValues &&
-        Object.keys(installResult.userConfigValues).length > 0
-      ) {
-        setOAuthUserConfigValues({
-          values: installResult.userConfigValues,
-          userConfig: localServerCatalogItem.userConfig,
-          isByosVault: installResult.isByosVault,
+      // If in reauth mode, call reauthenticate endpoint instead of install
+      if (reauthServerId) {
+        await reauthMutation.mutateAsync({
+          id: reauthServerId,
+          name: catalogItem.name,
+          ...credentialPayload,
         });
+
+        closeDialog("remote-install");
+        setSelectedCatalogItem(null);
+        setReauthServerId(null);
+        return;
       }
+
+      const installResult = await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        ...credentialPayload,
+        scope: result.scope,
+        teamId:
+          result.scope === "team" ? (result.teamId ?? undefined) : undefined,
+      });
+
+      resolveTemplateInstallWaiter(catalogItem.id, {
+        installedServerId: installResult.installedServer?.id ?? null,
+        completed: Boolean(installResult.installedServer?.id),
+      });
+    },
+    [
+      closeDialog,
+      installMutation,
+      reauthMutation,
+      reauthServerId,
+      resolveTemplateInstallWaiter,
+    ],
+  );
+
+  const handleLocalServerInstallConfirm = useCallback(
+    async (result: LocalServerInstallResult) => {
+      const currentCatalogItem = localServerCatalogItemRef.current;
+      if (!currentCatalogItem) return;
+
+      // If in reauth mode, call reauthenticate endpoint instead of install
+      if (reauthServerId) {
+        await reauthMutation.mutateAsync({
+          id: reauthServerId,
+          name: currentCatalogItem.name,
+          environmentValues: result.environmentValues,
+          userConfigValues: result.userConfigValues,
+          isByosVault: result.isByosVault,
+        });
+
+        closeDialog("local-install");
+        localServerCatalogItemRef.current = null;
+        setLocalServerCatalogItem(null);
+        setReauthServerId(null);
+        return;
+      }
+
+      if (getOAuthPendingAfterEnvVars() && currentCatalogItem.oauthConfig) {
+        clearPendingAfterEnvVars();
+        setOAuthServerType("local");
+        if (
+          result.environmentValues &&
+          Object.keys(result.environmentValues).length > 0
+        ) {
+          const secretKeys = new Set(
+            (currentCatalogItem.localConfig?.environment ?? [])
+              .filter((e) => e.type === "secret")
+              .map((e) => e.key),
+          );
+          const safeValues = result.isByosVault
+            ? result.environmentValues
+            : Object.fromEntries(
+                Object.entries(result.environmentValues).filter(
+                  ([key]) => !secretKeys.has(key),
+                ),
+              );
+          if (Object.keys(safeValues).length > 0) {
+            setOAuthEnvironmentValues(safeValues);
+          }
+        }
+        if (
+          result.userConfigValues &&
+          Object.keys(result.userConfigValues).length > 0
+        ) {
+          setOAuthUserConfigValues({
+            values: result.userConfigValues,
+            userConfig: currentCatalogItem.userConfig,
+            isByosVault: result.isByosVault,
+          });
+        }
+        closeDialog("local-install");
+        setSelectedCatalogItem(currentCatalogItem);
+        localServerCatalogItemRef.current = null;
+        setLocalServerCatalogItem(null);
+        openDialog("oauth");
+        return;
+      }
+
+      const installedServerResult = await installMutation.mutateAsync({
+        name: currentCatalogItem.name,
+        catalogId: currentCatalogItem.id,
+        environmentValues: result.environmentValues,
+        userConfigValues: result.userConfigValues,
+        isByosVault: result.isByosVault,
+        scope: result.scope,
+        teamId:
+          result.scope === "team" ? (result.teamId ?? undefined) : undefined,
+        serviceAccount: result.serviceAccount,
+      });
+
+      resolveTemplateInstallWaiter(currentCatalogItem.id, {
+        installedServerId: installedServerResult.installedServer?.id ?? null,
+        completed: Boolean(installedServerResult.installedServer?.id),
+      });
+
       closeDialog("local-install");
-      setSelectedCatalogItem(localServerCatalogItem);
+      localServerCatalogItemRef.current = null;
       setLocalServerCatalogItem(null);
-      openDialog("oauth");
-      return;
-    }
+    },
+    [
+      closeDialog,
+      installMutation,
+      openDialog,
+      reauthMutation,
+      reauthServerId,
+      resolveTemplateInstallWaiter,
+    ],
+  );
 
-    await installMutation.mutateAsync({
-      name: localServerCatalogItem.name,
-      catalogId: localServerCatalogItem.id,
-      environmentValues: installResult.environmentValues,
-      userConfigValues: installResult.userConfigValues,
-      isByosVault: installResult.isByosVault,
-      scope: installResult.scope,
-      teamId:
-        installResult.scope === "team"
-          ? (installResult.teamId ?? undefined)
-          : undefined,
-      serviceAccount: installResult.serviceAccount,
-    });
+  const handleNoAuthConfirm = useCallback(
+    async (result: NoAuthInstallResult) => {
+      const currentCatalogItem = noAuthCatalogItemRef.current;
+      if (!currentCatalogItem) return;
 
-    closeDialog("local-install");
-    setLocalServerCatalogItem(null);
-  };
-
-  const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
-    if (!noAuthCatalogItem) return;
-
-    await installMutation.mutateAsync({
-      name: noAuthCatalogItem.name,
-      catalogId: noAuthCatalogItem.id,
-      scope: result.scope,
-      teamId:
-        result.scope === "team" ? (result.teamId ?? undefined) : undefined,
-    });
-    closeDialog("no-auth");
-    setNoAuthCatalogItem(null);
-  };
+      const installResult = await installMutation.mutateAsync({
+        name: currentCatalogItem.name,
+        catalogId: currentCatalogItem.id,
+        scope: result.scope,
+        teamId:
+          result.scope === "team" ? (result.teamId ?? undefined) : undefined,
+      });
+      resolveTemplateInstallWaiter(currentCatalogItem.id, {
+        installedServerId: installResult.installedServer?.id ?? null,
+        completed: Boolean(installResult.installedServer?.id),
+      });
+      closeDialog("no-auth");
+      noAuthCatalogItemRef.current = null;
+      setNoAuthCatalogItem(null);
+    },
+    [closeDialog, installMutation, resolveTemplateInstallWaiter],
+  );
 
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
     if (!selectedCatalogItem) return;
@@ -356,6 +436,110 @@ export function useMcpInstallOrchestrator() {
     });
   };
 
+  const triggerInstallByCatalogIdAndWait = useCallback(
+    async (params: {
+      catalogId: string;
+      installationData: TemplateInstallPayload;
+    }) => {
+      const catalogItem =
+        findCatalogItem(params.catalogId) ??
+        (await getCatalogItemById(params.catalogId));
+      if (!catalogItem) {
+        return { installedServerId: null, completed: false };
+      }
+
+      return new Promise<{
+        installedServerId: string | null;
+        completed: boolean;
+      }>((resolve) => {
+        templateInstallWaitersRef.current.set(params.catalogId, {
+          resolve,
+          installationData: params.installationData,
+        });
+
+        const resolveFailure = () => {
+          resolveTemplateInstallWaiter(params.catalogId, {
+            installedServerId: null,
+            completed: false,
+          });
+        };
+
+        if (catalogItem.serverType === "local") {
+          const hasUserConfig =
+            catalogItem.userConfig &&
+            Object.keys(catalogItem.userConfig).length > 0;
+          const hasPromptedEnvVars =
+            catalogItem.localConfig?.environment?.some(
+              (env) => env.promptOnInstallation === true,
+            ) ?? false;
+
+          if (
+            !catalogItem.oauthConfig &&
+            !hasUserConfig &&
+            !hasPromptedEnvVars
+          ) {
+            noAuthCatalogItemRef.current = catalogItem;
+            setNoAuthCatalogItem(catalogItem);
+            void handleNoAuthConfirm({
+              scope: params.installationData.scope,
+              agentIds: params.installationData.agentIds,
+              teamId:
+                params.installationData.scope === "team"
+                  ? (params.installationData.teamId ?? undefined)
+                  : undefined,
+            }).catch(resolveFailure);
+            return;
+          }
+
+          localServerCatalogItemRef.current = catalogItem;
+          setLocalServerCatalogItem(catalogItem);
+          void handleLocalServerInstallConfirm({
+            environmentValues: params.installationData.environmentValues ?? {},
+            userConfigValues: params.installationData.userConfigValues,
+            isByosVault: params.installationData.isByosVault,
+            scope: params.installationData.scope,
+            agentIds: params.installationData.agentIds,
+            teamId:
+              params.installationData.scope === "team"
+                ? (params.installationData.teamId ?? undefined)
+                : undefined,
+            serviceAccount: params.installationData.serviceAccount,
+          }).catch(resolveFailure);
+          return;
+        }
+
+        setSelectedCatalogItem(catalogItem);
+        void handleRemoteServerInstallConfirm(catalogItem, {
+          metadata: Object.fromEntries(
+            Object.entries(params.installationData.userConfigValues ?? {}).map(
+              ([key, value]) => [key, value],
+            ),
+          ),
+          scope: params.installationData.scope,
+          agentIds: params.installationData.agentIds,
+          teamId:
+            params.installationData.scope === "team"
+              ? (params.installationData.teamId ?? undefined)
+              : undefined,
+          isByosVault: params.installationData.isByosVault,
+        })
+          .then(() => {
+            closeDialog("remote-install");
+            setSelectedCatalogItem(null);
+          })
+          .catch(resolveFailure);
+      });
+    },
+    [
+      closeDialog,
+      findCatalogItem,
+      handleLocalServerInstallConfirm,
+      handleNoAuthConfirm,
+      handleRemoteServerInstallConfirm,
+      resolveTemplateInstallWaiter,
+    ],
+  );
+
   const handleManageDialogClose = useCallback(() => {
     closeDialog("manage");
     setManageCatalogId(null);
@@ -364,6 +548,7 @@ export function useMcpInstallOrchestrator() {
   return {
     // Public API
     triggerInstallByCatalogId,
+    triggerInstallByCatalogIdAndWait,
     triggerReauthByCatalogIdAndServerId,
 
     // Dialog state (for rendering)
@@ -390,11 +575,13 @@ export function useMcpInstallOrchestrator() {
     },
     closeLocalInstall: () => {
       closeDialog("local-install");
+      localServerCatalogItemRef.current = null;
       setLocalServerCatalogItem(null);
       setReauthServerId(null);
     },
     closeNoAuth: () => {
       closeDialog("no-auth");
+      noAuthCatalogItemRef.current = null;
       setNoAuthCatalogItem(null);
     },
     closeOAuth: () => {
@@ -408,3 +595,10 @@ export function useMcpInstallOrchestrator() {
 export type McpInstallOrchestrator = ReturnType<
   typeof useMcpInstallOrchestrator
 >;
+
+async function getCatalogItemById(
+  catalogId: string,
+): Promise<CatalogItem | null> {
+  const response = await archestraApiSdk.getInternalMcpCatalog();
+  return response.data?.find((item) => item.id === catalogId) ?? null;
+}

@@ -1,4 +1,6 @@
+export * from "./agent-templates";
 export * from "./agents";
+
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
 export * from "./chat";

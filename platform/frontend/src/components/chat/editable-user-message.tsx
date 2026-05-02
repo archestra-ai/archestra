@@ -251,25 +251,24 @@ export function EditableUserMessage({
         )}
         {/* Text message bubble - only show if there's text */}
         {text && (
-          <MessageContent>
-            <UserMessageText text={text} />
-          </MessageContent>
-        )}
-        {/* Actions below the message - only show edit for messages with text */}
-        {text && (
-          <MessageActions
-            textToCopy={text}
-            onEditClick={handleStartEdit}
-            onRegenerateClick={handleRegenerateClick}
-            isRegenerateConfirming={isRegenerateConfirming}
-            editDisabled={editDisabled}
-            className={cn(
-              "absolute -bottom-1 right-0 translate-y-full z-10 transition-opacity",
-              isRegenerateConfirming
-                ? "opacity-100"
-                : "opacity-0 group-hover/message:opacity-100",
-            )}
-          />
+          <div className="flex max-w-[80%] items-center justify-end gap-2">
+            <MessageActions
+              textToCopy={text}
+              onEditClick={handleStartEdit}
+              onRegenerateClick={handleRegenerateClick}
+              isRegenerateConfirming={isRegenerateConfirming}
+              editDisabled={editDisabled}
+              className={cn(
+                "shrink-0 transition-opacity",
+                isRegenerateConfirming
+                  ? "opacity-100"
+                  : "opacity-0 group-hover/message:opacity-100",
+              )}
+            />
+            <MessageContent className="max-w-none">
+              <UserMessageText text={text} />
+            </MessageContent>
+          </div>
         )}
       </div>
     </Message>

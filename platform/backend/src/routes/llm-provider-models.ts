@@ -311,6 +311,7 @@ export async function syncModelsForVisibleApiKeys(params: {
             provider: apiKey.provider,
             apiKeyValue: secretValue ?? "",
             baseUrl: apiKey.baseUrl,
+            extraHeaders: apiKey.extraHeaders,
           });
         } catch (error) {
           logger.error(

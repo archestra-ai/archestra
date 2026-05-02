@@ -1,5 +1,5 @@
 {
-  "id": "e958bf4f-0fdf-4d01-9184-2dc9d3a27227",
+  "id": "46acc03c-c81b-44c3-8a22-10496939b14a",
   "prevId": "0eae590d-a798-4ccf-812c-3fbc39460617",
   "version": "7",
   "dialect": "postgresql",
@@ -2466,12 +2466,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "virtual_key_id": {
-          "name": "virtual_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "session_id": {
           "name": "session_id",
           "type": "varchar",
@@ -2748,19 +2742,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "interactions_virtual_key_id_virtual_api_keys_id_fk": {
-          "name": "interactions_virtual_key_id_virtual_api_keys_id_fk",
-          "tableFrom": "interactions",
-          "tableTo": "virtual_api_keys",
-          "columnsFrom": [
-            "virtual_key_id"
           ],
           "columnsTo": [
             "id"
@@ -4265,6 +4246,12 @@
         "base_url": {
           "name": "base_url",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "extra_headers": {
+          "name": "extra_headers",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

@@ -8,6 +8,7 @@ import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
 import { LinearConnector } from "./linear/linear-connector";
 import { NotionConnector } from "./notion/notion-connector";
+import { OneDriveConnector } from "./onedrive/onedrive-connector";
 import { OutlineConnector } from "./outline/outline-connector";
 import { SalesforceConnector } from "./salesforce/salesforce-connector";
 import { ServiceNowConnector } from "./servicenow/servicenow-connector";
@@ -23,6 +24,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   sharepoint: () => new SharePointConnector(),
   gdrive: () => new GoogleDriveConnector(),
   dropbox: () => new DropboxConnector(),
+  onedrive: () => new OneDriveConnector(),
   outline: () => new OutlineConnector(),
   asana: () => new AsanaConnector(),
   linear: () => new LinearConnector(),

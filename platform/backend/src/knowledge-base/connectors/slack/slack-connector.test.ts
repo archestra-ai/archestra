@@ -37,6 +37,10 @@ vi.mock("quick-lru", () => {
 
 const credentials = { apiToken: "xoxb-test-token" };
 
+function makeConnector() {
+  return new SlackConnector(0);
+}
+
 function makeChannel(id: string, name: string, isMember = true) {
   return { id, name, is_member: isMember };
 }
@@ -65,28 +69,28 @@ describe("SlackConnector", () => {
   });
 
   it("has the correct type", () => {
-    const connector = new SlackConnector();
+    const connector = makeConnector();
     expect(connector.type).toBe("slack");
   });
 
   // ===== validateConfig =====
   describe("validateConfig", () => {
     it("rejects empty config (channelIds required)", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({});
       expect(result.valid).toBe(false);
       expect(result.error).toContain("Channel IDs are required");
     });
 
     it("rejects config with empty channelIds array", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({ channelIds: [] });
       expect(result.valid).toBe(false);
       expect(result.error).toContain("Channel IDs are required");
     });
 
     it("accepts config with valid channelIds", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["C12345ABC", "G98765XYZ"],
       });
@@ -94,7 +98,7 @@ describe("SlackConnector", () => {
     });
 
     it("rejects config with invalid channelIds format", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["invalid-id", "C12345"],
       });
@@ -104,7 +108,7 @@ describe("SlackConnector", () => {
     });
 
     it("rejects whitespace-only channel IDs", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["   "],
       });
@@ -113,7 +117,7 @@ describe("SlackConnector", () => {
     });
 
     it("accepts config with boolean toggle fields", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["C12345ABC"],
         skipBotMessages: false,
@@ -122,7 +126,7 @@ describe("SlackConnector", () => {
     });
 
     it("accepts config with batchSize", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["C12345ABC"],
         batchSize: 50,
@@ -131,7 +135,7 @@ describe("SlackConnector", () => {
     });
 
     it("accepts config with valid syncWindowDays", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["C12345ABC"],
         syncWindowDays: 90,
@@ -140,7 +144,7 @@ describe("SlackConnector", () => {
     });
 
     it("rejects invalid syncWindowDays values", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
 
       const zeroResult = await connector.validateConfig({
         channelIds: ["C12345ABC"],
@@ -165,7 +169,7 @@ describe("SlackConnector", () => {
     });
 
     it("rejects invalid batchSize type", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.validateConfig({
         channelIds: ["C12345ABC"],
         batchSize: "not-a-number",
@@ -196,7 +200,7 @@ describe("SlackConnector", () => {
           response_metadata: { next_cursor: "" },
         });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.testConnection({
         config: { channelIds: ["C001"] },
         credentials,
@@ -210,7 +214,7 @@ describe("SlackConnector", () => {
         error: "invalid_auth",
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.testConnection({
         config: { channelIds: ["C001"] },
         credentials,
@@ -226,7 +230,7 @@ describe("SlackConnector", () => {
         error: "missing_scope",
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.testConnection({
         config: { channelIds: ["C001"] },
         credentials,
@@ -251,7 +255,7 @@ describe("SlackConnector", () => {
           response_metadata: { next_cursor: "" },
         });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.testConnection({
         config: { channelIds: ["C999"] },
         credentials,
@@ -266,7 +270,7 @@ describe("SlackConnector", () => {
         new Error("fetch failed: ECONNREFUSED"),
       );
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.testConnection({
         config: { channelIds: ["C001"] },
         credentials,
@@ -288,7 +292,7 @@ describe("SlackConnector", () => {
         response_metadata: { next_cursor: "" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.estimateTotalItems({
         config: { channelIds: ["C001", "C002"] },
         credentials,
@@ -300,7 +304,7 @@ describe("SlackConnector", () => {
     it("returns null on failure", async () => {
       mockConversationsList.mockRejectedValueOnce(new Error("API error"));
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const result = await connector.estimateTotalItems({
         config: { channelIds: ["C001"] },
         credentials,
@@ -332,7 +336,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C002"] },
@@ -364,7 +368,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C003"] },
@@ -394,7 +398,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C002"] },
@@ -404,8 +408,10 @@ describe("SlackConnector", () => {
         batches.push(batch);
       }
 
-      // Only C001 (is_member=true) → 1 batch
-      expect(batches).toHaveLength(1);
+      // First batch surfaces missing C002, second batch is the accessible channel C001
+      expect(batches).toHaveLength(2);
+      expect(batches[0].failures).toHaveLength(1);
+      expect(batches[0].failures?.[0].itemId).toBe("C002");
     });
   });
 
@@ -435,7 +441,7 @@ describe("SlackConnector", () => {
           user: { real_name: "Bob", profile: {}, name: "bob" },
         });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -473,7 +479,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -515,10 +521,10 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
-        config: { channelIds: ["C001", "C002"] },
+        config: { channelIds: ["C001"] },
         credentials,
         checkpoint: null,
       })) {
@@ -553,7 +559,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -596,7 +602,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -662,7 +668,7 @@ describe("SlackConnector", () => {
         return Promise.resolve({ user: { real_name: "Unknown" } });
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: {
@@ -710,7 +716,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -750,7 +756,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -784,7 +790,7 @@ describe("SlackConnector", () => {
 
       mockUsersInfo.mockRejectedValue(new Error("user_not_found"));
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -811,7 +817,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -840,7 +846,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C001"] },
@@ -888,7 +894,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C002"] },
@@ -931,7 +937,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"] },
@@ -963,7 +969,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"] },
@@ -1002,7 +1008,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"] },
@@ -1040,7 +1046,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       for await (const _batch of connector.sync({
         config: { channelIds: ["C001"], syncWindowDays: 1 },
         credentials,
@@ -1075,7 +1081,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const recentCheckpointTs = String(
         Math.floor(Date.now() / 1000) - 5 * 24 * 60 * 60,
       );
@@ -1113,7 +1119,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       for await (const _batch of connector.sync({
         config: { channelIds: ["C001"], syncWindowDays: 1 },
         credentials,
@@ -1150,7 +1156,7 @@ describe("SlackConnector", () => {
         has_more: false,
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"] },
@@ -1188,7 +1194,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C999"] },
@@ -1232,7 +1238,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C002"] },
@@ -1283,7 +1289,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001", "C002"] },
@@ -1328,7 +1334,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -1380,7 +1386,7 @@ describe("SlackConnector", () => {
         user: { real_name: "Alice", profile: {}, name: "alice" },
       });
 
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const batches: ConnectorSyncBatch[] = [];
       for await (const batch of connector.sync({
         config: { channelIds: ["C001"], skipBotMessages: false },
@@ -1403,27 +1409,27 @@ describe("SlackConnector", () => {
 
   // ===== sync — invalid config =====
   describe("sync — invalid config", () => {
-    it("throws when config is invalid", async () => {
-      const connector = new SlackConnector();
-      const generator = connector.sync({
-        config: { batchSize: "not-a-number" },
-        credentials,
-        checkpoint: null,
-      });
-      await expect(generator.next()).rejects.toThrow(
-        "Invalid Slack configuration",
-      );
-    });
-
     it("throws when channelIds are missing", async () => {
-      const connector = new SlackConnector();
+      const connector = makeConnector();
       const generator = connector.sync({
-        config: {},
+        config: { batchSize: 50 },
         credentials,
         checkpoint: null,
       });
       await expect(generator.next()).rejects.toThrow(
         "Channel IDs are required",
+      );
+    });
+
+    it("throws when config is invalid", async () => {
+      const connector = makeConnector();
+      const generator = connector.sync({
+        config: { channelIds: ["C001"], batchSize: "not-a-number" },
+        credentials,
+        checkpoint: null,
+      });
+      await expect(generator.next()).rejects.toThrow(
+        "Invalid Slack configuration",
       );
     });
   });

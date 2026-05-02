@@ -623,7 +623,6 @@ export async function handleLLMProxy<
       }
     } else {
       logger.info(
-        {},
         `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
       );
     }

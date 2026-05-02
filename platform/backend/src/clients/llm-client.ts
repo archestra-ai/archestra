@@ -212,7 +212,7 @@ export function createLLMModel(params: {
       { chatApiKeyId, provider },
       `[${provider}Proxy] chat attaching provider-api-key-id header`,
     );
-  } 
+  }
 
   const headers =
     Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined;

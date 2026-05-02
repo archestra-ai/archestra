@@ -2174,16 +2174,7 @@ function getObjectMetadata(message: UIMessage): Record<string, unknown> {
 // No API Key Setup — shown when user has no API keys configured
 // =========================================================================
 
-const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
-  name: "",
-  provider: "anthropic",
-  apiKey: null,
-  baseUrl: null,
-  extraHeaders: [],
-  scope: "personal",
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
   isPrimary: true,
 };
 

@@ -146,6 +146,18 @@ export function McpCatalogForm({
   // Fetch local config secrets only for local MCP catalog items.
   const { data: localConfigSecret } = useGetSecret(localConfigSecretId);
 
+  // Pre-existing secret env-var keys, used to render a `••••••••` placeholder.
+  const storedSecretKeys = useMemo(() => {
+    if (initialValues?.serverType !== "local" || !initialValues.localConfig) {
+      return new Set<string>();
+    }
+    return new Set(
+      (initialValues.localConfig.environment ?? [])
+        .filter((env) => env.type === "secret")
+        .map((env) => env.key),
+    );
+  }, [initialValues]);
+
   // Get MCP server base image from backend features endpoint
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
@@ -599,9 +611,10 @@ export function McpCatalogForm({
             <Alert variant="info">
               <Info className="h-4 w-4" />
               <AlertDescription>
-                Changes to {nameDisabled ? "" : "Name, "}Server URL or
-                Authentication will require reinstalling the server for the
-                changes to take effect.
+                Changes to {nameDisabled ? "" : "Name, "}Server URL,
+                Authentication, prompted Environment Variables, or Headers will
+                require existing installations to be reinstalled (and their
+                credentials updated) before the new values take effect.
               </AlertDescription>
             </Alert>
           )}
@@ -983,6 +996,7 @@ export function McpCatalogForm({
                 fieldNamePrefix="localConfig.environment"
                 form={form}
                 useExternalSecretsManager={showByosOption}
+                secretKeysWithStoredValue={storedSecretKeys}
                 disablePromptOnInstallation={isMultitenant}
                 disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
                 envFrom={{

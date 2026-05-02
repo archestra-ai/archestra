@@ -1529,7 +1529,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // A preliminary title set from the first user message should still be
       // overwritten by the LLM-generated one (#3246).
       const isPreliminaryTitle =
-        conversation.title === firstUserMessage;
+        conversation.title === firstUserMessage.slice(0, 200);
       if (conversation.title && !regenerate && !isPreliminaryTitle) {
         logger.info(
           { conversationId: id, existingTitle: conversation.title },

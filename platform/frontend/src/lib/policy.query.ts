@@ -1,4 +1,7 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@shared";
 import {
   type QueryClient,
   useMutation,
@@ -29,6 +32,79 @@ import {
   transformToolResultPolicies,
 } from "./policy.utils";
 import { handleApiError } from "./utils";
+
+export type ToolInvocationSimulationOutcome =
+  | "allowed"
+  | "blocked"
+  | "require_approval";
+
+export type ToolInvocationSimulationDetail = {
+  mcpToolCallId: string;
+  toolName: string;
+  agentId: string | null;
+  calledAt: string;
+  currentOutcome: ToolInvocationSimulationOutcome;
+  simulatedOutcome: ToolInvocationSimulationOutcome;
+  changed: boolean;
+  changedReason?: string;
+};
+
+export type ToolInvocationSimulationResponse = {
+  summary: {
+    totalCalls: number;
+    newlyBlocked: number;
+    newlyAllowed: number;
+    requireApprovalAdded: number;
+    requireApprovalRemoved: number;
+    noChange: number;
+  };
+  details: ToolInvocationSimulationDetail[];
+};
+
+export type ToolInvocationSimulationCandidatePolicy = {
+  toolId: string;
+  conditions: PolicyCondition[];
+  action: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"];
+  reason?: string | null;
+};
+
+export function useSimulateToolInvocationPoliciesMutation() {
+  return useMutation({
+    mutationFn: async ({
+      candidatePolicies,
+      limit,
+      agentId,
+      startDate,
+      endDate,
+      globalToolPolicy,
+    }: {
+      candidatePolicies: ToolInvocationSimulationCandidatePolicy[];
+      limit?: number;
+      agentId?: string;
+      startDate?: string;
+      endDate?: string;
+      globalToolPolicy?: "permissive" | "restrictive";
+    }) => {
+      const result = await archestraApiSdk.simulateToolInvocationPolicy({
+        body: {
+          candidatePolicies,
+          ...(limit !== undefined && { limit }),
+          ...(agentId !== undefined && { agentId }),
+          ...(startDate !== undefined && { startDate }),
+          ...(endDate !== undefined && { endDate }),
+          ...(globalToolPolicy !== undefined && { globalToolPolicy }),
+        },
+      });
+
+      if (result.error) {
+        handleApiError(result.error);
+        return null;
+      }
+
+      return (result.data ?? null) as ToolInvocationSimulationResponse | null;
+    },
+  });
+}
 
 export function useToolInvocationPolicies(
   initialData?: ReturnType<typeof transformToolInvocationPolicies>,

@@ -436,7 +436,6 @@ class MemberModel {
 
   /**
    * Clear defaultAgentId for all members that reference the given agent.
-   * Called before deleting an agent so the deletion guard is not needed.
    */
   static async clearDefaultAgentForAll(agentId: string): Promise<void> {
     await db

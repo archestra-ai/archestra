@@ -285,6 +285,26 @@ describe("agent routes", () => {
       expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
       expect(getResponse.json().toolAssignmentMode).toBe("automatic");
     });
+
+    test("allows changing scope from org back to personal", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: `Scope Downgrade Test ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${agent.id}`,
+        payload: { scope: "personal" },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json().scope).toBe("personal");
+    });
   });
 
   describe("DELETE /api/agents/:id", () => {
@@ -384,28 +404,20 @@ describe("agent routes", () => {
       expect(created.isPersonalGateway).toBe(false);
     });
 
-    test("deleting a default agent succeeds and clears member defaultAgentId", async ({
-      makeUser,
-      makeOrganization,
-      makeMember,
-    }) => {
+    test("deleting a default agent succeeds and clears member defaultAgentId", async () => {
       const { default: AgentModel } = await import("@/models/agent");
       const { default: MemberModel } = await import("@/models/member");
 
-      const memberUser = await makeUser();
-      const org = await makeOrganization();
-      await makeMember(memberUser.id, org.id);
-
       await AgentModel.ensurePersonalChatAgent({
-        userId: memberUser.id,
-        organizationId: org.id,
+        userId: user.id,
+        organizationId,
       });
 
       const defaultAgentId = await MemberModel.getDefaultAgentId(
-        memberUser.id,
-        org.id,
+        user.id,
+        organizationId,
       );
-      if (!defaultAgentId) throw new Error("expected default agent to be set");
+      if (!defaultAgentId) throw new Error("expected default agent");
 
       const deleteResponse = await app.inject({
         method: "DELETE",
@@ -417,32 +429,10 @@ describe("agent routes", () => {
 
       // defaultAgentId should now be cleared
       const clearedDefault = await MemberModel.getDefaultAgentId(
-        memberUser.id,
-        org.id,
+        user.id,
+        organizationId,
       );
       expect(clearedDefault).toBeNull();
-    });
-  });
-
-  describe("PUT /api/agents/:id scope changes", () => {
-    test("allows changing scope from org back to personal", async ({
-      makeAgent,
-    }) => {
-      const agent = await makeAgent({
-        name: `Scope Downgrade Test ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        scope: "org",
-        authorId: user.id,
-      });
-
-      const updateResponse = await app.inject({
-        method: "PUT",
-        url: `/api/agents/${agent.id}`,
-        payload: { scope: "personal" },
-      });
-
-      expect(updateResponse.statusCode).toBe(200);
-      expect(updateResponse.json().scope).toBe("personal");
     });
   });
 

@@ -31,6 +31,7 @@ import {
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
+import { broadcastMcpInstallationStatus } from "@/websocket";
 
 // Match the schema from getMcpServerTools endpoint
 const ToolWithAssignedAgentCountSchema = z.object({
@@ -651,11 +652,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     localInstallationStatus: "pending",
                     localInstallationError: null,
                   });
+                  broadcastMcpInstallationStatus(server.id, "pending", null);
                   await autoReinstallServer(server, catalogItem);
                   await McpServerModel.update(server.id, {
                     localInstallationStatus: "success",
                     localInstallationError: null,
                   });
+                  broadcastMcpInstallationStatus(server.id, "success", null);
                   logger.info(
                     { serverId: server.id, serverName: server.name },
                     "Auto-reinstalled MCP server successfully",
@@ -677,6 +680,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     localInstallationStatus: "error",
                     localInstallationError: errorMessage,
                   });
+                  broadcastMcpInstallationStatus(
+                    server.id,
+                    "error",
+                    errorMessage,
+                  );
                 }
               }
             } catch (error) {

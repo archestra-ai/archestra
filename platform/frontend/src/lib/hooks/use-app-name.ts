@@ -1,7 +1,7 @@
 import { DEFAULT_APP_NAME } from "@shared";
 import { useAppearanceSettings } from "@/lib/organization.query";
 
-export const DEFAULT_APP_LOGO = "/logo.png";
+export const DEFAULT_APP_LOGO = "/logo-icon.svg";
 
 /**
  * Returns the configured app name, preferring authenticated organization data

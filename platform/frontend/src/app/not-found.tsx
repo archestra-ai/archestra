@@ -38,7 +38,7 @@ function NotFound() {
         <div className="w-full max-w-xs mt-2">
           <Button asChild variant="outline" size="lg" className="w-full">
             <Link href="/chat">
-              <Home className="mr-2 h-4 w-4" />
+              <Home className="h-4 w-4" />
               Go to Chat
             </Link>
           </Button>

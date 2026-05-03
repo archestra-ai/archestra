@@ -70,6 +70,19 @@ const interactionsTable = pgTable(
      * External API requests default to 'api'.
      */
     source: varchar("source").$type<InteractionSource>(),
+    /**
+     * Authentication method used for the request.
+     * Values include provider_key, virtual_key, jwks, oauth_client_credentials,
+     * oauth_user, internal, and unknown.
+     */
+    authMethod: varchar("auth_method"),
+    /**
+     * Authenticated application identity resolved from an OAuth client
+     * credentials token. This is distinct from externalAgentId, which is a
+     * caller-supplied label.
+     */
+    authenticatedAppId: text("authenticated_app_id"),
+    authenticatedAppName: varchar("authenticated_app_name"),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),

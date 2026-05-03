@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   hasArchestraTokenPrefix,
   RouteId,
@@ -7,12 +8,20 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
-import { AgentModel, ModelModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  LlmApplicationModel,
+  LlmProviderApiKeyModel,
+  ModelModel,
+  OAuthAccessTokenModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
+  LLM_MODEL_ROUTER_SCOPE,
   OpenAi,
   UuidIdSchema,
 } from "@/types";
@@ -76,12 +85,31 @@ type ModelRouterMappedProviderKey = {
 };
 
 type ModelRouterVirtualKeyAuth = {
+  authMethod: "virtual_key";
   organizationId: string;
   providerApiKeysByProvider: Map<
     SupportedProvider,
     ModelRouterMappedProviderKey
   >;
+  application?: never;
 };
+
+type ModelRouterApplicationAuth = {
+  authMethod: "oauth_client_credentials";
+  organizationId: string;
+  providerApiKeysByProvider: Map<
+    SupportedProvider,
+    ModelRouterMappedProviderKey
+  >;
+  allowedLlmProxyIds: Set<string>;
+  application: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+};
+
+type ModelRouterAuth = ModelRouterVirtualKeyAuth | ModelRouterApplicationAuth;
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -186,7 +214,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const auth = await getModelRouterVirtualKeyAuth(request);
+      const auth = await getModelRouterAuth(request);
       const agent = await getDefaultModelRouterAgent();
       ensureModelRouterAgentAccess({ agent, auth });
       return reply.send(
@@ -212,7 +240,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const auth = await getModelRouterVirtualKeyAuth(request);
+      const auth = await getModelRouterAuth(request);
       const agent = await getModelRouterAgent(request.params.agentId);
       ensureModelRouterAgentAccess({ agent, auth });
       return reply.send(
@@ -318,7 +346,7 @@ async function routeChatCompletion(
 ) {
   const body = request.body as OpenAi.Types.ChatCompletionsRequest;
   const params = request.params as { agentId?: string };
-  const auth = await getModelRouterVirtualKeyAuth(request);
+  const auth = await getModelRouterAuth(request);
   const agent = params.agentId
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
@@ -358,7 +386,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const body = request.body as OpenAi.Types.ResponsesRequest;
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
-  const auth = await getModelRouterVirtualKeyAuth(request);
+  const auth = await getModelRouterAuth(request);
   const agent = params.agentId
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
@@ -563,7 +591,7 @@ async function getDefaultModelRouterAgent() {
 
 function ensureModelRouterAgentAccess(params: {
   agent: Agent | null;
-  auth: ModelRouterVirtualKeyAuth;
+  auth: ModelRouterAuth;
 }) {
   if (!params.agent) {
     return;
@@ -574,19 +602,29 @@ function ensureModelRouterAgentAccess(params: {
       "Model Router virtual key cannot access this LLM Proxy.",
     );
   }
+  if (
+    params.auth.authMethod === "oauth_client_credentials" &&
+    !params.auth.allowedLlmProxyIds.has(params.agent.id)
+  ) {
+    throw new ApiError(403, "LLM application cannot access this LLM Proxy.");
+  }
 }
 
-async function getModelRouterVirtualKeyAuth(
+async function getModelRouterAuth(
   request: FastifyRequest,
-): Promise<ModelRouterVirtualKeyAuth> {
+): Promise<ModelRouterAuth> {
   const rawAuthHeader = request.raw.headers.authorization;
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1];
-  if (!bearerToken || !hasArchestraTokenPrefix(bearerToken)) {
+  if (!bearerToken) {
     throw new ApiError(
       401,
-      "Model router requests require a Model Router-enabled virtual API key.",
+      "Model router requests require a Model Router-enabled virtual API key or LLM application access token.",
     );
+  }
+
+  if (!hasArchestraTokenPrefix(bearerToken)) {
+    return getModelRouterApplicationAuth(bearerToken);
   }
 
   await virtualKeyRateLimiter.check(request.ip);
@@ -610,6 +648,7 @@ async function getModelRouterVirtualKeyAuth(
     }
 
     return {
+      authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,
       providerApiKeysByProvider: new Map(
         mappings.map((mapping) => [mapping.provider, mapping]),
@@ -635,9 +674,7 @@ async function getModelRouterVirtualKeyAuth(
   }
 }
 
-function getMappedProviders(
-  auth: ModelRouterVirtualKeyAuth,
-): Set<SupportedProvider> {
+function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
   return new Set(auth.providerApiKeysByProvider.keys());
 }
 
@@ -655,7 +692,7 @@ function assertNever(value: never): never {
 
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
-  auth: ModelRouterVirtualKeyAuth;
+  auth: ModelRouterAuth;
   provider: SupportedProvider;
 }): Promise<void> {
   const mappedApiKey = params.auth.providerApiKeysByProvider.get(
@@ -681,5 +718,69 @@ async function applyModelRouterAuthOverride(params: {
     chatApiKeyId: mappedApiKey.chatApiKeyId,
     authenticated: true,
     source: "model_router",
+    authMethod: params.auth.authMethod,
+    authenticatedApp: params.auth.application,
+  };
+}
+
+async function getModelRouterApplicationAuth(
+  bearerToken: string,
+): Promise<ModelRouterApplicationAuth> {
+  const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+    createHash("sha256").update(bearerToken).digest("base64url"),
+  );
+  if (!accessToken || accessToken.expiresAt < new Date()) {
+    throw new ApiError(401, "Invalid LLM application access token.");
+  }
+  if (!accessToken.scopes?.includes(LLM_MODEL_ROUTER_SCOPE)) {
+    throw new ApiError(403, "Access token is missing Model Router scope.");
+  }
+
+  const application = await LlmApplicationModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (!application) {
+    throw new ApiError(401, "LLM application is no longer available.");
+  }
+
+  const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
+    application.modelRouterProviderApiKeys.map(
+      (mapping) => mapping.chatApiKeyId,
+    ),
+  );
+  const providerApiKeysById = new Map(
+    providerApiKeys.map((apiKey) => [apiKey.id, apiKey]),
+  );
+
+  return {
+    authMethod: "oauth_client_credentials",
+    organizationId: application.organizationId,
+    allowedLlmProxyIds: new Set(application.allowedLlmProxyIds),
+    application: {
+      id: application.id,
+      name: application.name,
+      clientId: application.clientId,
+    },
+    providerApiKeysByProvider: new Map(
+      application.modelRouterProviderApiKeys.map((mapping) => {
+        const apiKey = providerApiKeysById.get(mapping.chatApiKeyId);
+        if (!apiKey) {
+          throw new ApiError(
+            401,
+            "LLM application references a missing provider API key.",
+          );
+        }
+        return [
+          mapping.provider,
+          {
+            provider: mapping.provider,
+            chatApiKeyId: apiKey.id,
+            chatApiKeyName: apiKey.name,
+            secretId: apiKey.secretId,
+            baseUrl: apiKey.baseUrl,
+          },
+        ];
+      }),
+    ),
   };
 }

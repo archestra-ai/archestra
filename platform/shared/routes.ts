@@ -301,6 +301,12 @@ export const RouteId = {
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
+  // LLM Application Routes
+  GetLlmApplications: "getLlmApplications",
+  CreateLlmApplication: "createLlmApplication",
+  RotateLlmApplicationSecret: "rotateLlmApplicationSecret",
+  DeleteLlmApplication: "deleteLlmApplication",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",

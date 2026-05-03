@@ -144,10 +144,17 @@ const navigationItems = [
   },
   {
     icon: Key,
-    label: "Provider Settings",
-    value: "provider-settings",
-    keywords: "provider settings api keys virtual keys models llm",
-    href: "/llm/providers/api-keys",
+    label: "Model Providers",
+    value: "model-providers",
+    keywords: "provider settings api keys models llm",
+    href: "/llm/model-providers/api-keys",
+  },
+  {
+    icon: Key,
+    label: "App Access",
+    value: "app-access",
+    keywords: "virtual keys applications oauth client credentials llm",
+    href: "/llm/app-access/virtual-keys",
   },
   {
     icon: MessagesSquare,

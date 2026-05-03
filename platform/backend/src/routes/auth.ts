@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { DEFAULT_ADMIN_EMAIL, IDENTITY_PROVIDER_ID, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
@@ -11,6 +11,7 @@ import logger from "@/logging";
 import {
   AccountModel,
   AgentModel,
+  LlmApplicationModel,
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -25,6 +26,7 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
+import { LLM_MODEL_ROUTER_SCOPE } from "@/types/llm-application";
 import {
   isLoopbackRedirectUri,
   loopbackRedirectUriMatchesIgnoringPort,
@@ -392,6 +394,23 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           assertion: body.assertion as string | undefined,
           clientId: authenticatedClientId,
           clientSecret,
+        });
+
+        return reply
+          .status(result.ok ? 200 : result.statusCode)
+          .send(result.body);
+      }
+
+      if (body?.grant_type === "client_credentials") {
+        const { clientId: authenticatedClientId, clientSecret } =
+          extractOAuthClientCredentials({
+            authorizationHeader: request.headers.authorization,
+            body,
+          });
+        const result = await issueLlmApplicationAccessToken({
+          clientId: authenticatedClientId,
+          clientSecret,
+          scope: body.scope as string | undefined,
         });
 
         return reply
@@ -860,6 +879,71 @@ function extractOAuthClientCredentials(params: {
   return {
     clientId: params.body?.client_id as string | undefined,
     clientSecret: params.body?.client_secret as string | undefined,
+  };
+}
+
+async function issueLlmApplicationAccessToken(params: {
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  scope: string | undefined;
+}): Promise<{
+  ok: boolean;
+  statusCode: number;
+  body: Record<string, unknown>;
+}> {
+  if (!params.clientId || !params.clientSecret) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
+    LLM_MODEL_ROUTER_SCOPE,
+  ];
+  if (!requestedScopes.includes(LLM_MODEL_ROUTER_SCOPE)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      body: {
+        error: "invalid_scope",
+        error_description: `${LLM_MODEL_ROUTER_SCOPE} scope is required`,
+      },
+    };
+  }
+
+  const application = await LlmApplicationModel.findClientForCredentials({
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+  });
+  if (!application) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  const accessToken = `llm_at_${randomBytes(32).toString("base64url")}`;
+  const expiresIn = 3600;
+  await OAuthAccessTokenModel.createClientCredentialsToken({
+    tokenHash: hashOAuthAccessTokenForLookup(accessToken),
+    clientId: application.clientId,
+    expiresAt: new Date(Date.now() + expiresIn * 1000),
+    scopes: [LLM_MODEL_ROUTER_SCOPE],
+    referenceId: `llm-model-router:${application.id}`,
+  });
+
+  return {
+    ok: true,
+    statusCode: 200,
+    body: {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      scope: LLM_MODEL_ROUTER_SCOPE,
+    },
   };
 }
 

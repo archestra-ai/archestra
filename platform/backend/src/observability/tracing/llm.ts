@@ -12,6 +12,9 @@ import logger from "@/logging";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { Agent, GenAiOperationName } from "@/types";
 import {
+  ATTR_ARCHESTRA_APP_ID,
+  ATTR_ARCHESTRA_APP_NAME,
+  ATTR_ARCHESTRA_AUTH_METHOD,
   ATTR_ARCHESTRA_EXECUTION_ID,
   ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
@@ -69,6 +72,8 @@ export async function startActiveLlmSpan<T>(params: {
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
+  authMethod?: string;
+  authenticatedApp?: { id: string; name: string; clientId: string };
   source?: InteractionSource;
   serverAddress?: string;
   promptMessages?: unknown;
@@ -123,6 +128,13 @@ export async function startActiveLlmSpan<T>(params: {
         ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
         params.externalAgentId,
       );
+    }
+    if (params.authMethod) {
+      span.setAttribute(ATTR_ARCHESTRA_AUTH_METHOD, params.authMethod);
+    }
+    if (params.authenticatedApp) {
+      span.setAttribute(ATTR_ARCHESTRA_APP_ID, params.authenticatedApp.id);
+      span.setAttribute(ATTR_ARCHESTRA_APP_NAME, params.authenticatedApp.name);
     }
     if (params.source) {
       span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.source);

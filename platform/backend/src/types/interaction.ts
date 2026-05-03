@@ -354,6 +354,8 @@ export const SessionSummarySchema = z.object({
   profileName: z.string().nullable(),
   externalAgentIds: z.array(z.string()),
   externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names
+  authMethods: z.array(z.string()),
+  authenticatedAppNames: z.array(z.string()),
   userNames: z.array(z.string()),
   lastInteractionRequest: z.unknown().nullable(),
   lastInteractionType: z.string().nullable(),

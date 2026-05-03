@@ -33,6 +33,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
+  llmApplication: ["read", "create", "update", "delete", "admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -85,6 +86,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
+  llmApplication: ["read", "create", "update", "delete"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -137,6 +139,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete"],
   llmProviderApiKey: ["read"],
   llmVirtualKey: ["read"],
+  llmApplication: ["read"],
   llmModel: ["read"],
   llmLimit: [],
   optimizationRule: [],
@@ -271,6 +274,11 @@ export const permissionDescriptions: Record<string, string> = {
   "llmVirtualKey:update": "Modify LLM virtual keys and their visibility",
   "llmVirtualKey:delete": "Delete LLM virtual keys",
   "llmVirtualKey:admin": "Manage all LLM virtual keys and view every scope",
+  "llmApplication:read": "View LLM application registrations",
+  "llmApplication:create": "Create LLM application registrations",
+  "llmApplication:update": "Modify LLM application registrations",
+  "llmApplication:delete": "Delete LLM application registrations",
+  "llmApplication:admin": "Manage all LLM application registrations",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update": "Modify LLM model pricing and modality settings",
   "llmLimit:read": "View token usage limits",
@@ -749,6 +757,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteVirtualApiKey]: {
     llmVirtualKey: ["delete"],
   },
+  [RouteId.GetLlmApplications]: {
+    llmApplication: ["read"],
+  },
+  [RouteId.CreateLlmApplication]: {
+    llmApplication: ["create"],
+  },
+  [RouteId.RotateLlmApplicationSecret]: {
+    llmApplication: ["update"],
+  },
+  [RouteId.DeleteLlmApplication]: {
+    llmApplication: ["delete"],
+  },
   [RouteId.GetModelsWithApiKeys]: {
     llmModel: ["read"],
   },
@@ -1031,12 +1051,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
-  "/llm/providers/api-keys": { llmProviderApiKey: ["read"] },
-  "/llm/providers/virtual-keys": {
+  "/llm/model-providers/api-keys": { llmProviderApiKey: ["read"] },
+  "/llm/model-providers/models": { llmModel: ["read"] },
+  "/llm/app-access/virtual-keys": {
     llmVirtualKey: ["read"],
     llmProviderApiKey: ["read"],
   },
-  "/llm/providers/models": { llmModel: ["read"] },
+  "/llm/app-access/applications": { llmApplication: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },

@@ -3,14 +3,21 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-02-20
+lastUpdated: 2026-05-03
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-The LLM Proxy supports three authentication methods: direct provider API keys, virtual API keys, and JWKS via an external identity provider.
+The LLM Proxy supports direct provider API keys, virtual API keys, LLM application access tokens, and JWKS via an external identity provider.
+
+| Method | Best for | Model Router | Notes |
+| --- | --- | --- | --- |
+| Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
+| Virtual API key | Generic OpenAI-compatible clients and individual developers | Yes | Works with clients that only support `baseURL` and `apiKey`. |
+| LLM application access token | Backend services, production apps, and external bots | Yes | Uses OAuth client credentials to issue short-lived bearer tokens. |
+| JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |
 
 ## Direct Provider API Key
 
@@ -39,9 +46,9 @@ Virtual API keys are platform-managed bearer tokens that map to a real provider 
 
 ### Creating Virtual Keys
 
-1. Go to **Settings > LLM API Keys**
-2. Click the edit icon on an existing API key
-3. In the **Virtual API Keys** section at the bottom, enter a name and click the add button
+1. Go to **LLM Proxies > App Access > Virtual Keys**
+2. Create a virtual key
+3. Select either one provider API key or enable **Use for Model Router** and map provider keys
 4. Copy the generated token (shown only once)
 
 ### Using Virtual Keys
@@ -75,6 +82,42 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -H "Content-Type: application/json" \
   -d '{"model": "anthropic:claude-haiku-4-5-20251001", "input": "Hello"}'
 ```
+
+## LLM Applications
+
+LLM applications are registered clients that call the Model Router with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The application receives a `client_id` and one-time `client_secret`, exchanges them for a short-lived access token, and uses that token as the Model Router bearer token.
+
+Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM applications are better when you control the service code and can request a token before calling the Model Router.
+
+### Creating Applications
+
+1. Go to **LLM Proxies > App Access > Applications**
+2. Create an application
+3. Select the LLM proxies it can access
+4. Map the provider API keys it can route through
+5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
+
+### Getting an Access Token
+
+```bash
+curl -X POST "https://archestra.example.com/api/auth/oauth2/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=$CLIENT_ID" \
+  -d "client_secret=$CLIENT_SECRET" \
+  -d "scope=llm:model-router"
+```
+
+### Calling the Model Router
+
+```bash
+curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "openai:gpt-5.4", "input": "Hello"}'
+```
+
+LLM logs and traces record the authenticated application separately from `X-Archestra-Agent-Id`. Use `X-Archestra-Agent-Id` as a caller-provided label, not as proof of app identity.
 
 ## JWKS (External Identity Provider)
 

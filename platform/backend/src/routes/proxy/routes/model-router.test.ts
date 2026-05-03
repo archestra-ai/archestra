@@ -6,7 +6,13 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { InteractionModel, ModelModel, VirtualApiKeyModel } from "@/models";
+import {
+  InteractionModel,
+  LlmApplicationModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import authRoutes from "@/routes/auth";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -584,6 +590,84 @@ describe("model router proxy routes", () => {
     expect(interactions.data[0].source).toBe("model_router");
   });
 
+  test("routes requests authenticated with an LLM application access token issued from client credentials", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Application Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const { application, clientSecret } = await LlmApplicationModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      modelRouterProviderApiKeys: [
+        {
+          provider,
+          chatApiKeyId: chatApiKey.id,
+        },
+      ],
+    });
+
+    const tokenResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: application.clientId,
+        client_secret: clientSecret,
+        scope: "llm:model-router",
+      },
+    });
+    expect(tokenResponse.statusCode).toBe(200);
+    const { access_token: accessToken } = tokenResponse.json();
+    expect(accessToken).toMatch(/^llm_at_/);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+        "x-archestra-agent-id": "caller-supplied-label",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data[0]).toMatchObject({
+      authMethod: "oauth_client_credentials",
+      authenticatedAppId: application.id,
+      authenticatedAppName: "Backend Service",
+      externalAgentId: "caller-supplied-label",
+    });
+  });
+
   test("rejects raw provider keys on model router routes", async ({
     makeAgent,
   }) => {
@@ -611,7 +695,7 @@ describe("model router proxy routes", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().error.message).toContain(
-      "Model Router-enabled virtual API key",
+      "Invalid LLM application access token",
     );
   });
 

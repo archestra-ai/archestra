@@ -3,6 +3,7 @@ import { IDENTITY_PROVIDER_ID } from "@shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
+import LlmApplicationModel from "@/models/llm-application";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -98,6 +99,60 @@ describe("auth routes", () => {
     expect(storedToken?.expiresAt).toEqual(
       new Date((issuedAtSeconds + 604_800) * 1000),
     );
+  });
+
+  test("issues LLM application access tokens with client credentials", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { application, clientSecret } = await LlmApplicationModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      modelRouterProviderApiKeys: [
+        { provider: "openai", chatApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: application.clientId,
+        client_secret: clientSecret,
+        scope: "llm:model-router",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: "llm:model-router",
+    });
+    expect(response.json().access_token).toMatch(/^llm_at_/);
+
+    const tokenHash = createHash("sha256")
+      .update(response.json().access_token)
+      .digest("base64url");
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.clientId).toBe(application.clientId);
+    expect(storedToken?.userId).toBeNull();
+    expect(storedToken?.scopes).toEqual(["llm:model-router"]);
   });
 
   test("applies MCP token lifetime when resource uses the token endpoint origin", async ({

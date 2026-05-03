@@ -891,6 +891,8 @@ class InteractionModel {
           profileId: schema.interactionsTable.profileId,
           profileName: schema.agentsTable.name,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
+          authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
+          authenticatedAppNames: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}, ',')`,
           userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
@@ -987,6 +989,12 @@ class InteractionModel {
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
+        authMethods: s.authMethods
+          ? s.authMethods.split(",").filter(Boolean)
+          : [],
+        authenticatedAppNames: s.authenticatedAppNames
+          ? s.authenticatedAppNames.split(",").filter(Boolean)
+          : [],
         userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
         lastInteractionRequest: lastInteraction?.request ?? null,
         lastInteractionType: lastInteraction?.type ?? null,

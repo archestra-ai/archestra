@@ -6,6 +6,7 @@ import type { SupportedProvider } from "./model-constants";
  */
 export const OAUTH_SCOPES = [
   "mcp",
+  "llm:model-router",
   "openid",
   "profile",
   "email",
@@ -19,6 +20,7 @@ export type OAuthScope = (typeof OAUTH_SCOPES)[number];
  */
 export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
   mcp: "Access MCP tools and resources",
+  "llm:model-router": "Access the LLM Model Router",
   openid: "Verify your identity",
   profile: "Access your profile information",
   email: "Access your email address",

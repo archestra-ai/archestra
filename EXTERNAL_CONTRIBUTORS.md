@@ -191,3 +191,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @devman247
 - @void0x14
 - @Enejivk
+- @J-0524

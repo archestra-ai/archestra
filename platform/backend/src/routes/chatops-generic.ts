@@ -2,17 +2,17 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { bundledGenericAdapterRuntimeManager } from "@/agents/chatops/bundled-generic-adapter-runtime-manager";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
-import GenericChatOpsProvider from "@/agents/chatops/generic-provider";
 import { CHATOPS_RATE_LIMIT } from "@/agents/chatops/constants";
+import GenericChatOpsProvider from "@/agents/chatops/generic-provider";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
-import { ApiError, type BundledChatOpsAdapterId } from "@/types";
 import { ChatOpsExternalIdMappingModel, UserModel } from "@/models";
+import { ApiError, type BundledChatOpsAdapterId } from "@/types";
 import {
-  GenericMessageEventRequestSchema,
-  GenericInteractiveEventRequestSchema,
   GenericChannelSyncRequestSchema,
+  GenericInteractiveEventRequestSchema,
+  GenericMessageEventRequestSchema,
 } from "@/types/chatops-generic";
 
 const genericProviderCache = new Map<string, GenericChatOpsProvider>();
@@ -55,10 +55,9 @@ function resolveAdapterAndProvider(adapterId: string): {
   provider: GenericChatOpsProvider;
   summary: { status: string };
 } {
-  const catalogEntry =
-    bundledGenericAdapterRuntimeManager.getCatalogEntry(
-      adapterId as BundledChatOpsAdapterId,
-    );
+  const catalogEntry = bundledGenericAdapterRuntimeManager.getCatalogEntry(
+    adapterId as BundledChatOpsAdapterId,
+  );
   const summary = bundledGenericAdapterRuntimeManager.getSummary(
     adapterId as BundledChatOpsAdapterId,
   );
@@ -71,9 +70,7 @@ function resolveAdapterAndProvider(adapterId: string): {
   }
 
   const port = catalogEntry.connectionPage?.port;
-  const baseUrl = port
-    ? `http://localhost:${port}`
-    : `http://localhost:0`;
+  const baseUrl = port ? `http://localhost:${port}` : `http://localhost:0`;
 
   const provider = resolveProvider(
     adapterId,
@@ -177,10 +174,7 @@ const chatopsGenericRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const { provider } = resolveAdapterAndProvider(adapterId);
 
-      await checkRateLimit(
-        request.ip || "unknown",
-        `${adapterId}-interactive`,
-      );
+      await checkRateLimit(request.ip || "unknown", `${adapterId}-interactive`);
 
       chatOpsManager
         .handleInteractiveSelection(provider, request.body)

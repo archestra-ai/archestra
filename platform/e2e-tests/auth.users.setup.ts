@@ -1,8 +1,13 @@
-import {
-  expect,
-  test as setup,
-} from "@playwright/test";
+import { expect, test as setup } from "@playwright/test";
 import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import {
+  createInvitation,
+  signInUser,
+  signOut,
+  signUpWithInvitation,
+  sleep,
+  userExists,
+} from "./auth.setup.helpers";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -14,14 +19,6 @@ import {
   memberAuthFile,
   UI_BASE_URL,
 } from "./consts";
-import {
-  createInvitation,
-  signInUser,
-  signOut,
-  signUpWithInvitation,
-  sleep,
-  userExists,
-} from "./auth.setup.helpers";
 import { expectAuthenticated } from "./utils";
 
 // Run user setup tests sequentially to avoid rate limiting

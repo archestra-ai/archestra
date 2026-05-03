@@ -21,9 +21,7 @@ describe("GET /api/chatops/external-id-mappings", () => {
         organizationId;
     });
 
-    const { default: routes } = await import(
-      "./chatops-external-id-mappings"
-    );
+    const { default: routes } = await import("./chatops-external-id-mappings");
     await app.register(routes);
   });
 
@@ -91,9 +89,7 @@ describe("POST /api/chatops/external-id-mappings", () => {
         organizationId;
     });
 
-    const { default: routes } = await import(
-      "./chatops-external-id-mappings"
-    );
+    const { default: routes } = await import("./chatops-external-id-mappings");
     await app.register(routes);
   });
 
@@ -226,9 +222,7 @@ describe("DELETE /api/chatops/external-id-mappings/:id", () => {
         organizationId;
     });
 
-    const { default: routes } = await import(
-      "./chatops-external-id-mappings"
-    );
+    const { default: routes } = await import("./chatops-external-id-mappings");
     await app.register(routes);
   });
 

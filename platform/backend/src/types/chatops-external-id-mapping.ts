@@ -1,5 +1,5 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod";
+import type { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectChatOpsExternalIdMappingSchema = createSelectSchema(

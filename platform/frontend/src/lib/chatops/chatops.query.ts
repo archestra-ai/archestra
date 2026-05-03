@@ -29,7 +29,8 @@ export function useBundledChatOpsAdapters() {
   return useQuery({
     queryKey: ["chatops", "bundled-adapters"],
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.listBundledChatOpsAdapters();
+      const { data, error } =
+        await archestraApiSdk.listBundledChatOpsAdapters();
       if (error) {
         handleApiError(error);
         return null;
@@ -196,7 +197,9 @@ export function useStartBundledChatOpsAdapter() {
     onSuccess: (data) => {
       if (!data) return;
       toast.success(`${data.displayName} started`);
-      queryClient.invalidateQueries({ queryKey: ["chatops", "bundled-adapters"] });
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "bundled-adapters"],
+      });
     },
   });
 }
@@ -220,7 +223,9 @@ export function useStopBundledChatOpsAdapter() {
     onSuccess: (data) => {
       if (!data) return;
       toast.success(`${data.displayName} stopped`);
-      queryClient.invalidateQueries({ queryKey: ["chatops", "bundled-adapters"] });
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "bundled-adapters"],
+      });
     },
   });
 }

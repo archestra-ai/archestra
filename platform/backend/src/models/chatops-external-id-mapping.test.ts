@@ -9,11 +9,10 @@ describe("ChatOpsExternalIdMappingModel", () => {
         externalId: "user-42",
       });
 
-      const result =
-        await ChatOpsExternalIdMappingModel.findByExternalId(
-          "whatsapp",
-          "user-42",
-        );
+      const result = await ChatOpsExternalIdMappingModel.findByExternalId(
+        "whatsapp",
+        "user-42",
+      );
 
       expect(result).toBeDefined();
       expect(result?.id).toBe(mapping.id);
@@ -23,11 +22,10 @@ describe("ChatOpsExternalIdMappingModel", () => {
     });
 
     test("returns null when not found", async () => {
-      const result =
-        await ChatOpsExternalIdMappingModel.findByExternalId(
-          "whatsapp",
-          "nonexistent",
-        );
+      const result = await ChatOpsExternalIdMappingModel.findByExternalId(
+        "whatsapp",
+        "nonexistent",
+      );
 
       expect(result).toBeNull();
     });
@@ -50,8 +48,7 @@ describe("ChatOpsExternalIdMappingModel", () => {
         externalId: "ext-2",
       });
 
-      const results =
-        await ChatOpsExternalIdMappingModel.findByUserId(user.id);
+      const results = await ChatOpsExternalIdMappingModel.findByUserId(user.id);
 
       expect(results).toHaveLength(2);
       expect(results.map((r) => r.externalId).sort()).toEqual([
@@ -64,8 +61,7 @@ describe("ChatOpsExternalIdMappingModel", () => {
       makeUser,
     }) => {
       const user = await makeUser();
-      const results =
-        await ChatOpsExternalIdMappingModel.findByUserId(user.id);
+      const results = await ChatOpsExternalIdMappingModel.findByUserId(user.id);
       expect(results).toEqual([]);
     });
   });
@@ -95,24 +91,23 @@ describe("ChatOpsExternalIdMappingModel", () => {
     }) => {
       const mapping = await makeExternalIdMapping();
 
-      const deleted =
-        await ChatOpsExternalIdMappingModel.deleteById(mapping.id);
+      const deleted = await ChatOpsExternalIdMappingModel.deleteById(
+        mapping.id,
+      );
 
       expect(deleted).toBe(true);
 
-      const found =
-        await ChatOpsExternalIdMappingModel.findByExternalId(
-          mapping.adapterId,
-          mapping.externalId,
-        );
+      const found = await ChatOpsExternalIdMappingModel.findByExternalId(
+        mapping.adapterId,
+        mapping.externalId,
+      );
       expect(found).toBeNull();
     });
 
     test("returns false for non-existent id", async () => {
-      const deleted =
-        await ChatOpsExternalIdMappingModel.deleteById(
-          "00000000-0000-0000-0000-000000000000",
-        );
+      const deleted = await ChatOpsExternalIdMappingModel.deleteById(
+        "00000000-0000-0000-0000-000000000000",
+      );
       expect(deleted).toBe(false);
     });
   });
@@ -145,20 +140,18 @@ describe("ChatOpsExternalIdMappingModel", () => {
         userId: user1.id,
       });
 
-      const updated =
-        await ChatOpsExternalIdMappingModel.upsert({
-          adapterId: "whatsapp",
-          externalId: "ext-upsert-dup",
-          userId: user2.id,
-        });
+      const updated = await ChatOpsExternalIdMappingModel.upsert({
+        adapterId: "whatsapp",
+        externalId: "ext-upsert-dup",
+        userId: user2.id,
+      });
 
       expect(updated.userId).toBe(user2.id);
 
-      const found =
-        await ChatOpsExternalIdMappingModel.findByExternalId(
-          "whatsapp",
-          "ext-upsert-dup",
-        );
+      const found = await ChatOpsExternalIdMappingModel.findByExternalId(
+        "whatsapp",
+        "ext-upsert-dup",
+      );
       expect(found?.userId).toBe(user2.id);
     });
   });

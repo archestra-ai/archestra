@@ -3,7 +3,16 @@
 import { E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Eye, Link2, Plus, Shield, Trash2, Unlink, UserCog } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  Link2,
+  Plus,
+  Shield,
+  Trash2,
+  Unlink,
+  UserCog,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -21,6 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import {
@@ -30,21 +41,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useCreateExternalIdMapping,
+  useDeleteExternalIdMapping,
+  useExternalIdMappings,
+} from "@/lib/chatops/chatops-external-id-mapping.query";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import {
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
-import {
-  type ExternalIdMapping,
-  useCreateExternalIdMapping,
-  useDeleteExternalIdMapping,
-  useExternalIdMappings,
-} from "@/lib/chatops/chatops-external-id-mapping.query";
 import {
   type Invitation,
   type Member,

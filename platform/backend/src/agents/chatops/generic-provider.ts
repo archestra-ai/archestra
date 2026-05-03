@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import logger from "@/logging";
+import { ChatOpsExternalIdMappingModel, UserModel } from "@/models";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsEventHandler,
@@ -22,7 +23,6 @@ import type {
   GenericSendReplyCallback,
   GenericTypingCallback,
 } from "@/types/chatops-generic";
-import { ChatOpsExternalIdMappingModel, UserModel } from "@/models";
 import { errorMessage } from "./utils";
 
 const REPLY_CONTEXT_TTL_MS = 15 * 60 * 1000;
@@ -52,7 +52,6 @@ class GenericChatOpsProvider implements ChatOpsProvider {
   >();
   private readonly senderNameCache = new Map<string, string>();
   private readonly senderExternalIdCache = new Map<string, string>();
-  private eventHandler: ChatOpsEventHandler | null = null;
 
   constructor(config: {
     adapterId: string;
@@ -90,10 +89,7 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     this.senderNameCache.clear();
     this.senderExternalIdCache.clear();
     this.eventHandler = null;
-    logger.info(
-      { adapterId: this.adapterId },
-      "[GenericChatOps] Cleaned up",
-    );
+    logger.info({ adapterId: this.adapterId }, "[GenericChatOps] Cleaned up");
   }
 
   setEventHandler(handler: ChatOpsEventHandler): void {
@@ -253,11 +249,10 @@ class GenericChatOpsProvider implements ChatOpsProvider {
   async getUserEmail(namespacedSenderId: string): Promise<string | null> {
     const externalId = this.senderExternalIdCache.get(namespacedSenderId);
     if (!externalId) return null;
-    const mapping =
-      await ChatOpsExternalIdMappingModel.findByExternalId(
-        this.adapterId,
-        externalId,
-      );
+    const mapping = await ChatOpsExternalIdMappingModel.findByExternalId(
+      this.adapterId,
+      externalId,
+    );
     if (!mapping) return null;
     const user = await UserModel.getById(mapping.userId);
     return user?.email ?? null;
@@ -346,14 +341,12 @@ class GenericChatOpsProvider implements ChatOpsProvider {
   ): Promise<DiscoveredChannel[] | null> {
     if (this.channelCache.size === 0) return null;
 
-    return Array.from(this.channelCache.entries()).map(
-      ([channelId, info]) => ({
-        channelId,
-        channelName: info.name,
-        workspaceId: info.workspaceId,
-        workspaceName: info.workspaceName,
-      }),
-    );
+    return Array.from(this.channelCache.entries()).map(([channelId, info]) => ({
+      channelId,
+      channelName: info.name,
+      workspaceId: info.workspaceId,
+      workspaceName: info.workspaceName,
+    }));
   }
 
   parseInteractivePayload(payload: unknown): {
@@ -514,9 +507,7 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Callback ${path} failed with status ${response.status}`,
-      );
+      throw new Error(`Callback ${path} failed with status ${response.status}`);
     }
   }
 }

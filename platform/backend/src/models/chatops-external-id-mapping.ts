@@ -40,7 +40,11 @@ class ChatOpsExternalIdMappingModel {
       })
       .returning();
     logger.debug(
-      { adapterId: params.adapterId, externalId: params.externalId, userId: params.userId },
+      {
+        adapterId: params.adapterId,
+        externalId: params.externalId,
+        userId: params.userId,
+      },
       "ChatOpsExternalIdMappingModel.create: created mapping",
     );
     return mapping;
@@ -72,7 +76,11 @@ class ChatOpsExternalIdMappingModel {
       })
       .returning();
     logger.debug(
-      { adapterId: params.adapterId, externalId: params.externalId, userId: params.userId },
+      {
+        adapterId: params.adapterId,
+        externalId: params.externalId,
+        userId: params.userId,
+      },
       "ChatOpsExternalIdMappingModel.upsert: upserted mapping",
     );
     return mapping;

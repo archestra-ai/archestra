@@ -5,7 +5,11 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["generic", "ms-teams", "slack"]);
+export const ChatOpsProviderTypeSchema = z.enum([
+  "generic",
+  "ms-teams",
+  "slack",
+]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);

@@ -1,5 +1,12 @@
 import { INTERACTION_SOURCE_DISPLAY, type InteractionSource } from "@shared";
-import { CalendarClock, Database, Globe, Mail, MessageSquare, Route } from "lucide-react";
+import {
+  CalendarClock,
+  Database,
+  Globe,
+  Mail,
+  MessageSquare,
+  Route,
+} from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";

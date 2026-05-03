@@ -1,6 +1,40 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import type { IncomingChatMessage } from "@/types";
 import GenericChatOpsProvider, { namespaceId } from "./generic-provider";
+
+interface ProviderTestAccess {
+  getReplyContext(key: string): unknown;
+}
+
+type FetchCallInit = RequestInit & { body?: string };
+
+function asTestAccess(p: GenericChatOpsProvider): ProviderTestAccess {
+  return p as unknown as ProviderTestAccess;
+}
+
+function getFetchBody(calls: unknown[][], index: number): string {
+  return (calls[index][1] as FetchCallInit).body as string;
+}
+
+function parseFetchBody(
+  calls: unknown[][],
+  index: number,
+): Record<string, unknown> {
+  return JSON.parse(getFetchBody(calls, index));
+}
+
+async function parseMessage(
+  provider: GenericChatOpsProvider,
+  overrides: Record<string, unknown> = {},
+): Promise<IncomingChatMessage> {
+  const result = await provider.parseWebhookNotification(
+    makeMessagePayload(overrides),
+    {},
+  );
+  expect(result).not.toBeNull();
+  return result as IncomingChatMessage;
+}
 
 function makeMessagePayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -71,9 +105,9 @@ describe("GenericChatOpsProvider", () => {
 
   beforeEach(() => {
     provider = makeProvider();
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(null, { status: 200, statusText: "OK" }),
-    );
+    fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200, statusText: "OK" }));
   });
 
   afterEach(() => {
@@ -93,53 +127,48 @@ describe("GenericChatOpsProvider", () => {
 
   describe("parseWebhookNotification", () => {
     test("correctly namespaces all ids", async () => {
-      const payload = makeMessagePayload();
-      const result = await provider.parseWebhookNotification(payload, {});
+      const result = await parseMessage(provider);
 
-      expect(result).not.toBeNull();
-      expect(result!.messageId).toBe(
+      expect(result.messageId).toBe(
         namespaceId("test-adapter", "message", "msg-001"),
       );
-      expect(result!.channelId).toBe(
+      expect(result.channelId).toBe(
         namespaceId("test-adapter", "channel", "ch-99"),
       );
-      expect(result!.workspaceId).toBe(
+      expect(result.workspaceId).toBe(
         namespaceId("test-adapter", "workspace", "ws-1"),
       );
-      expect(result!.threadId).toBe(
+      expect(result.threadId).toBe(
         namespaceId("test-adapter", "thread", "thr-1"),
       );
-      expect(result!.senderId).toBe(
+      expect(result.senderId).toBe(
         namespaceId("test-adapter", "sender", "user-42"),
       );
     });
 
     test("sets channel metadata correctly", async () => {
-      const payload = makeMessagePayload({
-        channel: { externalId: "dm-1", name: null, kind: "dm" },
-      });
-      const result = await provider.parseWebhookNotification(payload, {});
-      expect(result!.metadata?.channelType).toBe("im");
+      const result = await provider.parseWebhookNotification(
+        makeMessagePayload({
+          channel: { externalId: "dm-1", name: null, kind: "dm" },
+        }),
+        {},
+      );
+      expect(result?.metadata?.channelType).toBe("im");
     });
 
     test("caches reply context", async () => {
-      const payload = makeMessagePayload({
-        replyContext: { myToken: 42 },
-      });
-      await provider.parseWebhookNotification(payload, {});
-
-      const namespacedMsgId = namespaceId(
-        "test-adapter",
-        "message",
-        "msg-001",
+      await provider.parseWebhookNotification(
+        makeMessagePayload({ replyContext: { myToken: 42 } }),
+        {},
       );
-      const cached = (provider as any).getReplyContext(namespacedMsgId);
+
+      const namespacedMsgId = namespaceId("test-adapter", "message", "msg-001");
+      const cached = asTestAccess(provider).getReplyContext(namespacedMsgId);
       expect(cached).toEqual({ myToken: 42 });
     });
 
     test("caches channel name when present", async () => {
-      const payload = makeMessagePayload();
-      await provider.parseWebhookNotification(payload, {});
+      await provider.parseWebhookNotification(makeMessagePayload(), {});
 
       const namespacedChannelId = namespaceId(
         "test-adapter",
@@ -151,28 +180,30 @@ describe("GenericChatOpsProvider", () => {
     });
 
     test("handles null workspace", async () => {
-      const payload = makeMessagePayload({ workspace: null });
-      const result = await provider.parseWebhookNotification(payload, {});
-      expect(result!.workspaceId).toBeNull();
+      const result = await provider.parseWebhookNotification(
+        makeMessagePayload({ workspace: null }),
+        {},
+      );
+      expect(result?.workspaceId).toBeNull();
     });
 
     test("handles null thread", async () => {
-      const payload = makeMessagePayload({ thread: null });
-      const result = await provider.parseWebhookNotification(payload, {});
-      expect(result!.threadId).toBeUndefined();
+      const result = await provider.parseWebhookNotification(
+        makeMessagePayload({ thread: null }),
+        {},
+      );
+      expect(result?.threadId).toBeUndefined();
     });
 
     test("passes sender email through", async () => {
-      const payload = makeMessagePayload();
-      const result = await provider.parseWebhookNotification(payload, {});
-      expect(result!.senderEmail).toBe("alice@example.com");
+      const result = await parseMessage(provider);
+      expect(result.senderEmail).toBe("alice@example.com");
     });
   });
 
   describe("sendReply", () => {
     test("makes POST to /reply callback URL", async () => {
-      const payload = makeMessagePayload();
-      const message = (await provider.parseWebhookNotification(payload, {}))!;
+      const message = await parseMessage(provider);
 
       const deliveryId = await provider.sendReply({
         originalMessage: message,
@@ -185,15 +216,14 @@ describe("GenericChatOpsProvider", () => {
       expect(url).toBe("http://localhost:3200/reply");
       expect(init?.method).toBe("POST");
 
-      const body = JSON.parse(init?.body as string);
+      const body = JSON.parse(getFetchBody(fetchSpy.mock.calls, 0));
       expect(body.schemaVersion).toBe("v1");
       expect(body.text).toBe("Hello!");
       expect(body.replyContext).toEqual({ token: "rc-123" });
     });
 
     test("includes footer when provided", async () => {
-      const payload = makeMessagePayload();
-      const message = (await provider.parseWebhookNotification(payload, {}))!;
+      const message = await parseMessage(provider);
 
       await provider.sendReply({
         originalMessage: message,
@@ -201,17 +231,14 @@ describe("GenericChatOpsProvider", () => {
         footer: "Powered by Bot",
       });
 
-      const body = JSON.parse(
-        (fetchSpy.mock.calls[0][1] as any).body as string,
-      );
+      const body = parseFetchBody(fetchSpy.mock.calls, 0);
       expect(body.footer).toBe("Powered by Bot");
     });
   });
 
   describe("sendAgentSelectionCard", () => {
     test("makes POST to /agent-selection with agent list", async () => {
-      const payload = makeMessagePayload();
-      const message = (await provider.parseWebhookNotification(payload, {}))!;
+      const message = await parseMessage(provider);
 
       const agents = [
         { id: "agent-uuid-1", name: "Sales" },
@@ -225,10 +252,10 @@ describe("GenericChatOpsProvider", () => {
       });
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchSpy.mock.calls[0];
+      const [url] = fetchSpy.mock.calls[0];
       expect(url).toBe("http://localhost:3200/agent-selection");
 
-      const body = JSON.parse(init?.body as string);
+      const body = parseFetchBody(fetchSpy.mock.calls, 0);
       expect(body.schemaVersion).toBe("v1");
       expect(body.isWelcome).toBe(true);
       expect(body.agents).toEqual(agents);
@@ -238,8 +265,7 @@ describe("GenericChatOpsProvider", () => {
 
   describe("addApprovalRequestForm", () => {
     test("makes POST to /reply with approval metadata", async () => {
-      const payload = makeMessagePayload();
-      const message = (await provider.parseWebhookNotification(payload, {}))!;
+      const message = await parseMessage(provider);
 
       await provider.addApprovalRequestForm({
         originalMessage: message,
@@ -250,9 +276,7 @@ describe("GenericChatOpsProvider", () => {
       });
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const body = JSON.parse(
-        (fetchSpy.mock.calls[0][1] as any).body as string,
-      );
+      const body = parseFetchBody(fetchSpy.mock.calls, 0);
       expect(body.metadata.approvalRequest).toEqual({
         taskId: "task-1",
         approvalId: "approval-1",
@@ -290,20 +314,20 @@ describe("GenericChatOpsProvider", () => {
       const result = provider.parseInteractivePayload(payload);
 
       expect(result).not.toBeNull();
-      expect(result!.agentId).toBe("agent-uuid-1");
-      expect(result!.channelId).toBe(
+      expect(result?.agentId).toBe("agent-uuid-1");
+      expect(result?.channelId).toBe(
         namespaceId("test-adapter", "channel", "ch-99"),
       );
-      expect(result!.workspaceId).toBe(
+      expect(result?.workspaceId).toBe(
         namespaceId("test-adapter", "workspace", "ws-1"),
       );
-      expect(result!.threadTs).toBe(
+      expect(result?.threadTs).toBe(
         namespaceId("test-adapter", "thread", "thr-1"),
       );
-      expect(result!.userId).toBe(
+      expect(result?.userId).toBe(
         namespaceId("test-adapter", "sender", "user-42"),
       );
-      expect(result!.userName).toBe("Alice");
+      expect(result?.userName).toBe("Alice");
     });
 
     test("returns null for non-select-agent action", () => {
@@ -323,22 +347,18 @@ describe("GenericChatOpsProvider", () => {
 
   describe("reply context cache", () => {
     test("stores and retrieves reply context", async () => {
-      const payload = makeMessagePayload({
-        replyContext: { sessionId: "abc" },
-      });
-      await provider.parseWebhookNotification(payload, {});
-
-      const namespacedId = namespaceId(
-        "test-adapter",
-        "message",
-        "msg-001",
+      await provider.parseWebhookNotification(
+        makeMessagePayload({ replyContext: { sessionId: "abc" } }),
+        {},
       );
-      const cached = (provider as any).getReplyContext(namespacedId);
+
+      const namespacedId = namespaceId("test-adapter", "message", "msg-001");
+      const cached = asTestAccess(provider).getReplyContext(namespacedId);
       expect(cached).toEqual({ sessionId: "abc" });
     });
 
     test("returns undefined for missing key", () => {
-      const cached = (provider as any).getReplyContext("nonexistent");
+      const cached = asTestAccess(provider).getReplyContext("nonexistent");
       expect(cached).toBeUndefined();
     });
 
@@ -359,7 +379,7 @@ describe("GenericChatOpsProvider", () => {
       provider.parseWebhookNotification(payload2, {});
 
       const oldKey = namespaceId("test-adapter", "message", "msg-001");
-      expect((provider as any).getReplyContext(oldKey)).toBeUndefined();
+      expect(asTestAccess(provider).getReplyContext(oldKey)).toBeUndefined();
 
       vi.useRealTimers();
     });

@@ -97,7 +97,7 @@ const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const eeRoutes =
   config.enterpriseFeatures.core || config.codegenMode
     ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-    await import("./routes/index.ee")
+      await import("./routes/index.ee")
     : ({} as Record<string, never>);
 
 const {
@@ -506,9 +506,10 @@ const startMetricsServer = async () => {
     host,
   });
   metricsServer.log.info(
-    `Metrics server started on port ${observability.metrics.port}${observability.metrics.secret
-      ? " (with authentication)"
-      : " (no authentication)"
+    `Metrics server started on port ${observability.metrics.port}${
+      observability.metrics.secret
+        ? " (with authentication)"
+        : " (no authentication)"
     }`,
   );
 };
@@ -596,8 +597,8 @@ const registerSandboxRoute = (
   if (process.env.ARCHESTRA_MCP_SANDBOX_PORT) {
     logger.warn(
       "ARCHESTRA_MCP_SANDBOX_PORT is deprecated and no longer used. " +
-      "The sandbox is now served from the main backend on /_sandbox/. " +
-      "Remove this env var from your configuration.",
+        "The sandbox is now served from the main backend on /_sandbox/. " +
+        "Remove this env var from your configuration.",
     );
   }
 
@@ -660,7 +661,8 @@ const startMcpServerRuntime = async (
       });
     } catch (error) {
       fastify.log.error(
-        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"
+        `Failed to import MCP Server Runtime: ${
+          error instanceof Error ? error.message : "Unknown error"
         }`,
       );
       // Continue server startup even if MCP runtime fails

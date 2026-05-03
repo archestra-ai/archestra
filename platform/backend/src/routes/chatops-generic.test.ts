@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { createFastifyInstance } from "@/server";
-import { ApiError } from "@/types";
 import { describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import chatopsGenericRoutes from "./chatops-generic";
 
 const {
@@ -24,26 +24,21 @@ const {
   getUserByIdMock: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock(
-  "@/agents/chatops/bundled-generic-adapter-runtime-manager",
-  () => ({
-    bundledGenericAdapterRuntimeManager: {
-      initialize: vi.fn(),
-      cleanup: vi.fn(),
-      getCatalogEntry: getCatalogEntryMock,
-      getSummary: getSummaryMock,
-    },
-  }),
-);
+vi.mock("@/agents/chatops/bundled-generic-adapter-runtime-manager", () => ({
+  bundledGenericAdapterRuntimeManager: {
+    initialize: vi.fn(),
+    cleanup: vi.fn(),
+    getCatalogEntry: getCatalogEntryMock,
+    getSummary: getSummaryMock,
+  },
+}));
 
 vi.mock("@/agents/chatops/chatops-manager", () => ({
   chatOpsManager: {
-    handleIncomingMessage: handleIncomingMessageMock.mockResolvedValue(
-      undefined,
-    ),
-    handleInteractiveSelection: handleInteractiveSelectionMock.mockResolvedValue(
-      undefined,
-    ),
+    handleIncomingMessage:
+      handleIncomingMessageMock.mockResolvedValue(undefined),
+    handleInteractiveSelection:
+      handleInteractiveSelectionMock.mockResolvedValue(undefined),
     getAccessibleChatopsAgents: getAccessibleChatopsAgentsMock,
   },
 }));
@@ -460,7 +455,10 @@ describe("ChatOps generic webhook routes", () => {
       externalId: "79123456789@s.whatsapp.net",
       userId: "user-1",
     });
-    getUserByIdMock.mockResolvedValueOnce({ id: "user-1", email: "alice@example.com" });
+    getUserByIdMock.mockResolvedValueOnce({
+      id: "user-1",
+      email: "alice@example.com",
+    });
     getAccessibleChatopsAgentsMock.mockResolvedValueOnce([
       { id: "agent-1", name: "Agent Alpha" },
     ]);

@@ -100,11 +100,12 @@ export class BundledGenericAdapterRuntimeManager {
     killProcess?: KillProcess;
   }) {
     this.catalog = options?.catalog ?? bundledGenericAdapterCatalog;
-    this.prebuiltMode = options?.prebuiltMode ?? Boolean(config.chatops.bundledAdaptersDir);
+    this.prebuiltMode =
+      options?.prebuiltMode ?? Boolean(config.chatops.bundledAdaptersDir);
     this.workspaceRootPath =
-      options?.workspaceRootPath
-      ?? config.chatops.bundledAdaptersDir
-      ?? DEFAULT_PLATFORM_ROOT;
+      options?.workspaceRootPath ??
+      config.chatops.bundledAdaptersDir ??
+      DEFAULT_PLATFORM_ROOT;
     this.fileAccess = options?.fileAccess ?? access;
     this.packageFileRead = options?.packageFileRead ?? readFile;
     this.spawnProcess = options?.spawnProcess ?? spawn;
@@ -179,7 +180,7 @@ export class BundledGenericAdapterRuntimeManager {
         throw new ApiError(
           409,
           `Bundled adapter ${entry.adapterId} entrypoint not found at ${entrypointPath}. ` +
-          `Ensure the adapter was built during image creation.`,
+            `Ensure the adapter was built during image creation.`,
         );
       }
     } else {

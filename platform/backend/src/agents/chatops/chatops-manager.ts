@@ -41,6 +41,10 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  type BundledGenericAdapterRuntimeManager,
+  bundledGenericAdapterRuntimeManager,
+} from "./bundled-generic-adapter-runtime-manager";
+import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
@@ -49,10 +53,6 @@ import {
 import GenericChatOpsProvider from "./generic-provider";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
-import {
-  type BundledGenericAdapterRuntimeManager,
-  bundledGenericAdapterRuntimeManager,
-} from "./bundled-generic-adapter-runtime-manager";
 import { errorMessage, isSlackDmChannel } from "./utils";
 
 /**
@@ -802,7 +802,7 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    let { agentToUse, cleanedMessageText } =
+    const { agentToUse, cleanedMessageText } =
       await this.resolveInlineAgentMention({
         messageText: message.text,
         defaultAgent: resolvedAgent,
@@ -1999,13 +1999,25 @@ export function findTolerantMatchLength(
 
 function mapLlmErrorToUserMessage(errMsg: string): string {
   const lower = errMsg.toLowerCase();
-  if (lower.includes("more credits") || lower.includes("insufficient") || lower.includes("402")) {
+  if (
+    lower.includes("more credits") ||
+    lower.includes("insufficient") ||
+    lower.includes("402")
+  ) {
     return "Error: LLM API credits exhausted. Please contact your administrator to top up the balance.";
   }
-  if (lower.includes("rate limit") || lower.includes("429") || lower.includes("too many requests")) {
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("429") ||
+    lower.includes("too many requests")
+  ) {
     return "Error: Rate limit exceeded. Please try again in a few seconds.";
   }
-  if (lower.includes("invalid api key") || lower.includes("401") || lower.includes("unauthorized")) {
+  if (
+    lower.includes("invalid api key") ||
+    lower.includes("401") ||
+    lower.includes("unauthorized")
+  ) {
     return "Error: LLM API authentication failed. Please contact your administrator.";
   }
   if (lower.includes("quota") || lower.includes("capacity")) {

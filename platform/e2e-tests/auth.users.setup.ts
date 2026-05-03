@@ -21,6 +21,13 @@ import {
 } from "./consts";
 import { expectAuthenticated } from "./utils";
 
+/**
+ * Permission set granted to the basic-user custom role.
+ *
+ * Deliberately slim — these are the permissions a restricted user
+ * needs to access /chat once an admin has configured provider keys.
+ * Used by chat-permissions.spec.ts to regression-test PR #4142.
+ */
 const BASIC_USER_PERMISSION = {
   agent: ["read"],
   chat: ["read"],

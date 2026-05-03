@@ -1,6 +1,9 @@
 import { RouteId } from "@shared";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import db, { schema } from "@/database";
+import type { SimulationEvaluation } from "@/models/tool-invocation-policy";
 import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
 import {
   ApiError,
@@ -340,6 +343,282 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.action,
       );
       return reply.send(result);
+    },
+  );
+
+  const SIMULATE_MAX_CALLS = 1000;
+
+  const CandidatePolicySchema = z.object({
+    toolId: UuidIdSchema,
+    conditions: z.array(
+      z.object({
+        key: z.string().min(1).max(200),
+        operator: AutonomyPolicyOperator.SupportedOperatorSchema,
+        value: z.string().max(1000),
+      }),
+    ),
+    action: z.enum([
+      "allow_when_context_is_untrusted",
+      "block_when_context_is_untrusted",
+      "block_always",
+      "require_approval",
+    ]),
+    reason: z.string().max(500).nullable().optional(),
+  });
+
+  const SimulationDetailSchema = z.object({
+    mcpToolCallId: z.string(),
+    toolName: z.string(),
+    agentId: z.string().nullable(),
+    calledAt: z.string(),
+    currentOutcome: z.enum(["allowed", "blocked", "require_approval"]),
+    simulatedOutcome: z.enum(["allowed", "blocked", "require_approval"]),
+    changed: z.boolean(),
+    changedReason: z.string().optional(),
+  });
+
+  fastify.post(
+    "/api/autonomy-policies/tool-invocation/simulate",
+    {
+      schema: {
+        operationId: RouteId.SimulateToolInvocationPolicy,
+        description:
+          "Simulate the impact of candidate policies against recent historical tool calls without saving any changes",
+        tags: ["Tool Invocation Policies"],
+        body: z.object({
+          candidatePolicies: z.array(CandidatePolicySchema).max(500),
+          limit: z.number().int().min(1).max(SIMULATE_MAX_CALLS).optional(),
+          agentId: UuidIdSchema.optional(),
+          startDate: z.string().datetime().optional(),
+          endDate: z.string().datetime().optional(),
+          globalToolPolicy: z.enum(["permissive", "restrictive"]).optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            summary: z.object({
+              totalCalls: z.number(),
+              newlyBlocked: z.number(),
+              newlyAllowed: z.number(),
+              requireApprovalAdded: z.number(),
+              requireApprovalRemoved: z.number(),
+              noChange: z.number(),
+            }),
+            details: z.array(SimulationDetailSchema),
+          }),
+        ),
+      },
+    },
+    async ({ body }, reply) => {
+      const {
+        candidatePolicies,
+        limit = 200,
+        agentId,
+        startDate,
+        endDate,
+        globalToolPolicy = "restrictive",
+      } = body;
+
+      // Load recent mcp_tool_calls (tools/call method only — skips list/initialize)
+      const whereConditions = [];
+      if (agentId) {
+        whereConditions.push(
+          inArray(schema.mcpToolCallsTable.agentId, [agentId]),
+        );
+      }
+      if (startDate) {
+        whereConditions.push(
+          gte(schema.mcpToolCallsTable.createdAt, new Date(startDate)),
+        );
+      }
+      if (endDate) {
+        whereConditions.push(
+          lte(schema.mcpToolCallsTable.createdAt, new Date(endDate)),
+        );
+      }
+
+      const baseCondition = eq(
+        schema.mcpToolCallsTable.method,
+        "tools/call",
+      );
+      const whereClause = whereConditions.length > 0
+        ? and(baseCondition, ...whereConditions)
+        : baseCondition;
+
+      const historicalCalls = await db
+        .select({
+          id: schema.mcpToolCallsTable.id,
+          agentId: schema.mcpToolCallsTable.agentId,
+          toolCall: schema.mcpToolCallsTable.toolCall,
+          createdAt: schema.mcpToolCallsTable.createdAt,
+        })
+        .from(schema.mcpToolCallsTable)
+        .where(whereClause)
+        .orderBy(desc(schema.mcpToolCallsTable.createdAt))
+        .limit(limit);
+
+      // Get unique tool names from historical calls
+      const toolNames = [
+        ...new Set(
+          historicalCalls
+            .map((c) => (c.toolCall as { name?: string } | null)?.name)
+            .filter((n): n is string => typeof n === "string"),
+        ),
+      ];
+
+      if (toolNames.length === 0) {
+        return reply.send({
+          summary: {
+            totalCalls: 0,
+            newlyBlocked: 0,
+            newlyAllowed: 0,
+            requireApprovalAdded: 0,
+            requireApprovalRemoved: 0,
+            noChange: 0,
+          },
+          details: [],
+        });
+      }
+
+      // Batch-fetch tool IDs for all tool names
+      const tools = await db
+        .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(inArray(schema.toolsTable.name, toolNames));
+
+      const toolIdsByName = new Map(tools.map((t) => [t.name, t.id]));
+      const toolIds = tools.map((t) => t.id);
+
+      // Fetch current DB policies for those tools
+      const currentPoliciesRaw =
+        toolIds.length > 0
+          ? await db
+              .select()
+              .from(schema.toolInvocationPoliciesTable)
+              .where(
+                inArray(schema.toolInvocationPoliciesTable.toolId, toolIds),
+              )
+          : [];
+
+      const currentPoliciesByToolId = new Map<
+        string,
+        ToolInvocation.ToolInvocationPolicy[]
+      >();
+      for (const policy of currentPoliciesRaw) {
+        const existing = currentPoliciesByToolId.get(policy.toolId) ?? [];
+        existing.push(policy);
+        currentPoliciesByToolId.set(policy.toolId, existing);
+      }
+
+      // Build candidate policies map by toolId (cast to ToolInvocationPolicy shape)
+      const candidatePoliciesByToolId = new Map<
+        string,
+        ToolInvocation.ToolInvocationPolicy[]
+      >();
+      for (const cp of candidatePolicies) {
+        const existing = candidatePoliciesByToolId.get(cp.toolId) ?? [];
+        existing.push({
+          id: "",
+          toolId: cp.toolId,
+          conditions: cp.conditions,
+          action: cp.action,
+          reason: cp.reason ?? null,
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        });
+        candidatePoliciesByToolId.set(cp.toolId, existing);
+      }
+
+      // Evaluate each historical call against current and candidate policies
+      const emptyContext = { teamIds: [] };
+      const details: z.infer<typeof SimulationDetailSchema>[] = [];
+      const summary = {
+        totalCalls: 0,
+        newlyBlocked: 0,
+        newlyAllowed: 0,
+        requireApprovalAdded: 0,
+        requireApprovalRemoved: 0,
+        noChange: 0,
+      };
+
+      for (const call of historicalCalls) {
+        const tc = call.toolCall as { name?: string; arguments?: Record<string, unknown> } | null;
+        if (!tc?.name) continue;
+
+        summary.totalCalls++;
+
+        const toolName = tc.name;
+        const toolInput = tc.arguments ?? {};
+        const toolId = toolIdsByName.get(toolName);
+        const currentPolicies = toolId
+          ? (currentPoliciesByToolId.get(toolId) ?? [])
+          : [];
+        const candidatePoliciesForTool = toolId
+          ? (candidatePoliciesByToolId.get(toolId) ?? [])
+          : [];
+
+        const currentEval = globalToolPolicy === "permissive"
+          ? ({ outcome: "allowed" } as SimulationEvaluation)
+          : ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+              toolName,
+              toolInput,
+              emptyContext,
+              true,
+              currentPolicies,
+            );
+
+        const simulatedEval = globalToolPolicy === "permissive"
+          ? ({ outcome: "allowed" } as SimulationEvaluation)
+          : ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+              toolName,
+              toolInput,
+              emptyContext,
+              true,
+              candidatePoliciesForTool,
+            );
+
+        const changed = currentEval.outcome !== simulatedEval.outcome;
+
+        if (changed) {
+          if (
+            currentEval.outcome !== "blocked" &&
+            simulatedEval.outcome === "blocked"
+          ) {
+            summary.newlyBlocked++;
+          } else if (
+            currentEval.outcome === "blocked" &&
+            simulatedEval.outcome !== "blocked"
+          ) {
+            summary.newlyAllowed++;
+          } else if (
+            currentEval.outcome !== "require_approval" &&
+            simulatedEval.outcome === "require_approval"
+          ) {
+            summary.requireApprovalAdded++;
+          } else if (
+            currentEval.outcome === "require_approval" &&
+            simulatedEval.outcome !== "require_approval"
+          ) {
+            summary.requireApprovalRemoved++;
+          }
+        } else {
+          summary.noChange++;
+        }
+
+        details.push({
+          mcpToolCallId: call.id,
+          toolName,
+          agentId: call.agentId,
+          calledAt: call.createdAt.toISOString(),
+          currentOutcome: currentEval.outcome,
+          simulatedOutcome: simulatedEval.outcome,
+          changed,
+          ...(changed && simulatedEval.reason
+            ? { changedReason: simulatedEval.reason }
+            : {}),
+        });
+      }
+
+      return reply.send({ summary, details });
     },
   );
 };

@@ -455,6 +455,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkUpsertDefaultCallPolicy]: {
     toolPolicy: ["update"],
   },
+  [RouteId.SimulateToolInvocationPolicy]: {
+    toolPolicy: ["read"],
+  },
   [RouteId.GetTrustedDataPolicies]: {
     toolPolicy: ["read"],
   },

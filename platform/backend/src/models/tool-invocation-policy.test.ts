@@ -1875,4 +1875,189 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("evaluateToolCallAgainstPolicies", () => {
+    const makePolicy = (
+      overrides: Partial<ToolInvocation.ToolInvocationPolicy>,
+    ): ToolInvocation.ToolInvocationPolicy => ({
+      id: "test-id",
+      toolId: "test-tool-id",
+      conditions: [],
+      action: "allow_when_context_is_untrusted",
+      reason: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...overrides,
+    });
+
+    test("allows archestra internal tools regardless of policies", () => {
+      const blockPolicy = makePolicy({ action: "block_always" });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "archestra__whoami",
+        {},
+        mockContext,
+        false,
+        [blockPolicy],
+      );
+
+      expect(result.outcome).toBe("allowed");
+    });
+
+    test("blocks when block_always policy matches (no conditions)", () => {
+      const blockPolicy = makePolicy({
+        action: "block_always",
+        reason: "Always blocked",
+      });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "dangerous-tool",
+        {},
+        mockContext,
+        true,
+        [blockPolicy],
+      );
+
+      expect(result.outcome).toBe("blocked");
+      expect(result.reason).toBe("Always blocked");
+    });
+
+    test("blocks when block_when_context_is_untrusted and context is untrusted", () => {
+      const policy = makePolicy({ action: "block_when_context_is_untrusted" });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "risky-tool",
+        {},
+        mockContext,
+        false,
+        [policy],
+      );
+
+      expect(result.outcome).toBe("blocked");
+    });
+
+    test("allows when block_when_context_is_untrusted and context is trusted", () => {
+      const policy = makePolicy({ action: "block_when_context_is_untrusted" });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "risky-tool",
+        {},
+        mockContext,
+        true,
+        [policy],
+      );
+
+      expect(result.outcome).toBe("allowed");
+    });
+
+    test("returns require_approval when require_approval policy matches", () => {
+      const policy = makePolicy({ action: "require_approval" });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "approval-tool",
+        {},
+        mockContext,
+        true,
+        [policy],
+      );
+
+      expect(result.outcome).toBe("require_approval");
+    });
+
+    test("allows when no policies and context is trusted", () => {
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "unknown-tool",
+        {},
+        mockContext,
+        true,
+        [],
+      );
+
+      expect(result.outcome).toBe("allowed");
+    });
+
+    test("blocks when no policies and context is untrusted (restrictive default)", () => {
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "unknown-tool",
+        {},
+        mockContext,
+        false,
+        [],
+      );
+
+      expect(result.outcome).toBe("blocked");
+    });
+
+    test("specific policy takes precedence over default policy", () => {
+      const defaultAllowPolicy = makePolicy({
+        conditions: [],
+        action: "allow_when_context_is_untrusted",
+      });
+      const specificBlockPolicy = makePolicy({
+        conditions: [{ key: "action", operator: "equal", value: "delete" }],
+        action: "block_always",
+        reason: "Delete always blocked",
+      });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "managed-tool",
+        { action: "delete" },
+        mockContext,
+        true,
+        [defaultAllowPolicy, specificBlockPolicy],
+      );
+
+      expect(result.outcome).toBe("blocked");
+      expect(result.reason).toBe("Delete always blocked");
+    });
+
+    test("falls through to default policy when no specific policy conditions match", () => {
+      const defaultBlockPolicy = makePolicy({
+        conditions: [],
+        action: "block_always",
+        reason: "Default block",
+      });
+      const specificAllowPolicy = makePolicy({
+        conditions: [{ key: "action", operator: "equal", value: "read" }],
+        action: "allow_when_context_is_untrusted",
+      });
+
+      const result = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "managed-tool",
+        { action: "write" },
+        mockContext,
+        true,
+        [defaultBlockPolicy, specificAllowPolicy],
+      );
+
+      expect(result.outcome).toBe("blocked");
+      expect(result.reason).toBe("Default block");
+    });
+
+    test("input condition matching works (equal operator)", () => {
+      const policy = makePolicy({
+        conditions: [{ key: "env", operator: "equal", value: "prod" }],
+        action: "block_always",
+        reason: "Prod blocked",
+      });
+
+      const blocked = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "deploy-tool",
+        { env: "prod" },
+        mockContext,
+        true,
+        [policy],
+      );
+      expect(blocked.outcome).toBe("blocked");
+
+      const allowed = ToolInvocationPolicyModel.evaluateToolCallAgainstPolicies(
+        "deploy-tool",
+        { env: "staging" },
+        mockContext,
+        true,
+        [policy],
+      );
+      expect(allowed.outcome).toBe("allowed");
+    });
+  });
 });

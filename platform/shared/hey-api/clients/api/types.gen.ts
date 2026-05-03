@@ -15539,6 +15539,122 @@ export type BulkUpsertDefaultResultPolicyResponses = {
 
 export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolicyResponses[keyof BulkUpsertDefaultResultPolicyResponses];
 
+export type SimulateToolInvocationPolicyData = {
+    body: {
+        candidatePolicies: Array<{
+            toolId: string;
+            conditions: Array<{
+                key: string;
+                operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+                value: string;
+            }>;
+            action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+            reason?: string | null;
+        }>;
+        limit?: number;
+        agentId?: string;
+        startDate?: string;
+        endDate?: string;
+        globalToolPolicy?: 'permissive' | 'restrictive';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/simulate';
+};
+
+export type SimulateToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SimulateToolInvocationPolicyError = SimulateToolInvocationPolicyErrors[keyof SimulateToolInvocationPolicyErrors];
+
+export type SimulateToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        summary: {
+            totalCalls: number;
+            newlyBlocked: number;
+            newlyAllowed: number;
+            requireApprovalAdded: number;
+            requireApprovalRemoved: number;
+            noChange: number;
+        };
+        details: Array<{
+            mcpToolCallId: string;
+            toolName: string;
+            agentId: string | null;
+            calledAt: string;
+            currentOutcome: 'allowed' | 'blocked' | 'require_approval';
+            simulatedOutcome: 'allowed' | 'blocked' | 'require_approval';
+            changed: boolean;
+            changedReason?: string;
+        }>;
+    };
+};
+
+export type SimulateToolInvocationPolicyResponse = SimulateToolInvocationPolicyResponses[keyof SimulateToolInvocationPolicyResponses];
+
 export type AzureChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {

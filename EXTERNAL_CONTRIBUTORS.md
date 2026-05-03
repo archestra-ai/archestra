@@ -197,3 +197,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @rinkydevi
 - @ShubhamOulkar
 - @krishnanpandya007
+- @avasis-ai

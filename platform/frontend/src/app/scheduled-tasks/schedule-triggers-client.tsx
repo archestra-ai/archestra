@@ -1086,7 +1086,7 @@ function ScheduleTriggerCreateButton({
           : "You need access to at least one internal agent to create a schedule."
       }
     >
-      <Plus className="mr-2 h-4 w-4" />
+      <Plus className="h-4 w-4" />
       {children}
     </PermissionButton>
   );

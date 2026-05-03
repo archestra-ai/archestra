@@ -4,6 +4,8 @@ import {
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
+  type ToolStateMcpToolError,
+  ToolStateMcpToolErrorSchema,
 } from "@shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
@@ -24,6 +26,7 @@ import {
   EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
+  structuredToolErrorResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -50,11 +53,31 @@ const TodoWriteOutputSchema = z.object({
     .describe("How many todo items were written."),
 });
 
-const SwapAgentOutputSchema = z.object({
-  success: z.literal(true).describe("Whether the swap succeeded."),
-  agent_id: z.string().describe("The agent ID the conversation now uses."),
-  agent_name: z.string().describe("The agent name the conversation now uses."),
-});
+const SwapAgentStateCodeSchema = z.enum([
+  "no_agent_found",
+  "already_using_agent",
+  "no_default_agent",
+  "default_agent_not_found",
+  "already_using_default_agent",
+]);
+
+const SwapAgentOutputSchema = z.discriminatedUnion("success", [
+  z.object({
+    success: z.literal(true).describe("Whether the swap succeeded."),
+    agent_id: z.string().describe("The agent ID the conversation now uses."),
+    agent_name: z
+      .string()
+      .describe("The agent name the conversation now uses."),
+  }),
+  z.object({
+    success: z.literal(false).describe("Whether the swap succeeded."),
+    code: SwapAgentStateCodeSchema.describe("Why the swap was not applied."),
+    message: z.string().describe("Human-readable explanation."),
+    archestraError: ToolStateMcpToolErrorSchema,
+  }),
+]);
+
+type SwapAgentStateCode = z.infer<typeof SwapAgentStateCodeSchema>;
 
 const ArtifactWriteOutputSchema = z.object({
   success: z.literal(true).describe("Whether the artifact write succeeded."),
@@ -217,6 +240,38 @@ export const toolEntries = registry.toolEntries;
 
 export const tools = registry.tools;
 
+function swapAgentStateResult(params: {
+  code: SwapAgentStateCode;
+  message: string;
+  toolName: string;
+}): CallToolResult {
+  const archestraError: ToolStateMcpToolError = {
+    type: "tool_state",
+    code: params.code,
+    message: params.message,
+    toolName: params.toolName,
+  };
+
+  return structuredToolErrorResult({
+    error: archestraError,
+    text: JSON.stringify({
+      success: false,
+      code: params.code,
+      message: params.message,
+      archestraError,
+    }),
+    structuredContent: {
+      success: false,
+      code: params.code,
+      message: params.message,
+    },
+    // These are expected chat-routing states, not MCP transport failures. Keep
+    // isError false so the agent can respond normally instead of surfacing a
+    // global chat error.
+    isError: false,
+  });
+}
+
 async function handleSwapAgent(params: {
   agentName: string;
   context: ArchestraContext;
@@ -275,7 +330,11 @@ async function handleSwapAgent(params: {
     );
 
     if (results.data.length === 0) {
-      return errorResult(`No agent found matching "${agentName}".`);
+      return swapAgentStateResult({
+        code: "no_agent_found",
+        message: `No agent found matching "${agentName}".`,
+        toolName: TOOL_SWAP_AGENT_SHORT_NAME,
+      });
     }
 
     // Pick exact name match if available, otherwise first result
@@ -286,9 +345,11 @@ async function handleSwapAgent(params: {
 
     // Prevent swapping to the same agent
     if (targetAgent.id === contextAgent.id) {
-      return errorResult(
-        `Already using agent "${targetAgent.name}". Choose a different agent.`,
-      );
+      return swapAgentStateResult({
+        code: "already_using_agent",
+        message: `Already using agent "${targetAgent.name}". Choose a different agent.`,
+        toolName: TOOL_SWAP_AGENT_SHORT_NAME,
+      });
     }
 
     // In chatops-triggered A2A runs we can have both:
@@ -417,20 +478,28 @@ async function handleSwapToDefaultAgent(params: {
     const defaultAgentId = org?.defaultAgentId ?? null;
 
     if (!defaultAgentId) {
-      return errorResult(
-        "No default agent is configured for this organization.",
-      );
+      return swapAgentStateResult({
+        code: "no_default_agent",
+        message: "No default agent is configured for this organization.",
+        toolName: TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
+      });
     }
 
     const targetAgent = await AgentModel.findById(defaultAgentId);
     if (!targetAgent) {
-      return errorResult("Default agent not found.");
+      return swapAgentStateResult({
+        code: "default_agent_not_found",
+        message: "Default agent not found.",
+        toolName: TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
+      });
     }
 
     if (targetAgent.id === contextAgent.id) {
-      return errorResult(
-        `Already using the default agent "${targetAgent.name}".`,
-      );
+      return swapAgentStateResult({
+        code: "already_using_default_agent",
+        message: `Already using the default agent "${targetAgent.name}".`,
+        toolName: TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
+      });
     }
 
     // In chatops-triggered A2A runs we can have both:

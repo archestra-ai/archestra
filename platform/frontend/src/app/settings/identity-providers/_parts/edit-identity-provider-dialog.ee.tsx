@@ -192,7 +192,7 @@ export function EditIdentityProviderDialog({
                 onClick={() => setShowDeleteConfirm(true)}
                 data-testid={E2eTestId.IdentityProviderDeleteButton}
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="h-4 w-4" />
                 Delete
               </PermissionButton>
               <Button type="button" variant="outline" onClick={handleClose}>

@@ -53,6 +53,6 @@ describe("useAppIconLogo", () => {
   it("falls back to the default app logo when no branding is available", () => {
     const { result } = renderHook(() => useAppIconLogo());
 
-    expect(result.current).toBe("/logo.png");
+    expect(result.current).toBe("/logo-icon.svg");
   });
 });

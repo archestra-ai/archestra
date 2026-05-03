@@ -100,20 +100,33 @@ export function computeDeploymentStatusSummary(
 ): DeploymentStatusSummary | null {
   if (serverIds.length === 0) return null;
 
+  // Multi-tenant catalogs alias one K8s pod across many mcp_server rows.
+  // Dedupe entries by podName so the count reflects pods, not callers.
+  // Entries without a podName count individually (no aliasing known).
+  const seenPodNames = new Set<string>();
+  const uniqueEntries: McpDeploymentStatusEntry[] = [];
+  for (const id of serverIds) {
+    const entry = statuses[id];
+    if (!entry || entry.state === "not_created") continue;
+    const podName = entry.podName;
+    if (podName) {
+      if (seenPodNames.has(podName)) continue;
+      seenPodNames.add(podName);
+    }
+    uniqueEntries.push(entry);
+  }
+
   let total = 0;
   let running = 0;
   let pending = 0;
   let failed = 0;
-  for (const id of serverIds) {
-    const entry = statuses[id];
-    if (entry && entry.state !== "not_created") {
-      total++;
-      // "succeeded" is treated as running — K8s Jobs report "succeeded" on completion,
-      // but the MCP server is still available and serving requests.
-      if (entry.state === "running" || entry.state === "succeeded") running++;
-      else if (entry.state === "pending") pending++;
-      else if (entry.state === "failed") failed++;
-    }
+  for (const entry of uniqueEntries) {
+    total++;
+    // "succeeded" is treated as running — K8s Jobs report "succeeded" on completion,
+    // but the MCP server is still available and serving requests.
+    if (entry.state === "running" || entry.state === "succeeded") running++;
+    else if (entry.state === "pending") pending++;
+    else if (entry.state === "failed") failed++;
   }
   if (total === 0) return null;
 

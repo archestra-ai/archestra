@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
+const hasPermissions = vi.fn(() => ({ data: true }));
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
   serializeExtraHeaders: () => null,
+  PROVIDER_CONFIG: { anthropic: { name: "Anthropic" } },
   LlmProviderApiKeyForm: ({
     form,
   }: {
@@ -34,10 +36,16 @@ vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => hasPermissions(),
+}));
+
 describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({});
+    hasPermissions.mockReset();
+    hasPermissions.mockReturnValue({ data: false });
   });
 
   it("submits the shared create API key flow and closes on success", async () => {
@@ -73,5 +81,47 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to the provider name when the name field is empty", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+      />,
+    );
+
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Anthropic" }),
+    );
+  });
+
+  it("defaults the scope to org when the user has llmProviderApiKey:admin", async () => {
+    hasPermissions.mockReturnValue({ data: true });
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Org Wide Key");
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: "org" }),
+    );
   });
 });

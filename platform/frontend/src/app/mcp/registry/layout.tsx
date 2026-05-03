@@ -30,7 +30,7 @@ export default function McpCatalogLayout({
               window.dispatchEvent(new CustomEvent("mcp-registry:create"))
             }
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Add MCP Server
           </PermissionButton>
         ) : undefined

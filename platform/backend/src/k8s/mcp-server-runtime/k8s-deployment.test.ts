@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
@@ -4821,5 +4822,224 @@ describe("K8sDeployment.ensureHttpServerConfigured cluster domain", () => {
         originalLoadFromCluster;
       config.orchestrator.kubernetes.clusterDomain = originalClusterDomain;
     }
+  });
+});
+
+describe("K8sDeployment.streamLogs", () => {
+  function makeRunningPod(name = "mcp-test-pod"): k8s.V1Pod {
+    return {
+      metadata: { name },
+      status: {
+        phase: "Running",
+        containerStatuses: [
+          {
+            name: "mcp-server",
+            ready: true,
+            restartCount: 0,
+            state: { running: { startedAt: new Date() } },
+            image: "test",
+            imageID: "test",
+            started: true,
+            ready_: true,
+          } as unknown as k8s.V1ContainerStatus,
+        ],
+      },
+    } as k8s.V1Pod;
+  }
+
+  function makePendingPod(name = "mcp-test-pod"): k8s.V1Pod {
+    return {
+      metadata: { name },
+      status: {
+        phase: "Pending",
+        containerStatuses: [],
+      },
+    } as k8s.V1Pod;
+  }
+
+  function collectStream(stream: NodeJS.WritableStream): {
+    text: () => string;
+  } {
+    const chunks: string[] = [];
+    const original = stream.write.bind(stream);
+    (stream as unknown as { write: typeof stream.write }).write = ((
+      chunk: string | Buffer,
+    ) => {
+      chunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return original(chunk);
+    }) as typeof stream.write;
+    return { text: () => chunks.join("") };
+  }
+
+  test("when pod is Pending, writes events snapshot then upgrades to live logs once Ready", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const ac = new AbortController();
+
+    const pendingPod = makePendingPod();
+    const runningPod = makeRunningPod();
+    vi.spyOn(
+      deployment as unknown as {
+        findAnyPodForDeployment: () => Promise<k8s.V1Pod | undefined>;
+      },
+      "findAnyPodForDeployment",
+    )
+      // initial check (in streamLogs) - Pending
+      .mockResolvedValueOnce(pendingPod)
+      // first poll - still Pending
+      .mockResolvedValueOnce(pendingPod)
+      // second poll - now Running
+      .mockResolvedValueOnce(runningPod);
+
+    vi.spyOn(
+      deployment as unknown as { getDeploymentEvents: () => Promise<string> },
+      "getDeploymentEvents",
+    ).mockResolvedValue("Normal Scheduled  test event\n");
+
+    // Capture the stream the production code passes to k8sLog.log so we can
+    // verify it gets called with a Running pod. We end the stream to model
+    // a pod going away (e.g. reinstall) and immediately abort so the
+    // "wait for replacement pod" recovery loop tears down cleanly.
+    const k8sLogMock = vi.fn(
+      async (
+        _ns: string,
+        _pod: string,
+        _container: string,
+        out: NodeJS.WritableStream,
+      ) => {
+        out.write("real container log line\n");
+        out.end();
+        ac.abort();
+        return { abort: () => {} };
+      },
+    );
+    (deployment as unknown as { k8sLog: { log: typeof k8sLogMock } }).k8sLog = {
+      log: k8sLogMock,
+    };
+
+    const out = new PassThrough();
+    const captured = collectStream(out);
+
+    vi.useFakeTimers();
+    try {
+      const done = deployment.streamLogs(out, 100, ac.signal);
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(2000);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const text = captured.text();
+    expect(text).toContain("--- Kubernetes Events ---");
+    expect(text).toContain("test event");
+    expect(text).toContain("is now Running, switching to live logs");
+    expect(text).toContain("real container log line");
+    expect(k8sLogMock).toHaveBeenCalledTimes(1);
+    expect(k8sLogMock.mock.calls[0]?.[1]).toBe("mcp-test-pod");
+  });
+
+  test("when the running pod's log stream ends without abort, waits for a replacement pod and resumes streaming", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const ac = new AbortController();
+
+    const firstPod = makeRunningPod("mcp-old-pod");
+    const replacementPod = makeRunningPod("mcp-new-pod");
+    vi.spyOn(
+      deployment as unknown as {
+        findAnyPodForDeployment: () => Promise<k8s.V1Pod | undefined>;
+      },
+      "findAnyPodForDeployment",
+    )
+      // initial check - first pod is Running
+      .mockResolvedValueOnce(firstPod)
+      // poll fires after the first log stream ends - replacement is up
+      .mockResolvedValueOnce(replacementPod);
+
+    vi.spyOn(
+      deployment as unknown as { getDeploymentEvents: () => Promise<string> },
+      "getDeploymentEvents",
+    ).mockResolvedValue("");
+
+    let invocation = 0;
+    const k8sLogMock = vi.fn(
+      async (
+        _ns: string,
+        podName: string,
+        _container: string,
+        out: NodeJS.WritableStream,
+      ) => {
+        invocation++;
+        out.write(`logs from ${podName}\n`);
+        if (invocation === 1) {
+          // simulate the pod being deleted under us (reinstall, eviction)
+          out.end();
+        } else {
+          out.end();
+          ac.abort();
+        }
+        return { abort: () => {} };
+      },
+    );
+    (deployment as unknown as { k8sLog: { log: typeof k8sLogMock } }).k8sLog = {
+      log: k8sLogMock,
+    };
+
+    const out = new PassThrough();
+    const captured = collectStream(out);
+
+    vi.useFakeTimers();
+    try {
+      const done = deployment.streamLogs(out, 100, ac.signal);
+      await vi.advanceTimersByTimeAsync(2000);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const text = captured.text();
+    expect(text).toContain("logs from mcp-old-pod");
+    expect(text).toContain("waiting for replacement pod");
+    expect(text).toContain("logs from mcp-new-pod");
+    expect(k8sLogMock).toHaveBeenCalledTimes(2);
+    expect(k8sLogMock.mock.calls[0]?.[1]).toBe("mcp-old-pod");
+    expect(k8sLogMock.mock.calls[1]?.[1]).toBe("mcp-new-pod");
+  });
+
+  test("aborting while polling stops the wait and does not call k8sLog.log", async () => {
+    const deployment = createK8sDeploymentInstance();
+
+    vi.spyOn(
+      deployment as unknown as {
+        findAnyPodForDeployment: () => Promise<k8s.V1Pod | undefined>;
+      },
+      "findAnyPodForDeployment",
+    ).mockResolvedValue(makePendingPod());
+
+    vi.spyOn(
+      deployment as unknown as { getDeploymentEvents: () => Promise<string> },
+      "getDeploymentEvents",
+    ).mockResolvedValue("");
+
+    const k8sLogMock = vi.fn();
+    (deployment as unknown as { k8sLog: { log: typeof k8sLogMock } }).k8sLog = {
+      log: k8sLogMock,
+    };
+
+    const out = new PassThrough();
+    const ac = new AbortController();
+
+    vi.useFakeTimers();
+    try {
+      const done = deployment.streamLogs(out, 100, ac.signal);
+      // Let the events snapshot write, then abort before the next poll fires.
+      await vi.advanceTimersByTimeAsync(500);
+      ac.abort();
+      await vi.advanceTimersByTimeAsync(2000);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(k8sLogMock).not.toHaveBeenCalled();
   });
 });

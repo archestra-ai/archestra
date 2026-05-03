@@ -110,7 +110,7 @@ export function ImageUpload({
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploadPending}
             >
-              <Upload className="h-4 w-4 mr-2" />
+              <Upload className="h-4 w-4" />
               {hasPreview ? "Change" : "Upload"}
             </PermissionButton>
             {hasPreview && (
@@ -121,7 +121,7 @@ export function ImageUpload({
                 onClick={handleRemove}
                 disabled={isRemovePending}
               >
-                <X className="h-4 w-4 mr-2" />
+                <X className="h-4 w-4" />
                 Remove
               </PermissionButton>
             )}

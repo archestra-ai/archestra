@@ -321,9 +321,49 @@ export function McpServerCard({
   const deploymentServerIds = (allMcpServers ?? [])
     .filter((s) => s.catalogId === item.id && s.serverType === "local")
     .map((s) => s.id);
+
+  // Multi-tenant catalogs alias one K8s pod across many mcp_server rows.
+  // Each row's K8sDeployment instance reports its own state independently
+  // (one stays "pending" while another flips to "failed"), so before any
+  // summary or per-row dot is computed, canonicalize the state per podName
+  // by picking the highest-priority observation. All rows then agree.
+  const STATE_PRIORITY: Record<string, number> = {
+    failed: 4,
+    running: 3,
+    succeeded: 3,
+    pending: 2,
+    not_created: 1,
+  };
+  const effectiveDeploymentStatuses = (() => {
+    if (!item.multitenant) return deploymentStatuses;
+    const canonicalByPod = new Map<string, string>();
+    for (const id of deploymentServerIds) {
+      const entry = deploymentStatuses[id];
+      if (!entry?.podName) continue;
+      const current = canonicalByPod.get(entry.podName);
+      if (
+        !current ||
+        (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
+      ) {
+        canonicalByPod.set(entry.podName, entry.state);
+      }
+    }
+    if (canonicalByPod.size === 0) return deploymentStatuses;
+    const next: typeof deploymentStatuses = { ...deploymentStatuses };
+    for (const id of deploymentServerIds) {
+      const entry = next[id];
+      if (!entry?.podName) continue;
+      const canonical = canonicalByPod.get(entry.podName);
+      if (canonical && canonical !== entry.state) {
+        next[id] = { ...entry, state: canonical as typeof entry.state };
+      }
+    }
+    return next;
+  })();
+
   const deploymentSummary = computeDeploymentStatusSummary(
     deploymentServerIds,
-    deploymentStatuses,
+    effectiveDeploymentStatuses,
   );
 
   const chatButton =
@@ -335,7 +375,7 @@ export function McpServerCard({
         disabled={isChatCreating}
         onClick={handleChatWithMcpServer}
       >
-        <MessageSquare className="mr-2 h-4 w-4" />
+        <MessageSquare className="h-4 w-4" />
         {isChatCreating ? "Creating..." : "Chat"}
       </Button>
     ) : null;
@@ -496,7 +536,7 @@ export function McpServerCard({
             {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
               const connDeployment = computeDeploymentStatusSummary(
                 entry.serverIds,
-                deploymentStatuses,
+                effectiveDeploymentStatuses,
               );
               const borderClass = connDeployment
                 ? {
@@ -581,7 +621,7 @@ export function McpServerCard({
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
         )}
@@ -610,7 +650,7 @@ export function McpServerCard({
               variant="outline"
               className="flex-1"
             >
-              <User className="mr-2 h-4 w-4" />
+              <User className="h-4 w-4" />
               Install
             </PermissionButton>
           ))}
@@ -630,7 +670,7 @@ export function McpServerCard({
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
         )}
@@ -665,7 +705,7 @@ export function McpServerCard({
                       className="w-full"
                       data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                     >
-                      <Server className="mr-2 h-4 w-4" />
+                      <Server className="h-4 w-4" />
                       Install
                     </PermissionButton>
                   </div>
@@ -694,7 +734,7 @@ export function McpServerCard({
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
         )}
@@ -729,7 +769,7 @@ export function McpServerCard({
                       className="w-full"
                       data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                     >
-                      <Server className="mr-2 h-4 w-4" />
+                      <Server className="h-4 w-4" />
                       Install
                     </PermissionButton>
                   </div>

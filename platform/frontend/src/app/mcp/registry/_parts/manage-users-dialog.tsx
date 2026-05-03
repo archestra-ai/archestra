@@ -498,6 +498,30 @@ function UnifiedConnectionsTable({
     (r) => deploymentStatuses[r.server.id],
   );
 
+  // Multi-tenant catalogs alias one pod across N caller rows. Each row's
+  // K8sDeployment instance tracks its own state independently, so the row
+  // that didn't observe the pod first stays "pending" while the other goes
+  // "failed". Pick a canonical state per podName so all rows agree.
+  const STATE_PRIORITY: Record<string, number> = {
+    failed: 4,
+    running: 3,
+    succeeded: 3,
+    pending: 2,
+    not_created: 1,
+  };
+  const canonicalStateByPod = new Map<string, string>();
+  for (const { server } of rows) {
+    const entry = deploymentStatuses[server.id];
+    if (!entry?.podName) continue;
+    const current = canonicalStateByPod.get(entry.podName);
+    if (
+      !current ||
+      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
+    ) {
+      canonicalStateByPod.set(entry.podName, entry.state);
+    }
+  }
+
   const teamItems =
     onAddForTeam && availableTeamsForShared.length > 0
       ? availableTeamsForShared.map((team) => ({
@@ -610,7 +634,9 @@ function UnifiedConnectionsTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[220px]">Owner</TableHead>
-              {hasDeploymentStatuses && <TableHead>Pod</TableHead>}
+              {hasDeploymentStatuses && (
+                <TableHead className="w-[260px]">Pod</TableHead>
+              )}
               <TableHead>Secret Storage</TableHead>
               <TableHead>Created At</TableHead>
               <TableHead>Action</TableHead>
@@ -656,30 +682,47 @@ function UnifiedConnectionsTable({
                   )}
                 </TableCell>
                 {hasDeploymentStatuses && (
-                  <TableCell>
-                    {deploymentStatuses[server.id] ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPodLogs?.(server.id)}
-                        className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
-                      >
+                  <TableCell className="max-w-[260px]">
+                    {(() => {
+                      const status = deploymentStatuses[server.id];
+                      if (!status) {
+                        return <span className="text-muted-foreground">—</span>;
+                      }
+                      const podName = status.podName;
+                      const effectiveState =
+                        (podName && canonicalStateByPod.get(podName)) ||
+                        status.state;
+                      const dot = (
                         <DeploymentStatusDot
                           state={
-                            (deploymentStatuses[server.id].state ===
-                              "not_created" ||
-                            deploymentStatuses[server.id].state === "succeeded"
+                            (effectiveState === "not_created" ||
+                            effectiveState === "succeeded"
                               ? "running"
-                              : deploymentStatuses[server.id]
-                                  .state) as DeploymentState
+                              : effectiveState) as DeploymentState
                           }
                         />
-                        <span className="truncate max-w-[150px]">
-                          {server.name}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                      );
+                      if (!podName) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
+                            {dot}
+                            <span>Pod not reported yet</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPodLogs?.(server.id)}
+                          className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
+                        >
+                          {dot}
+                          <span className="truncate min-w-0 flex-1 text-left">
+                            {podName}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   </TableCell>
                 )}
                 <TableCell className="text-muted-foreground">

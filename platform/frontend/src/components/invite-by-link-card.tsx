@@ -149,9 +149,9 @@ function InviteByLinkCardContent({
             </Button>
             <Button type="button" onClick={handleCopyLink}>
               {isCopied ? (
-                <Check className="mr-2 h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-green-600" />
               ) : (
-                <Copy className="mr-2 h-4 w-4" />
+                <Copy className="h-4 w-4" />
               )}
               Copy Link
             </Button>
@@ -166,7 +166,7 @@ function InviteByLinkCardContent({
               data-testid={E2eTestId.GenerateInvitationButton}
             >
               {createMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               )}
               Generate Invitation Link
             </PermissionButton>

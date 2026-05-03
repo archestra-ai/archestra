@@ -42,6 +42,12 @@ const internalMcpCatalogTable = pgTable(
     serverType: text("server_type")
       .$type<InternalMcpCatalogServerType>()
       .notNull(),
+    /**
+     * When true (self-hosted only): one shared K8s deployment per catalog,
+     * caller-level credentials sent as request-time headers. When false:
+     * one deployment per caller (default).
+     */
+    multitenant: boolean("multitenant").notNull().default(false),
     serverUrl: text("server_url"), // For remote servers
     docsUrl: text("docs_url"), // Documentation URL for remote servers
     clientSecretId: uuid("client_secret_id").references(() => secretTable.id, {

@@ -683,10 +683,18 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     // Click on Generic OIDC card to edit (our provider)
     await openIdentityProviderDialog(page, "Generic OIDC");
+    await expect(
+      page.getByTestId(E2eTestId.IdentityProviderUpdateButton),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByLabel("Client ID")).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Update the domain (use a subdomain to keep it valid for the same email domain)
-    await page.getByLabel("Domain").clear();
-    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
+    // Update a Generic OIDC field that is rendered in the edit dialog.
+    await page.getByLabel("Client ID").clear();
+    await page
+      .getByLabel("Client ID")
+      .fill(`${KEYCLOAK_OIDC.clientId}-updated`);
 
     // Save changes
     await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();

@@ -252,6 +252,8 @@ export function McpCatalogForm({
         }),
   });
 
+
+
   // Expose imperative submit to parent
   useEffect(() => {
     if (submitRef) {
@@ -799,17 +801,20 @@ export function McpCatalogForm({
           >
             {catalogButton}
 
-            <div className="space-y-4">
-              <div className="flex items-stretch gap-3">
-                <AgentIconPicker
-                  value={form.watch("icon") ?? null}
-                  fallbackType="server"
-                  onChange={(icon) =>
-                    form.setValue("icon", icon, { shouldDirty: true })
-                  }
-                  showLogos
-                  className="h-auto w-16 self-stretch rounded-md"
-                />
+
+
+
+                <div className="space-y-4">
+                  <div className="flex items-stretch gap-3">
+                    <AgentIconPicker
+                      value={form.watch("icon") ?? null}
+                      fallbackType="server"
+                      onChange={(icon) =>
+                        form.setValue("icon", icon, { shouldDirty: true })
+                      }
+                      showLogos
+                      className="h-auto w-16 self-stretch rounded-md"
+                    />
                 <FormField
                   control={form.control}
                   name="name"
@@ -2230,7 +2235,7 @@ export function McpCatalogForm({
                   onLabelsChange={setLabels}
                   showLabel={false}
                 />
-              </div>
+                </div>
             </div>
           </div>
 

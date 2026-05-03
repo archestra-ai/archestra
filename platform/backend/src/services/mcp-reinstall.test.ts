@@ -44,6 +44,10 @@ describe("mcp-reinstall", () => {
         promptOnInstallation: boolean;
         required?: boolean;
       }> = [],
+      userConfig: Record<
+        string,
+        { type: string; required?: boolean; headerName?: string }
+      > = {},
     ): InternalMcpCatalog =>
       ({
         id: "test-id",
@@ -54,6 +58,7 @@ describe("mcp-reinstall", () => {
           arguments: ["start"],
           environment,
         },
+        userConfig,
       }) as InternalMcpCatalog;
 
     // Helper to create a minimal remote catalog item
@@ -398,6 +403,36 @@ describe("mcp-reinstall", () => {
           serverType: "local",
           localConfig: null,
         } as InternalMcpCatalog;
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(false);
+      });
+
+      test("returns true when a required header userConfig field is ADDED", () => {
+        const oldConfig = createLocalCatalog([], {});
+        const newConfig = createLocalCatalog([], {
+          db_url: {
+            type: "string",
+            required: true,
+            headerName: "x-db-url",
+          },
+        });
+
+        const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
+
+        expect(result).toBe(true);
+      });
+
+      test("returns false when an OPTIONAL userConfig field is added", () => {
+        const oldConfig = createLocalCatalog([], {});
+        const newConfig = createLocalCatalog([], {
+          tenant_id: {
+            type: "string",
+            required: false,
+            headerName: "x-tenant-id",
+          },
+        });
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 

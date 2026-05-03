@@ -269,7 +269,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                     connector.lastSyncStatus === "running"
                   }
                 >
-                  <Play className="mr-2 h-4 w-4" />
+                  <Play className="h-4 w-4" />
                   {syncConnector.isPending
                     ? "Starting..."
                     : connector.lastSyncStatus === "running"

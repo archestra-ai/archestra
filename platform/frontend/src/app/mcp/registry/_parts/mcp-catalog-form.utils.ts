@@ -148,6 +148,7 @@ export function transformFormToApiData(
 
     data.userConfig = isClientCredentials
       ? {
+          ...buildStaticHeaderUserConfig(values),
           client_id: {
             type: "string",
             title: "Client ID",
@@ -178,10 +179,10 @@ export function transformFormToApiData(
             sensitive: false,
           },
         }
-      : {};
+      : buildStaticHeaderUserConfig(values);
     data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "enterprise_managed") {
-    data.userConfig = {};
+    data.userConfig = buildStaticHeaderUserConfig(values);
     data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig
       ? {
@@ -190,7 +191,7 @@ export function transformFormToApiData(
         }
       : null;
   } else if (values.authMethod === "idp_jwt") {
-    data.userConfig = {};
+    data.userConfig = buildStaticHeaderUserConfig(values);
     data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig
       ? {

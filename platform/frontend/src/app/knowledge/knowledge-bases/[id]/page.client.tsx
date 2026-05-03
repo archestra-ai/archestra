@@ -245,7 +245,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
                   onClick={() => checkHealth()}
                   disabled={isCheckingHealth}
                 >
-                  <Heart className="mr-2 h-4 w-4" />
+                  <Heart className="h-4 w-4" />
                   {isCheckingHealth ? "Checking..." : "Health Check"}
                 </Button>
               </div>

@@ -337,11 +337,24 @@ export async function handleLLMProxy<
   // the proxy can pick up per-key configuration (extraHeaders) below.
   // External clients must NOT be able to spoof this — same SSRF reasoning
   // as PROVIDER_BASE_URL_HEADER.
-  if (!perKeyChatApiKeyId && isLoopbackAddress(request.ip)) {
+  if (!perKeyChatApiKeyId) {
     const headerValue =
       headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
-    if (typeof headerValue === "string" && headerValue.length > 0) {
-      perKeyChatApiKeyId = headerValue;
+    const headerPresent =
+      typeof headerValue === "string" && headerValue.length > 0;
+    if (isLoopbackAddress(request.ip)) {
+      if (headerPresent) {
+        perKeyChatApiKeyId = headerValue;
+        logger.info(
+          { chatApiKeyId: perKeyChatApiKeyId },
+          `[${providerName}Proxy] received provider-api-key-id header`,
+        );
+      }
+    } else if (headerPresent) {
+      logger.warn(
+        { ip: request.ip },
+        `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
+      );
     }
   }
 
@@ -594,6 +607,24 @@ export async function handleLLMProxy<
     if (perKeyChatApiKeyId) {
       const row = await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
       perKeyExtraHeaders = row?.extraHeaders ?? null;
+      if (!row) {
+        logger.warn(
+          { chatApiKeyId: perKeyChatApiKeyId },
+          `[${providerName}Proxy] chat_api_key row not found for id`,
+        );
+      } else {
+        logger.info(
+          {
+            chatApiKeyId: perKeyChatApiKeyId,
+            headers: headerNamePeek(perKeyExtraHeaders),
+          },
+          `[${providerName}Proxy] loaded extra headers from db`,
+        );
+      }
+    } else {
+      logger.info(
+        `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
+      );
     }
     // Merge per-key extra headers behind any provider-forwarded headers
     // (anthropic-beta etc.) so protocol-level headers always win.
@@ -601,6 +632,12 @@ export async function handleLLMProxy<
       ...(perKeyExtraHeaders ?? {}),
       ...headersToForward,
     };
+    if (Object.keys(mergedHeaders).length > 0) {
+      logger.info(
+        { headers: headerNamePeek(mergedHeaders) },
+        `[${providerName}Proxy] forwarding headers to provider`,
+      );
+    }
 
     // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
     // External clients must NOT be able to set this header — it would be an SSRF vector
@@ -1385,4 +1422,15 @@ function normalizeVirtualKeyCandidate(
   }
 
   return apiKey.replace(/^Bearer[:\s]+/i, "");
+}
+
+function headerNamePeek(
+  headers: Record<string, string> | null | undefined,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!headers) return result;
+  for (const [k, v] of Object.entries(headers)) {
+    result[k] = typeof v === "string" && v.length > 0 ? v[0] : "";
+  }
+  return result;
 }

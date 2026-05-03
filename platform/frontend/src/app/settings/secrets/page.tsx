@@ -37,7 +37,7 @@ export default function SecretsSettingsPage() {
         disabled={checkConnectivityMutation.isPending}
       >
         {checkConnectivityMutation.isPending && (
-          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+          <RefreshCw className="h-4 w-4 animate-spin" />
         )}
         Check Vault Connectivity
       </PermissionButton>,

@@ -495,10 +495,15 @@ export function LlmProviderApiKeyForm({
 
           {mode === "full" && (
             <div className="space-y-2">
-              <Label htmlFor="llm-provider-api-key-name">Name</Label>
+              <Label htmlFor="llm-provider-api-key-name">
+                Name{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
               <Input
                 id="llm-provider-api-key-name"
-                placeholder={`My ${providerConfig.name} Key`}
+                placeholder={providerConfig.name}
                 disabled={isPending}
                 {...form.register("name")}
               />

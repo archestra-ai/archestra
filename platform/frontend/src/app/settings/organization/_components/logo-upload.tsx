@@ -153,7 +153,7 @@ function LogoSlot({
           onClick={() => fileInputRef.current?.click()}
           disabled={uploadMutation.isPending}
         >
-          <Upload className="h-4 w-4 mr-2" />
+          <Upload className="h-4 w-4" />
           {hasPreviewOrCurrentLogo ? "Change" : "Upload"}
         </PermissionButton>
 
@@ -165,7 +165,7 @@ function LogoSlot({
             onClick={handleRemoveLogo}
             disabled={removeMutation.isPending}
           >
-            <X className="h-4 w-4 mr-2" />
+            <X className="h-4 w-4" />
             Remove
           </PermissionButton>
         )}

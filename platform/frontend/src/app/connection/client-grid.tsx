@@ -149,7 +149,7 @@ function ClientTile({ client, selected, onSelect }: ClientTileProps) {
         <div className="truncate text-sm font-semibold tracking-tight text-foreground">
           {client.label}
         </div>
-        <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">
           {client.sub}
         </div>
       </div>

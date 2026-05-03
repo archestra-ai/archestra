@@ -48,10 +48,12 @@ export function EditCatalogContent({
 
   const onSubmit = async (values: McpCatalogFormValues) => {
     const apiData = transformFormToApiData(values);
+    // Tenancy is locked after creation — drop it from the update payload
+    const { multitenant: _multitenant, ...updateData } = apiData;
 
     await updateMutation.mutateAsync({
       id: item.id,
-      data: apiData,
+      data: updateData,
     });
 
     if (!keepOpenOnSave) {

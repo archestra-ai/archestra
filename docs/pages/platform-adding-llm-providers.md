@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-04-13
+lastUpdated: 2026-04-29
 ---
 
 <!--
@@ -66,6 +66,18 @@ The adapter pattern provides a **provider-agnostic API** for business logic. LLM
 - **ResponseAdapter**: Provides read/write access to the response data (id, model, text, tool calls, usage);
 - **StreamAdapter**: Process streaming chunks incrementally, accumulating data required for the LLMProxy logic;
 - **LLMProvider**: Create adapters, extract API keys from headers, create provider SDK clients, execute requests;
+
+### Model Router Translator Layer
+
+The Model Router exposes OpenAI-compatible Chat Completions and Responses endpoints. If the provider does not accept OpenAI request/response shapes natively, add translator adapters that convert between OpenAI schemas and the provider's native API.
+
+| File                                                             | Description                                                                                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `backend/src/routes/proxy/adapters/{provider}-openai.ts`         | OpenAI-compatible adapter factory used by Model Router routes.                                                     |
+| `backend/src/routes/proxy/adapters/{provider}-openai-translator.ts` | Request, response, and stream translation between OpenAI chat completions and the provider's native API.            |
+| `backend/src/routes/proxy/adapters/openai-responses-from-chat.ts` | Shared helper for exposing OpenAI Responses API semantics through a chat-completions-backed provider implementation. |
+
+Translator coverage should include non-streaming and streaming Chat Completions and Responses behavior. Add the provider to the model-router provider matrix tests so the route-level tests exercise the full request path.
 
 ### Route Handler
 

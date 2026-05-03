@@ -85,7 +85,10 @@ vi.mock("@/models/internal-mcp-catalog", () => ({
 }));
 
 vi.mock("@/models/mcp-server", () => ({
-  default: {},
+  default: {
+    findById: vi.fn().mockResolvedValue(null),
+    findByCatalogId: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 vi.mock("@/models/mcp-http-session", () => ({

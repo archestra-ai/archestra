@@ -268,6 +268,7 @@ class AgentModel {
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
       scope?: AgentScope;
+      excludeOtherPersonalAgents?: boolean;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -305,6 +306,17 @@ class AgentModel {
     // Filter by scope if specified
     if (options?.scope) {
       whereConditions.push(eq(schema.agentsTable.scope, options.scope));
+    }
+
+    // Exclude other users' personal agents (show non-personal + own personal)
+    if (options?.excludeOtherPersonalAgents && userId) {
+      const condition = or(
+        ne(schema.agentsTable.scope, "personal"),
+        eq(schema.agentsTable.authorId, userId),
+      );
+      if (condition) {
+        whereConditions.push(condition);
+      }
     }
 
     // Apply access control filtering for non-agent admins
@@ -1768,6 +1780,78 @@ class AgentModel {
       .limit(1);
 
     return row?.id ?? null;
+  }
+
+  /**
+   * Clone an agent and all its associations.
+   * Returns the newly created agent.
+   */
+  static async cloneAgent(params: {
+    sourceId: string;
+    userId: string;
+  }): Promise<Agent> {
+    const { sourceId, userId } = params;
+
+    const sourceAgent = await AgentModel.findById(sourceId, userId, true);
+    if (!sourceAgent) {
+      throw new Error("Source agent not found");
+    }
+
+    // Omit teams if scope is not 'team' — scope takes precedence
+    const cloneTeams =
+      sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
+
+    let created: Agent | null = null;
+    try {
+      created = await AgentModel.create(
+        {
+          organizationId: sourceAgent.organizationId,
+          agentType: sourceAgent.agentType,
+          scope: sourceAgent.scope,
+          teams: cloneTeams,
+          labels: sourceAgent.labels,
+          knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
+          connectorIds: sourceAgent.connectorIds ?? [],
+          suggestedPrompts: sourceAgent.suggestedPrompts ?? [],
+          name: `Copy of ${sourceAgent.name}`,
+          systemPrompt: sourceAgent.systemPrompt,
+          description: sourceAgent.description,
+          icon: sourceAgent.icon,
+          toolExposureMode: sourceAgent.toolExposureMode,
+          toolAssignmentMode: sourceAgent.toolAssignmentMode,
+          considerContextUntrusted: sourceAgent.considerContextUntrusted,
+          incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
+          incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
+          incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
+          llmApiKeyId: null,
+          llmModel: sourceAgent.llmModel,
+          identityProviderId: null,
+          passthroughHeaders: null,
+        },
+        sourceAgent.scope === "personal" ? userId : undefined,
+      );
+
+      await AgentToolModel.cloneAssignments({
+        fromAgentId: sourceAgent.id,
+        toAgentId: created.id,
+      });
+
+      const clonedAgent = await AgentModel.findById(created.id, userId, true);
+      if (!clonedAgent) {
+        throw new Error("Failed to load cloned agent");
+      }
+
+      return clonedAgent;
+    } catch (error) {
+      if (created) {
+        try {
+          await AgentModel.delete(created.id);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      throw error;
+    }
   }
 
   private static async generateUniqueSlug(name: string): Promise<string> {

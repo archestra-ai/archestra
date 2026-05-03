@@ -32,6 +32,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
+import { broadcastMcpInstallationStatus } from "@/websocket";
 import {
   catchError,
   deduplicateLabels,
@@ -468,9 +469,6 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolShortNames = registry.toolShortNames;
-export const toolArgsSchemas = registry.toolArgsSchemas;
-export const toolOutputSchemas = registry.toolOutputSchemas;
 export const toolEntries = registry.toolEntries;
 
 // === Exports ===
@@ -1061,6 +1059,7 @@ async function handleDeployMcpServer(
         localInstallationStatus: "pending",
         localInstallationError: null,
       });
+      broadcastMcpInstallationStatus(mcpServer.id, "pending", null);
       await McpServerRuntimeManager.startServer(mcpServer);
 
       void discoverLocalMcpServerTools({
@@ -1243,6 +1242,7 @@ async function discoverLocalMcpServerTools(params: {
       localInstallationStatus: "discovering-tools",
       localInstallationError: null,
     });
+    broadcastMcpInstallationStatus(mcpServer.id, "discovering-tools", null);
 
     const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
     const toolsToCreate = discoveredTools.map((tool) => ({
@@ -1269,16 +1269,18 @@ async function discoverLocalMcpServerTools(params: {
       localInstallationStatus: "success",
       localInstallationError: null,
     });
+    broadcastMcpInstallationStatus(mcpServer.id, "success", null);
   } catch (err) {
     logger.error(
       { err, mcpServerId: mcpServer.id },
       "Error during async tool discovery after deploy",
     );
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
     await McpServerModel.update(mcpServer.id, {
       localInstallationStatus: "error",
-      localInstallationError:
-        err instanceof Error ? err.message : "Unknown error",
+      localInstallationError: errorMessage,
     });
+    broadcastMcpInstallationStatus(mcpServer.id, "error", errorMessage);
   }
 }
 

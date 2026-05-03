@@ -5,6 +5,7 @@ import type { ModelInfo } from "./types";
 export async function fetchOpenrouterModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.openrouter.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -13,6 +14,7 @@ export async function fetchOpenrouterModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "OpenRouter models",
+    extraHeaders,
   });
 
   return data.data.map((model) => ({

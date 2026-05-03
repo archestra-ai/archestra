@@ -494,6 +494,7 @@ function shouldTrustAllOriginsForIdentityProviderRegistration(
  * - Blocking invitations when disabled via environment variable
  * - Email validation for invitation requests
  * - Invitation-only sign-up enforcement
+ * @public — exported for testability
  */
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
@@ -702,6 +703,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
  * - Accepting invitations after sign-up
  * - Auto-accepting pending invitations on sign-in
  * - Setting active organization for new sessions
+ * @public — exported for testability
  */
 export async function handleAfterHook(ctx: HookEndpointContext) {
   const { path, method, body, context, request } = ctx;

@@ -1,7 +1,5 @@
 export {
-  type AgentTypePermissionChecker,
   getAgentTypePermissionChecker,
-  getResourceForAgentType,
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
   isAgentTypeAdmin,

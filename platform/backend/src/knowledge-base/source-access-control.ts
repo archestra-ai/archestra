@@ -22,12 +22,12 @@ type VisibilityScopedKnowledgeSourceUpdates = Partial<{
   teamIds: string[];
 }>;
 
-export interface KnowledgeSourceAccessControlContext {
+interface KnowledgeSourceAccessControlContext {
   canReadAll: boolean;
   teamIds: string[];
 }
 
-export function buildDocumentAccessControlList(params: {
+function buildDocumentAccessControlList(params: {
   visibility: KnowledgeSourceVisibility;
   teamIds: string[];
   permissions?: {

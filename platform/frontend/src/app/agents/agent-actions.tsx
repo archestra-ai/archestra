@@ -1,5 +1,13 @@
 import { E2eTestId } from "@shared";
-import { Clock, Eye, MessageSquare, Pencil, Plug, Trash2 } from "lucide-react";
+import {
+  Clock,
+  Copy,
+  Eye,
+  MessageSquare,
+  Pencil,
+  Plug,
+  Trash2,
+} from "lucide-react";
 import {
   type TableRowAction,
   TableRowActions,
@@ -17,6 +25,7 @@ type AgentActionsProps = {
   onEdit: (agent: Agent) => void;
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
+  onClone: (agentId: string) => void;
 };
 
 export function AgentActions({
@@ -26,6 +35,7 @@ export function AgentActions({
   onEdit,
   onView,
   onDelete,
+  onClone,
 }: AgentActionsProps) {
   const isBuiltIn = Boolean(agent.builtIn);
 
@@ -69,6 +79,17 @@ export function AgentActions({
       disabledTooltip: "Built-in agents cannot be scheduled",
       permissions: { scheduledTask: ["read"] },
       href: `/scheduled-tasks?agentId=${agent.id}`,
+    },
+    {
+      icon: <Copy className="h-4 w-4" />,
+      label: "Clone",
+      disabled: isBuiltIn,
+      disabledTooltip: isBuiltIn
+        ? "Built-in agents cannot be cloned"
+        : undefined,
+      permissions: { agent: ["create"] },
+      onClick: () => onClone(agent.id),
+      testId: `${E2eTestId.CloneAgentButton}-${agent.name}`,
     },
     editOrViewAction,
     {

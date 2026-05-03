@@ -105,6 +105,65 @@ describe("ModelModel", () => {
     });
   });
 
+  describe("findAll", () => {
+    test("filters by multiple providers", async () => {
+      await ModelModel.create({
+        externalId: "openai/find-all-provider-filter",
+        provider: "openai",
+        modelId: "find-all-provider-filter",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000010",
+        completionPricePerToken: "0.000030",
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.create({
+        externalId: "anthropic/find-all-provider-filter",
+        provider: "anthropic",
+        modelId: "find-all-provider-filter",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.create({
+        externalId: "gemini/find-all-provider-filter",
+        provider: "gemini",
+        modelId: "find-all-provider-filter",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      });
+
+      const models = await ModelModel.findAll({
+        providers: ["anthropic", "gemini"],
+      });
+
+      expect(models.map((model) => model.provider).sort()).toEqual([
+        "anthropic",
+        "gemini",
+      ]);
+    });
+
+    test("returns no models for an empty provider filter", async () => {
+      await ModelModel.create({
+        externalId: "openai/empty-provider-filter",
+        provider: "openai",
+        modelId: "empty-provider-filter",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000010",
+        completionPricePerToken: "0.000030",
+        lastSyncedAt: new Date(),
+      });
+
+      await expect(ModelModel.findAll({ providers: [] })).resolves.toEqual([]);
+    });
+  });
+
   describe("findByProviderModelIds", () => {
     test("returns empty map when no keys provided", async () => {
       const map = await ModelModel.findByProviderModelIds([]);

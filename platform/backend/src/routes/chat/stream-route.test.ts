@@ -309,10 +309,10 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(capturedInnerOnError).toBeDefined();
 
     const stage1Error = new Error("Upstream provider error");
-    const payload1 = capturedInnerOnError!(stage1Error);
+    const payload1 = capturedInnerOnError?.(stage1Error);
 
     const stage2Error = new Error(payload1);
-    const payload2 = capturedInnerOnError!(stage2Error);
+    const payload2 = capturedInnerOnError?.(stage2Error);
 
     expect(payload2).toBe(payload1);
 

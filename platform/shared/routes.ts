@@ -3,6 +3,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
   CreateAgent: "createAgent",
+  CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetDefaultLlmProxy: "getDefaultLlmProxy",
@@ -161,6 +162,18 @@ export const RouteId = {
   OpenAiChatCompletionsWithDefaultAgent:
     "openAiChatCompletionsWithDefaultAgent",
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
+  OpenAiResponsesWithDefaultAgent: "openAiResponsesWithDefaultAgent",
+  OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
+
+  // Proxy Routes - OpenAI-compatible model router
+  ModelRouterChatCompletionsWithDefaultAgent:
+    "modelRouterChatCompletionsWithDefaultAgent",
+  ModelRouterChatCompletionsWithAgent: "modelRouterChatCompletionsWithAgent",
+  ModelRouterListModelsWithDefaultAgent:
+    "modelRouterListModelsWithDefaultAgent",
+  ModelRouterListModelsWithAgent: "modelRouterListModelsWithAgent",
+  ModelRouterResponsesWithDefaultAgent: "modelRouterResponsesWithDefaultAgent",
+  ModelRouterResponsesWithAgent: "modelRouterResponsesWithAgent",
 
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
@@ -283,7 +296,6 @@ export const RouteId = {
   DeleteApiKey: "deleteApiKey",
 
   // Virtual API Key Routes
-  GetVirtualApiKeys: "getVirtualApiKeys",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",

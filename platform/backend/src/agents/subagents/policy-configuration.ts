@@ -44,6 +44,7 @@ interface BulkAutoPolicyResult {
 
 /**
  * Auto-configure security policies tools using LLM analysis
+ * @public — exported for testability
  */
 export class PolicyConfigurationService {
   /**

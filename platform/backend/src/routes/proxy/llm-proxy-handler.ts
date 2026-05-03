@@ -11,6 +11,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import {
+  CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
@@ -25,6 +26,7 @@ import {
   AgentTeamModel,
   InteractionModel,
   LimitValidationService,
+  LlmProviderApiKeyModel,
   ModelModel,
   ToolInvocationPolicyModel,
   UserModel,
@@ -118,6 +120,15 @@ export interface LLMProxyContext<TRequest> {
   teamIds?: string[];
 }
 
+export type LLMProxyAuthOverride = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  /** Mapped chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
+  chatApiKeyId?: string;
+  authenticated: boolean;
+  source?: InteractionSource;
+};
+
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
     return messages.length;
@@ -161,6 +172,9 @@ export async function handleLLMProxy<
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
+  const authOverride = (
+    request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
+  ).llmProxyAuthOverride;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
@@ -182,8 +196,13 @@ export async function handleLLMProxy<
     headersForExtraction,
     SOURCE_HEADER,
   );
+  const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
+  // `model_router` is assigned by the route auth override, not accepted from
+  // the public source header.
   const source: InteractionSource =
-    InteractionSourceSchema.safeParse(rawSource).data ?? "api";
+    authOverride?.source ??
+    (parsedSource === "model_router" ? "api" : parsedSource) ??
+    "api";
   const inheritedContextUntrusted =
     utils.headers.metaHeader.getHeaderValue(
       headersForExtraction,
@@ -246,27 +265,41 @@ export async function handleLLMProxy<
   // Authenticate and resolve API key (JWKS → virtual key → header extraction → keyless check)
   let apiKey: string | undefined;
   let perKeyBaseUrl: string | undefined;
+  /**
+   * The chat_api_key row ID for this call, if the call resolved through a
+   * DB-managed key OR was forwarded by an internal loopback caller via
+   * CHAT_API_KEY_ID_HEADER. Used at the bottom of the handler to look up
+   * extra HTTP headers. `undefined` for raw-bearer calls from external IPs.
+   */
+  let perKeyChatApiKeyId: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
-
   // 1. Try JWKS auth if the agent has an external identity provider configured
-  const jwksResult = await attemptJwksAuth(
-    request,
-    resolvedAgent,
-    providerName,
-  );
-  if (jwksResult) {
-    wasJwksAuthenticated = true;
-    apiKey = jwksResult.apiKey;
-    perKeyBaseUrl = jwksResult.baseUrl;
-    if (jwksResult.userId) {
-      userId = jwksResult.userId;
-      resolvedUser = await UserModel.getById(userId);
+  if (authOverride) {
+    apiKey = authOverride.apiKey;
+    perKeyBaseUrl = authOverride.baseUrl;
+    perKeyChatApiKeyId = authOverride.chatApiKeyId;
+    wasVirtualKeyResolved = authOverride.authenticated;
+  } else {
+    const jwksResult = await attemptJwksAuth(
+      request,
+      resolvedAgent,
+      providerName,
+    );
+    if (jwksResult) {
+      wasJwksAuthenticated = true;
+      apiKey = jwksResult.apiKey;
+      perKeyBaseUrl = jwksResult.baseUrl;
+      perKeyChatApiKeyId = jwksResult.chatApiKeyId;
+      if (jwksResult.userId) {
+        userId = jwksResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
     }
   }
 
   // 2. Extract API key from headers if not already resolved via JWKS
-  if (!wasJwksAuthenticated) {
+  if (!authOverride && !wasJwksAuthenticated) {
     apiKey = provider.extractApiKey(headers);
   }
 
@@ -277,6 +310,7 @@ export async function handleLLMProxy<
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
   if (
     !wasJwksAuthenticated &&
+    !authOverride &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -288,6 +322,7 @@ export async function handleLLMProxy<
       );
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
+      perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
@@ -297,7 +332,33 @@ export async function handleLLMProxy<
     }
   }
 
-  // 4. Enforce authentication for keyless providers on external requests
+  // 4. Internal callers (in-app chat) that send a raw provider secret can
+  // forward the resolved chat_api_keys row ID via a loopback-only header so
+  // the proxy can pick up per-key configuration (extraHeaders) below.
+  // External clients must NOT be able to spoof this — same SSRF reasoning
+  // as PROVIDER_BASE_URL_HEADER.
+  if (!perKeyChatApiKeyId) {
+    const headerValue =
+      headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
+    const headerPresent =
+      typeof headerValue === "string" && headerValue.length > 0;
+    if (isLoopbackAddress(request.ip)) {
+      if (headerPresent) {
+        perKeyChatApiKeyId = headerValue;
+        logger.info(
+          { chatApiKeyId: perKeyChatApiKeyId },
+          `[${providerName}Proxy] received provider-api-key-id header`,
+        );
+      }
+    } else if (headerPresent) {
+      logger.warn(
+        { ip: request.ip },
+        `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
+      );
+    }
+  }
+
+  // 5. Enforce authentication for keyless providers on external requests
   assertAuthenticatedForKeylessProvider(
     apiKey,
     wasVirtualKeyResolved,
@@ -538,6 +599,46 @@ export async function handleLLMProxy<
       headersToForward["anthropic-beta"] = headersObj["anthropic-beta"];
     }
 
+    // Per-key extra HTTP headers (e.g. RBAC headers required by Kubeflow-style
+    // gateways). Looked up by chat_api_key ID — set whenever the call resolved
+    // through a DB-managed key (auth override, JWKS, virtual key). Raw-bearer
+    // calls have no chat_api_key row, so no extra headers.
+    let perKeyExtraHeaders: Record<string, string> | null = null;
+    if (perKeyChatApiKeyId) {
+      const row = await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
+      perKeyExtraHeaders = row?.extraHeaders ?? null;
+      if (!row) {
+        logger.warn(
+          { chatApiKeyId: perKeyChatApiKeyId },
+          `[${providerName}Proxy] chat_api_key row not found for id`,
+        );
+      } else {
+        logger.info(
+          {
+            chatApiKeyId: perKeyChatApiKeyId,
+            headers: headerNamePeek(perKeyExtraHeaders),
+          },
+          `[${providerName}Proxy] loaded extra headers from db`,
+        );
+      }
+    } else {
+      logger.info(
+        `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
+      );
+    }
+    // Merge per-key extra headers behind any provider-forwarded headers
+    // (anthropic-beta etc.) so protocol-level headers always win.
+    const mergedHeaders: Record<string, string> = {
+      ...(perKeyExtraHeaders ?? {}),
+      ...headersToForward,
+    };
+    if (Object.keys(mergedHeaders).length > 0) {
+      logger.info(
+        { headers: headerNamePeek(mergedHeaders) },
+        `[${providerName}Proxy] forwarding headers to provider`,
+      );
+    }
+
     // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
@@ -556,7 +657,7 @@ export async function handleLLMProxy<
       externalAgentId,
       source,
       defaultHeaders:
-        Object.keys(headersToForward).length > 0 ? headersToForward : undefined,
+        Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
     });
 
     // Build final request
@@ -725,6 +826,7 @@ async function handleStreaming<
       sessionId,
       executionId,
       externalAgentId,
+      source,
       serverAddress: provider.getBaseUrl(),
       promptMessages: provider
         .createRequestAdapter(originalRequest)
@@ -1097,6 +1199,7 @@ async function handleNonStreaming<
     sessionId,
     executionId,
     externalAgentId,
+    source,
     serverAddress: provider.getBaseUrl(),
     promptMessages: provider
       .createRequestAdapter(originalRequest)
@@ -1319,4 +1422,15 @@ function normalizeVirtualKeyCandidate(
   }
 
   return apiKey.replace(/^Bearer[:\s]+/i, "");
+}
+
+function headerNamePeek(
+  headers: Record<string, string> | null | undefined,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!headers) return result;
+  for (const [k, v] of Object.entries(headers)) {
+    result[k] = typeof v === "string" && v.length > 0 ? v[0] : "";
+  }
+  return result;
 }

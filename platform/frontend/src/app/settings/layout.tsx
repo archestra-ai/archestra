@@ -44,7 +44,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
       "Manage Kubernetes clusters where MCP servers run, including a separate cluster or namespace for personal MCP servers.",
   },
   "/settings/connection": {
-    title: "Connection",
+    title: "Connect page",
     description:
       'Control what other users see when getting connection instructions on the "Connect" page.',
   },

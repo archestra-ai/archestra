@@ -3,6 +3,7 @@
 import {
   E2eTestId,
   formatSecretStorageType,
+  PROVIDERS_WITH_OPTIONAL_API_KEY,
   type ResourceVisibilityScope,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -26,11 +27,13 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import {
+  deserializeExtraHeaders,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
   type LlmProviderApiKeyResponse,
   PROVIDER_CONFIG,
+  serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-options";
 import { SearchInput } from "@/components/search-input";
@@ -53,6 +56,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -75,6 +79,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "anthropic",
   apiKey: null,
   baseUrl: null,
+  extraHeaders: [],
   scope: "personal",
   teamId: null,
   vaultSecretPath: null,
@@ -87,13 +92,20 @@ export default function ApiKeysPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
-  const { data: allApiKeys = [] } = useLlmProviderApiKeys();
+  const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
+    useHasPermissions({ llmProviderApiKey: ["read"] });
+  const apiKeyQueriesEnabled =
+    !permissionsPending && canReadLlmProviderApiKeys === true;
+  const { data: allApiKeys = [] } = useLlmProviderApiKeys({
+    enabled: apiKeyQueriesEnabled,
+  });
   const { data: queriedApiKeys = [], isPending } = useLlmProviderApiKeys({
     search: search || undefined,
     provider:
       providerFilter === "all"
         ? undefined
         : (providerFilter as LlmProviderApiKeyResponse["provider"]),
+    enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
   const updateMutation = useUpdateLlmProviderApiKey();
@@ -132,8 +144,9 @@ export default function ApiKeysPage() {
       editForm.reset({
         name: selectedApiKey.name,
         provider: selectedApiKey.provider,
-        apiKey: LLM_PROVIDER_API_KEY_PLACEHOLDER,
+        apiKey: selectedApiKey.secretId ? LLM_PROVIDER_API_KEY_PLACEHOLDER : "",
         baseUrl: selectedApiKey.baseUrl ?? null,
+        extraHeaders: deserializeExtraHeaders(selectedApiKey.extraHeaders),
         scope: selectedApiKey.scope,
         teamId: selectedApiKey.teamId ?? "",
         vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
@@ -161,6 +174,7 @@ export default function ApiKeysPage() {
           name: values.name || undefined,
           apiKey: apiKeyChanged ? (values.apiKey ?? undefined) : undefined,
           baseUrl: values.baseUrl || null,
+          extraHeaders: serializeExtraHeaders(values.extraHeaders),
           scope: scopeChanged ? values.scope : undefined,
           teamId:
             scopeChanged || teamIdChanged
@@ -220,7 +234,7 @@ export default function ApiKeysPage() {
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="h-4 w-4" />
         Add API Key
       </PermissionButton>,
     );
@@ -338,7 +352,9 @@ export default function ApiKeysPage() {
         header: "Status",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            {row.original.isSystem || row.original.secretId ? (
+            {row.original.isSystem ||
+            row.original.secretId ||
+            PROVIDERS_WITH_OPTIONAL_API_KEY.has(row.original.provider) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -448,7 +464,7 @@ export default function ApiKeysPage() {
           data={apiKeys}
           getRowId={(row) => row.id}
           hideSelectedCount
-          isLoading={isPending}
+          isLoading={permissionsPending || isPending}
           emptyMessage="No API keys configured"
           hasActiveFilters={Boolean(search || providerFilter !== "all")}
           filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."

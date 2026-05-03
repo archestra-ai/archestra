@@ -66,6 +66,7 @@ export function OidcConfigForm({
   const scopes = form.watch("oidcConfig.scopes") || [];
   const issuer = form.watch("issuer") || "";
   const providerId = form.watch("providerId") || "";
+  const showAllowedEmailDomains = providerId === "Google";
 
   const inferredEnterpriseExchangeType = inferEnterpriseExchangeType({
     issuer,
@@ -135,24 +136,26 @@ export function OidcConfigForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="domain"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Allowed Email Domains</FormLabel>
-              <FormControl>
-                <Input placeholder="company.com, subsidiary.com" {...field} />
-              </FormControl>
-              <FormDescription>
-                Users can sign in with this provider only when their returned
-                email matches one of these domains. Separate multiple domains
-                with commas.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {showAllowedEmailDomains && (
+          <FormField
+            control={form.control}
+            name="domain"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Allowed Email Domains</FormLabel>
+                <FormControl>
+                  <Input placeholder="company.com, subsidiary.com" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Users can sign in with this provider only when their returned
+                  email matches one of these domains. Separate multiple domains
+                  with commas.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <Separator />
 

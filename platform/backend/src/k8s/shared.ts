@@ -24,6 +24,7 @@ export interface K8sClients {
  * Validates kubeconfig YAML/JSON content and throws descriptive errors for
  * various failure scenarios. Used by both file-path validation and the
  * Cluster CRUD layer (which receives YAML as a string from admins).
+ * @public — exported for testability
  */
 export function validateKubeconfigContent(content: string) {
   const kc = new k8s.KubeConfig();
@@ -168,6 +169,7 @@ export function createK8sClients(
 /**
  * Check if K8s runtime is enabled based on environment configuration.
  * Returns true when either KUBECONFIG or LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is set.
+ * @public — exported for testability
  */
 export function isK8sConfigured(): boolean {
   return (
@@ -178,6 +180,7 @@ export function isK8sConfigured(): boolean {
 
 /**
  * Returns the resolved K8s namespace from configuration.
+ * @public — exported for testability
  */
 export function getK8sNamespace(): string {
   return namespace || "default";

@@ -59,7 +59,7 @@ import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
 export { getAgentTools } from "./delegation";
-export { filterToolNamesByPermission, TOOL_PERMISSIONS } from "./rbac";
+export { filterToolNamesByPermission } from "./rbac";
 export type { ArchestraContext } from "./types";
 
 const toolEntries: Partial<
@@ -220,6 +220,7 @@ function validateToolResult(
   };
 }
 
+/** @public — exported for testability */
 export const __test = {
   validateToolResult,
 };

@@ -1,5 +1,5 @@
 import { INTERACTION_SOURCE_DISPLAY, type InteractionSource } from "@shared";
-import { CalendarClock, Database, Globe, Mail } from "lucide-react";
+import { CalendarClock, Database, Globe, Mail, Route } from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +82,7 @@ function getSourceIcon({
 
   const sourceIcon: Record<Exclude<InteractionSource, "chat">, ReactNode> = {
     api: <Globe className="h-3 w-3 shrink-0" />,
+    model_router: <Route className="h-3 w-3 shrink-0" />,
     "chatops:slack": (
       <Image
         src="/icons/slack.png"

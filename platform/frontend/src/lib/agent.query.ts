@@ -10,6 +10,7 @@ import { handleApiError } from "@/lib/utils";
 
 const {
   createAgent,
+  cloneAgent,
   deleteAgent,
   getAgents,
   getAllAgents,
@@ -42,6 +43,28 @@ export function useProfiles(
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
+  });
+}
+
+export function useCloneAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data: responseData, error } = await cloneAgent({
+        path: { id },
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      if (data.id) {
+        queryClient.setQueryData(["agents", data.id], data);
+      }
+    },
   });
 }
 

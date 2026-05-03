@@ -25,7 +25,7 @@ export function useSettingsTabs() {
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
     ...(permissionMap?.["/settings/connection"]
-      ? [{ label: "Connection", href: "/settings/connection" }]
+      ? [{ label: "Connect page", href: "/settings/connection" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]

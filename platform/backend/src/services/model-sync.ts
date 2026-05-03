@@ -36,9 +36,17 @@ class ModelSyncService {
     provider: SupportedProvider;
     apiKeyValue: string;
     baseUrl?: string | null;
+    extraHeaders?: Record<string, string> | null;
     forceRefresh?: boolean;
   }): Promise<number> {
-    const { apiKeyId, provider, apiKeyValue, baseUrl, forceRefresh } = params;
+    const {
+      apiKeyId,
+      provider,
+      apiKeyValue,
+      baseUrl,
+      extraHeaders,
+      forceRefresh,
+    } = params;
     const fetcher = modelFetchers[provider];
 
     if (!fetcher) {
@@ -51,7 +59,7 @@ class ModelSyncService {
 
     try {
       // 1. Fetch models from provider API
-      const providerModels = await fetcher(apiKeyValue, baseUrl);
+      const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders);
 
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
@@ -131,6 +139,7 @@ class ModelSyncService {
       provider: SupportedProvider;
       apiKeyValue: string;
       baseUrl?: string | null;
+      extraHeaders?: Record<string, string> | null;
     }>,
     options?: { forceRefresh?: boolean },
   ): Promise<Map<string, number>> {
@@ -143,6 +152,7 @@ class ModelSyncService {
           provider: apiKey.provider,
           apiKeyValue: apiKey.apiKeyValue,
           baseUrl: apiKey.baseUrl,
+          extraHeaders: apiKey.extraHeaders,
           forceRefresh: options?.forceRefresh,
         });
         results.set(apiKey.id, count);
@@ -171,7 +181,7 @@ export const modelSyncService = new ModelSyncService();
 // Helper functions
 // ============================================================================
 
-export interface ProviderModelCapabilities {
+interface ProviderModelCapabilities {
   description: string | null;
   contextLength: number | null;
   inputModalities: ModelInputModality[] | null;
@@ -217,7 +227,7 @@ export function buildModelsToUpsert(params: {
  * Best-effort inference of embedding dimensions for known models.
  * Unknown models return null and can be configured manually in the model editor.
  */
-export function inferEmbeddingDimensions(
+function inferEmbeddingDimensions(
   modelId: string,
   provider: SupportedProvider,
 ): SupportedEmbeddingDimension | null {
@@ -242,6 +252,7 @@ export function inferEmbeddingDimensions(
   return null;
 }
 
+/** @public — exported for testability */
 export function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
@@ -300,7 +311,7 @@ const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
 /**
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
  */
-export function buildCapabilitiesMap(
+function buildCapabilitiesMap(
   modelsDevData: ModelsDevApiResponse,
   targetProvider: SupportedProvider,
 ): Map<string, ProviderModelCapabilities> {

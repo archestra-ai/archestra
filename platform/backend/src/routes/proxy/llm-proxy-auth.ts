@@ -48,6 +48,30 @@ export async function resolveAgent(
 export interface VirtualKeyValidationResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
+  chatApiKeyId: string | undefined;
+}
+
+type ResolvedVirtualApiKey = NonNullable<
+  Awaited<ReturnType<typeof VirtualApiKeyModel.validateToken>>
+>;
+
+export async function validateVirtualApiKeyToken(
+  tokenValue: string,
+): Promise<ResolvedVirtualApiKey> {
+  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
+  if (!resolved) {
+    throw new ApiError(401, "Invalid virtual API key");
+  }
+
+  if (
+    resolved.virtualKey.expiresAt &&
+    resolved.virtualKey.expiresAt < new Date()
+  ) {
+    throw new ApiError(401, "Virtual API key expired");
+  }
+
+  return resolved;
 }
 
 /**
@@ -61,16 +85,12 @@ export async function validateVirtualApiKey(
   tokenValue: string,
   expectedProvider: string,
 ): Promise<VirtualKeyValidationResult> {
-  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
-  if (!resolved) {
-    throw new ApiError(401, "Invalid virtual API key");
-  }
-
-  if (
-    resolved.virtualKey.expiresAt &&
-    resolved.virtualKey.expiresAt < new Date()
-  ) {
-    throw new ApiError(401, "Virtual API key expired");
+  const resolved = await validateVirtualApiKeyToken(tokenValue);
+  if (!resolved.chatApiKey) {
+    throw new ApiError(
+      400,
+      "Model Router virtual API keys cannot be used with provider-specific proxy routes",
+    );
   }
 
   if (resolved.chatApiKey.provider !== expectedProvider) {
@@ -107,6 +127,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
+    chatApiKeyId: resolved.chatApiKey.id,
   };
 }
 
@@ -117,6 +138,8 @@ export async function validateVirtualApiKey(
 export interface JwksAuthResult {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  /** Resolved chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
+  chatApiKeyId: string | undefined;
   userId: string | undefined;
   organizationId: string;
 }
@@ -187,6 +210,7 @@ export async function attemptJwksAuth(
 
   let apiKey: string | undefined;
   let baseUrl: string | undefined;
+  let chatApiKeyId: string | undefined;
 
   if (isSupportedProvider(providerName)) {
     const resolved = await resolveProviderApiKey({
@@ -196,11 +220,13 @@ export async function attemptJwksAuth(
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
+    chatApiKeyId = resolved.chatApiKeyId;
   }
 
   return {
     apiKey,
     baseUrl,
+    chatApiKeyId,
     userId: jwksResult.userId,
     organizationId: jwksResult.organizationId,
   };

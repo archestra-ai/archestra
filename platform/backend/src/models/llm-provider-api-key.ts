@@ -45,6 +45,17 @@ class LlmProviderApiKeyModel {
     return apiKey ?? null;
   }
 
+  static async findByIds(ids: string[]): Promise<LlmProviderApiKey[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(inArray(schema.llmProviderApiKeysTable.id, ids));
+  }
+
   /**
    * Find all LLM provider API keys for an organization.
    */
@@ -153,6 +164,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
         teamId: schema.llmProviderApiKeysTable.teamId,
@@ -274,6 +286,7 @@ class LlmProviderApiKeyModel {
         provider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
         teamId: schema.llmProviderApiKeysTable.teamId,

@@ -1,5 +1,5 @@
 {
-  "id": "5a90d6f8-b965-4174-b53f-3707fc2cf014",
+  "id": "d94c9a82-6822-4182-b2b5-f6c9c2c7a18c",
   "prevId": "3962e239-e49a-4648-bd19-17f62c295695",
   "version": "7",
   "dialect": "postgresql",
@@ -1650,126 +1650,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.cluster": {
-      "name": "cluster",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "namespace": {
-          "name": "namespace",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "kubeconfig_secret_id": {
-          "name": "kubeconfig_secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "load_from_cluster": {
-          "name": "load_from_cluster",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_default": {
-          "name": "is_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_personal_default": {
-          "name": "is_personal_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "cluster_single_default_idx": {
-          "name": "cluster_single_default_idx",
-          "columns": [
-            {
-              "expression": "is_default",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"cluster\".\"is_default\" = true",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cluster_single_personal_default_idx": {
-          "name": "cluster_single_personal_default_idx",
-          "columns": [
-            {
-              "expression": "is_personal_default",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"cluster\".\"is_personal_default\" = true",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "cluster_kubeconfig_secret_id_secret_id_fk": {
-          "name": "cluster_kubeconfig_secret_id_secret_id_fk",
-          "tableFrom": "cluster",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "kubeconfig_secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -5024,12 +4904,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cluster_id": {
-          "name": "cluster_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "scope": {
           "name": "scope",
           "type": "text",
@@ -5148,19 +5022,6 @@
           "tableTo": "team",
           "columnsFrom": [
             "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "mcp_server_cluster_id_cluster_id_fk": {
-          "name": "mcp_server_cluster_id_cluster_id_fk",
-          "tableFrom": "mcp_server",
-          "tableTo": "cluster",
-          "columnsFrom": [
-            "cluster_id"
           ],
           "columnsTo": [
             "id"
@@ -6674,6 +6535,12 @@
         "connection_shown_providers": {
           "name": "connection_shown_providers",
           "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connection_base_urls": {
+          "name": "connection_base_urls",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         }

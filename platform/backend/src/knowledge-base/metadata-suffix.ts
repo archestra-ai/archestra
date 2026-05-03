@@ -1,6 +1,6 @@
 import { countTokens, getEncoding } from "./tokenizer";
 
-export interface MetadataSuffixes {
+interface MetadataSuffixes {
   /** Structured key-value format for embeddings. null if over 25% token budget or min content rule. */
   semantic: string | null;
   /** Space-separated values only, for BM25. Always present if metadata is non-empty. */

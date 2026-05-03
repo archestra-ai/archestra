@@ -38,6 +38,7 @@ export function isNoisyTransactionName(transactionName: string): boolean {
   );
 }
 
+/** @public — exported for testability */
 export function isNoisyMcpGatewayTransactionName(
   transactionName: string,
 ): boolean {

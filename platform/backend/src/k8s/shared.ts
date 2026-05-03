@@ -59,7 +59,8 @@ export function validateKubeconfigContent(content: string) {
 }
 
 /**
- * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ * Validates kubeconfig file and throws descriptive errors for various failure scenarios.
+ * @public — exported for direct unit testing; consumed by src/k8s/shared.test.ts
  */
 export function validateKubeconfig(path?: string) {
   if (!path) {
@@ -74,7 +75,7 @@ export function validateKubeconfig(path?: string) {
   logger.info("✓ Custom kubeconfig validated successfully.");
 }
 
-export interface BuildKubeConfigInput {
+interface BuildKubeConfigInput {
   kubeconfigYaml?: string;
   kubeconfigPath?: string;
   loadFromCluster?: boolean;

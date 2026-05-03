@@ -11,7 +11,7 @@ import type { McpServer } from "@/types/mcp-server";
 
 const KUBECONFIG_SECRET_KEY = "kubeconfig";
 
-export type K8sClientsBundle = {
+type K8sClientsBundle = {
   clients: K8sClients;
   namespace: string;
   clusterId: string;

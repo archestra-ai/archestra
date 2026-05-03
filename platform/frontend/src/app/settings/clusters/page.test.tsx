@@ -5,6 +5,13 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Radix Dialog / Popper need ResizeObserver as a real constructor
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
 
@@ -46,7 +53,7 @@ const defaultCluster: MockCluster = {
 const personalCluster: MockCluster = {
   id: "cluster-personal",
   name: "my-laptop",
-  namespace: "default",
+  namespace: "laptop-ns",
   kubeconfigSecretId: "secret-1",
   loadFromCluster: false,
   isDefault: false,

@@ -14,7 +14,7 @@ import SecretModel from "./secret";
  * Key inside the secret JSON blob where kubeconfig YAML is stored.
  * The schema does not pin this name; we pick a stable key for round-tripping.
  */
-export const KUBECONFIG_SECRET_KEY = "kubeconfig";
+const KUBECONFIG_SECRET_KEY = "kubeconfig";
 
 class ClusterModel {
   static async list(): Promise<Cluster[]> {

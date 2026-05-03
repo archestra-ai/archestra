@@ -6,6 +6,7 @@ import {
   type Browser,
   type BrowserContext,
   test as base,
+  expect,
   type Page,
 } from "@playwright/test";
 import {
@@ -47,7 +48,6 @@ interface TestFixtures {
 
 export const goToPage = async (page: Page, path = "") => {
   await page.goto(`${UI_BASE_URL}${path}`);
-  await page.waitForTimeout(500);
   await dismissOnboarding(page);
 };
 
@@ -64,7 +64,7 @@ async function dismissOnboarding(page: Page): Promise<void> {
   const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
   if (await skipButton.isVisible().catch(() => false)) {
     await skipButton.click();
-    await page.waitForTimeout(500);
+    await expect(skipButton).toBeHidden();
   }
 }
 

@@ -26,8 +26,9 @@ export function useLimits(params?: LimitsParams) {
       });
       return response.data ?? [];
     },
-    // Automatically refetch every 5 seconds to keep usage data fresh
-    refetchInterval: 5000,
+    // Usage changes on request completion; keep this fresh without aggressive polling.
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     // Refetch when window regains focus
     refetchOnWindowFocus: true,
   });

@@ -12,6 +12,7 @@
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsgo --noEmit",
     "test": "vitest",
+    "bench:costs": "vitest bench \"src/app/llm/(costs)/costs.utils.bench.ts\" --outputJson ./costs.utils.bench.json && node ./scripts/write-costs-bench-report.mjs",
     "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,knip,biome 'pnpm type-check' 'pnpm test' 'pnpm knip' 'biome ci'",
     "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
     "knip": "knip"

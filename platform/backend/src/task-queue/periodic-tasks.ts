@@ -7,6 +7,7 @@ type PeriodicTaskDefinition = {
 };
 
 const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
+  { taskType: "cleanup_due_limits", intervalSeconds: 60, payload: {} },
   { taskType: "check_due_connectors", intervalSeconds: 60, payload: {} },
   {
     taskType: "check_due_schedule_triggers",

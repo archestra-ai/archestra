@@ -6,7 +6,12 @@
   "private": true,
   "exports": {
     ".": "./index.ts",
-    "./access-control": "./access-control.ts"
+    "./access-control": "./access-control.ts",
+    "./api/client": "./hey-api/clients/api/client.gen.ts",
+    "./api/sdk": "./hey-api/clients/api/sdk.gen.ts",
+    "./api/types": "./hey-api/clients/api/types.gen.ts",
+    "./catalog/sdk": "./hey-api/clients/archestra-catalog/sdk.gen.ts",
+    "./catalog/types": "./hey-api/clients/archestra-catalog/types.gen.ts"
   },
   "scripts": {
     "lint": "biome check",

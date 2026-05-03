@@ -60,6 +60,7 @@ const uiTestMatch = [
 const apiTestMatch = [
   "**/built-in-agents.spec.ts",
   "**/chat-api.spec.ts",
+  "**/playwright-config.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/image-pull-secrets.spec.ts",
   "**/mcp-enterprise-managed.ee.spec.ts",
@@ -76,7 +77,12 @@ const apiTestMatch = [
 
 const quickstartTestMatch = [
   "**/auth-origin.spec.ts",
-  "**/mcp-install.spec.ts",
+  "**/mcp-install-quickstart.spec.ts",
+  "**/quickstart.spec.ts",
+];
+
+const browserQuickstartFileIgnore = [
+  "**/auth-origin.spec.ts",
   "**/quickstart.spec.ts",
 ];
 
@@ -87,7 +93,7 @@ const quickstartTestMatch = [
 const browserTestIgnore = [
   testPatterns.credentialsWithVault,
   testPatterns.identityProviders,
-  testPatterns.quickstart,
+  ...browserQuickstartFileIgnore,
   testPatterns.llmProxy,
 ];
 
@@ -191,6 +197,7 @@ export default defineConfig({
       testDir: "./tests",
       testMatch: uiTestMatch,
       testIgnore: browserTestIgnore,
+      grepInvert: /@quickstart/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,
@@ -203,6 +210,7 @@ export default defineConfig({
       testDir: "./tests",
       testMatch: uiTestMatch,
       testIgnore: browserTestIgnore,
+      grepInvert: /@quickstart/,
       use: {
         ...devices["Desktop Firefox"],
         storageState: adminAuthFile,
@@ -216,6 +224,7 @@ export default defineConfig({
       testDir: "./tests",
       testMatch: uiTestMatch,
       testIgnore: browserTestIgnore,
+      grepInvert: /@quickstart/,
       use: {
         ...devices["Desktop Safari"],
         storageState: adminAuthFile,

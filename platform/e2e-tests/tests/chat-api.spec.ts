@@ -1,8 +1,70 @@
 import { randomUUID } from "node:crypto";
+import type { APIRequestContext } from "@playwright/test";
 import { getE2eRequestUrl, UI_BASE_URL } from "../consts";
 import { expect, test } from "./api-fixtures";
 
 const NONEXISTENT_MESSAGE_ID = "1d6934ea-eb0d-452d-abf3-72122d140c49";
+
+type ConversationResponse = {
+  messages: Array<{
+    id: string;
+    role: string;
+    parts: Array<{ text?: string }>;
+  }>;
+  chatErrors: Array<{ error?: unknown }>;
+};
+type MakeApiRequest = (params: {
+  request: APIRequestContext;
+  method: "get";
+  urlSuffix: string;
+}) => Promise<{ json: () => Promise<ConversationResponse> }>;
+
+async function waitForConversationMessages({
+  request,
+  makeApiRequest,
+  conversationId,
+  minMessages = 1,
+  minChatErrors,
+}: {
+  request: APIRequestContext;
+  makeApiRequest: MakeApiRequest;
+  conversationId: string;
+  minMessages?: number;
+  minChatErrors?: number;
+}) {
+  const getLatestConversation = async () => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat/conversations/${conversationId}`,
+    });
+    return response.json();
+  };
+
+  await expect
+    .poll(
+      async () => {
+        const latestConversation = await getLatestConversation();
+        return latestConversation.messages.length;
+      },
+      { timeout: 15_000, intervals: [250, 500, 1_000] },
+    )
+    .toBeGreaterThanOrEqual(minMessages);
+
+  if (minChatErrors !== undefined) {
+    await expect
+      .poll(
+        async () => {
+          const latestConversation = await getLatestConversation();
+          return latestConversation.chatErrors.length;
+        },
+        { timeout: 15_000, intervals: [250, 500, 1_000] },
+      )
+      .toBeGreaterThanOrEqual(minChatErrors);
+  }
+
+  return getLatestConversation();
+}
 
 test.describe("Chat Messages Access Control", () => {
   test("requires authentication", async ({ playwright }) => {
@@ -99,16 +161,13 @@ test.describe("Chat message persistence on provider error", () => {
       // Consume the stream body to ensure the response is fully processed
       await chatResponse.text();
 
-      // 4. Wait for the async message persistence (fire-and-forget in onError handler)
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // 5. Verify the user message was persisted to the database
-      const getConvResponse = await makeApiRequest({
+      // 4. Verify the user message was persisted to the database
+      const updatedConversation = await waitForConversationMessages({
         request,
-        method: "get",
-        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+        makeApiRequest,
+        conversationId: conversation.id,
+        minChatErrors: 1,
       });
-      const updatedConversation = await getConvResponse.json();
 
       expect(updatedConversation.messages.length).toBeGreaterThan(0);
       expect(updatedConversation.chatErrors).toHaveLength(1);
@@ -118,10 +177,12 @@ test.describe("Chat message persistence on provider error", () => {
       });
 
       const userMessage = updatedConversation.messages.find(
-        (m: { role: string }) => m.role === "user",
+        (m) => m.role === "user",
       );
       expect(userMessage).toBeDefined();
-      expect(userMessage.id).toBeDefined();
+      if (!userMessage) {
+        throw new Error("Expected persisted user message");
+      }
 
       // Verify the message content matches what was sent
       // The API returns messages with parts flattened at the top level (not nested under content)
@@ -145,6 +206,10 @@ test.describe("Chat message persistence on provider error", () => {
       const editedMessage = editedConversation.messages.find(
         (m: { id: string }) => m.id === userMessage.id,
       );
+      expect(editedMessage).toBeDefined();
+      if (!editedMessage) {
+        throw new Error("Expected edited user message");
+      }
       expect(editedMessage.parts[0].text).toBe(
         "Edited message after provider error",
       );
@@ -218,19 +283,16 @@ test.describe("Chat message persistence on provider error", () => {
       expect(chatResponse.status()).toBe(200);
       await chatResponse.text();
 
-      // Wait for async persistence to complete
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
       // Verify: there should be exactly 1 user message (not duplicated)
-      const getConvResponse = await makeApiRequest({
+      const updatedConversation = await waitForConversationMessages({
         request,
-        method: "get",
-        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+        makeApiRequest,
+        conversationId: conversation.id,
+        minChatErrors: 1,
       });
-      const updatedConversation = await getConvResponse.json();
 
       const userMessages = updatedConversation.messages.filter(
-        (m: { role: string }) => m.role === "user",
+        (m) => m.role === "user",
       );
 
       // BUG: Without the fix, this may be 2 (or more) due to the race condition
@@ -301,16 +363,16 @@ test.describe("Chat message persistence on provider error", () => {
         },
       });
       await chat1.text();
-      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Check messages after first error
-      const afterFirst = await makeApiRequest({
+      const conv1 = await waitForConversationMessages({
         request,
-        method: "get",
-        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+        makeApiRequest,
+        conversationId: conversation.id,
+        minChatErrors: 1,
       });
-      const conv1 = await afterFirst.json();
       const firstCount = conv1.messages.length;
+      const firstErrorCount = conv1.chatErrors.length;
 
       // 2. "Retry" — send the same conversation with the same user message
       // (simulating the frontend resending after the error)
@@ -331,19 +393,17 @@ test.describe("Chat message persistence on provider error", () => {
         },
       });
       await chat2.text();
-      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Check messages after retry
-      const afterRetry = await makeApiRequest({
+      const conv2 = await waitForConversationMessages({
         request,
-        method: "get",
-        urlSuffix: `/api/chat/conversations/${conversation.id}`,
+        makeApiRequest,
+        conversationId: conversation.id,
+        minMessages: firstCount,
+        minChatErrors: firstErrorCount + 1,
       });
-      const conv2 = await afterRetry.json();
 
-      const userMessages = conv2.messages.filter(
-        (m: { role: string }) => m.role === "user",
-      );
+      const userMessages = conv2.messages.filter((m) => m.role === "user");
 
       // There should be exactly 1 user message across all retries
       expect(userMessages.length).toBe(1);

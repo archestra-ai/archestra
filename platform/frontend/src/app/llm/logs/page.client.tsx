@@ -2,7 +2,6 @@
 
 import {
   type archestraApiTypes,
-  DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@shared";
@@ -39,6 +38,11 @@ import {
 } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
+import {
+  buildAgentNameMap,
+  type EnrichedSessionRow,
+  enrichSessionRows,
+} from "./logs-table.utils";
 
 function formatDuration(start: Date | string, end: Date | string): string {
   const startDate = new Date(start);
@@ -75,46 +79,7 @@ function formatDuration(start: Date | string, end: Date | string): string {
   return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
-type SessionData =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
 type UniqueUser = archestraApiTypes.GetUniqueUserIdsResponses["200"][number];
-
-function getSessionDisplayData(session: SessionData) {
-  const isSingleInteraction =
-    session.sessionId === null && session.interactionId;
-  const conversationTitle = session.conversationTitle;
-  const isArchestraChat = conversationTitle && session.sessionId;
-  const claudeCodeTitle = session.claudeCodeTitle;
-  const isClaudeCodeSession = session.sessionSource === "claude_code";
-
-  let lastUserMessage = "";
-  if (session.lastInteractionRequest && session.lastInteractionType) {
-    try {
-      const mockInteraction = {
-        request: session.lastInteractionRequest,
-        response: {},
-        type: session.lastInteractionType,
-      };
-      const interaction = new DynamicInteraction(
-        mockInteraction as archestraApiTypes.GetInteractionResponses["200"],
-      );
-      lastUserMessage = interaction.getLastUserMessage();
-    } catch {
-      lastUserMessage = "";
-    }
-  }
-
-  const displayText = claudeCodeTitle || lastUserMessage;
-
-  return {
-    isSingleInteraction,
-    conversationTitle,
-    isArchestraChat,
-    isClaudeCodeSession,
-    lastUserMessage,
-    displayText,
-  };
-}
 
 export default function LlmProxyLogsPage({
   initialData,
@@ -232,7 +197,12 @@ function SessionsTable({
   const { data: uniqueUsers } = useUniqueUserIds();
 
   const sessions = sessionsResponse?.data ?? [];
+  const enrichedSessions = useMemo(
+    () => enrichSessionRows(sessions),
+    [sessions],
+  );
   const paginationMeta = sessionsResponse?.pagination;
+  const agentNameById = useMemo(() => buildAgentNameMap(agents), [agents]);
   const hasFilters =
     profileFilter !== "all" ||
     userFilter !== "all" ||
@@ -253,7 +223,7 @@ function SessionsTable({
     });
   }, [dateTimePicker, updateQueryParams]);
 
-  const columns: ColumnDef<SessionData>[] = useMemo(
+  const columns: ColumnDef<EnrichedSessionRow>[] = useMemo(
     () => [
       {
         id: "session",
@@ -266,7 +236,7 @@ function SessionsTable({
             isArchestraChat,
             isClaudeCodeSession,
             lastUserMessage,
-          } = getSessionDisplayData(session);
+          } = session;
 
           return (
             <div className="flex items-center gap-1 text-xs">
@@ -416,7 +386,9 @@ function SessionsTable({
         id: "details",
         header: "Details",
         cell: ({ row }) => {
-          const agent = agents?.find((a) => a.id === row.original.profileId);
+          const agentName = row.original.profileId
+            ? agentNameById.get(row.original.profileId)
+            : undefined;
           return (
             <div className="flex flex-wrap gap-1">
               <Badge variant="secondary" className="text-xs max-w-[200px]">
@@ -426,7 +398,7 @@ function SessionsTable({
                   <Layers className="h-3 w-3 mr-1 shrink-0" />
                 )}
                 <span className="truncate">
-                  {agent?.name ??
+                  {agentName ??
                     row.original.profileName ??
                     (row.original.source?.startsWith("knowledge:")
                       ? "Knowledge Base"
@@ -450,7 +422,7 @@ function SessionsTable({
         },
       },
     ],
-    [agents],
+    [agentNameById],
   );
 
   return (
@@ -533,7 +505,7 @@ function SessionsTable({
 
       <DataTable
         columns={columns}
-        data={sessions}
+        data={enrichedSessions}
         hideSelectedCount
         manualPagination
         pagination={{
@@ -548,7 +520,7 @@ function SessionsTable({
         filteredEmptyMessage="No LLM logs match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
         onRowClick={(session) => {
-          const { isSingleInteraction } = getSessionDisplayData(session);
+          const { isSingleInteraction } = session;
           if (isSingleInteraction) {
             router.push(`/llm/logs/${session.interactionId}`);
           } else if (session.sessionId) {

@@ -17,6 +17,12 @@ const {
   getUniqueUserIds,
 } = archestraApiSdk;
 
+export function getInteractionRefetchInterval(
+  refetchInterval: number | null = 3_000,
+): number | false {
+  return refetchInterval === null ? false : refetchInterval;
+}
+
 const isSessionId = (value: string): boolean => {
   // Either <UUID>, or scheduled-<UUID>
   const sessionIdRegex =
@@ -142,7 +148,8 @@ export function useInteraction({
       return response.data ?? null;
     },
     initialData,
-    ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
+    refetchInterval: getInteractionRefetchInterval(refetchInterval),
+    refetchIntervalInBackground: false,
   });
 }
 

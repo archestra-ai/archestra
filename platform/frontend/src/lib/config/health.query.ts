@@ -1,4 +1,5 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import * as archestraApiSdk from "@shared/api/sdk";
+import type * as archestraApiTypes from "@shared/api/types";
 import { useQuery } from "@tanstack/react-query";
 
 const { getHealth } = archestraApiSdk;

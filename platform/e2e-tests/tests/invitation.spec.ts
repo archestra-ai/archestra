@@ -23,7 +23,6 @@ async function openInviteDialog(
   });
 
   await clickButton({ page, options: { name: /invite user/i } });
-  await page.waitForTimeout(500);
 
   const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
   await expect(emailInput).toBeVisible();
@@ -40,7 +39,7 @@ test.describe("Invitation functionality", {
   // increase stability
   // Extended timeout for Firefox/WebKit CI environments where React hydration
   // and permission checks may take longer than the default 60s
-  test.describe.configure({ mode: "serial", retries: 4, timeout: 120_000 });
+  test.describe.configure({ mode: "serial", retries: 4, timeout: 180_000 });
 
   test("shows error message when email is invalid", async ({
     page,
@@ -101,9 +100,6 @@ test.describe("Invitation functionality", {
       // Navigate to the invitation link
       await newUserPage.goto(invitationLink);
 
-      // Wait for the sign-up page to load
-      await newUserPage.waitForTimeout(2000);
-
       // Verify we're on the invitation sign-up page
       await expect(
         newUserPage.getByText(/You've been invited to join the .* workspace/i),
@@ -157,14 +153,19 @@ test.describe("Invitation functionality", {
       // PART 3: Verify the new user is listed in members (back to admin context)
       // Go back to the admin page and verify the new member appears
       await goToPage(page, "/settings/users");
-      await page.waitForTimeout(1000);
 
       // Look for the new user in the members list
       await expect(page.getByText(TEST_EMAIL)).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText(uniqueName)).toBeVisible({ timeout: 15_000 });
     } finally {
       // Clean up the new user context
-      await newUserContext.close();
+      // Wrap in try/catch to prevent ENOENT from trace artifact writing
+      // from propagating and causing test timeout
+      try {
+        await newUserContext.close();
+      } catch {
+        // Ignore cleanup errors (ENOENT from trace/video artifacts)
+      }
     }
   });
 });

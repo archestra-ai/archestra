@@ -2,18 +2,34 @@
 
 import DOMPurify from "dompurify";
 import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
-import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const MermaidDiagram = dynamic(
+  () =>
+    import("@/components/mermaid-diagram").then((mod) => mod.MermaidDiagram),
+  { ssr: false },
+);
+
+const CodeBlock = dynamic(
+  () =>
+    import("@/components/ai-elements/code-block").then((mod) => mod.CodeBlock),
+  { ssr: false },
+);
+
+const CodeBlockCopyButton = dynamic(
+  () =>
+    import("@/components/ai-elements/code-block").then(
+      (mod) => mod.CodeBlockCopyButton,
+    ),
+  { ssr: false },
+);
 
 interface ConversationArtifactPanelProps {
   artifact?: string | null;

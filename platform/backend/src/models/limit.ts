@@ -384,7 +384,7 @@ class LimitModel {
 
   static async cleanupLimitsIfNeeded(organizationId: string): Promise<void> {
     try {
-      logger.info(
+      logger.debug(
         `[LimitsCleanup] Starting cleanup check for organization: ${organizationId}`,
       );
 
@@ -402,11 +402,11 @@ class LimitModel {
           `[LimitsCleanup] Organization not found: ${organizationId}, using default interval: ${cleanupInterval}`,
         );
       } else if (!organization.limitCleanupInterval) {
-        logger.info(
+        logger.debug(
           `[LimitsCleanup] No cleanup interval set for organization: ${organizationId}, using default: ${cleanupInterval}`,
         );
       } else {
-        logger.info(
+        logger.debug(
           `[LimitsCleanup] Using cleanup interval: ${cleanupInterval} for organization: ${organizationId}`,
         );
       }
@@ -439,7 +439,7 @@ class LimitModel {
           return;
       }
 
-      logger.info(
+      logger.debug(
         `[LimitsCleanup] Calculated cutoff time: ${cutoffTime.toISOString()} (interval: ${interval})`,
       );
 
@@ -449,12 +449,12 @@ class LimitModel {
         cutoffTime,
       );
 
-      logger.info(
+      logger.debug(
         `[LimitsCleanup] Found ${limitsToCleanup.length} limits that need cleanup for organization: ${organizationId}`,
       );
 
       if (limitsToCleanup.length > 0) {
-        logger.info(
+        logger.debug(
           `[LimitsCleanup] Limits to cleanup: ${limitsToCleanup.map((l) => `${l.id}(${l.limitType}:${l.lastCleanup ? l.lastCleanup.toISOString() : "never"})`).join(", ")}`,
         );
       }
@@ -462,22 +462,22 @@ class LimitModel {
       // Reset current usage and update last cleanup for eligible limits
       if (limitsToCleanup.length > 0) {
         for (const limit of limitsToCleanup) {
-          logger.info(
+          logger.debug(
             `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
           );
 
           await LimitModel.resetLimitUsage(limit.id);
 
-          logger.info(
+          logger.debug(
             `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset model usage to 0 and set lastCleanup to ${now.toISOString()}`,
           );
         }
 
-        logger.info(
+        logger.debug(
           `[LimitsCleanup] Completed cleanup of ${limitsToCleanup.length} limits for organization: ${organizationId}`,
         );
       } else {
-        logger.info(
+        logger.debug(
           `[LimitsCleanup] No limits need cleanup for organization: ${organizationId}`,
         );
       }
@@ -504,48 +504,18 @@ export class LimitValidationService {
     agentId: string,
   ): Promise<null | [string, string]> {
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
 
       // Get agent's teams to check team and organization limits
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-      logger.info(
+      logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
 
-      // Get organization ID for cleanup (either from teams or fallback)
-      let organizationId: string | null = null;
-      if (agentTeamIds.length > 0) {
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-        if (teams.length > 0 && teams[0].organizationId) {
-          organizationId = teams[0].organizationId;
-        }
-      } else {
-        // If agent has no teams, check if there are any organization limits to apply
-        const existingOrgLimits = await db
-          .select({ entityId: schema.limitsTable.entityId })
-          .from(schema.limitsTable)
-          .where(sql`${schema.limitsTable.entityType} = 'organization'`)
-          .limit(1);
-        if (existingOrgLimits.length > 0) {
-          organizationId = existingOrgLimits[0].entityId;
-        }
-      }
-
-      // Run cleanup if we have an organization ID
-      if (organizationId) {
-        logger.info(
-          `[LimitValidation] Running cleanup for organization: ${organizationId}`,
-        );
-        await LimitModel.cleanupLimitsIfNeeded(organizationId);
-      }
-
       // Check agent-level limits first (highest priority)
-      logger.info(
+      logger.debug(
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
       const agentLimitViolation =
@@ -556,23 +526,23 @@ export class LimitValidationService {
         );
         return agentLimitViolation;
       }
-      logger.info(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
+      logger.debug(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
 
       // Check team-level limits
       if (agentTeamIds.length > 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking team-level limits for agent: ${agentId}`,
         );
         const teams = await db
           .select()
           .from(schema.teamsTable)
           .where(inArray(schema.teamsTable.id, agentTeamIds));
-        logger.info(
+        logger.debug(
           `[LimitValidation] Found ${teams.length} teams for agent ${agentId}: ${teams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
         );
 
         for (const team of teams) {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
           const teamLimitViolation =
@@ -583,14 +553,14 @@ export class LimitValidationService {
             );
             return teamLimitViolation;
           }
-          logger.info(
+          logger.debug(
             `[LimitValidation] Team-level limits OK for team: ${team.id}`,
           );
         }
 
         // Check organization-level limits
         if (teams.length > 0 && teams[0].organizationId) {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Checking organization-level limits for org: ${teams[0].organizationId}`,
           );
           const orgLimitViolation =
@@ -604,12 +574,12 @@ export class LimitValidationService {
             );
             return orgLimitViolation;
           }
-          logger.info(
+          logger.debug(
             `[LimitValidation] Organization-level limits OK for org: ${teams[0].organizationId}`,
           );
         }
       } else {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Agent ${agentId} has no teams, checking fallback organization limits`,
         );
         // If agent has no teams, check if there are any organization limits to apply
@@ -618,12 +588,12 @@ export class LimitValidationService {
           .from(schema.limitsTable)
           .where(sql`${schema.limitsTable.entityType} = 'organization'`)
           .limit(1);
-        logger.info(
+        logger.debug(
           `[LimitValidation] Found ${existingOrgLimits.length} fallback organization limits`,
         );
 
         if (existingOrgLimits.length > 0) {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Checking fallback organization limit for org: ${existingOrgLimits[0].entityId}`,
           );
           const orgLimitViolation =
@@ -637,12 +607,12 @@ export class LimitValidationService {
             );
             return orgLimitViolation;
           }
-          logger.info(
+          logger.debug(
             `[LimitValidation] Fallback organization-level limits OK for org: ${existingOrgLimits[0].entityId}`,
           );
         }
       }
-      logger.info(
+      logger.debug(
         `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
       );
       return null; // No limits exceeded
@@ -663,7 +633,7 @@ export class LimitValidationService {
     entityId: string,
   ): Promise<null | [string, string]> {
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
       );
       const limits = await LimitModel.findLimitsForValidation(
@@ -672,19 +642,19 @@ export class LimitValidationService {
         "token_cost",
       );
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] Found ${limits.length} token_cost limits for ${entityType} ${entityId}`,
       );
 
       if (limits.length === 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] No token_cost limits found for ${entityType} ${entityId} - allowing`,
         );
         return null;
       }
 
       for (const limit of limits) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
 
@@ -800,13 +770,13 @@ ${contentMessage}`;
 
           return [refusalMessage, contentMessage];
         } else {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
           );
         }
       }
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] All ${limits.length} limits OK for ${entityType} ${entityId}`,
       );
       return null; // No limits exceeded for this entity

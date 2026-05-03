@@ -19,6 +19,7 @@ export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 export const TaskTypeSchema = z.enum([
   "connector_sync",
   "batch_embedding",
+  "cleanup_due_limits",
   "check_due_connectors",
   "check_due_schedule_triggers",
   "schedule_trigger_run_execute",

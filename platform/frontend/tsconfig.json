@@ -27,6 +27,12 @@
       }
     ],
     "paths": {
+      "@shared/api/sdk": [
+        "../shared/hey-api/clients/api/sdk.gen.ts"
+      ],
+      "@shared/api/types": [
+        "../shared/hey-api/clients/api/types.gen.ts"
+      ],
       "@/*": [
         "./src/*"
       ]

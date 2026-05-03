@@ -15,6 +15,20 @@ const {
   getCostSavingsStatistics,
 } = archestraApiSdk;
 
+export function getStatisticsRefetchInterval(
+  timeframe: StatisticsTimeFrame,
+  now = Date.now(),
+): number | false {
+  if (timeframe.startsWith("custom:")) {
+    const [, endTime] = timeframe.slice("custom:".length).split("_");
+    const endTimestamp = Date.parse(endTime ?? "");
+    if (!Number.isNaN(endTimestamp) && endTimestamp < now) {
+      return false;
+    }
+  }
+  return 30_000;
+}
+
 export function useTeamStatistics({
   timeframe = "24h",
   initialData,
@@ -31,7 +45,8 @@ export function useTeamStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: getStatisticsRefetchInterval(timeframe),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -51,7 +66,8 @@ export function useProfileStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: getStatisticsRefetchInterval(timeframe),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -71,7 +87,8 @@ export function useModelStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: getStatisticsRefetchInterval(timeframe),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -91,7 +108,8 @@ export function useOverviewStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: getStatisticsRefetchInterval(timeframe),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -111,6 +129,7 @@ export function useCostSavingsStatistics({
       return response.data;
     },
     initialData,
-    refetchInterval: 30_000, // Refresh every 30 seconds
+    refetchInterval: getStatisticsRefetchInterval(timeframe),
+    refetchIntervalInBackground: false,
   });
 }

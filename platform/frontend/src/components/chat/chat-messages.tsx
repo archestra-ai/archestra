@@ -16,6 +16,7 @@ import {
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Fragment,
@@ -98,7 +99,7 @@ import { EditableUserMessage } from "./editable-user-message";
 import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
-import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
+import type { McpToolOutput } from "./mcp-app-container";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 import {
   findScrollContainer,
@@ -115,6 +116,11 @@ import {
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
+
+const McpAppSection = dynamic(
+  () => import("./mcp-app-container").then((mod) => mod.McpAppSection),
+  { ssr: false },
+);
 
 interface ChatMessagesProps {
   conversationId: string | undefined;

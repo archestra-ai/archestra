@@ -22,6 +22,10 @@ class OrganizationModel {
     return organization || null;
   }
 
+  static async findAll(): Promise<Organization[]> {
+    return db.select().from(schema.organizationsTable);
+  }
+
   /**
    * Get or create the default organization
    */

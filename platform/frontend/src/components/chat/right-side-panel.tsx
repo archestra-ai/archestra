@@ -1,10 +1,18 @@
 "use client";
 
 import { GripVertical } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserPanel } from "@/components/chat/browser-panel";
-import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { cn } from "@/lib/utils";
+
+const ConversationArtifactPanel = dynamic(
+  () =>
+    import("@/components/chat/conversation-artifact").then(
+      (mod) => mod.ConversationArtifactPanel,
+    ),
+  { ssr: false },
+);
 
 interface RightSidePanelProps {
   // Artifact props

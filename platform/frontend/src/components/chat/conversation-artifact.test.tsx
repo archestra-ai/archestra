@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,8 @@ vi.mock("@/components/mermaid-diagram", () => ({
 
 import { ConversationArtifactPanel } from "./conversation-artifact";
 
+const LAZY_RENDER_TIMEOUT_MS = 15_000;
+
 function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -18,7 +20,7 @@ function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
 }
 
 describe("ConversationArtifactPanel", () => {
-  it("renders a copy button inside fenced code blocks", () => {
+  it("renders a copy button inside fenced code blocks", async () => {
     render(
       <ConversationArtifactPanel
         artifact={"```js\nconst x = 1;\n```"}
@@ -29,6 +31,16 @@ describe("ConversationArtifactPanel", () => {
 
     // The panel header already has a "copy entire artifact" button; the new
     // per-block copy button means at least 2 buttons share this name.
+    await waitFor(
+      () => {
+        expect(
+          screen.getAllByRole("button", { name: /copy to clipboard/i }).length,
+        ).toBeGreaterThanOrEqual(2);
+      },
+      {
+        timeout: LAZY_RENDER_TIMEOUT_MS,
+      },
+    );
     const copyButtons = screen.getAllByRole("button", {
       name: /copy to clipboard/i,
     });
@@ -49,6 +61,16 @@ describe("ConversationArtifactPanel", () => {
     );
 
     // Panel-header copy comes first in DOM order; the code-block copy is last.
+    await waitFor(
+      () => {
+        expect(
+          screen.getAllByRole("button", { name: /copy to clipboard/i }).length,
+        ).toBeGreaterThanOrEqual(2);
+      },
+      {
+        timeout: LAZY_RENDER_TIMEOUT_MS,
+      },
+    );
     const copyButtons = screen.getAllByRole("button", {
       name: /copy to clipboard/i,
     });
@@ -57,7 +79,7 @@ describe("ConversationArtifactPanel", () => {
     expect(writeText).toHaveBeenCalledWith("const x = 1;");
   });
 
-  it("still routes mermaid code blocks to the mermaid renderer", () => {
+  it("still routes mermaid code blocks to the mermaid renderer", async () => {
     render(
       <ConversationArtifactPanel
         artifact={"```mermaid\ngraph TD; A-->B;\n```"}
@@ -66,6 +88,6 @@ describe("ConversationArtifactPanel", () => {
       />,
     );
 
-    expect(screen.getByTestId("mermaid-diagram")).toBeInTheDocument();
+    expect(await screen.findByTestId("mermaid-diagram")).toBeInTheDocument();
   });
 });

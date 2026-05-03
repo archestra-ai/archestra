@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -29,9 +29,7 @@ import {
 } from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
-
-type McpToolCallData =
-  archestraApiTypes.GetMcpToolCallsResponses["200"]["data"][number];
+import { enrichMcpToolCallRows } from "./logs-table.utils";
 
 function SortIcon({
   isSorted,
@@ -198,9 +196,18 @@ function McpToolCallsTable({
   }, [mcpServers]);
 
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
+  const enrichedMcpToolCalls = useMemo(
+    () =>
+      enrichMcpToolCallRows({
+        toolCalls: mcpToolCalls,
+        agents,
+        serverNameToCatalogName,
+      }),
+    [mcpToolCalls, agents, serverNameToCatalogName],
+  );
   const paginationMeta = mcpToolCallsResponse?.pagination;
 
-  const columns: ColumnDef<McpToolCallData>[] = [
+  const columns: ColumnDef<(typeof enrichedMcpToolCalls)[number]>[] = [
     {
       id: "createdAt",
       header: ({ column }) => {
@@ -243,26 +250,11 @@ function McpToolCallsTable({
     },
     {
       id: "agent",
-      accessorFn: (row) => {
-        const agent = agents?.find((a) => a.id === row.agentId);
-        return (
-          agent?.name ??
-          (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
-        );
-      },
+      accessorFn: (row) => row.agentName,
       header: "MCP Gateway",
       cell: ({ row }) => {
-        const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
-          <TruncatedText
-            message={
-              agent?.name ??
-              (row.original.agentId === null
-                ? "Deleted MCP Gateway"
-                : "Unknown")
-            }
-            maxLength={30}
-          />
+          <TruncatedText message={row.original.agentName} maxLength={30} />
         );
       },
     },
@@ -299,7 +291,7 @@ function McpToolCallsTable({
         if (!rawName) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }
-        const displayName = serverNameToCatalogName.get(rawName) ?? rawName;
+        const displayName = row.original.serverDisplayName ?? rawName;
         return (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -321,26 +313,25 @@ function McpToolCallsTable({
       id: "toolName",
       header: "Tool Name",
       cell: ({ row }) => {
-        const fullName = row.original.toolCall?.name;
-        if (!fullName) {
+        if (!row.original.toolDisplayName) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }
-        const { toolName } = parseFullToolName(fullName);
-        return <code className="text-xs">{toolName || fullName}</code>;
+        return <code className="text-xs">{row.original.toolDisplayName}</code>;
       },
     },
     {
       id: "arguments",
       header: "Arguments",
       cell: ({ row }) => {
-        const args = row.original.toolCall?.arguments;
-        if (!args) {
+        if (!row.original.argumentsText) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }
-        const argsString = JSON.stringify(args);
         return (
           <div className="text-xs font-mono">
-            <TruncatedText message={argsString} maxLength={60} />
+            <TruncatedText
+              message={row.original.argumentsText}
+              maxLength={60}
+            />
           </div>
         );
       },
@@ -449,7 +440,7 @@ function McpToolCallsTable({
 
       <DataTable
         columns={columns}
-        data={mcpToolCalls}
+        data={enrichedMcpToolCalls}
         hideSelectedCount
         pagination={
           paginationMeta

@@ -296,7 +296,10 @@ function ServerCard({
   userIsMcpServerAdmin: boolean;
 }) {
   return (
-    <Card className="flex flex-col">
+    <Card
+      className="flex flex-col"
+      data-testid={`${E2eTestId.McpServerCard}-${server.name}`}
+    >
       <CardHeader>
         <div className="flex items-start">
           <div className="flex items-start gap-2 flex-1 min-w-0">

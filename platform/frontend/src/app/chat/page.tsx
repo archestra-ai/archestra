@@ -16,6 +16,7 @@ import {
   Share2,
   Users,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -39,7 +40,6 @@ import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
@@ -141,6 +141,14 @@ import {
 } from "./chat-initial-state";
 import ArchestraPromptInput from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
+
+const ConversationArtifactPanel = dynamic(
+  () =>
+    import("@/components/chat/conversation-artifact").then(
+      (mod) => mod.ConversationArtifactPanel,
+    ),
+  { ssr: false },
+);
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 

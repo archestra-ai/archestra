@@ -39,6 +39,7 @@ import {
   useProfileStatistics,
   useTeamStatistics,
 } from "@/lib/statistics.query";
+import { buildSeriesChartData } from "@/lib/statistics-chart.utils";
 
 /**
  * Reusable tooltip component for cost charts.
@@ -230,24 +231,12 @@ export default function StatisticsPage() {
   const teamChartData = useMemo(() => {
     if (teamStatistics.length === 0) return [];
 
-    const allTimestamps = [
-      ...new Set(
-        teamStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
-      ),
-    ].sort();
-
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      teamStatistics.slice(0, 5).forEach((team) => {
-        const point = team.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[team.teamId] = point ? point.value : 0;
-      });
-      return dataPoint;
+    return buildSeriesChartData({
+      series: teamStatistics.slice(0, 5).map((team) => ({
+        key: team.teamId,
+        timeSeries: team.timeSeries,
+      })),
+      formatTimestamp,
     });
   }, [teamStatistics, formatTimestamp]);
 
@@ -276,24 +265,12 @@ export default function StatisticsPage() {
   const agentChartData = useMemo(() => {
     if (chatAgentStatistics.length === 0) return [];
 
-    const allTimestamps = [
-      ...new Set(
-        chatAgentStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
-      ),
-    ].sort();
-
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      chatAgentStatistics.slice(0, 5).forEach((agent) => {
-        const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[agent.agentId] = point ? point.value : 0;
-      });
-      return dataPoint;
+    return buildSeriesChartData({
+      series: chatAgentStatistics.slice(0, 5).map((agent) => ({
+        key: agent.agentId,
+        timeSeries: agent.timeSeries,
+      })),
+      formatTimestamp,
     });
   }, [chatAgentStatistics, formatTimestamp]);
 
@@ -312,24 +289,12 @@ export default function StatisticsPage() {
   const llmProxyChartData = useMemo(() => {
     if (llmProxyStatistics.length === 0) return [];
 
-    const allTimestamps = [
-      ...new Set(
-        llmProxyStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
-      ),
-    ].sort();
-
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      llmProxyStatistics.slice(0, 5).forEach((agent) => {
-        const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[agent.agentId] = point ? point.value : 0;
-      });
-      return dataPoint;
+    return buildSeriesChartData({
+      series: llmProxyStatistics.slice(0, 5).map((agent) => ({
+        key: agent.agentId,
+        timeSeries: agent.timeSeries,
+      })),
+      formatTimestamp,
     });
   }, [llmProxyStatistics, formatTimestamp]);
 
@@ -348,24 +313,12 @@ export default function StatisticsPage() {
   const modelChartData = useMemo(() => {
     if (modelStatistics.length === 0) return [];
 
-    const allTimestamps = [
-      ...new Set(
-        modelStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
-      ),
-    ].sort();
-
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      modelStatistics.slice(0, 5).forEach((model) => {
-        const point = model.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[model.model] = point ? point.value : 0;
-      });
-      return dataPoint;
+    return buildSeriesChartData({
+      series: modelStatistics.slice(0, 5).map((model) => ({
+        key: model.model,
+        timeSeries: model.timeSeries,
+      })),
+      formatTimestamp,
     });
   }, [modelStatistics, formatTimestamp]);
 

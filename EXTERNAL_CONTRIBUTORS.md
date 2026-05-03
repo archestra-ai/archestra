@@ -194,3 +194,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @J-0524
 - @Jsapw-878-311
 - @colorbank
+- @rinkydevi

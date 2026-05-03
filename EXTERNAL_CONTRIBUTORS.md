@@ -192,3 +192,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @void0x14
 - @Enejivk
 - @J-0524
+- @Jsapw-878-311
+- @colorbank
+- @rinkydevi
+- @ShubhamOulkar
+- @krishnanpandya007
+- @avasis-ai

@@ -9,7 +9,7 @@ const {
   },
 } = config;
 
-interface K8sClients {
+export interface K8sClients {
   kubeConfig: k8s.KubeConfig;
   coreApi: k8s.CoreV1Api;
   appsApi: k8s.AppsV1Api;

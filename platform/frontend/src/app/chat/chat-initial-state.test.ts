@@ -3,6 +3,7 @@ import {
   buildCreateConversationInput,
   getProviderForModelId,
   resolveChatModelState,
+  resolveInitialAgentSelection,
   resolveInitialAgentState,
   resolvePreferredModelForProvider,
   shouldResetInitialChatState,
@@ -55,6 +56,75 @@ describe("resolveInitialAgentState", () => {
       apiKeyId: "key-2",
       modelSource: "agent",
     });
+  });
+});
+
+describe("resolveInitialAgentSelection", () => {
+  const agents = [
+    { id: "first-agent" },
+    { id: "member-default" },
+    { id: "saved-agent" },
+    { id: "org-default" },
+  ];
+
+  test("prefers the organization default over saved and member defaults", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        organizationDefaultAgentId: "org-default",
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      })?.id,
+    ).toBe("org-default");
+  });
+
+  test("uses saved agent before member default when the picker is available", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        organizationDefaultAgentId: null,
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      })?.id,
+    ).toBe("saved-agent");
+  });
+
+  test("ignores saved agent when the picker is hidden", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        organizationDefaultAgentId: null,
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: false,
+      })?.id,
+    ).toBe("member-default");
+  });
+
+  test("returns null when no agents are available", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents: [],
+        organizationDefaultAgentId: "org-default",
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      }),
+    ).toBeNull();
+  });
+
+  test("falls back to the first agent when no defaults match", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        organizationDefaultAgentId: null,
+        savedAgentId: "missing-saved-agent",
+        memberDefaultAgentId: "missing-member-default",
+        canUseSavedAgent: true,
+      })?.id,
+    ).toBe("first-agent");
   });
 });
 

@@ -1393,7 +1393,6 @@ export function InternalMCPCatalog({
           closeDialog("reinstall");
           setCatalogItemForReinstall(null);
         }}
-        isRemoteServer={catalogItemForReinstall?.serverType === "remote"}
         onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
         isReinstalling={reinstallMutation.isPending}

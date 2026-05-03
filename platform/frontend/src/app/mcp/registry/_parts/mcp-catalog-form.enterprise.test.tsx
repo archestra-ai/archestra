@@ -100,15 +100,11 @@ describe("McpCatalogForm enterprise gating", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.getByRole("radio", {
-        name: "Identity Provider Token Exchange",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: /IdP token exchange/ }),
+    ).toHaveAttribute("aria-disabled", "true");
     expect(
-      screen.getByRole("radio", {
-        name: "Identity Provider JWT / JWKS",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: /IdP signed JWT/ }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("shows enterprise-managed credentials when the enterprise license is enabled", async () => {
@@ -126,12 +122,8 @@ describe("McpCatalogForm enterprise gating", () => {
 
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
-    expect(
-      screen.getByText("Identity Provider Token Exchange"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Identity Provider JWT / JWKS"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("IdP token exchange")).toBeInTheDocument();
+    expect(screen.getByText("IdP signed JWT")).toBeInTheDocument();
   });
 
   it("renders enterprise auth options as disabled when no OIDC identity providers are configured", () => {
@@ -140,15 +132,11 @@ describe("McpCatalogForm enterprise gating", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.getByRole("radio", {
-        name: "Identity Provider Token Exchange",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: /IdP token exchange/ }),
+    ).toHaveAttribute("aria-disabled", "true");
     expect(
-      screen.getByRole("radio", {
-        name: "Identity Provider JWT / JWKS",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: /IdP signed JWT/ }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("resets an existing enterprise auth selection to none when OIDC providers become unavailable", () => {
@@ -195,10 +183,8 @@ describe("McpCatalogForm enterprise gating", () => {
     );
 
     expect(
-      screen.getByRole("radio", {
-        name: "Identity Provider Token Exchange",
-      }),
-    ).toBeChecked();
+      screen.getByRole("button", { name: /IdP token exchange/ }),
+    ).toHaveAttribute("aria-pressed", "true");
 
     useIdentityProvidersMock.mockReturnValue({ data: [] });
 
@@ -210,11 +196,10 @@ describe("McpCatalogForm enterprise gating", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("radio", {
-        name: /None \(e\.g\. static API key via environment variables\)/,
-      }),
-    ).toBeChecked();
+    expect(screen.getByRole("button", { name: /^None/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("disables browser autofill for MCP config forms and secret fields", () => {
@@ -268,7 +253,7 @@ describe("McpCatalogForm enterprise gating", () => {
 
     expect(
       screen.queryByText(
-        "Organize servers and drive automatic tool assignment",
+        /Organize servers and drive automatic tool assignment/,
       ),
     ).not.toBeInTheDocument();
   });
@@ -285,7 +270,7 @@ describe("McpCatalogForm enterprise gating", () => {
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
     expect(
-      screen.getByText("Organize servers and drive automatic tool assignment"),
+      screen.getByText(/Organize servers and drive automatic tool assignment/),
     ).toBeInTheDocument();
   });
 });

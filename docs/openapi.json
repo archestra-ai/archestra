@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.28"
+    "version": "1.2.31"
   },
   "components": {
     "schemas": {
@@ -16813,6 +16813,9 @@
             "type": "number"
           },
           "headerName": {
+            "type": "string"
+          },
+          "valuePrefix": {
             "type": "string"
           }
         },
@@ -34397,6 +34400,9 @@
           },
           "headerName": {
             "type": "string"
+          },
+          "valuePrefix": {
+            "type": "string"
           }
         },
         "required": [
@@ -40575,6 +40581,701 @@
         "x-required-permissions": {
           "kind": "dynamic",
           "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agents/{id}/clone": {
+      "post": {
+        "operationId": "cloneAgent",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Clone an agent and all its associations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "isPersonalGateway": {
+                      "type": "boolean"
+                    },
+                    "considerContextUntrusted": {
+                      "type": "boolean"
+                    },
+                    "agentType": {
+                      "type": "string",
+                      "enum": [
+                        "profile",
+                        "mcp_gateway",
+                        "llm_proxy",
+                        "agent"
+                      ]
+                    },
+                    "systemPrompt": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "incomingEmailEnabled": {
+                      "type": "boolean"
+                    },
+                    "incomingEmailSecurityMode": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "internal",
+                        "public"
+                      ]
+                    },
+                    "incomingEmailAllowedDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "llmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "llmModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "passthroughHeaders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "toolExposureMode": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "search_and_run_only"
+                      ]
+                    },
+                    "toolAssignmentMode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "manual"
+                      ]
+                    },
+                    "builtInAgentConfig": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "policy-configuration-subagent"
+                              ]
+                            },
+                            "autoConfigureOnToolDiscovery": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "autoConfigureOnToolDiscovery"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-main-agent"
+                              ]
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 20
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "maxRounds"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "dual-llm-quarantine-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "builtIn": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "agentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "catalogId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "delegateToAgentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "parameters": {
+                            "anyOf": [
+                              {
+                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "meta": {
+                            "nullable": true,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "array",
+                                "items": {}
+                              }
+                            ]
+                          },
+                          "policiesAutoConfiguredAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguringStartedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "policiesAutoConfiguredReasoning": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "policiesAutoConfiguredModel": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "agentId",
+                          "catalogId",
+                          "delegateToAgentId",
+                          "name",
+                          "description",
+                          "meta",
+                          "policiesAutoConfiguredAt",
+                          "policiesAutoConfiguringStartedAt",
+                          "policiesAutoConfiguredReasoning",
+                          "policiesAutoConfiguredModel",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "knowledgeBaseIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "suggestedPrompts": {
+                      "default": [],
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "summaryTitle": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 50
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 5000
+                          }
+                        },
+                        "required": [
+                          "summaryTitle",
+                          "prompt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "authorId",
+                    "scope",
+                    "name",
+                    "slug",
+                    "isDefault",
+                    "isPersonalGateway",
+                    "considerContextUntrusted",
+                    "agentType",
+                    "systemPrompt",
+                    "description",
+                    "icon",
+                    "incomingEmailEnabled",
+                    "incomingEmailSecurityMode",
+                    "incomingEmailAllowedDomain",
+                    "llmApiKeyId",
+                    "llmModel",
+                    "identityProviderId",
+                    "passthroughHeaders",
+                    "toolExposureMode",
+                    "toolAssignmentMode",
+                    "builtInAgentConfig",
+                    "builtIn",
+                    "createdAt",
+                    "updatedAt",
+                    "tools",
+                    "teams",
+                    "labels",
+                    "knowledgeBaseIds",
+                    "connectorIds",
+                    "suggestedPrompts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
           "permissions": []
         }
       }
@@ -95851,6 +96552,9 @@
                           "builtin"
                         ]
                       },
+                      "multitenant": {
+                        "type": "boolean"
+                      },
                       "serverUrl": {
                         "nullable": true,
                         "type": "string"
@@ -96339,6 +97043,7 @@
                       "authDescription",
                       "authFields",
                       "serverType",
+                      "multitenant",
                       "serverUrl",
                       "docsUrl",
                       "clientSecretId",
@@ -96685,6 +97390,9 @@
                       "remote",
                       "builtin"
                     ]
+                  },
+                  "multitenant": {
+                    "type": "boolean"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -97219,6 +97927,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -97707,6 +98418,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -98069,6 +98781,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -98557,6 +99272,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -99439,6 +100155,9 @@
                         "builtin"
                       ]
                     },
+                    "multitenant": {
+                      "type": "boolean"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -99927,6 +100646,7 @@
                     "authDescription",
                     "authFields",
                     "serverType",
+                    "multitenant",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -104551,7 +105271,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List all knowledge bases for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -104688,6 +105408,12 @@
                                       "type": "string",
                                       "enum": [
                                         "dropbox"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "onedrive"
                                       ]
                                     },
                                     {
@@ -105058,7 +105784,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Create a new knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create knowledge bases and connectors",
+        "description": "Create a new knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -105373,7 +106099,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Get a knowledge base by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Get a knowledge base by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -105674,7 +106400,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Update a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Update a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -105995,7 +106721,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -106269,7 +106995,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Check the health of a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Check the health of a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -106550,7 +107276,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List all connectors for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -106645,6 +107371,12 @@
                   "type": "string",
                   "enum": [
                     "dropbox"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "onedrive"
                   ]
                 },
                 {
@@ -106773,6 +107505,12 @@
                                 "type": "string",
                                 "enum": [
                                   "dropbox"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "onedrive"
                                 ]
                               },
                               {
@@ -107171,6 +107909,54 @@
                                 },
                                 "required": [
                                   "type"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "onedrive"
+                                    ]
+                                  },
+                                  "tenantId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "userIds": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "folderId": {
+                                    "type": "string"
+                                  },
+                                  "recursive": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "batchSize": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "tenantId",
+                                  "userIds"
                                 ],
                                 "additionalProperties": false
                               },
@@ -107725,7 +108511,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Create a new connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create knowledge bases and connectors",
+        "description": "Create a new connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:create`: Create Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -107808,6 +108594,12 @@
                         "type": "string",
                         "enum": [
                           "dropbox"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "onedrive"
                         ]
                       },
                       {
@@ -108218,6 +109010,53 @@
                           "type": {
                             "type": "string",
                             "enum": [
+                              "onedrive"
+                            ]
+                          },
+                          "tenantId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "userIds": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderId": {
+                            "type": "string"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "tenantId",
+                          "userIds"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
                               "asana"
                             ]
                           },
@@ -108475,6 +109314,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "onedrive"
                           ]
                         },
                         {
@@ -108873,6 +109718,54 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "onedrive"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "userIds": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "userIds"
                           ],
                           "additionalProperties": false
                         },
@@ -109357,7 +110250,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a connector by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Get a connector by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -109458,6 +110351,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "onedrive"
                           ]
                         },
                         {
@@ -109856,6 +110755,54 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "onedrive"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "userIds": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "userIds"
                           ],
                           "additionalProperties": false
                         },
@@ -110342,7 +111289,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Update a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Update a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -110753,6 +111700,53 @@
                           "type": {
                             "type": "string",
                             "enum": [
+                              "onedrive"
+                            ]
+                          },
+                          "tenantId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "userIds": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "folderId": {
+                            "type": "string"
+                          },
+                          "recursive": {
+                            "type": "boolean"
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "batchSize": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "tenantId",
+                          "userIds"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
                               "asana"
                             ]
                           },
@@ -111008,6 +112002,12 @@
                           "type": "string",
                           "enum": [
                             "dropbox"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "onedrive"
                           ]
                         },
                         {
@@ -111406,6 +112406,54 @@
                           },
                           "required": [
                             "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "onedrive"
+                              ]
+                            },
+                            "tenantId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "userIds": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "folderId": {
+                              "type": "string"
+                            },
+                            "recursive": {
+                              "type": "boolean"
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "batchSize": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "tenantId",
+                            "userIds"
                           ],
                           "additionalProperties": false
                         },
@@ -111888,7 +112936,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete knowledge bases and connectors",
+        "description": "Delete a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112162,7 +113210,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually trigger a connector sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Manually trigger a connector sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112440,7 +113488,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112718,7 +113766,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Test a connector connection\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Test a connector connection\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -112995,7 +114043,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Assign a connector to one or more knowledge bases\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Assign a connector to one or more knowledge bases\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -113289,7 +114337,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List knowledge bases assigned to a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List knowledge bases assigned to a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -113604,7 +114652,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Unassign a connector from a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify knowledge bases and connectors",
+        "description": "Unassign a connector from a knowledge base\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -113886,7 +114934,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List connector runs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "List connector runs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -113997,6 +115045,12 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "itemsSkipped": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "error": {
                             "nullable": true,
                             "type": "string"
@@ -114051,6 +115105,7 @@
                           "totalBatches",
                           "completedBatches",
                           "itemErrors",
+                          "itemsSkipped",
                           "error",
                           "checkpoint",
                           "createdAt"
@@ -114351,7 +115406,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Get a single connector run (including logs)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View knowledge bases and connectors",
+        "description": "Get a single connector run (including logs)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -114443,6 +115498,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "itemsSkipped": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "error": {
                       "nullable": true,
                       "type": "string"
@@ -114501,6 +115562,7 @@
                     "totalBatches",
                     "completedBatches",
                     "itemErrors",
+                    "itemsSkipped",
                     "error",
                     "logs",
                     "checkpoint",
@@ -118335,6 +119397,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "extraHeaders": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
                       "isSystem": {
                         "type": "boolean"
                       },
@@ -118392,6 +119461,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "extraHeaders",
                       "isSystem",
                       "isPrimary",
                       "createdAt",
@@ -118687,6 +119757,13 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "extraHeaders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "scope": {
                     "default": "personal",
                     "type": "string",
@@ -118786,6 +119863,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -118811,6 +119895,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",
@@ -119173,6 +120258,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "extraHeaders": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
                       "isSystem": {
                         "type": "boolean"
                       },
@@ -119230,6 +120322,7 @@
                       "userId",
                       "teamId",
                       "baseUrl",
+                      "extraHeaders",
                       "isSystem",
                       "isPrimary",
                       "createdAt",
@@ -119564,6 +120657,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -119621,6 +120721,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",
@@ -119893,6 +120994,13 @@
                     "type": "string",
                     "format": "uri"
                   },
+                  "extraHeaders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
                   "scope": {
                     "type": "string",
                     "enum": [
@@ -120002,6 +121110,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "extraHeaders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
                     "isSystem": {
                       "type": "boolean"
                     },
@@ -120027,6 +121142,7 @@
                     "userId",
                     "teamId",
                     "baseUrl",
+                    "extraHeaders",
                     "isSystem",
                     "isPrimary",
                     "createdAt",

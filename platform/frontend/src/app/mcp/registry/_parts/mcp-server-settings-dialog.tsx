@@ -95,7 +95,7 @@ const DEBUG_TAB_MAP: Record<string, McpLogsTab> = {
 
 const PAGE_TITLES: Record<SettingsPage, string> = {
   configuration: "Configuration",
-  connections: "Connections",
+  connections: "Credentials",
   "debug-logs": "Logs",
   "debug-inspector": "Inspector",
   "debug-shell": "Shell",
@@ -145,7 +145,7 @@ export function McpServerSettingsDialog({
   if (showConnections) {
     navItems.push({
       id: "connections",
-      label: "Connections",
+      label: "Credentials",
       badge: connectionCount,
     });
   }
@@ -290,7 +290,7 @@ export function McpServerSettingsDialog({
                     })
                   }
                 >
-                  {variant === "remote" ? "Connect" : "Install"}
+                  Install
                 </Button>
               )}
               {needsReinstall && (
@@ -368,7 +368,6 @@ export function McpServerSettingsDialog({
                   onAddOrgConnection={onAddOrgConnection}
                   deploymentStatuses={deploymentStatuses}
                   hideHeader
-                  variant={variant}
                   onOpenPodLogs={
                     showDebug
                       ? (podServerId: string) => {
@@ -387,7 +386,28 @@ export function McpServerSettingsDialog({
                     <McpLogsContent
                       isActive={open && isDebugPage}
                       serverName={item.label || item.name}
-                      installs={installs}
+                      installs={
+                        item.multitenant
+                          ? // Multi-tenant catalogs alias one pod; pick the
+                            // install whose deployment status is reported,
+                            // otherwise the first row, and label by catalog.
+                            (() => {
+                              const reporting =
+                                installs.find(
+                                  (i) => deploymentStatuses[i.id]?.podName,
+                                ) ?? installs[0];
+                              return [
+                                {
+                                  ...reporting,
+                                  name: item.label || item.name,
+                                  ownerEmail: null,
+                                  teamDetails: null,
+                                  scope: null,
+                                },
+                              ];
+                            })()
+                          : installs
+                      }
                       deploymentStatuses={deploymentStatuses}
                       hideHeader
                       hideTabBar
@@ -403,16 +423,13 @@ export function McpServerSettingsDialog({
                         <PlugZap />
                       </EmptyMedia>
                       <EmptyDescription>
-                        {variant === "remote" ? "Connect" : "Install"} this
-                        server to open the{" "}
+                        Install this server to open the{" "}
                         {PAGE_TITLES[validPage].toLowerCase()}.
                       </EmptyDescription>
                     </EmptyHeader>
                     {onConnect && (
                       <EmptyContent className="flex-row justify-center">
-                        <Button onClick={() => onConnect()}>
-                          {variant === "remote" ? "Connect" : "Install"}
-                        </Button>
+                        <Button onClick={() => onConnect()}>Install</Button>
                       </EmptyContent>
                     )}
                   </Empty>

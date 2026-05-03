@@ -7,12 +7,14 @@ import {
   type McpLogsEndedMessage,
   type McpLogsErrorMessage,
   type McpLogsMessage,
+  type ResourceVisibilityScope,
 } from "@shared";
 import {
   ArrowDown,
   Check,
   ChevronsUpDown,
   Copy,
+  Globe,
   RefreshCw,
   Terminal,
 } from "lucide-react";
@@ -58,6 +60,7 @@ interface McpLogsDialogProps {
     teamDetails?: { teamId: string; name: string } | null;
     clusterName?: string | null;
     k8sNamespace?: string | null;
+    scope?: ResourceVisibilityScope | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
@@ -738,7 +741,10 @@ function InstanceSelector({
             : selectedStatus.state) as DeploymentState,
         )
       : null;
-  const owner = selected?.teamDetails?.name ?? selected?.ownerEmail;
+  const isOrgScope = selected?.scope === "org";
+  const owner = isOrgScope
+    ? "Organization"
+    : (selected?.teamDetails?.name ?? selected?.ownerEmail);
   const ownerInitials = (
     selected?.teamDetails?.name ||
     selected?.ownerEmail ||
@@ -811,15 +817,21 @@ function InstanceSelector({
         {/* Stats — separated by hairlines */}
         {owner && (
           <div className="hidden md:flex items-center gap-2 px-4 py-3 border-l border-border/40">
-            <span
-              className={`flex items-center justify-center size-6 rounded-full text-[10px] font-medium ${
-                selected?.teamDetails
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {ownerInitials}
-            </span>
+            {isOrgScope ? (
+              <span className="flex items-center justify-center size-6 rounded-full bg-accent text-accent-foreground">
+                <Globe className="h-3 w-3" />
+              </span>
+            ) : (
+              <span
+                className={`flex items-center justify-center size-6 rounded-full text-[10px] font-medium ${
+                  selected?.teamDetails
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {ownerInitials}
+              </span>
+            )}
             <span className="text-xs text-foreground/80 max-w-[140px] truncate">
               {owner}
             </span>
@@ -895,7 +907,10 @@ function InstanceSelector({
                   ? "running"
                   : (s?.state ?? "pending")
               ) as DeploymentState;
-              const io = install.teamDetails?.name ?? install.ownerEmail;
+              const io =
+                install.scope === "org"
+                  ? "Organization"
+                  : (install.teamDetails?.name ?? install.ownerEmail);
               const age = s?.podAge;
               const isActive = install.id === serverId;
 

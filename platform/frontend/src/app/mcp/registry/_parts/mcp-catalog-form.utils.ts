@@ -20,6 +20,8 @@ export function transformFormToApiData(
     name: values.name,
     description: values.description || null,
     serverType: values.serverType,
+    multitenant:
+      values.serverType === "local" ? Boolean(values.multitenant) : false,
     icon: values.icon ?? null,
   };
 
@@ -68,12 +70,6 @@ export function transformFormToApiData(
       data.localConfigVaultKey = values.localConfigVaultKey;
     }
 
-    if (values.k8sNamespace) {
-      data.k8sNamespace = values.k8sNamespace;
-    }
-    if (values.k8sClusterId !== undefined) {
-      data.k8sClusterId = values.k8sClusterId ?? undefined;
-    }
   }
 
   // Handle OAuth configuration
@@ -153,6 +149,7 @@ export function transformFormToApiData(
 
     data.userConfig = isClientCredentials
       ? {
+          ...buildStaticHeaderUserConfig(values),
           client_id: {
             type: "string",
             title: "Client ID",
@@ -183,10 +180,10 @@ export function transformFormToApiData(
             sensitive: false,
           },
         }
-      : {};
+      : buildStaticHeaderUserConfig(values);
     data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "enterprise_managed") {
-    data.userConfig = {};
+    data.userConfig = buildStaticHeaderUserConfig(values);
     data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig
       ? {
@@ -195,7 +192,7 @@ export function transformFormToApiData(
         }
       : null;
   } else if (values.authMethod === "idp_jwt") {
-    data.userConfig = {};
+    data.userConfig = buildStaticHeaderUserConfig(values);
     data.oauthConfig = null;
     data.enterpriseManagedConfig = values.enterpriseManagedConfig
       ? {
@@ -276,6 +273,16 @@ export function transformCatalogItemToFormValues(
     item.name.includes("github")
   ) {
     authMethod = "bearer";
+  } else if (
+    Object.entries(item.userConfig ?? {}).some(
+      ([fieldName, config]) =>
+        fieldName !== "access_token" &&
+        fieldName !== "raw_access_token" &&
+        (config as { valuePrefix?: string } | undefined)?.valuePrefix ===
+          "Bearer ",
+    )
+  ) {
+    authMethod = "auth_header";
   }
 
   // Check if OAuth client_secret is a BYOS vault reference
@@ -437,6 +444,7 @@ export function transformCatalogItemToFormValues(
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
       description: config.description ?? "",
+      includeBearerPrefix: config.valuePrefix === "Bearer ",
     }));
 
   return {
@@ -444,6 +452,7 @@ export function transformCatalogItemToFormValues(
     description: item.description || "",
     icon: item.icon ?? null,
     serverType: item.serverType as "remote" | "local",
+    multitenant: item.serverType === "local" && Boolean(item.multitenant),
     serverUrl: item.serverUrl || "",
     authMethod,
     includeBearerPrefix,
@@ -469,10 +478,6 @@ export function transformCatalogItemToFormValues(
     scope: (item.scope as AgentScope) ?? "org",
     // Teams
     teams: item.teams?.map((t) => t.id) ?? [],
-    // Kubernetes namespace for local server deployments
-    k8sNamespace: item.k8sNamespace ?? undefined,
-    // Kubernetes cluster for local server deployments
-    k8sClusterId: item.k8sClusterId ?? null,
   } as McpCatalogFormValues;
 }
 
@@ -700,6 +705,7 @@ export function transformExternalCatalogToFormValues(
     description: server.description || "",
     icon: server.icon ?? null,
     serverType: server.server.type as "remote" | "local",
+    multitenant: server.server.type === "local" && authMethod !== "none",
     serverUrl: server.server.type === "remote" ? server.server.url : "",
     authMethod,
     includeBearerPrefix,
@@ -719,6 +725,7 @@ export function transformExternalCatalogToFormValues(
         required: config.required ?? false,
         value: typeof config.default === "string" ? config.default : undefined,
         description: config.description ?? "",
+        includeBearerPrefix: config.valuePrefix === "Bearer ",
       })),
     oauthConfig: oauthConfig ?? {
       client_id: "",
@@ -792,9 +799,13 @@ function buildStaticHeaderUserConfig(
       default:
         !header.promptOnInstallation && header.value ? header.value : undefined,
       description:
-        header.description || `Additional header sent as ${header.headerName}`,
+        header.description ||
+        (header.includeBearerPrefix
+          ? `Sent as ${header.headerName} with a "Bearer " prefix`
+          : `Sent as ${header.headerName}`),
       sensitive: false,
       headerName: header.headerName,
+      valuePrefix: header.includeBearerPrefix ? "Bearer " : undefined,
     };
   }
 
@@ -841,6 +852,7 @@ function getHeaderMappedUserConfigEntries(
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     description?: string;
+    valuePrefix?: string;
   }
 > {
   return Object.fromEntries(
@@ -858,6 +870,7 @@ function getHeaderMappedUserConfigEntries(
           required?: boolean;
           default?: string | number | boolean | Array<string>;
           description?: string;
+          valuePrefix?: string;
         };
         return [
           fieldName,
@@ -868,6 +881,7 @@ function getHeaderMappedUserConfigEntries(
             required: userConfigField.required,
             default: userConfigField.default,
             description: userConfigField.description,
+            valuePrefix: userConfigField.valuePrefix,
           },
         ];
       }),

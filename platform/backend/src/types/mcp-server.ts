@@ -1,3 +1,4 @@
+import { LOCAL_MCP_INSTALLATION_STATES } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -8,13 +9,9 @@ import { schema } from "@/database";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
-export const LocalMcpServerInstallationStatusSchema = z.enum([
-  "idle",
-  "pending",
-  "discovering-tools",
-  "success",
-  "error",
-]);
+export const LocalMcpServerInstallationStatusSchema = z.enum(
+  LOCAL_MCP_INSTALLATION_STATES,
+);
 
 export const SecretStorageTypeSchema = z.enum([
   "vault",

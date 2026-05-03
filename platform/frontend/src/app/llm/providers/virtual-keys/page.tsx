@@ -256,7 +256,7 @@ export default function VirtualKeysPage() {
         disabled={parentableKeys.length === 0}
         data-testid={E2eTestId.AddVirtualKeyButton}
       >
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="h-4 w-4" />
         Create Virtual Key
       </Button>,
     );
@@ -555,7 +555,7 @@ function CreateVirtualKeyDialog({
               }
             >
               {createMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               )}
               Create
             </Button>
@@ -758,7 +758,7 @@ function EditVirtualKeyDialog({
             }
           >
             {updateMutation.isPending && (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             )}
             Save Changes
           </Button>

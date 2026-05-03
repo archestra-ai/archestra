@@ -1,5 +1,5 @@
 {
-  "id": "e53bbdbb-167e-45f8-b674-1766433e945e",
+  "id": "46acc03c-c81b-44c3-8a22-10496939b14a",
   "prevId": "0eae590d-a798-4ccf-812c-3fbc39460617",
   "version": "7",
   "dialect": "postgresql",
@@ -3153,72 +3153,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.k8s_cluster": {
-      "name": "k8s_cluster",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kubeconfig": {
-          "name": "kubeconfig",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "k8s_cluster_organization_id_organization_id_fk": {
-          "name": "k8s_cluster_organization_id_organization_id_fk",
-          "tableFrom": "k8s_cluster",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.kb_chunks": {
       "name": "kb_chunks",
       "schema": "",
@@ -4315,6 +4249,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "extra_headers": {
+          "name": "extra_headers",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_system": {
           "name": "is_system",
           "type": "boolean",
@@ -5010,18 +4950,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "k8s_namespace": {
-          "name": "k8s_namespace",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "k8s_cluster_id": {
-          "name": "k8s_cluster_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -5100,19 +5028,6 @@
           "tableTo": "team",
           "columnsFrom": [
             "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "mcp_server_k8s_cluster_id_k8s_cluster_id_fk": {
-          "name": "mcp_server_k8s_cluster_id_k8s_cluster_id_fk",
-          "tableFrom": "mcp_server",
-          "tableTo": "k8s_cluster",
-          "columnsFrom": [
-            "k8s_cluster_id"
           ],
           "columnsTo": [
             "id"

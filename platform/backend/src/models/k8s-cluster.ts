@@ -8,6 +8,9 @@ import {
   isEncryptedSecret,
 } from "@/utils/crypto";
 
+type EncryptedK8sCluster = typeof schema.k8sClustersTable.$inferSelect;
+type K8sClusterUpdateRow = Partial<typeof schema.k8sClustersTable.$inferInsert>;
+
 class K8sClusterModel {
   static async create({
     organizationId,
@@ -59,12 +62,13 @@ class K8sClusterModel {
     organizationId: string,
     data: UpdateK8sCluster,
   ): Promise<K8sCluster> {
-    const updateData = data.kubeconfig
-      ? {
-          ...data,
-          kubeconfig: encryptSecretValue({ kubeconfig: data.kubeconfig }),
-        }
-      : data;
+    const updateData: K8sClusterUpdateRow = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.kubeconfig !== undefined) {
+      updateData.kubeconfig = encryptSecretValue({
+        kubeconfig: data.kubeconfig,
+      });
+    }
     const [cluster] = await db
       .update(schema.k8sClustersTable)
       .set(updateData)
@@ -111,12 +115,12 @@ class K8sClusterModel {
 
 export default K8sClusterModel;
 
-function decryptKubeconfigRow(cluster: K8sCluster): K8sCluster {
+function decryptKubeconfigRow(cluster: EncryptedK8sCluster): K8sCluster {
   if (isEncryptedSecret(cluster.kubeconfig)) {
     const decrypted = decryptSecretValue(cluster.kubeconfig);
     return { ...cluster, kubeconfig: decrypted.kubeconfig as string };
   }
-  return cluster;
+  return { ...cluster, kubeconfig: String(cluster.kubeconfig) };
 }
 
 async function countMcpServersByClusterId(clusterId: string): Promise<number> {

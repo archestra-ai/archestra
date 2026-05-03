@@ -26,7 +26,9 @@ Archestra is built as a set of composable components. Most organizations already
 
 **[Agent Runtime](/docs/platform-agents)** — No-code builder for autonomous agents. Define system prompts, assign MCP tools and sub-agents, configure triggers.
 
-**[MCP Orchestrator](/docs/platform-orchestrator)** and **[RAG](/docs/platform-knowledge-bases)** — Run MCP servers as isolated pods in Kubernetes. Built-in knowledge bases with pgvector for document ingestion and hybrid search.
+**[MCP Orchestrator](/docs/platform-orchestrator)** — Run MCP servers as isolated pods in Kubernetes.
+
+**[Knowledge Base](/docs/platform-knowledge-bases)** — Built-in RAG Knowledge Base to give your agents access to your data.
 
 **[LLM & MCP Proxies](/docs/platform-llm-proxy)** — Drop-in proxy between your apps and LLM providers. [MCP Gateway](/docs/platform-mcp-gateway) provides a single endpoint for all MCP tools. Works with any framework: n8n, LangChain, Vercel AI, Pydantic AI, Mastra.
 

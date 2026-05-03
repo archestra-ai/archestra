@@ -142,7 +142,7 @@ export default function ModelsPage() {
     setProviderAction(
       <Button onClick={handleRefresh} disabled={isRefreshingModels}>
         <RefreshCw
-          className={`h-4 w-4 mr-2 ${isRefreshingModels ? "animate-spin" : ""}`}
+          className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
         />
         {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
       </Button>,

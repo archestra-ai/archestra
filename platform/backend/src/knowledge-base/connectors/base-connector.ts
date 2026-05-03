@@ -4,6 +4,7 @@ import type {
   Connector,
   ConnectorCredentials,
   ConnectorItemFailure,
+  ConnectorItemSkipped,
   ConnectorSyncBatch,
   ConnectorType,
 } from "@/types";
@@ -46,6 +47,7 @@ export abstract class BaseConnector implements Connector {
   protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];
+  private itemSkipped: ConnectorItemSkipped[] = [];
 
   constructor(rateLimitDelayMs = DEFAULT_RATE_LIMIT_DELAY_MS) {
     this.rateLimitDelayMs = rateLimitDelayMs;
@@ -68,6 +70,7 @@ export abstract class BaseConnector implements Connector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
+    embeddingInputModalities?: import("@shared").ModelInputModality[];
   }): Promise<number | null> {
     return null;
   }
@@ -188,6 +191,16 @@ export abstract class BaseConnector implements Connector {
     const failures = this.itemFailures;
     this.itemFailures = [];
     return failures;
+  }
+
+  protected trackSkipped(item: ConnectorItemSkipped): void {
+    this.itemSkipped.push(item);
+  }
+
+  protected flushSkipped(): ConnectorItemSkipped[] {
+    const skipped = this.itemSkipped;
+    this.itemSkipped = [];
+    return skipped;
   }
 
   protected async rateLimit(): Promise<void> {

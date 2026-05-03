@@ -111,6 +111,15 @@ export const META_HEADER = "X-Archestra-Meta";
  */
 export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
 
+/**
+ * Header used to pass the chat_api_keys row ID from chat → LLM proxy so the
+ * proxy can look up per-key configuration (currently `extraHeaders`) for
+ * raw-bearer calls that originate from the in-app chat. Only honored on
+ * loopback requests, like PROVIDER_BASE_URL_HEADER, to prevent external
+ * clients from spoofing arbitrary key IDs.
+ */
+export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

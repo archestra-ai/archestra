@@ -43,6 +43,42 @@ export type CreateConversationInput = {
   chatApiKeyId?: string | null;
 };
 
+export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
+  agents: TAgent[];
+  organizationDefaultAgentId?: string | null;
+  savedAgentId?: string | null;
+  memberDefaultAgentId?: string | null;
+  canUseSavedAgent: boolean;
+}): TAgent | null {
+  const { agents } = params;
+  if (agents.length === 0) {
+    return null;
+  }
+
+  const organizationDefaultAgent = agents.find(
+    (agent) => agent.id === params.organizationDefaultAgentId,
+  );
+  if (organizationDefaultAgent) {
+    return organizationDefaultAgent;
+  }
+
+  if (params.canUseSavedAgent) {
+    const savedAgent = agents.find((agent) => agent.id === params.savedAgentId);
+    if (savedAgent) {
+      return savedAgent;
+    }
+  }
+
+  const memberDefaultAgent = agents.find(
+    (agent) => agent.id === params.memberDefaultAgentId,
+  );
+  if (memberDefaultAgent) {
+    return memberDefaultAgent;
+  }
+
+  return agents[0];
+}
+
 export function resolveInitialAgentState(params: {
   agent: AgentInfo;
   modelsByProvider: Record<string, LlmModel[]>;

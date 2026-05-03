@@ -14,10 +14,16 @@ export const SelectK8sClusterSchema = createSelectSchema(
 
 export const InsertK8sClusterSchema = createInsertSchema(
   schema.k8sClustersTable,
+  {
+    kubeconfig: z.string().min(1),
+  },
 ).omit({ id: true, createdAt: true, updatedAt: true });
 
 export const UpdateK8sClusterSchema = createUpdateSchema(
   schema.k8sClustersTable,
+  {
+    kubeconfig: z.string().min(1).optional(),
+  },
 ).pick({ name: true, kubeconfig: true });
 
 export type K8sCluster = z.infer<typeof SelectK8sClusterSchema>;

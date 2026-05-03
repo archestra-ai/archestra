@@ -25,44 +25,11 @@ docs_writer_prompt.md.
 
 This guide configures Microsoft Entra ID with Archestra end-to-end. After you finish, your users will sign in once with their work Microsoft account and the agents and MCP servers they use will act on their own behalf — reading their mailbox, calendar, files, or any Entra-protected API as them, not as a shared service account.
 
-<!-- video-placeholder: full-walkthrough screencast. Replace with <video> tag or YouTube/Loom embed once recorded. Suggested filename: /docs/assets/videos/platform-entra-obo-setup_full-walkthrough.mp4 -->
-
-> 📹 **Video walkthrough coming soon.** A full screencast of the configuration below — Azure portal app registration through to a working OBO tool call — will be embedded here.
-
-## What is OBO and why does it matter?
-
-**On-Behalf-Of (OBO)** is an OAuth flow defined by Microsoft that lets one app exchange a user's access token for a *new* token, scoped to a different downstream API, that still represents the same user. ([Microsoft docs](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow))
-
-Without OBO, MCP servers typically authenticate to downstream APIs with a shared secret — every user's tool call hits Microsoft Graph as the same robot. That breaks audit trails, ignores per-user permissions, and is a non-starter for regulated environments.
-
-With OBO, each tool call carries the **caller's own identity** all the way down. If Alice doesn't have access to a calendar, the tool call fails for Alice. Logs in Microsoft 365 show *Alice* read the message, not "the Archestra service account."
-
-```mermaid
-sequenceDiagram
-    participant U as User (Alice)
-    participant A as Archestra
-    participant E as Microsoft Entra ID
-    participant M as MCP Server
-    participant G as Microsoft Graph
-
-    U->>A: Sign in with Microsoft
-    A->>E: OIDC code flow
-    E-->>A: User access token (Alice)
-    Note over A: SSO complete
-
-    U->>A: "Summarize my unread emails"
-    A->>E: OBO exchange<br/>(Alice's token + scope=Mail.Read)
-    E-->>A: New token for Graph (still Alice)
-    A->>M: Tool call + Bearer token
-    M->>G: GET /me/messages
-    G-->>M: Alice's emails only
-    M-->>A: Result
-    A-->>U: Summary
-```
-
-And now here is the step-by-step guide to configure all of that.
+**On-Behalf-Of (OBO)** is the OAuth flow defined by Microsoft that makes the second half possible: it lets Archestra exchange a user's access token for a new token scoped to a downstream API while preserving the user's identity. ([Microsoft docs](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow))
 
 The first three sections get sign-in working. If that is all you need today, you can stop after Section 3 and come back to OBO later. Sections 4 through 6 layer the OBO flow on top of the same app you just registered.
+
+# Configuring SSO
 
 ## 1. Register Entra App for SSO
 
@@ -98,8 +65,6 @@ The first three sections get sign-in working. If that is all you need today, you
 
 ## 2. Configure SSO in Archestra
 
-[screenshot: platform-entra-obo-setup_sso-card.webp — Microsoft Entra ID provider card on Settings > Identity Providers]
-
 Go to **Settings > Identity Providers** and click **Enable** on the **Microsoft Entra ID** card. The card pre-fills the discovery endpoint and sets the provider ID to `EntraID` (which is what makes the redirect URI from Step 1 work).
 
 Fill in:
@@ -125,9 +90,40 @@ For Entra, the most common pattern is mapping the `groups` claim to Archestra te
 - **Groups Handlebars Template** _(default extraction works for `groups`)_: leave empty, or use `{{#each groups}}{{this}},{{/each}}`
 - Link your Archestra teams to the Entra group object IDs (or names) under **Settings > Teams** > link icon
 
-## 4. Additional Entra App Settings for OBO
+🎉 **SSO is done.** Your users can now sign in with Microsoft and land in the right teams. If you don't need per-user downstream API calls, you can stop here.
 
-[screenshot: platform-entra-obo-setup_expose-api.webp — Expose an API page with access_as_user scope and Authorized client application]
+# Configuring OBO for Enterprise MCP Auth
+
+Without OBO, MCP servers typically authenticate to downstream APIs with a shared secret — every user's tool call hits Microsoft Graph as the same robot. That breaks audit trails, ignores per-user permissions, and is a non-starter for regulated environments.
+
+With OBO, each tool call carries the **caller's own identity** all the way down. If Alice doesn't have access to a calendar, the tool call fails for Alice. Logs in Microsoft 365 show *Alice* read the message, not "the Archestra service account."
+
+```mermaid
+sequenceDiagram
+    participant U as User (Alice)
+    participant A as Archestra
+    participant E as Microsoft Entra ID
+    participant M as MCP Server
+    participant G as Microsoft Graph
+
+    U->>A: Sign in with Microsoft
+    A->>E: OIDC code flow
+    E-->>A: User access token (Alice)
+    Note over A: SSO complete
+
+    U->>A: "Summarize my unread emails"
+    A->>E: OBO exchange<br/>(Alice's token + scope=Mail.Read)
+    E-->>A: New token for Graph (still Alice)
+    A->>M: Tool call + Bearer token
+    M->>G: GET /me/messages
+    G-->>M: Alice's emails only
+    M-->>A: Result
+    A-->>U: Summary
+```
+
+Sections 4 through 6 layer this flow on top of the app you just registered.
+
+## 4. Additional Entra App Settings for OBO
 
 OBO requires the app to expose at least one scope and to authorize itself as a client. Without these, Entra rejects the token exchange.
 
@@ -180,8 +176,6 @@ Reopen the Microsoft Entra ID provider in **Settings > Identity Providers** and 
 Save the provider.
 
 ## 6. Connect MCP Server
-
-[screenshot: platform-entra-obo-setup_multitenant-auth.webp — MCP catalog item Multitenant Authorization with Identity Provider Token Exchange selected]
 
 Open the catalog entry for the MCP server that should call Entra-protected APIs and scroll to **Multitenant Authorization**. Select **Identity Provider Token Exchange**, pick the Entra provider you just configured, then fill in:
 

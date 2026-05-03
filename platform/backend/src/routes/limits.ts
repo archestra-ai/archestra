@@ -37,9 +37,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Cleanup limits if needed before fetching
-      if (organizationId) {
-        await LimitModel.cleanupLimitsIfNeeded(organizationId);
-      }
+      await LimitModel.cleanupLimitsIfNeeded({
+        allForOrganizationId: organizationId,
+        entityType,
+        entityId,
+        limitType,
+      });
 
       // Ensure default token prices and optimization rules exist
       if (organizationId) {

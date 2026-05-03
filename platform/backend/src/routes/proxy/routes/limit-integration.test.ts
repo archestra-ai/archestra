@@ -139,6 +139,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: ["gpt-4o"],
+      lastCleanup: new Date(),
     });
 
     // Pre-populate usage to exceed limit
@@ -187,6 +188,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: ["gpt-4o"],
+      lastCleanup: new Date(),
     });
 
     await LimitModel.updateTokenLimitUsage(
@@ -316,6 +318,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: ["gpt-4o"],
+      lastCleanup: new Date(),
     });
     await LimitModel.updateTokenLimitUsage(
       "virtual_key",
@@ -332,6 +335,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: ["gpt-4o"],
+      lastCleanup: new Date(),
     });
     await LimitModel.updateTokenLimitUsage(
       "user",
@@ -348,6 +352,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: ["gpt-4o"],
+      lastCleanup: new Date(),
     });
     await LimitModel.updateTokenLimitUsage(
       "agent",
@@ -541,6 +546,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: null,
+      lastCleanup: new Date(),
     });
 
     // Pre-populate usage to exceed limit
@@ -588,6 +594,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: null,
+      lastCleanup: new Date(),
     });
 
     // Pre-populate usage to exceed limit
@@ -646,6 +653,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       limitType: "token_cost",
       limitValue: 1,
       model: null,
+      lastCleanup: new Date(),
     });
 
     // Pre-populate usage to exceed limit

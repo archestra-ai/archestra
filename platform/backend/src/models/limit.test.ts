@@ -929,92 +929,13 @@ describe("LimitModel", () => {
     });
   });
 
-  describe("findLimitsNeedingCleanup", () => {
-    test("should find limits that have never been cleaned up", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-
-      await LimitModel.create({
-        entityType: "organization",
-        entityId: org.id,
-        limitType: "token_cost",
-        limitValue: 1000000,
-        model: ["claude-3-5-sonnet-20241022"],
-      });
-
-      const cutoffTime = new Date();
-      const limits = await LimitModel.findLimitsNeedingCleanup(
-        org.id,
-        cutoffTime,
-      );
-
-      expect(limits).toHaveLength(1);
-      expect(limits[0].lastCleanup).toBeNull();
-    });
-
-    test("should find limits with old lastCleanup", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-
-      const limit = await LimitModel.create({
-        entityType: "organization",
-        entityId: org.id,
-        limitType: "token_cost",
-        limitValue: 1000000,
-        model: ["claude-3-5-sonnet-20241022"],
-      });
-
-      // Set lastCleanup to 2 hours ago
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      await LimitModel.patch(limit.id, { lastCleanup: twoHoursAgo });
-
-      // Check with cutoff of 1 hour ago
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const limits = await LimitModel.findLimitsNeedingCleanup(
-        org.id,
-        oneHourAgo,
-      );
-
-      expect(limits).toHaveLength(1);
-    });
-
-    test("should not find limits with recent lastCleanup", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-
-      const limit = await LimitModel.create({
-        entityType: "organization",
-        entityId: org.id,
-        limitType: "token_cost",
-        limitValue: 1000000,
-        model: ["claude-3-5-sonnet-20241022"],
-      });
-
-      // Set lastCleanup to 30 minutes ago
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      await LimitModel.patch(limit.id, { lastCleanup: thirtyMinutesAgo });
-
-      // Check with cutoff of 1 hour ago
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const limits = await LimitModel.findLimitsNeedingCleanup(
-        org.id,
-        oneHourAgo,
-      );
-
-      expect(limits).toHaveLength(0);
-    });
-  });
-
-  describe("resetLimitUsage", () => {
+  describe("resetLimitsUsage", () => {
     test("should reset usage counters and set lastCleanup", async ({
       makeAgent,
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      const limit = await LimitModel.create({
+      const limit1 = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1031,18 +952,64 @@ describe("LimitModel", () => {
         200,
       );
 
+      const limit2 = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      // Add some usage
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        300,
+        400,
+      );
+
+      // Pre-test
+      const modelUsage1BeforeReset = await LimitModel.getRawModelUsage(
+        limit1.id,
+      );
+      expect(modelUsage1BeforeReset.length).toBe(1);
+      expect(modelUsage1BeforeReset[0].currentUsageTokensIn).toBe(100);
+      expect(modelUsage1BeforeReset[0].currentUsageTokensOut).toBe(200);
+
+      const modelUsage2BeforeReset = await LimitModel.getRawModelUsage(
+        limit2.id,
+      );
+      expect(modelUsage2BeforeReset.length).toBe(1);
+      expect(modelUsage2BeforeReset[0].currentUsageTokensIn).toBe(300);
+      expect(modelUsage2BeforeReset[0].currentUsageTokensOut).toBe(400);
+
       // Reset
-      const reset = await LimitModel.resetLimitUsage(limit.id);
+      await LimitModel.resetLimitsUsage([limit1.id, limit2.id]);
 
-      // Check model usage was also reset
-      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+      const limit1AfterReset = await LimitModel.findById(limit1.id);
+      const modelUsage1AfterReset = await LimitModel.getRawModelUsage(
+        limit1.id,
+      );
 
-      expect(reset).toBeDefined();
-      expect(modelUsage.length).toBe(1);
-      expect(modelUsage[0].currentUsageTokensIn).toBe(0);
-      expect(modelUsage[0].currentUsageTokensOut).toBe(0);
-      expect(reset?.lastCleanup).toBeDefined();
-      expect(reset?.lastCleanup).not.toBeNull();
+      expect(limit1AfterReset).toBeDefined();
+      expect(modelUsage1AfterReset.length).toBe(1);
+      expect(modelUsage1AfterReset[0].currentUsageTokensIn).toBe(0);
+      expect(modelUsage1AfterReset[0].currentUsageTokensOut).toBe(0);
+      expect(limit1AfterReset?.lastCleanup).toBeDefined();
+      expect(limit1AfterReset?.lastCleanup).not.toBeNull();
+
+      const limit2AfterReset = await LimitModel.findById(limit1.id);
+      const modelUsage2AfterReset = await LimitModel.getRawModelUsage(
+        limit1.id,
+      );
+
+      expect(limit2AfterReset).toBeDefined();
+      expect(modelUsage2AfterReset.length).toBe(1);
+      expect(modelUsage2AfterReset[0].currentUsageTokensIn).toBe(0);
+      expect(modelUsage2AfterReset[0].currentUsageTokensOut).toBe(0);
+      expect(limit2AfterReset?.lastCleanup).toBeDefined();
+      expect(limit2AfterReset?.lastCleanup).not.toBeNull();
     });
   });
 
@@ -1163,7 +1130,7 @@ describe("LimitValidationService", () => {
       const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
       // Create a virtual key limit with very low threshold
-      await LimitModel.create({
+      const vkLimit = await LimitModel.create({
         entityType: "virtual_key",
         entityId: apiKey.id,
         limitType: "token_cost",
@@ -1178,6 +1145,9 @@ describe("LimitValidationService", () => {
         1000000,
         1000000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(vkLimit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1196,7 +1166,7 @@ describe("LimitValidationService", () => {
       const user = await makeUser();
 
       // Create a user limit with very low threshold
-      await LimitModel.create({
+      const userLimit = await LimitModel.create({
         entityType: "user",
         entityId: user.id,
         limitType: "token_cost",
@@ -1211,6 +1181,9 @@ describe("LimitValidationService", () => {
         1000000,
         1000000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(userLimit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1236,7 +1209,7 @@ describe("LimitValidationService", () => {
 
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
-      await LimitModel.create({
+      const agentLimit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1252,7 +1225,7 @@ describe("LimitValidationService", () => {
         1000000,
       );
 
-      await LimitModel.create({
+      const teamLimit = await LimitModel.create({
         entityType: "team",
         entityId: team.id,
         limitType: "token_cost",
@@ -1267,6 +1240,10 @@ describe("LimitValidationService", () => {
         1000000,
         1000000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(agentLimit.id, { lastCleanup: new Date() });
+      await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1291,7 +1268,7 @@ describe("LimitValidationService", () => {
 
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
-      await LimitModel.create({
+      const teamLimit = await LimitModel.create({
         entityType: "team",
         entityId: team.id,
         limitType: "token_cost",
@@ -1307,7 +1284,7 @@ describe("LimitValidationService", () => {
         1000000,
       );
 
-      await LimitModel.create({
+      const orgLimit = await LimitModel.create({
         entityType: "organization",
         entityId: org.id,
         limitType: "token_cost",
@@ -1323,6 +1300,10 @@ describe("LimitValidationService", () => {
         1000000,
       );
 
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(teamLimit.id, { lastCleanup: new Date() });
+      await LimitModel.patch(orgLimit.id, { lastCleanup: new Date() });
+
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
       });
@@ -1336,7 +1317,7 @@ describe("LimitValidationService", () => {
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      await LimitModel.create({
+      const limit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1351,6 +1332,9 @@ describe("LimitValidationService", () => {
         1000000,
         1000000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1393,7 +1377,7 @@ describe("LimitValidationService", () => {
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      await LimitModel.create({
+      const limit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1408,6 +1392,9 @@ describe("LimitValidationService", () => {
         1000000,
         1000000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1442,7 +1429,7 @@ describe("LimitValidationService", () => {
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      await LimitModel.create({
+      const limit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1465,6 +1452,9 @@ describe("LimitValidationService", () => {
         0,
       );
 
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
       });
@@ -1477,7 +1467,7 @@ describe("LimitValidationService", () => {
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      await LimitModel.create({
+      const specificLimit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1485,7 +1475,7 @@ describe("LimitValidationService", () => {
         model: ["gpt-4o"],
       });
 
-      await LimitModel.create({
+      const allModelsLimit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
@@ -1500,6 +1490,10 @@ describe("LimitValidationService", () => {
         1_000_000,
         1_000_000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(specificLimit.id, { lastCleanup: new Date() });
+      await LimitModel.patch(allModelsLimit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1535,7 +1529,7 @@ describe("LimitValidationService", () => {
       const agent = await makeAgent({ name: "Test Agent" });
       const user = await makeUser();
 
-      await LimitModel.create({
+      const limit = await LimitModel.create({
         entityType: "user",
         entityId: user.id,
         limitType: "token_cost",
@@ -1550,6 +1544,9 @@ describe("LimitValidationService", () => {
         1_000_000,
         1_000_000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1617,7 +1614,7 @@ describe("LimitValidationService", () => {
       const secret = await makeSecret();
       const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
-      await LimitModel.create({
+      const limit = await LimitModel.create({
         entityType: "virtual_key",
         entityId: apiKey.id,
         limitType: "token_cost",
@@ -1632,6 +1629,9 @@ describe("LimitValidationService", () => {
         1_000_000,
         1_000_000,
       );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
@@ -1668,6 +1668,7 @@ describe("LimitValidationService", () => {
         model: null,
       });
 
+      // Prevent cleanup from resetting test data
       await LimitModel.patch(limit.id, { lastCleanup: new Date() });
 
       await LimitModel.updateTokenLimitUsage(
@@ -1685,5 +1686,1282 @@ describe("LimitValidationService", () => {
       expect(result).not.toBeNull();
       expect(result?.[1]).toContain("organization-level");
     });
+  });
+});
+
+describe("cleanupLimitsIfNeeded", () => {
+  test("cleans up organization limits", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+
+    const limit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { organization: org.id },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleans up agent limits", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleans up team limits", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+
+    const limit = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage("team", team.id, "gpt-4o", 500, 500);
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { team: [team.id] },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleans up user limits", async ({ makeUser }) => {
+    const user = await makeUser();
+
+    const limit = await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage("user", user.id, "gpt-4o", 500, 500);
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { user: user.id },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleans up virtual_key limits", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret();
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+    const limit = await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: apiKey.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "virtual_key",
+      apiKey.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { virtual_key: apiKey.id },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleans up multiple entity types in single call", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const teamLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage("team", team.id, "gpt-4o", 300, 300);
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: {
+        agent: agent.id,
+        team: [team.id],
+      },
+    });
+
+    const agentUsage = await LimitModel.getRawModelUsage(agentLimit.id);
+    expect(agentUsage[0].currentUsageTokensIn).toBe(0);
+    expect(agentUsage[0].currentUsageTokensOut).toBe(0);
+
+    const teamUsage = await LimitModel.getRawModelUsage(teamLimit.id);
+    expect(teamUsage[0].currentUsageTokensIn).toBe(0);
+    expect(teamUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("does not clean limits with recent lastCleanup", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(500);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(500);
+  });
+
+  test("cleans limits with null lastCleanup", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const limit = await LimitModel.create({
+      lastCleanup: null,
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id },
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("filters by entityType and entityId options", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const teamLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage("team", team.id, "gpt-4o", 300, 300);
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entityType: "agent",
+      entityId: agent.id,
+    });
+
+    const agentUsage = await LimitModel.getRawModelUsage(agentLimit.id);
+    expect(agentUsage[0].currentUsageTokensIn).toBe(0);
+    expect(agentUsage[0].currentUsageTokensOut).toBe(0);
+
+    const teamUsage = await LimitModel.getRawModelUsage(teamLimit.id);
+    expect(teamUsage[0].currentUsageTokensIn).toBe(300);
+    expect(teamUsage[0].currentUsageTokensOut).toBe(300);
+  });
+
+  test("filters by limitType option", async ({ makeAgent }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const tokenLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "mcp_server_calls",
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(tokenLimit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(500);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(500);
+  });
+
+  test("handles empty entities gracefully", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+
+    const limit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: {},
+    });
+
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("handles unknown organization gracefully", async () => {
+    await expect(
+      LimitModel.cleanupLimitsIfNeeded({
+        entities: { organization: "non-existent-org-id" },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("with entities and entityType filter", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const teamLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage("team", team.id, "gpt-4o", 300, 300);
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id, team: [team.id] },
+      entityType: "agent",
+    });
+
+    const agentUsage = await LimitModel.getRawModelUsage(agentLimit.id);
+    expect(agentUsage[0].currentUsageTokensIn).toBe(0);
+    expect(agentUsage[0].currentUsageTokensOut).toBe(0);
+
+    const teamUsage = await LimitModel.getRawModelUsage(teamLimit.id);
+    expect(teamUsage[0].currentUsageTokensIn).toBe(0);
+    expect(teamUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("with entities and entityId filter", async ({ makeAgent }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit1 = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const limit2 = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 500000,
+      model: ["claude-3-5-sonnet-20241022"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "claude-3-5-sonnet-20241022",
+      300,
+      300,
+    );
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id },
+      entityId: agent.id,
+    });
+
+    const usage1 = await LimitModel.getRawModelUsage(limit1.id);
+    expect(usage1[0].currentUsageTokensIn).toBe(0);
+    expect(usage1[0].currentUsageTokensOut).toBe(0);
+
+    const usage2 = await LimitModel.getRawModelUsage(limit2.id);
+    expect(usage2[0].currentUsageTokensIn).toBe(0);
+    expect(usage2[0].currentUsageTokensOut).toBe(0);
+  });
+});
+
+describe("checkLimitsBeforeRequest cleanup integration", () => {
+  test("cleans up all 5 entity types in a single checkLimitsBeforeRequest call", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    const secret = await makeSecret();
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    // Create limits for all 5 entity types
+    const vkLimit = await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: apiKey.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const userLimit = await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const teamLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const orgLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage to all limits
+    await LimitModel.updateTokenLimitUsage(
+      "virtual_key",
+      apiKey.id,
+      "gpt-4o",
+      100,
+      100,
+    );
+    await LimitModel.updateTokenLimitUsage("user", user.id, "gpt-4o", 200, 200);
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      300,
+      300,
+    );
+    await LimitModel.updateTokenLimitUsage("team", team.id, "gpt-4o", 400, 400);
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    // Call checkLimitsBeforeRequest which triggers cleanup for all entity types
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+      virtualKeyId: apiKey.id,
+    });
+
+    // Verify all limits were cleaned up
+    const vkUsage = await LimitModel.getRawModelUsage(vkLimit.id);
+    expect(vkUsage[0].currentUsageTokensIn).toBe(0);
+    expect(vkUsage[0].currentUsageTokensOut).toBe(0);
+
+    const userUsage = await LimitModel.getRawModelUsage(userLimit.id);
+    expect(userUsage[0].currentUsageTokensIn).toBe(0);
+    expect(userUsage[0].currentUsageTokensOut).toBe(0);
+
+    const agentUsage = await LimitModel.getRawModelUsage(agentLimit.id);
+    expect(agentUsage[0].currentUsageTokensIn).toBe(0);
+    expect(agentUsage[0].currentUsageTokensOut).toBe(0);
+
+    const teamUsage = await LimitModel.getRawModelUsage(teamLimit.id);
+    expect(teamUsage[0].currentUsageTokensIn).toBe(0);
+    expect(teamUsage[0].currentUsageTokensOut).toBe(0);
+
+    const orgUsage = await LimitModel.getRawModelUsage(orgLimit.id);
+    expect(orgUsage[0].currentUsageTokensIn).toBe(0);
+    expect(orgUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleanup resets usage before limit check, allowing previously blocked request", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    // Create a limit with low threshold
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage that exceeds the limit
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      1000000,
+      1000000,
+    );
+
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    // Verify limit is exceeded before cleanup
+    const beforeCheck = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+    expect(beforeCheck).not.toBeNull();
+
+    // Now set lastCleanup to null so cleanup will reset usage
+    await LimitModel.patch(limit.id, { lastCleanup: null });
+
+    // Call checkLimitsBeforeRequest - cleanup should reset usage first
+    const afterCheck = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    // Request should now be allowed because cleanup reset the usage
+    expect(afterCheck).toBeNull();
+
+    // Verify usage was actually reset
+    const modelUsage = await LimitModel.getRawModelUsage(limit.id);
+    expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+    expect(modelUsage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("mixed lastCleanup states - old gets reset, recent stays intact in same call", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    // Create two agent limits - one with old lastCleanup, one with recent
+    const oldLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const recentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["claude-3-5-sonnet-20241022"],
+    });
+
+    // Add usage to both
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "claude-3-5-sonnet-20241022",
+      300,
+      300,
+    );
+
+    // Set old lastCleanup (far in the past)
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 7);
+    await LimitModel.patch(oldLimit.id, { lastCleanup: oldDate });
+
+    // Set recent lastCleanup (just now)
+    await LimitModel.patch(recentLimit.id, { lastCleanup: new Date() });
+
+    // Call checkLimitsBeforeRequest which triggers cleanup
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    // Old limit should have been reset
+    const oldUsage = await LimitModel.getRawModelUsage(oldLimit.id);
+    expect(oldUsage[0].currentUsageTokensIn).toBe(0);
+    expect(oldUsage[0].currentUsageTokensOut).toBe(0);
+
+    // Recent limit should NOT have been reset
+    const recentUsage = await LimitModel.getRawModelUsage(recentLimit.id);
+    expect(recentUsage[0].currentUsageTokensIn).toBe(300);
+    expect(recentUsage[0].currentUsageTokensOut).toBe(300);
+  });
+
+  test("all 5 entity types present with virtual_key + user + agent + team + organization", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    const secret = await makeSecret();
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    // Create limits for all entity types with high thresholds so they don't block
+    await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: apiKey.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Add some usage to all
+    await LimitModel.updateTokenLimitUsage(
+      "virtual_key",
+      apiKey.id,
+      "gpt-4o",
+      100,
+      100,
+    );
+    await LimitModel.updateTokenLimitUsage("user", user.id, "gpt-4o", 200, 200);
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      300,
+      300,
+    );
+    await LimitModel.updateTokenLimitUsage("team", team.id, "gpt-4o", 400, 400);
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    // Call checkLimitsBeforeRequest with all entity types
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+      virtualKeyId: apiKey.id,
+    });
+
+    // Should be allowed since all limits have high thresholds
+    expect(result).toBeNull();
+  });
+
+  test("cleanup only affects limits for entities passed in options, not unrelated limits", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    const otherAgent = await makeAgent({ name: "Other Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    // Create limit for agent
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Create limit for unrelated agent
+    const otherLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: otherAgent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage to both
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      otherAgent.id,
+      "gpt-4o",
+      300,
+      300,
+    );
+
+    // Call checkLimitsBeforeRequest for agent only
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    // Agent limit should be cleaned
+    const agentUsage = await LimitModel.getRawModelUsage(agentLimit.id);
+    expect(agentUsage[0].currentUsageTokensIn).toBe(0);
+    expect(agentUsage[0].currentUsageTokensOut).toBe(0);
+
+    // Other agent limit should NOT be cleaned
+    const otherUsage = await LimitModel.getRawModelUsage(otherLimit.id);
+    expect(otherUsage[0].currentUsageTokensIn).toBe(300);
+    expect(otherUsage[0].currentUsageTokensOut).toBe(300);
+  });
+
+  test("checkEntityLimits with multiple limits on same entity (different models)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    // Create 2 agent limits: one for gpt-4o (low) and one for claude (high)
+    const gpt4Limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["claude-3-5-sonnet-20241022"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      1_000_000_000,
+      1_000_000_000,
+    );
+
+    await LimitModel.patch(gpt4Limit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    expect(result).not.toBeNull();
+    const [refusalMessage] = result as unknown as [string, string];
+    expect(refusalMessage).toContain(
+      "<archestra-limit-type>token_cost</archestra-limit-type>",
+    );
+  });
+
+  test("checkEntityLimits with all-models and specific-model limits on same entity", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const allModelsLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+    });
+
+    const specificLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      1_000_000_000,
+      1_000_000_000,
+    );
+
+    await LimitModel.patch(allModelsLimit.id, { lastCleanup: new Date() });
+    await LimitModel.patch(specificLimit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    expect(result).not.toBeNull();
+  });
+
+  test("checkEntityLimits allows request when usage is under limit value", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage under limit
+    await LimitModel.updateTokenLimitUsage("agent", agent.id, "gpt-4o", 500, 0);
+
+    // Prevent cleanup from resetting test data
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    // Allowed - usage under limit
+    expect(result).toBeNull();
+  });
+
+  test("checkEntityLimits blocks request when usage exactly equals limit value", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: ["gpt-4o"],
+    });
+
+    // Add any usage
+    await LimitModel.updateTokenLimitUsage("agent", agent.id, "gpt-4o", 100, 0);
+
+    // Prevent cleanup from resetting test data
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    // Blocked - >= comparison
+    expect(result).not.toBeNull();
+  });
+
+  test("checkEntityLimits with entity that has limits but zero usage", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Prevent cleanup from resetting test data
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    // Allowed - no usage
+    expect(result).toBeNull();
+  });
+
+  test("checkEntityLimits returns correct metadata in refusal message", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      1_000_000_000,
+      1_000_000_000,
+    );
+
+    await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+    });
+
+    expect(result).not.toBeNull();
+    const [refusalMessage] = result as unknown as [string, string];
+    expect(refusalMessage).toContain(
+      "<archestra-limit-type>token_cost</archestra-limit-type>",
+    );
+    expect(refusalMessage).toContain(
+      `<archestra-limit-entity-type>agent</archestra-limit-entity-type>`,
+    );
+    expect(refusalMessage).toContain(
+      `<archestra-limit-entity-id>${agent.id}</archestra-limit-entity-id>`,
+    );
+  });
+
+  test("does not reset limits for entity types not included in entities", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+    const user = await makeUser();
+
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const userLimit = await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage to both
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage("user", user.id, "gpt-4o", 300, 300);
+
+    // Call cleanup with only agent
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { agent: agent.id },
+    });
+
+    // Agent reset to 0
+    const agentUsage = await LimitModel.getRawModelUsage(agentLimit.id);
+    expect(agentUsage[0].currentUsageTokensIn).toBe(0);
+    expect(agentUsage[0].currentUsageTokensOut).toBe(0);
+
+    // User NOT reset
+    const userUsage = await LimitModel.getRawModelUsage(userLimit.id);
+    expect(userUsage[0].currentUsageTokensIn).toBe(300);
+    expect(userUsage[0].currentUsageTokensOut).toBe(300);
+  });
+
+  test("does not reset limits for different entity ID of same type", async ({
+    makeUser,
+  }) => {
+    const user1 = await makeUser();
+    const user2 = await makeUser();
+
+    const user1Limit = await LimitModel.create({
+      entityType: "user",
+      entityId: user1.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const user2Limit = await LimitModel.create({
+      entityType: "user",
+      entityId: user2.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage to both
+    await LimitModel.updateTokenLimitUsage(
+      "user",
+      user1.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "user",
+      user2.id,
+      "gpt-4o",
+      300,
+      300,
+    );
+
+    // Call cleanup with only user1
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { user: user1.id },
+    });
+
+    // user1 reset to 0
+    const user1Usage = await LimitModel.getRawModelUsage(user1Limit.id);
+    expect(user1Usage[0].currentUsageTokensIn).toBe(0);
+    expect(user1Usage[0].currentUsageTokensOut).toBe(0);
+
+    // user2 NOT reset
+    const user2Usage = await LimitModel.getRawModelUsage(user2Limit.id);
+    expect(user2Usage[0].currentUsageTokensIn).toBe(300);
+    expect(user2Usage[0].currentUsageTokensOut).toBe(300);
+  });
+
+  test("multiple teams in entities array all get cleaned", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team1 = await makeTeam(org.id, user.id);
+    const team2 = await makeTeam(org.id, user.id);
+
+    const team1Limit = await LimitModel.create({
+      entityType: "team",
+      entityId: team1.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    const team2Limit = await LimitModel.create({
+      entityType: "team",
+      entityId: team2.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+    });
+
+    // Add usage to both
+    await LimitModel.updateTokenLimitUsage(
+      "team",
+      team1.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "team",
+      team2.id,
+      "gpt-4o",
+      300,
+      300,
+    );
+
+    // Call cleanup with both teams
+    await LimitModel.cleanupLimitsIfNeeded({
+      entities: { team: [team1.id, team2.id] },
+    });
+
+    // Both reset to 0
+    const team1Usage = await LimitModel.getRawModelUsage(team1Limit.id);
+    expect(team1Usage[0].currentUsageTokensIn).toBe(0);
+    expect(team1Usage[0].currentUsageTokensOut).toBe(0);
+
+    const team2Usage = await LimitModel.getRawModelUsage(team2Limit.id);
+    expect(team2Usage[0].currentUsageTokensIn).toBe(0);
+    expect(team2Usage[0].currentUsageTokensOut).toBe(0);
+  });
+
+  test("cleanup with no options at all resolves without error", async () => {
+    await expect(LimitModel.cleanupLimitsIfNeeded({})).resolves.toBeUndefined();
   });
 });

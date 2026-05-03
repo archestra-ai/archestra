@@ -9,6 +9,7 @@ import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
+  PROVIDER_CONFIG,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   useCreateLlmProviderApiKey,
@@ -47,15 +49,26 @@ export function CreateLlmProviderApiKeyDialog({
   const byosEnabled = useFeature("byosEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
+  const { data: canCreateOrgScopedKey } = useHasPermissions({
+    llmProviderApiKey: ["admin"],
+  });
 
   const form = useForm<LlmProviderApiKeyFormValues>({
-    defaultValues: getDefaultFormValues(defaultValues),
+    defaultValues: getDefaultFormValues({
+      defaultValues,
+      canCreateOrgScopedKey: canCreateOrgScopedKey === true,
+    }),
   });
 
   useEffect(() => {
     if (!open) return;
-    form.reset(getDefaultFormValues(defaultValues));
-  }, [defaultValues, form, open]);
+    form.reset(
+      getDefaultFormValues({
+        defaultValues,
+        canCreateOrgScopedKey: canCreateOrgScopedKey === true,
+      }),
+    );
+  }, [canCreateOrgScopedKey, defaultValues, form, open]);
 
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
@@ -66,7 +79,7 @@ export function CreateLlmProviderApiKeyDialog({
   const handleCreate = form.handleSubmit(async (values) => {
     try {
       await createMutation.mutateAsync({
-        name: values.name,
+        name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
         provider: values.provider,
         apiKey: values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
@@ -134,16 +147,18 @@ export function CreateLlmProviderApiKeyDialog({
   );
 }
 
-function getDefaultFormValues(
-  defaultValues?: Partial<LlmProviderApiKeyFormValues>,
-): LlmProviderApiKeyFormValues {
+function getDefaultFormValues(params: {
+  defaultValues?: Partial<LlmProviderApiKeyFormValues>;
+  canCreateOrgScopedKey: boolean;
+}): LlmProviderApiKeyFormValues {
+  const { defaultValues, canCreateOrgScopedKey } = params;
   return {
     name: "",
     provider: "anthropic",
     apiKey: null,
     baseUrl: null,
     extraHeaders: [],
-    scope: "personal",
+    scope: canCreateOrgScopedKey ? "org" : "personal",
     teamId: null,
     vaultSecretPath: null,
     vaultSecretKey: null,
@@ -160,7 +175,6 @@ function getIsCreateFormValid(params: {
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-      values.name &&
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey

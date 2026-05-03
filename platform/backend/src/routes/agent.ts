@@ -701,11 +701,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Prevent downgrading shared agents to personal
-      if (body.scope === "personal" && existingAgent.scope !== "personal") {
-        throw new ApiError(400, "Shared agents cannot be made personal");
-      }
-
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
         if (existingAgent.agentType === "llm_proxy") {
@@ -853,14 +848,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in agents cannot be deleted");
       }
 
-      // Prevent deletion of an agent that is any member's default
-      const isDefault = await MemberModel.isAgentDefault(id);
-      if (isDefault) {
-        throw new ApiError(
-          403,
-          "Cannot delete a default agent. Set another agent as default first.",
-        );
-      }
+      // Clear defaultAgentId for any members who reference this agent as their default
+      await MemberModel.clearDefaultAgentForAll(id);
 
       // Prevent deletion of a user's personal MCP gateway
       if (agent.isPersonalGateway) {

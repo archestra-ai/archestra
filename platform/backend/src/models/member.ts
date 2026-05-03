@@ -433,6 +433,17 @@ class MemberModel {
       .where(eq(schema.membersTable.defaultAgentId, agentId));
     return (result?.count ?? 0) > 0;
   }
+
+  /**
+   * Clear defaultAgentId for all members that reference the given agent.
+   * Called before deleting an agent so the deletion guard is not needed.
+   */
+  static async clearDefaultAgentForAll(agentId: string): Promise<void> {
+    await db
+      .update(schema.membersTable)
+      .set({ defaultAgentId: null })
+      .where(eq(schema.membersTable.defaultAgentId, agentId));
+  }
 }
 
 export default MemberModel;

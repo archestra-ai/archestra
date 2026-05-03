@@ -421,8 +421,6 @@ function AccessLevelSelector({
   const canShareWithTeams = isAdmin || isTeamAdmin;
 
   const isOptionDisabled = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
-      return true;
     if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
@@ -437,8 +435,6 @@ function AccessLevelSelector({
   const resourceName = resourceMap[agentType] || "agent";
 
   const getDisabledReason = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
-      return "Shared agents cannot be made personal";
     if (value === "team" && !canReadTeams)
       return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)

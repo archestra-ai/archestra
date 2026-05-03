@@ -383,6 +383,67 @@ describe("agent routes", () => {
       const created = response.json();
       expect(created.isPersonalGateway).toBe(false);
     });
+
+    test("deleting a default agent succeeds and clears member defaultAgentId", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const { default: MemberModel } = await import("@/models/member");
+
+      const memberUser = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(memberUser.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: memberUser.id,
+        organizationId: org.id,
+      });
+
+      const defaultAgentId = await MemberModel.getDefaultAgentId(
+        memberUser.id,
+        org.id,
+      );
+      if (!defaultAgentId) throw new Error("expected default agent to be set");
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${defaultAgentId}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteResponse.json().success).toBe(true);
+
+      // defaultAgentId should now be cleared
+      const clearedDefault = await MemberModel.getDefaultAgentId(
+        memberUser.id,
+        org.id,
+      );
+      expect(clearedDefault).toBeNull();
+    });
+  });
+
+  describe("PUT /api/agents/:id scope changes", () => {
+    test("allows changing scope from org back to personal", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: `Scope Downgrade Test ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${agent.id}`,
+        payload: { scope: "personal" },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json().scope).toBe("personal");
+    });
   });
 
   describe("GET /api/agents (paginated)", () => {

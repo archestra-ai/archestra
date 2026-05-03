@@ -22,6 +22,13 @@ type EvaluationResult = {
   reason: string;
 };
 
+export type SimulationOutcome = "allowed" | "blocked" | "require_approval";
+
+export type SimulationEvaluation = {
+  outcome: SimulationOutcome;
+  reason?: string;
+};
+
 export type PolicyEvaluationContext = {
   teamIds: string[];
   externalAgentId?: string;
@@ -615,6 +622,152 @@ class ToolInvocationPolicyModel {
     }
 
     return { isAllowed: true, reason: "" };
+  }
+
+  /**
+   * Evaluates a single tool call against a provided set of policies without any DB access.
+   * Used for policy simulation — call this with both current and candidate policy sets to
+   * compute the diff.
+   *
+   * The evaluation logic mirrors evaluateBatch(). Unlike evaluateBatch(), this method also
+   * distinguishes `require_approval` from plain `allowed` so callers can surface the
+   * difference in simulation output.
+   */
+  static evaluateToolCallAgainstPolicies(
+    toolCallName: string,
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    toolInput: Record<string, any>,
+    context: PolicyEvaluationContext,
+    isContextTrusted: boolean,
+    policies: ToolInvocation.ToolInvocationPolicy[],
+  ): SimulationEvaluation {
+    if (
+      archestraMcpBranding.isToolName(toolCallName) ||
+      isAgentTool(toolCallName)
+    ) {
+      return { outcome: "allowed" };
+    }
+
+    const specificPolicies = policies.filter((p) => p.conditions.length > 0);
+    const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
+
+    let hasMatchingSpecificPolicy = false;
+    let specificAllowsUntrusted = false;
+    let specificRequiresApproval = false;
+
+    for (const policy of specificPolicies) {
+      const conditionsMatch = policy.conditions.every((condition) => {
+        const { key, value, operator } = condition;
+        if (key.startsWith("context.")) {
+          return ToolInvocationPolicyModel.evaluateContextCondition(
+            key,
+            value,
+            operator,
+            context,
+          );
+        }
+        return ToolInvocationPolicyModel.evaluateInputCondition(
+          key,
+          value,
+          operator,
+          toolInput,
+        );
+      });
+
+      if (!conditionsMatch) continue;
+
+      hasMatchingSpecificPolicy = true;
+
+      if (policy.action === "block_always") {
+        return {
+          outcome: "blocked",
+          reason: policy.reason ?? TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
+        };
+      }
+
+      if (
+        policy.action === "block_when_context_is_untrusted" &&
+        !isContextTrusted
+      ) {
+        return {
+          outcome: "blocked",
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        };
+      }
+
+      if (policy.action === "require_approval") {
+        specificRequiresApproval = true;
+        specificAllowsUntrusted = true;
+      }
+
+      if (policy.action === "allow_when_context_is_untrusted") {
+        specificAllowsUntrusted = true;
+      }
+    }
+
+    if (hasMatchingSpecificPolicy) {
+      if (!isContextTrusted && !specificAllowsUntrusted) {
+        return {
+          outcome: "blocked",
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        };
+      }
+      return {
+        outcome: specificRequiresApproval ? "require_approval" : "allowed",
+      };
+    }
+
+    let defaultAllowsUntrusted = false;
+    let defaultRequiresApproval = false;
+
+    for (const policy of defaultPolicies) {
+      if (policy.action === "block_always") {
+        return {
+          outcome: "blocked",
+          reason: policy.reason ?? TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
+        };
+      }
+
+      if (
+        policy.action === "block_when_context_is_untrusted" &&
+        !isContextTrusted
+      ) {
+        return {
+          outcome: "blocked",
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        };
+      }
+
+      if (policy.action === "require_approval") {
+        defaultRequiresApproval = true;
+        defaultAllowsUntrusted = true;
+      }
+
+      if (policy.action === "allow_when_context_is_untrusted") {
+        defaultAllowsUntrusted = true;
+      }
+    }
+
+    if (defaultPolicies.length > 0) {
+      if (!isContextTrusted && !defaultAllowsUntrusted) {
+        return {
+          outcome: "blocked",
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        };
+      }
+      return {
+        outcome: defaultRequiresApproval ? "require_approval" : "allowed",
+      };
+    }
+
+    if (!isContextTrusted) {
+      return {
+        outcome: "blocked",
+        reason: TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
+      };
+    }
+
+    return { outcome: "allowed" };
   }
 
   /**

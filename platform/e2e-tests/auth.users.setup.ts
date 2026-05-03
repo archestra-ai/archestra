@@ -1,6 +1,7 @@
 import {
   type APIRequestContext,
   expect,
+  type Page,
   test as setup,
 } from "@playwright/test";
 import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
@@ -138,7 +139,7 @@ async function createInvitation(
   request: APIRequestContext,
   email: string,
   role: string,
-): Promise<string> {
+): Promise<string | null> {
   // Get the organization ID first
   const organizationId = await getActiveOrganizationId(request);
   if (!organizationId) {
@@ -179,6 +180,10 @@ async function createInvitation(
       if (existingInvitationId) {
         return existingInvitationId;
       }
+    }
+
+    if (errorText.includes("USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION")) {
+      return null;
     }
 
     throw new Error(
@@ -245,137 +250,25 @@ async function userExists(
   return signedIn;
 }
 
-// Run user setup tests sequentially to avoid rate limiting
-setup.describe.configure({ mode: "serial" });
+setup("authenticate users", async ({ page }) => {
+  await authenticateInvitedUser({
+    page,
+    email: EDITOR_EMAIL,
+    password: EDITOR_PASSWORD,
+    role: EDITOR_ROLE_NAME,
+    authFile: editorAuthFile,
+    label: "Editor",
+  });
 
-// Setup editor authentication - runs after admin setup
-setup("authenticate as editor", async ({ page }) => {
-  // Check if editor user already exists
-  const editorExists = await userExists(
-    page.request,
-    EDITOR_EMAIL,
-    EDITOR_PASSWORD,
-  );
+  await authenticateInvitedUser({
+    page,
+    email: MEMBER_EMAIL,
+    password: MEMBER_PASSWORD,
+    role: MEMBER_ROLE_NAME,
+    authFile: memberAuthFile,
+    label: "Member",
+  });
 
-  if (!editorExists) {
-    // Wait 100ms to avoid rate limiting after userExists check
-    await sleep(100);
-
-    // Sign in as admin to create invitation
-    const adminSignedIn = await signInUser(
-      page.request,
-      ADMIN_EMAIL,
-      ADMIN_PASSWORD,
-    );
-    expect(adminSignedIn, "Admin sign-in failed for editor setup").toBe(true);
-
-    // Navigate to establish cookie context with organization
-    await page.goto(`${UI_BASE_URL}/chat`);
-    await page.waitForLoadState("domcontentloaded");
-
-    // Create invitation for editor
-    const invitationId = await createInvitation(
-      page.request,
-      EDITOR_EMAIL,
-      EDITOR_ROLE_NAME,
-    );
-
-    // Sign out admin
-    await signOut(page.request);
-
-    // Sign up editor with invitation
-    await signUpWithInvitation(
-      page.request,
-      EDITOR_EMAIL,
-      EDITOR_PASSWORD,
-      invitationId,
-    );
-  } else {
-    // Editor exists, just sign in
-    const signedIn = await signInUser(
-      page.request,
-      EDITOR_EMAIL,
-      EDITOR_PASSWORD,
-    );
-    expect(signedIn, "Editor sign-in failed").toBe(true);
-  }
-
-  // Navigate to trigger cookie storage and verify auth
-  await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("domcontentloaded");
-
-  // Verify we're authenticated
-  await expectAuthenticated(page);
-
-  // Save editor auth state
-  await page.context().storageState({ path: editorAuthFile });
-});
-
-// Setup member authentication - runs after admin setup
-setup("authenticate as member", async ({ page }) => {
-  // Check if member user already exists
-  const memberExists = await userExists(
-    page.request,
-    MEMBER_EMAIL,
-    MEMBER_PASSWORD,
-  );
-
-  if (!memberExists) {
-    // Wait 100ms to avoid rate limiting after userExists check
-    await sleep(100);
-
-    // Sign in as admin to create invitation
-    const adminSignedIn = await signInUser(
-      page.request,
-      ADMIN_EMAIL,
-      ADMIN_PASSWORD,
-    );
-    expect(adminSignedIn, "Admin sign-in failed for member setup").toBe(true);
-
-    // Navigate to establish cookie context with organization
-    await page.goto(`${UI_BASE_URL}/chat`);
-    await page.waitForLoadState("domcontentloaded");
-
-    // Create invitation for member
-    const invitationId = await createInvitation(
-      page.request,
-      MEMBER_EMAIL,
-      MEMBER_ROLE_NAME,
-    );
-
-    // Sign out admin
-    await signOut(page.request);
-
-    // Sign up member with invitation
-    await signUpWithInvitation(
-      page.request,
-      MEMBER_EMAIL,
-      MEMBER_PASSWORD,
-      invitationId,
-    );
-  } else {
-    // Member exists, just sign in
-    const signedIn = await signInUser(
-      page.request,
-      MEMBER_EMAIL,
-      MEMBER_PASSWORD,
-    );
-    expect(signedIn, "Member sign-in failed").toBe(true);
-  }
-
-  // Navigate to trigger cookie storage and verify auth
-  await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("domcontentloaded");
-
-  // Verify we're authenticated
-  await expectAuthenticated(page);
-
-  // Save member auth state
-  await page.context().storageState({ path: memberAuthFile });
-});
-
-// Setup basic-user authentication (custom role with slim permissions)
-setup("authenticate as basic-user (custom role)", async ({ page }) => {
   const basicUserExists = await userExists(
     page.request,
     BASIC_USER_EMAIL,
@@ -385,55 +278,97 @@ setup("authenticate as basic-user (custom role)", async ({ page }) => {
   // Always sign in as admin first so we can refresh the basic-user role's
   // permission set on every run. Without this, prior runs that created the
   // role with a stale permission set would persist and break the test.
+  await signInAsAdminForSetup(page, "basic-user");
+
+  const basicUserRoleIdentifier = await ensureBasicUserRole(page.request);
+
+  await authenticateInvitedUser({
+    page,
+    email: BASIC_USER_EMAIL,
+    password: BASIC_USER_PASSWORD,
+    role: basicUserRoleIdentifier,
+    authFile: basicUserAuthFile,
+    label: "Basic-user",
+    userExists: basicUserExists,
+    adminAlreadySignedIn: true,
+  });
+});
+
+async function authenticateInvitedUser(params: {
+  page: Page;
+  email: string;
+  password: string;
+  role: string;
+  authFile: string;
+  label: string;
+  userExists?: boolean;
+  adminAlreadySignedIn?: boolean;
+}): Promise<void> {
+  const exists =
+    params.userExists ??
+    (await userExists(params.page.request, params.email, params.password));
+
+  if (!exists) {
+    if (!params.adminAlreadySignedIn) {
+      await signInAsAdminForSetup(params.page, params.label.toLowerCase());
+    }
+
+    const invitationId = await createInvitation(
+      params.page.request,
+      params.email,
+      params.role,
+    );
+
+    await signOut(params.page.request);
+    if (invitationId) {
+      await signUpWithInvitation(
+        params.page.request,
+        params.email,
+        params.password,
+        invitationId,
+      );
+    } else {
+      const signedIn = await signInUser(
+        params.page.request,
+        params.email,
+        params.password,
+      );
+      expect(signedIn, `${params.label} sign-in failed`).toBe(true);
+    }
+  } else {
+    if (params.adminAlreadySignedIn) {
+      await signOut(params.page.request);
+    }
+
+    const signedIn = await signInUser(
+      params.page.request,
+      params.email,
+      params.password,
+    );
+    expect(signedIn, `${params.label} sign-in failed`).toBe(true);
+  }
+
+  await params.page.goto(`${UI_BASE_URL}/chat`);
+  await params.page.waitForLoadState("domcontentloaded");
+  await expectAuthenticated(params.page);
+  await params.page.context().storageState({ path: params.authFile });
+  await signOut(params.page.request);
+}
+
+async function signInAsAdminForSetup(page: Page, label: string): Promise<void> {
   await sleep(100);
+
   const adminSignedIn = await signInUser(
     page.request,
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
   );
-  expect(adminSignedIn, "Admin sign-in failed for basic-user setup").toBe(true);
+  expect(adminSignedIn, `Admin sign-in failed for ${label} setup`).toBe(true);
 
-  // Establish cookie context with active organization
+  // Establish cookie context with active organization.
   await page.goto(`${UI_BASE_URL}/chat`);
   await page.waitForLoadState("domcontentloaded");
-
-  // Ensure the custom role exists with the current permission set
-  const basicUserRoleIdentifier = await ensureBasicUserRole(page.request);
-
-  if (!basicUserExists) {
-    // Invite basic user with the custom role identifier
-    const invitationId = await createInvitation(
-      page.request,
-      BASIC_USER_EMAIL,
-      basicUserRoleIdentifier,
-    );
-
-    await signOut(page.request);
-
-    await signUpWithInvitation(
-      page.request,
-      BASIC_USER_EMAIL,
-      BASIC_USER_PASSWORD,
-      invitationId,
-    );
-  } else {
-    await signOut(page.request);
-
-    const signedIn = await signInUser(
-      page.request,
-      BASIC_USER_EMAIL,
-      BASIC_USER_PASSWORD,
-    );
-    expect(signedIn, "Basic-user sign-in failed").toBe(true);
-  }
-
-  await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("domcontentloaded");
-
-  await expectAuthenticated(page);
-
-  await page.context().storageState({ path: basicUserAuthFile });
-});
+}
 
 async function findCustomRole(
   request: APIRequestContext,

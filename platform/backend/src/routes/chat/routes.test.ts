@@ -34,6 +34,7 @@ import {
   extractFirstMessages,
   generateConversationTitle,
   getChatStopToolNames,
+  isPreliminaryTitle,
   PRELIMINARY_TITLE_MAX_LENGTH,
 } from "./routes";
 
@@ -681,54 +682,30 @@ describe("title generation integration", () => {
   });
 });
 
-describe("PRELIMINARY_TITLE_MAX_LENGTH", () => {
-  it("is 200", () => {
-    expect(PRELIMINARY_TITLE_MAX_LENGTH).toBe(200);
-  });
-
-  it("preliminary title detection: matches when title equals truncated first user message", () => {
+describe("isPreliminaryTitle", () => {
+  it("returns true when stored title equals truncated first user message", () => {
     const longMessage = "A".repeat(300);
-    const storedTitle = longMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-    const firstUserMessage = longMessage;
-
-    const isPreliminaryTitle =
-      !!firstUserMessage &&
-      storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-
-    expect(isPreliminaryTitle).toBe(true);
+    expect(
+      isPreliminaryTitle(
+        longMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH),
+        longMessage,
+      ),
+    ).toBe(true);
   });
 
-  it("preliminary title detection: short message stored verbatim is also detected", () => {
-    const shortMessage = "hi";
-    const storedTitle = shortMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-    const firstUserMessage = shortMessage;
-
-    const isPreliminaryTitle =
-      !!firstUserMessage &&
-      storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-
-    expect(isPreliminaryTitle).toBe(true);
+  it("returns true when first user message is shorter than the limit", () => {
+    expect(isPreliminaryTitle("hi", "hi")).toBe(true);
   });
 
-  it("preliminary title detection: LLM-generated title does not match", () => {
-    const firstUserMessage = "hello";
-    const llmTitle = "Greeting Conversation"; // different from firstUserMessage
-
-    const isPreliminaryTitle =
-      !!firstUserMessage &&
-      llmTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-
-    expect(isPreliminaryTitle).toBe(false);
+  it("returns false when stored title was set by the LLM", () => {
+    expect(isPreliminaryTitle("Greeting Conversation", "hello")).toBe(false);
   });
 
-  it("preliminary title detection: empty firstUserMessage returns false", () => {
-    const firstUserMessage = "";
-    const storedTitle = "something";
+  it("returns false when storedTitle is null", () => {
+    expect(isPreliminaryTitle(null, "hello")).toBe(false);
+  });
 
-    const isPreliminaryTitle =
-      !!firstUserMessage &&
-      storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-
-    expect(isPreliminaryTitle).toBe(false);
+  it("returns false when firstUserMessage is empty", () => {
+    expect(isPreliminaryTitle("hello", "")).toBe(false);
   });
 });

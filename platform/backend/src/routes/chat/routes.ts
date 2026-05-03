@@ -90,11 +90,7 @@ import {
 } from "./errors";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
-/**
- * Maximum length of the preliminary conversation title set from the first user
- * message. This value is shared between the streaming endpoint (which sets the
- * title) and the generate-title endpoint (which detects and overwrites it).
- */
+/** Max characters for the preliminary title stored from the first user message. */
 export const PRELIMINARY_TITLE_MAX_LENGTH = 200;
 
 function getCorrelationLogFields(traceContext: {
@@ -1534,16 +1530,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversation.messages || [],
       );
 
-      // Skip if title is already set (unless regenerating or overwriting a
-      // preliminary title). A preliminary title is written immediately from the
-      // first user message so the sidebar shows something meaningful before the
-      // LLM-generated title is ready (#3246). Detect it by comparing against
-      // the same truncated value that was stored.
-      const isPreliminaryTitle =
-        !!firstUserMessage &&
-        conversation.title ===
-          firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
-      if (conversation.title && !regenerate && !isPreliminaryTitle) {
+      // Skip if a real title is already set (unless regenerating).
+      // Preliminary titles (set from the first user message while waiting for
+      // LLM generation) are always overwritten.
+      if (
+        conversation.title &&
+        !regenerate &&
+        !isPreliminaryTitle(conversation.title, firstUserMessage)
+      ) {
         logger.info(
           { conversationId: id, existingTitle: conversation.title },
           "Skipping title generation - title already set",
@@ -1855,6 +1849,22 @@ interface Message {
 export interface ExtractedMessages {
   firstUserMessage: string;
   firstAssistantMessage: string;
+}
+
+/**
+ * Returns true if storedTitle looks like a preliminary title set from the
+ * first user message (i.e. it equals firstUserMessage truncated to
+ * PRELIMINARY_TITLE_MAX_LENGTH). Used by generate-title to decide whether
+ * to overwrite the stored title with an LLM-generated one.
+ */
+export function isPreliminaryTitle(
+  storedTitle: string | null,
+  firstUserMessage: string,
+): boolean {
+  if (!storedTitle || !firstUserMessage) return false;
+  return (
+    storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH)
+  );
 }
 
 /**

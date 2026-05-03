@@ -56,9 +56,6 @@ export function MermaidDiagram({
     const renderDiagram = async () => {
       if (ref.current) {
         ref.current.replaceChildren();
-        // Declare uniqueId outside try so it's accessible in catch for cleanup.
-        // mermaid.render() creates a temporary div#uniqueId in document.body;
-        // we must remove it on error to prevent it leaking to other pages.
         const uniqueId = `${id}-${Date.now()}`;
         try {
           const { svg } = await mermaid.render(uniqueId, chart);
@@ -70,7 +67,6 @@ export function MermaidDiagram({
             requestAnimationFrame(() => setIsLoaded(true));
           }
         } catch (err) {
-          // Remove the temporary container mermaid may have left in document.body.
           document.getElementById(uniqueId)?.remove();
           const message = err instanceof Error ? err.message : String(err);
           setError(message);

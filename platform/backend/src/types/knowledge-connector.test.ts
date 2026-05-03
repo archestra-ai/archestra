@@ -7,6 +7,7 @@ import {
   JiraConfigSchema,
   SalesforceCheckpointSchema,
   SalesforceConfigSchema,
+  SlackCheckpointSchema,
   SlackConfigSchema,
 } from "./knowledge-connector";
 
@@ -277,6 +278,44 @@ describe("knowledge-connector schemas", () => {
       expect(result.syncWindowDays).toBe(30);
       expect(result.skipBotMessages).toBe(true);
       expect(result.batchSize).toBe(50);
+    });
+
+    test("rejects invalid syncWindowDays", () => {
+      expect(() =>
+        SlackConfigSchema.parse({
+          type: "slack",
+          channelIds: ["C123"],
+          syncWindowDays: 0,
+        }),
+      ).toThrow();
+
+      expect(() =>
+        SlackConfigSchema.parse({
+          type: "slack",
+          channelIds: ["C123"],
+          syncWindowDays: 3651,
+        }),
+      ).toThrow();
+
+      expect(() =>
+        SlackConfigSchema.parse({
+          type: "slack",
+          channelIds: ["C123"],
+          syncWindowDays: 1.5,
+        }),
+      ).toThrow();
+    });
+
+    test("parses SlackCheckpoint correctly", () => {
+      const result = SlackCheckpointSchema.parse({
+        type: "slack",
+        channelCursors: {
+          C123: "1700000000.000000",
+        },
+        lastSyncedAt: "2026-05-01T00:00:00Z",
+      });
+      expect(result.type).toBe("slack");
+      expect(result.channelCursors?.C123).toBe("1700000000.000000");
     });
   });
 

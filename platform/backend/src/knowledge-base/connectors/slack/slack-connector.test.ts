@@ -278,6 +278,16 @@ describe("SlackConnector", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("ECONNREFUSED");
     });
+
+    it("returns failure when config is invalid", async () => {
+      const connector = makeConnector();
+      const result = await connector.testConnection({
+        config: { channelIds: [] },
+        credentials,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Channel IDs are required");
+    });
   });
 
   // ===== estimateTotalItems =====
@@ -307,6 +317,16 @@ describe("SlackConnector", () => {
       const connector = makeConnector();
       const result = await connector.estimateTotalItems({
         config: { channelIds: ["C001"] },
+        credentials,
+        checkpoint: null,
+      });
+      expect(result).toBe(null);
+    });
+
+    it("returns null when config is invalid", async () => {
+      const connector = makeConnector();
+      const result = await connector.estimateTotalItems({
+        config: { channelIds: [] }, // Invalid config
         credentials,
         checkpoint: null,
       });
@@ -615,6 +635,42 @@ describe("SlackConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].content).toContain("Normal message");
     });
+
+    it("includes thread_broadcast subtypes", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000000", "Also sent to channel", {
+            user: "U001",
+            subtype: "thread_broadcast",
+          }),
+        ],
+        has_more: false,
+      });
+
+      mockUsersInfo.mockResolvedValue({
+        user: { real_name: "Alice", profile: {}, name: "alice" },
+      });
+
+      const connector = makeConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001"] },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain("Also sent to channel");
+    });
   });
 
   // ===== sync — thread resolution =====
@@ -730,6 +786,113 @@ describe("SlackConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].content).toBe("Parent message");
       expect(batches[0].documents[0].content).not.toContain("Thread replies:");
+    });
+
+    it("filters bot messages in thread replies when skipBotMessages is true", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000000", "Parent message", {
+            user: "U001",
+            reply_count: 2,
+            thread_ts: "1700000001.000000",
+          }),
+        ],
+        has_more: false,
+      });
+
+      mockConversationsReplies.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000000", "Parent message", { user: "U001" }),
+          makeMessage("1700000001.000100", "Bot reply", { bot_id: "B001" }),
+          makeMessage("1700000001.000200", "Human reply", { user: "U002" }),
+        ],
+      });
+
+      mockUsersInfo.mockResolvedValue({
+        user: { real_name: "Human", profile: {}, name: "human" },
+      });
+
+      const connector = makeConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001"], skipBotMessages: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const doc = batches[0].documents[0];
+      expect(doc.content).toContain("Parent message");
+      expect(doc.content).not.toContain("Bot reply");
+      expect(doc.content).toContain("Human reply");
+    });
+
+    it("paginates through multiple pages of thread replies", async () => {
+      mockConversationsList.mockResolvedValueOnce({
+        ok: true,
+        channels: [makeChannel("C001", "general")],
+        response_metadata: { next_cursor: "" },
+      });
+
+      mockConversationsHistory.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000000", "Parent message", {
+            user: "U001",
+            reply_count: 3,
+            thread_ts: "1700000001.000000",
+          }),
+        ],
+        has_more: false,
+      });
+
+      // Page 1
+      mockConversationsReplies.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000000", "Parent message", { user: "U001" }),
+          makeMessage("1700000001.000100", "Reply 1", { user: "U002" }),
+        ],
+        has_more: true,
+        response_metadata: { next_cursor: "page2" },
+      });
+
+      // Page 2
+      mockConversationsReplies.mockResolvedValueOnce({
+        ok: true,
+        messages: [
+          makeMessage("1700000001.000200", "Reply 2", { user: "U003" }),
+        ],
+        has_more: false,
+      });
+
+      mockUsersInfo.mockResolvedValue({
+        user: { real_name: "Human", profile: {}, name: "human" },
+      });
+
+      const connector = makeConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { channelIds: ["C001"], skipBotMessages: false },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const doc = batches[0].documents[0];
+      expect(doc.content).toContain("Reply 1");
+      expect(doc.content).toContain("Reply 2");
+      expect(mockConversationsReplies).toHaveBeenCalledTimes(2);
     });
   });
 

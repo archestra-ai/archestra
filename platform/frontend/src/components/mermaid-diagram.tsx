@@ -16,9 +16,11 @@ export function MermaidDiagram({
   const ref = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoaded(false);
+    setError(null);
     const isDark = theme === "dark";
 
     mermaid.initialize({
@@ -54,9 +56,11 @@ export function MermaidDiagram({
     const renderDiagram = async () => {
       if (ref.current) {
         ref.current.replaceChildren();
+        // Declare uniqueId outside try so it's accessible in catch for cleanup.
+        // mermaid.render() creates a temporary div#uniqueId in document.body;
+        // we must remove it on error to prevent it leaking to other pages.
+        const uniqueId = `${id}-${Date.now()}`;
         try {
-          // Generate a unique ID to avoid conflicts
-          const uniqueId = `${id}-${Date.now()}`;
           const { svg } = await mermaid.render(uniqueId, chart);
           if (ref.current) {
             // Parse SVG string via DOMParser to avoid innerHTML
@@ -65,20 +69,27 @@ export function MermaidDiagram({
             ref.current.replaceChildren(svgElement);
             requestAnimationFrame(() => setIsLoaded(true));
           }
-        } catch (error) {
-          console.error("Error rendering mermaid diagram:", error);
-          if (ref.current) {
-            const pre = document.createElement("pre");
-            pre.textContent = chart;
-            ref.current.replaceChildren(pre);
-            setIsLoaded(true);
-          }
+        } catch (err) {
+          // Remove the temporary container mermaid may have left in document.body.
+          document.getElementById(uniqueId)?.remove();
+          const message = err instanceof Error ? err.message : String(err);
+          setError(message);
+          setIsLoaded(true);
         }
       }
     };
 
     renderDiagram();
   }, [chart, id, theme]);
+
+  if (error) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive text-xs whitespace-pre-wrap break-words select-text">
+        <p className="font-medium mb-1">Invalid diagram</p>
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div

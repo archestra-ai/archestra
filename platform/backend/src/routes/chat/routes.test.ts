@@ -34,6 +34,7 @@ import {
   extractFirstMessages,
   generateConversationTitle,
   getChatStopToolNames,
+  PRELIMINARY_TITLE_MAX_LENGTH,
 } from "./routes";
 
 describe("prepareMessagesForProvider", () => {
@@ -677,5 +678,57 @@ describe("title generation integration", () => {
     expect(prompt).toContain(
       "Assistant: I can help you debug that. What error are you seeing?",
     );
+  });
+});
+
+describe("PRELIMINARY_TITLE_MAX_LENGTH", () => {
+  it("is 200", () => {
+    expect(PRELIMINARY_TITLE_MAX_LENGTH).toBe(200);
+  });
+
+  it("preliminary title detection: matches when title equals truncated first user message", () => {
+    const longMessage = "A".repeat(300);
+    const storedTitle = longMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+    const firstUserMessage = longMessage;
+
+    const isPreliminaryTitle =
+      !!firstUserMessage &&
+      storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+
+    expect(isPreliminaryTitle).toBe(true);
+  });
+
+  it("preliminary title detection: short message stored verbatim is also detected", () => {
+    const shortMessage = "hi";
+    const storedTitle = shortMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+    const firstUserMessage = shortMessage;
+
+    const isPreliminaryTitle =
+      !!firstUserMessage &&
+      storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+
+    expect(isPreliminaryTitle).toBe(true);
+  });
+
+  it("preliminary title detection: LLM-generated title does not match", () => {
+    const firstUserMessage = "hello";
+    const llmTitle = "Greeting Conversation"; // different from firstUserMessage
+
+    const isPreliminaryTitle =
+      !!firstUserMessage &&
+      llmTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+
+    expect(isPreliminaryTitle).toBe(false);
+  });
+
+  it("preliminary title detection: empty firstUserMessage returns false", () => {
+    const firstUserMessage = "";
+    const storedTitle = "something";
+
+    const isPreliminaryTitle =
+      !!firstUserMessage &&
+      storedTitle === firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+
+    expect(isPreliminaryTitle).toBe(false);
   });
 });

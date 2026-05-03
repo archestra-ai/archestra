@@ -90,6 +90,13 @@ import {
 } from "./errors";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
+/**
+ * Maximum length of the preliminary conversation title set from the first user
+ * message. This value is shared between the streaming endpoint (which sets the
+ * title) and the generate-title endpoint (which detects and overwrites it).
+ */
+export const PRELIMINARY_TITLE_MAX_LENGTH = 200;
+
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
   traceId?: string;
@@ -399,6 +406,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               { error, conversationId },
               "Failed to persist user messages early (will retry in onFinish)",
             );
+          }
+
+          // Set a preliminary title from the first user message so the sidebar
+          // shows something meaningful before the LLM generates a title (#3246).
+          if (!conversation.title) {
+            const { firstUserMessage: prelimMsg } =
+              extractFirstMessages(messages);
+            if (prelimMsg) {
+              const prelimTitle = prelimMsg.slice(
+                0,
+                PRELIMINARY_TITLE_MAX_LENGTH,
+              );
+              try {
+                await ConversationModel.update(
+                  conversationId,
+                  user.id,
+                  organizationId,
+                  { title: prelimTitle },
+                );
+              } catch (error) {
+                logger.warn(
+                  { error, conversationId },
+                  "Failed to set preliminary title from first user message",
+                );
+              }
+            }
           }
 
           // Create stream with token usage data support
@@ -1496,19 +1529,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Skip if title is already set (unless regenerating)
-      if (conversation.title && !regenerate) {
+      // Extract first user and assistant messages
+      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
+        conversation.messages || [],
+      );
+
+      // Skip if title is already set (unless regenerating or overwriting a
+      // preliminary title). A preliminary title is written immediately from the
+      // first user message so the sidebar shows something meaningful before the
+      // LLM-generated title is ready (#3246). Detect it by comparing against
+      // the same truncated value that was stored.
+      const isPreliminaryTitle =
+        !!firstUserMessage &&
+        conversation.title ===
+          firstUserMessage.slice(0, PRELIMINARY_TITLE_MAX_LENGTH);
+      if (conversation.title && !regenerate && !isPreliminaryTitle) {
         logger.info(
           { conversationId: id, existingTitle: conversation.title },
           "Skipping title generation - title already set",
         );
         return reply.send(conversation);
       }
-
-      // Extract first user and assistant messages
-      const { firstUserMessage, firstAssistantMessage } = extractFirstMessages(
-        conversation.messages || [],
-      );
 
       // Need at least user message to generate title
       if (!firstUserMessage) {

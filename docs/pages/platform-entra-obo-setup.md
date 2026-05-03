@@ -33,8 +33,6 @@ The first three sections get sign-in working. If that is all you need today, you
 
 ## 1. Register Entra App for SSO
 
-[screenshot: platform-entra-obo-setup_app-registration-overview.webp — Entra Overview page showing client ID and tenant ID]
-
 ### Create the app registration
 
 1. **Microsoft Entra ID** > **App registrations** > **+ New registration**
@@ -65,13 +63,13 @@ The first three sections get sign-in working. If that is all you need today, you
 
 ## 2. Configure SSO in Archestra
 
-Go to **Settings > Identity Providers** and click **Enable** on the **Microsoft Entra ID** card. The card pre-fills the discovery endpoint and sets the provider ID to `EntraID` (which is what makes the redirect URI from Step 1 work).
+Go to **Settings > Identity Providers** and click **Enable** on the **Microsoft Entra ID** card.
 
 Fill in:
 
+- **All pre-filled endpoint URLs:** replace the literal `{tenant-id}` placeholder with your Directory (tenant) ID from Step 1 in every field that contains it. For multi-tenant apps, use `common` or `organizations` instead
 - **Client ID:** the Application (client) ID from Step 1
 - **Client Secret:** the secret Value from Step 1
-- **Issuer:** `https://login.microsoftonline.com/<TENANT_ID>/v2.0`. For multi-tenant apps, use `common` or `organizations` instead of the tenant ID
 - **Allowed Email Domains** _(optional)_: comma-separated list of domains, e.g. `acme.com, acme-subsidiary.com`
 
 Click **Create Provider**. The **Sign in with Microsoft Entra ID** button now appears on the sign-in page. Test it in a private window with a tenant user.
@@ -162,8 +160,6 @@ Click **Grant admin consent** afterwards.
 3. **Save**
 
 ## 5. Configure OBO in Archestra
-
-[screenshot: platform-entra-obo-setup_enterprise-managed-credentials.webp — Enterprise-Managed Credentials section of the Entra provider form]
 
 Reopen the Microsoft Entra ID provider in **Settings > Identity Providers** and expand **Enterprise-Managed Credentials**:
 

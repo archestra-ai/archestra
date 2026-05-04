@@ -860,3 +860,72 @@ describe("transformFormToApiData - secret env var preservation", () => {
     expect(env[1]?.value ?? "").toBe("");
   });
 });
+
+describe("transformFormToApiData - arguments parsing", () => {
+  function buildArgsFormValues(args: string): McpCatalogFormValues {
+    return {
+      name: "args-test",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: args,
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+  }
+
+  it("parses newline-separated arguments", () => {
+    const result = transformFormToApiData(buildArgsFormValues("--verbose\n--port\n8080"));
+    expect(result.localConfig?.arguments).toEqual(["--verbose", "--port", "8080"]);
+  });
+
+  it("parses minified JSON array arguments", () => {
+    const result = transformFormToApiData(buildArgsFormValues('["--verbose","--port","8080"]'));
+    expect(result.localConfig?.arguments).toEqual(["--verbose", "--port", "8080"]);
+  });
+
+  it("parses pretty-printed JSON array arguments", () => {
+    const result = transformFormToApiData(buildArgsFormValues('[\n  "--verbose",\n  "--port",\n  "8080"\n]'));
+    expect(result.localConfig?.arguments).toEqual(["--verbose", "--port", "8080"]);
+  });
+
+  it("handles non-array JSON by falling back to line splitting", () => {
+    const result = transformFormToApiData(buildArgsFormValues('{"not": "an array"}'));
+    expect(result.localConfig?.arguments).toEqual(['{"not": "an array"}']);
+  });
+
+  it("handles empty JSON array correctly", () => {
+    const result = transformFormToApiData(buildArgsFormValues("[]"));
+    expect(result.localConfig?.arguments).toBeUndefined();
+  });
+
+  it("handles invalid JSON by falling back to line splitting", () => {
+    const result = transformFormToApiData(buildArgsFormValues('[invalid, json]'));
+    expect(result.localConfig?.arguments).toEqual(['[invalid, json]']);
+  });
+});

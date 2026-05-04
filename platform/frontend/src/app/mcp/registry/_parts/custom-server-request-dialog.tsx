@@ -64,6 +64,27 @@ const customServerRequestSchema = z
 
 type CustomServerRequestFormValues = z.infer<typeof customServerRequestSchema>;
 
+function parseArguments(value: string): string[] {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return [];
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((arg: unknown) => String(arg));
+      }
+    } catch {
+      // Fallback to line-split if JSON parse fails
+    }
+  }
+
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 export function CustomServerRequestDialog({
   isOpen,
   onClose,
@@ -119,10 +140,7 @@ export function CustomServerRequestDialog({
             serverType: "local" as const,
             localConfig: {
               command: values.command,
-              arguments: values.arguments
-                .split("\n")
-                .map((arg) => arg.trim())
-                .filter((arg) => arg.length > 0),
+              arguments: parseArguments(values.arguments),
               environment:
                 values.environment.length > 0 ? values.environment : undefined,
             },
@@ -276,12 +294,38 @@ export function CustomServerRequestDialog({
                     name="arguments"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Arguments (one per line)</FormLabel>
+                        <FormLabel>
+                          Arguments (one per line or JSON array)
+                        </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\nor ["--arg1", "--arg2"]`}
                             rows={3}
                             {...field}
+                            onPaste={(e) => {
+                              const pastedText =
+                                e.clipboardData.getData("text");
+                              const trimmed = pastedText.trim();
+                              if (
+                                trimmed.startsWith("[") &&
+                                trimmed.endsWith("]")
+                              ) {
+                                try {
+                                  const parsed = JSON.parse(trimmed);
+                                  if (Array.isArray(parsed)) {
+                                    e.preventDefault();
+                                    const formatted = parsed
+                                      .map((arg: unknown) => String(arg))
+                                      .join("\n");
+                                    form.setValue("arguments", formatted, {
+                                      shouldDirty: true,
+                                    });
+                                  }
+                                } catch {
+                                  // Not a valid JSON array, let default paste happen
+                                }
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />

@@ -431,7 +431,6 @@ describe("connector file upload routes", () => {
         );
       expect(rows).toHaveLength(1);
     });
-
   });
 
   describe("GET /api/connectors/:id/files/:fileId", () => {

@@ -338,9 +338,8 @@ export function CreateConnectorDialog({
 
                 {connectorType === "file_upload" && (
                   <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    After creating the connector, you can
-                    upload text files or ZIP archives directly from the
-                    connector page.
+                    After creating the connector, you can upload text files or
+                    ZIP archives directly from the connector page.
                   </div>
                 )}
 

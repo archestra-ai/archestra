@@ -86,7 +86,7 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
 
 ## LLM OAuth Clients
 
-LLM OAuth clients are registered clients that call LLM proxy endpoints with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a 1-hour access token, and uses that token as the proxy bearer token.
+LLM OAuth clients are registered clients that call LLM proxy endpoints with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a fixed 1-hour access token, and uses that token as the proxy bearer token.
 
 Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling an LLM proxy. See [Model Router Client Credentials](/docs/platform-model-router-client-credentials-example) for a complete service-app example.
 
@@ -141,7 +141,7 @@ Custom applications can also use the OAuth authorization code flow when they act
 
 User OAuth tokens do not use the LLM OAuth Clients page. Provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys: personal keys, org-wide keys, and team keys for teams the user belongs to.
 
-The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows.
+The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows. It does not change the fixed 1-hour lifetime for LLM OAuth client credentials tokens.
 
 Use this approach when the application should inherit an individual user's access. Use LLM OAuth client credentials when the caller is a backend service or automation job with its own app identity. See [Model Router User OAuth](/docs/platform-model-router-user-oauth-example) for a complete example application.
 
@@ -186,7 +186,7 @@ Each LLM API key has a **scope** that controls who can use it:
 
 You can create **multiple keys per provider per scope** (e.g. two personal Anthropic keys with different base URLs). Mark one key as **Primary** to control which key is preferred when resolving. If no key is marked primary, the oldest key is used.
 
-When the Archestra Chat or JWKS auth resolves a provider key, it follows this priority: personal key > team key > organization-wide key > environment variable.
+When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a provider key, it follows this priority: personal key > team key > organization-wide key > environment variable. If multiple keys exist in the same scope for a provider, the primary key is selected first; otherwise, the oldest key is selected.
 
 ## Custom Base URLs
 

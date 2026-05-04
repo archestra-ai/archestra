@@ -143,7 +143,7 @@ User OAuth tokens do not use the LLM OAuth Clients page. Provider-specific route
 
 The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows.
 
-Use this approach when the application should inherit an individual user's access. Use LLM OAuth client credentials when the caller is a backend service or automation job with its own app identity.
+Use this approach when the application should inherit an individual user's access. Use LLM OAuth client credentials when the caller is a backend service or automation job with its own app identity. See [Model Router User OAuth](/docs/platform-model-router-user-oauth-example) for a complete example application.
 
 ## JWKS (External Identity Provider)
 

@@ -398,27 +398,30 @@ rl.on("line", (line) => {
     await adminPage.waitForLoadState("domcontentloaded");
 
     // ========================================
-    // STEP 5: Click reinstall and wait for tools discovery
+    // STEP 5: Click install/reinstall and wait for tools discovery
     // ========================================
-    // Close the settings dialog and wait for the card to show "Reinstall" button.
+    // Close the settings dialog and wait for the card install action.
     await closeOpenDialogs(adminPage, { timeoutMs: 10_000 });
     await expect(settingsDialog).not.toBeVisible({ timeout: 10_000 });
 
-    const reinstallButton = serverCard.getByRole("button", {
-      name: "Reinstall",
+    const installActionButton = serverCard.getByRole("button", {
+      name: /^(Install|Reinstall)$/,
     });
-    await reinstallButton.waitFor({ state: "visible", timeout: 120_000 });
-    await reinstallButton.click();
+    await installActionButton.waitFor({ state: "visible", timeout: 120_000 });
+    await installActionButton.click();
 
-    // The reinstall install dialog opens with prompted env vars
+    // The install dialog opens with prompted env vars
     const reinstallDialog = adminPage
       .getByRole("dialog")
-      .filter({ hasText: /Reinstall -/ });
+      .filter({ hasText: /(Install|Reinstall) -/ });
     await reinstallDialog.waitFor({ state: "visible", timeout: 30_000 });
     await reinstallDialog
       .getByRole("textbox", { name: "E2E_PROMPT" })
       .fill("ready");
-    await clickButton({ page: adminPage, options: { name: "Reinstall" } });
+    await clickButton({
+      page: adminPage,
+      options: { name: /^(Install|Reinstall)$/ },
+    });
     await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
 
     await expect(async () => {

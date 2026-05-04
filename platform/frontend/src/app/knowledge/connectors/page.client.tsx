@@ -171,7 +171,7 @@ function ConnectorsList() {
         if (row.original.connectorType === "file_upload") {
           return (
             <span className="text-xs text-muted-foreground">
-              Manual uploads
+              Ready
             </span>
           );
         }
@@ -205,7 +205,7 @@ function ConnectorsList() {
         if (row.original.connectorType === "file_upload") {
           return (
             <span className="text-xs text-muted-foreground">
-              Manual uploads
+              On demand
             </span>
           );
         }

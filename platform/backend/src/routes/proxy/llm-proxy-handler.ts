@@ -139,6 +139,7 @@ export type LLMProxyAuthOverride = {
     name: string;
     clientId: string;
   };
+  userId?: string;
 };
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -288,6 +289,10 @@ export async function handleLLMProxy<
   let wasVirtualKeyResolved = false;
   let authMethod = authOverride?.authMethod;
   const authenticatedApp = authOverride?.authenticatedApp;
+  if (authOverride?.userId) {
+    userId = authOverride.userId;
+    resolvedUser = await UserModel.getById(userId);
+  }
   // 1. Try JWKS auth if the agent has an external identity provider configured
   if (authOverride) {
     apiKey = authOverride.apiKey;

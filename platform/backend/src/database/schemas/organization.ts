@@ -3,7 +3,7 @@ import type {
   OrganizationTheme,
   SupportedProvider,
 } from "@shared";
-import { DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
 import {
   boolean,
   integer,
@@ -147,14 +147,14 @@ const organizationsTable = pgTable("organization", {
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 
   /**
-   * OAuth access token lifetime for MCP-native auth flows.
+   * Organization OAuth access token lifetime for user authorization-code flows.
    * Returned to clients via `expires_in` and used to persist token expiration.
    */
-  mcpOauthAccessTokenLifetimeSeconds: integer(
-    "mcp_oauth_access_token_lifetime_seconds",
+  oauthAccessTokenLifetimeSeconds: integer(
+    "oauth_access_token_lifetime_seconds",
   )
     .notNull()
-    .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
+    .default(DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 
   /**
    * Admin-selected MCP gateway pre-filled on /connection.

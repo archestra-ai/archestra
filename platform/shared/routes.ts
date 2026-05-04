@@ -341,8 +341,8 @@ export const RouteId = {
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 
-  // MCP Settings Routes (organization-level)
-  UpdateMcpSettings: "updateMcpSettings",
+  // Auth Settings Routes (organization-level)
+  UpdateAuthSettings: "updateAuthSettings",
 
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",

@@ -822,7 +822,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
-  [RouteId.UpdateMcpSettings]: {
+  [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],
   },
   [RouteId.UpdateConnectionSettings]: {
@@ -1092,7 +1092,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
-  "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

@@ -1,6 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
-import { DEFAULT_ADMIN_EMAIL, IDENTITY_PROVIDER_ID, RouteId } from "@shared";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  IDENTITY_PROVIDER_ID,
+  LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
+  RouteId,
+} from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -450,7 +455,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
-      const responseBody = await applyMcpOauthTokenLifetimeToResponse({
+      const responseBody = await applyOrganizationOAuthTokenLifetimeToResponse({
         response,
         resource,
         tokenEndpointOrigin,
@@ -926,7 +931,7 @@ async function issueLlmOauthClientAccessToken(params: {
   }
 
   const accessToken = `llm_at_${randomBytes(32).toString("base64url")}`;
-  const expiresIn = 3600;
+  const expiresIn = LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
   await OAuthAccessTokenModel.createClientCredentialsToken({
     tokenHash: hashOAuthAccessTokenForLookup(accessToken),
     clientId: oauthClient.clientId,
@@ -957,7 +962,7 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
   );
 }
 
-async function applyMcpOauthTokenLifetimeToResponse(params: {
+async function applyOrganizationOAuthTokenLifetimeToResponse(params: {
   response: Response;
   resource: unknown;
   tokenEndpointOrigin: string;
@@ -978,21 +983,23 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
 
   const accessToken =
     typeof tokenBody.access_token === "string" ? tokenBody.access_token : null;
-  if (
-    !accessToken ||
-    !isMcpTokenResponse({ tokenBody, resource: params.resource })
-  ) {
+  if (!accessToken) {
     return responseText;
   }
 
   const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
   const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
-  const lifetimeSeconds = await getMcpOauthAccessTokenLifetimeSeconds({
+  if (!storedToken?.userId) {
+    return responseText;
+  }
+
+  const lifetimeSeconds = await getOAuthAccessTokenLifetimeSeconds({
     resource: params.resource,
     referenceId: storedToken?.referenceId,
     tokenEndpointOrigin: params.tokenEndpointOrigin,
+    userId: storedToken.userId,
   });
-  if (!storedToken || !lifetimeSeconds) {
+  if (!lifetimeSeconds) {
     return responseText;
   }
 
@@ -1013,27 +1020,34 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
   });
 }
 
-async function getMcpOauthAccessTokenLifetimeSeconds(params: {
+async function getOAuthAccessTokenLifetimeSeconds(params: {
   resource: unknown;
   referenceId: string | null | undefined;
   tokenEndpointOrigin: string;
+  userId: string;
 }): Promise<number | null> {
   const profileId =
     (await getProfileIdFromResource({
       resource: params.resource,
       tokenEndpointOrigin: params.tokenEndpointOrigin,
     })) ?? getProfileIdFromReferenceId(params.referenceId);
-  if (!profileId) {
+  if (profileId) {
+    const agent = await AgentModel.findById(profileId);
+    if (agent) {
+      const organization = await OrganizationModel.getById(
+        agent.organizationId,
+      );
+      return organization?.oauthAccessTokenLifetimeSeconds ?? null;
+    }
+  }
+
+  const member = await MemberModel.getFirstMembershipForUser(params.userId);
+  if (!member) {
     return null;
   }
 
-  const agent = await AgentModel.findById(profileId);
-  if (!agent) {
-    return null;
-  }
-
-  const organization = await OrganizationModel.getById(agent.organizationId);
-  return organization?.mcpOauthAccessTokenLifetimeSeconds ?? null;
+  const organization = await OrganizationModel.getById(member.organizationId);
+  return organization?.oauthAccessTokenLifetimeSeconds ?? null;
 }
 
 function parseOAuthTokenResponseBody(
@@ -1048,19 +1062,6 @@ function parseOAuthTokenResponseBody(
   } catch {
     return null;
   }
-}
-
-function isMcpTokenResponse(params: {
-  tokenBody: Record<string, unknown>;
-  resource: unknown;
-}): boolean {
-  if (typeof params.resource === "string") {
-    return true;
-  }
-
-  const scope =
-    typeof params.tokenBody.scope === "string" ? params.tokenBody.scope : "";
-  return scope.split(/\s+/).includes("mcp");
 }
 
 function getIssuedAtSeconds(tokenBody: Record<string, unknown>): number {

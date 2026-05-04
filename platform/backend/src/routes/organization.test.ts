@@ -676,26 +676,26 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/mcp-settings", () => {
-    test("updates the MCP OAuth access token lifetime", async () => {
+  describe("PATCH /api/organization/auth-settings", () => {
+    test("updates the OAuth access token lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 604_800,
+          oauthAccessTokenLifetimeSeconds: 604_800,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().mcpOauthAccessTokenLifetimeSeconds).toBe(604_800);
+      expect(response.json().oauthAccessTokenLifetimeSeconds).toBe(604_800);
     });
 
     test("rejects values below the minimum lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 299,
+          oauthAccessTokenLifetimeSeconds: 299,
         },
       });
 
@@ -705,9 +705,9 @@ describe("organization routes", () => {
     test("rejects values above the maximum lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 31_536_001,
+          oauthAccessTokenLifetimeSeconds: 31_536_001,
         },
       });
 

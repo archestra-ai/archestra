@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { SOURCE_HEADER, type SupportedProvider } from "@shared";
 import Fastify from "fastify";
 import {
@@ -9,7 +10,10 @@ import { vi } from "vitest";
 import {
   InteractionModel,
   LlmOauthClientModel,
+  LlmProviderApiKeyModel,
   ModelModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
 import authRoutes from "@/routes/auth";
@@ -665,6 +669,112 @@ describe("model router proxy routes", () => {
       authenticatedAppId: oauthClient.id,
       authenticatedAppName: "Backend Service",
       externalAgentId: "caller-supplied-label",
+    });
+  });
+
+  test("routes requests authenticated with a user OAuth access token from an authorization code app", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeSecret,
+    makeUser,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "oauth-user@example.com" });
+    await makeMember(user.id, organization.id);
+    const olderSecret = await makeSecret({
+      secret: { apiKey: "sk-older-openai" },
+    });
+    await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      secretId: olderSecret.id,
+      name: "Older User OpenAI Key",
+      provider,
+      scope: "personal",
+      userId: user.id,
+      teamId: null,
+      isPrimary: false,
+    });
+    const primarySecret = await makeSecret({
+      secret: { apiKey: "sk-primary-openai" },
+    });
+    await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      secretId: primarySecret.id,
+      name: "Primary User OpenAI Key",
+      provider,
+      scope: "personal",
+      userId: user.id,
+      teamId: null,
+      isPrimary: true,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "User OAuth Model Router Agent",
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+    await OAuthClientModel.upsertFromCimd({
+      id: crypto.randomUUID(),
+      clientId,
+      name: "Example OAuth App",
+      redirectUris: ["http://localhost:3107/callback"],
+      grantTypes: ["authorization_code"],
+      responseTypes: ["code"],
+      tokenEndpointAuthMethod: "none",
+      isPublic: true,
+      metadata: { demo: true },
+    });
+    const rawAccessToken = `user-oauth-token-${crypto.randomUUID()}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: createHash("sha256")
+        .update(rawAccessToken)
+        .digest("base64url"),
+      clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+      scopes: ["llm:model-router"],
+    });
+    let capturedApiKey: string | undefined;
+    vi.mocked(openaiAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createOpenAiTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${rawAccessToken}`,
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedApiKey).toBe("sk-primary-openai");
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data[0]).toMatchObject({
+      authMethod: "oauth_user",
+      authenticatedAppName: "Example OAuth App",
+      userId: user.id,
     });
   });
 

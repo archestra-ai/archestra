@@ -38988,7 +38988,7 @@ export type GetOrganizationResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39258,7 +39258,7 @@ export type UpdateAppearanceSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39400,7 +39400,7 @@ export type UpdateSecuritySettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39543,7 +39543,7 @@ export type UpdateLlmSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39687,7 +39687,7 @@ export type UpdateAgentSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39838,7 +39838,7 @@ export type UpdateConnectionSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39855,16 +39855,16 @@ export type UpdateConnectionSettingsResponses = {
 
 export type UpdateConnectionSettingsResponse = UpdateConnectionSettingsResponses[keyof UpdateConnectionSettingsResponses];
 
-export type UpdateMcpSettingsData = {
+export type UpdateAuthSettingsData = {
     body: {
-        mcpOauthAccessTokenLifetimeSeconds?: number;
+        oauthAccessTokenLifetimeSeconds?: number;
     };
     path?: never;
     query?: never;
-    url: '/api/organization/mcp-settings';
+    url: '/api/organization/auth-settings';
 };
 
-export type UpdateMcpSettingsErrors = {
+export type UpdateAuthSettingsErrors = {
     /**
      * Default Response
      */
@@ -39927,9 +39927,9 @@ export type UpdateMcpSettingsErrors = {
     };
 };
 
-export type UpdateMcpSettingsError = UpdateMcpSettingsErrors[keyof UpdateMcpSettingsErrors];
+export type UpdateAuthSettingsError = UpdateAuthSettingsErrors[keyof UpdateAuthSettingsErrors];
 
-export type UpdateMcpSettingsResponses = {
+export type UpdateAuthSettingsResponses = {
     /**
      * Default Response
      */
@@ -39979,7 +39979,7 @@ export type UpdateMcpSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -39994,7 +39994,7 @@ export type UpdateMcpSettingsResponses = {
     };
 };
 
-export type UpdateMcpSettingsResponse = UpdateMcpSettingsResponses[keyof UpdateMcpSettingsResponses];
+export type UpdateAuthSettingsResponse = UpdateAuthSettingsResponses[keyof UpdateAuthSettingsResponses];
 
 export type UpdateKnowledgeSettingsData = {
     body: {
@@ -40123,7 +40123,7 @@ export type UpdateKnowledgeSettingsResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -40262,7 +40262,7 @@ export type DropEmbeddingConfigResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -40490,7 +40490,7 @@ export type CompleteOnboardingResponses = {
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         showTwoFactor: boolean;
-        mcpOauthAccessTokenLifetimeSeconds: number;
+        oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;

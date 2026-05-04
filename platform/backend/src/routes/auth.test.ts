@@ -30,7 +30,7 @@ describe("auth routes", () => {
     await app.close();
   });
 
-  test("applies organization MCP token lifetime to OAuth 2.1 token responses", async ({
+  test("applies organization OAuth token lifetime to OAuth 2.1 token responses", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -40,7 +40,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 604_800,
+      oauthAccessTokenLifetimeSeconds: 604_800,
     });
     const agent = await makeAgent({ organizationId: organization.id });
     const client = await makeOAuthClient({ userId: user.id });
@@ -155,7 +155,69 @@ describe("auth routes", () => {
     expect(storedToken?.scopes).toEqual(["llm:model-router"]);
   });
 
-  test("applies MCP token lifetime when resource uses the token endpoint origin", async ({
+  test("applies organization OAuth token lifetime to user Model Router token responses", async ({
+    makeMember,
+    makeOAuthAccessToken,
+    makeOAuthClient,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id);
+    await OrganizationModel.patch(organization.id, {
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
+    });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawAccessToken = "model-router-user-oauth-access-token";
+    const tokenHash = createHash("sha256")
+      .update(rawAccessToken)
+      .digest("base64url");
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: tokenHash,
+      expiresAt: new Date("2026-01-01T01:00:00.000Z"),
+    });
+    vi.mocked(betterAuth.handler).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: rawAccessToken,
+          token_type: "Bearer",
+          expires_in: 3_600,
+          scope: "openid profile email llm:model-router",
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "authorization_code",
+        client_id: client.clientId,
+        code: "auth-code",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      access_token: rawAccessToken,
+      expires_in: 31_536_000,
+      scope: "openid profile email llm:model-router",
+    });
+
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.expiresAt.getTime()).toBeGreaterThan(
+      Date.now() + 31_535_000 * 1000,
+    );
+  });
+
+  test("applies OAuth token lifetime when resource uses the token endpoint origin", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -165,7 +227,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 31_536_000,
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
     });
     const agent = await makeAgent({ organizationId: organization.id });
     const client = await makeOAuthClient({ userId: user.id });
@@ -215,7 +277,7 @@ describe("auth routes", () => {
     });
   });
 
-  test("applies MCP token lifetime for HTTPS token endpoint origin behind proxy", async ({
+  test("applies OAuth token lifetime for HTTPS token endpoint origin behind proxy", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -225,7 +287,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 31_536_000,
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
     });
     const agent = await makeAgent({ organizationId: organization.id });
     const client = await makeOAuthClient({ userId: user.id });
@@ -276,7 +338,7 @@ describe("auth routes", () => {
     });
   });
 
-  test("applies MCP token lifetime when resource uses the gateway slug", async ({
+  test("applies OAuth token lifetime when resource uses the gateway slug", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -286,7 +348,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 300,
+      oauthAccessTokenLifetimeSeconds: 300,
     });
     const agent = await makeAgent({
       agentType: "mcp_gateway",

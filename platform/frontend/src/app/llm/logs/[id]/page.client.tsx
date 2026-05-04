@@ -332,6 +332,8 @@ function formatAuthMethod(authMethod: string) {
   switch (authMethod) {
     case "oauth_client_credentials":
       return "OAuth Client Credentials";
+    case "oauth_user":
+      return "OAuth User";
     case "virtual_key":
       return "Virtual Key";
     case "provider_key":

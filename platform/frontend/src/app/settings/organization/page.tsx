@@ -30,6 +30,7 @@ import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { IconLogoUpload } from "./_components/icon-logo-upload";
 import { LogoUpload } from "./_components/logo-upload";
+import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
 import { OnboardingWizardEditor } from "./_components/onboarding-wizards-editor";
 import {
   type OnboardingWizardValue,
@@ -393,8 +394,10 @@ export default function OrganizationSettingsPage() {
 
       {/* Auth Section */}
       <div>
-        <h3 className="text-lg font-medium mb-4">Authentication</h3>
+        <h3 className="text-lg font-medium mb-4">Auth</h3>
         <SettingsSectionStack>
+          <OAuthTokenLifetimeSection />
+
           <Card>
             <SettingsCardHeader
               title="Two-Factor Authentication"

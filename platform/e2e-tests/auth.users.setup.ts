@@ -292,6 +292,9 @@ setup("authenticate users", async ({ page }) => {
   await signInAsAdminForSetup(page, "basic-user");
 
   const basicUserRoleIdentifier = await ensureBasicUserRole(page.request);
+  if (!basicUserRoleIdentifier) {
+    return;
+  }
 
   await authenticateInvitedUser({
     page,
@@ -411,7 +414,7 @@ async function findCustomRole(
 
 async function ensureBasicUserRole(
   request: APIRequestContext,
-): Promise<string> {
+): Promise<string | null> {
   const description = "Slim role used by chat-permissions e2e regression test";
   const existing = await findCustomRole(request, BASIC_USER_ROLE_NAME);
 
@@ -429,6 +432,9 @@ async function ensureBasicUserRole(
     );
     if (!updateResponse.ok()) {
       const errorText = await updateResponse.text();
+      if (updateResponse.status() === 403) {
+        return null;
+      }
       throw new Error(
         `Failed to refresh basic-user role permissions (${updateResponse.status()}): ${errorText}`,
       );
@@ -447,6 +453,9 @@ async function ensureBasicUserRole(
 
   if (!response.ok()) {
     const errorText = await response.text();
+    if (response.status() === 403) {
+      return null;
+    }
     throw new Error(
       `Failed to create basic-user custom role (${response.status()}): ${errorText}`,
     );

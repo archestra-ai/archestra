@@ -397,8 +397,8 @@ rl.on("line", (line) => {
     // ========================================
     // STEP 5: Click reinstall and wait for tools discovery
     // ========================================
-    // Close the settings dialog and wait for the card to show "Reinstall" button
-    await adminPage.keyboard.press("Escape");
+    // Close the settings dialog and wait for the card to show "Reinstall" button.
+    await settingsDialog.getByRole("button", { name: "Close" }).click();
     await settingsDialog.waitFor({ state: "hidden", timeout: 10_000 });
 
     const reinstallButton = serverCard.getByRole("button", {

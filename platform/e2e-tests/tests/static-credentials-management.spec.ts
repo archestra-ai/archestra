@@ -3,10 +3,10 @@ import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
-  E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MEMBER_EMAIL,
 } from "../consts";
 import { expect, goToPage, test } from "../fixtures";
 import {
@@ -90,11 +90,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
 
       if (user === "Member") {
         await openManageCredentialsDialog(page, catalogItemName);
-        await expect(
-          page.getByTestId(
-            E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
-          ),
-        ).toBeVisible();
+        await expect(await getVisibleCredentials(page)).toEqual([MEMBER_EMAIL]);
         await closeOpenDialogs(page);
       } else {
         const expectedTeams = {

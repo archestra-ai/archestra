@@ -200,47 +200,9 @@ export default function AuditLogPageClient() {
       },
     },
     {
-      id: "resourceType",
-      header: "Resource",
-      cell: ({ row }) => (
-        <Badge
-          variant="outline"
-          className="max-w-[9.5rem] whitespace-normal text-left text-xs font-normal leading-snug"
-        >
-          {auditRowParts(row.original).resource}
-        </Badge>
-      ),
-    },
-    {
       id: "resourceId",
-      header: "IDs",
-      cell: ({ row }) => {
-        const parts = auditRowParts(row.original);
-        if (parts.objectHint) {
-          return (
-            <span className="block max-w-[11rem] font-mono text-[11px] leading-snug text-muted-foreground">
-              {parts.objectHint}
-            </span>
-          );
-        }
-        const id = row.original.resourceId;
-        if (id) {
-          return (
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {shortenId(id)}
-            </span>
-          );
-        }
-        const fallback = getResourceLabel(row.original);
-        if (fallback) {
-          return (
-            <span className="line-clamp-2 max-w-[11rem] text-xs text-muted-foreground">
-              {fallback}
-            </span>
-          );
-        }
-        return <span className="text-xs text-muted-foreground">—</span>;
-      },
+      header: "Resource IDs",
+      cell: ({ row }) => <ResourceIdsCell event={row.original} />,
     },
     {
       id: "ipAddress",
@@ -628,6 +590,58 @@ function parseApiPath(url: string): string[] {
   return pathOnly.replace(/^\/api\/?/, "").split("/").filter(Boolean);
 }
 
+type LinkedAuditResourceId = { id: string; href: string | null };
+
+function domainResourceHref(resourceType: string, resourceId: string): string | null {
+  switch (resourceType) {
+    case "scheduleTrigger":
+      return `/scheduled-tasks/${encodeURIComponent(resourceId)}`;
+    case "agent":
+      return `/agents?${new URLSearchParams({ view: resourceId }).toString()}`;
+    default:
+      return null;
+  }
+}
+
+/** UUID segments in /api paths → deep links where the UI supports it. */
+function linkedResourceIdsFromApiUrl(url: string): LinkedAuditResourceId[] {
+  const segments = parseApiPath(url);
+  const out: LinkedAuditResourceId[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    if (!isUuidLike(seg)) continue;
+
+    let href: string | null = null;
+
+    if (i >= 1 && segments[i - 1] === "agents") {
+      href = `/agents?${new URLSearchParams({ view: seg }).toString()}`;
+    } else if (i >= 1 && segments[i - 1] === "schedule-triggers") {
+      href = `/scheduled-tasks/${encodeURIComponent(seg)}`;
+    } else if (
+      i >= 3 &&
+      segments[i - 1] === "runs" &&
+      segments[i - 3] === "schedule-triggers"
+    ) {
+      const triggerId = segments[i - 2]!;
+      if (isUuidLike(triggerId)) {
+        href = `/scheduled-tasks/${encodeURIComponent(triggerId)}/runs/${encodeURIComponent(seg)}`;
+      }
+    } else if (
+      i >= 3 &&
+      segments[i - 1] === "tools" &&
+      segments[i - 3] === "agents"
+    ) {
+      const agentId = segments[i - 2]!;
+      if (isUuidLike(agentId)) {
+        href = `/agents?${new URLSearchParams({ view: agentId }).toString()}`;
+      }
+    }
+
+    out.push({ id: seg, href });
+  }
+  return out;
+}
+
 function inferResourceCategoryFromSegments(segments: string[]): string {
   const structural = segments.filter((s) => !isUuidLike(s));
   if (structural.length === 0) return "API";
@@ -802,6 +816,53 @@ function httpMutationPresentation(
     };
   }
 
+  const stIdx = segments.indexOf("schedule-triggers");
+  if (stIdx !== -1) {
+    const triggerIdSeg = segments[stIdx + 1];
+    const subPath = segments[stIdx + 2];
+    const resourceCategory = "Scheduled trigger";
+    const tid = triggerIdSeg ? presSeg(triggerIdSeg) : null;
+
+    if (!triggerIdSeg) {
+      let headline = "Schedule trigger change";
+      if (method === "POST") headline = "Created schedule trigger";
+      return {
+        headline,
+        subline: undefined,
+        resourceCategory,
+        objectHint: null,
+        tooltipLines,
+      };
+    }
+
+    let headline = "Updated schedule trigger";
+    if (method === "DELETE") headline = "Deleted schedule trigger";
+    else if (method === "PUT" || method === "PATCH") headline = "Updated schedule trigger";
+    else if (subPath === "enable") headline = "Enabled schedule trigger";
+    else if (subPath === "disable") headline = "Disabled schedule trigger";
+    else if (subPath === "run-now") headline = "Manual schedule run started";
+    else if (subPath === "runs") {
+      const runSeg = segments[stIdx + 3];
+      if (runSeg && isUuidLike(runSeg)) {
+        return {
+          headline: "Schedule run opened",
+          subline: `${tid} · ${presSeg(runSeg)}`,
+          resourceCategory: "Scheduled trigger · Run",
+          objectHint: `${tid} · ${presSeg(runSeg)}`,
+          tooltipLines,
+        };
+      }
+    }
+
+    return {
+      headline,
+      subline: tid ?? undefined,
+      resourceCategory,
+      objectHint: tid,
+      tooltipLines,
+    };
+  }
+
   const last = segments[segments.length - 1] ?? "";
   const parents = segments.slice(0, -1);
   if (last === "sync" && parents.length > 0) {
@@ -881,9 +942,15 @@ function auditRowParts(event: AuditEventListItem): AuditRowParts {
     };
   }
 
-  const objectHint =
-    getResourceLabel(event) ??
-    (event.resourceId ? shortenId(event.resourceId) : null);
+  const objectHint = (() => {
+    if (event.resourceType === "scheduleTrigger" && event.resourceId) {
+      return shortenId(event.resourceId);
+    }
+    return (
+      getResourceLabel(event) ??
+      (event.resourceId ? shortenId(event.resourceId) : null)
+    );
+  })();
 
   return {
     kind: "domain",
@@ -895,6 +962,82 @@ function auditRowParts(event: AuditEventListItem): AuditRowParts {
   };
 }
 
+function ResourceIdsCell({ event }: { event: AuditEventListItem }) {
+  const meta = event.metadata as Record<string, unknown> | undefined;
+
+  if (
+    event.resourceType === "http" &&
+    meta &&
+    typeof meta.url === "string" &&
+    typeof meta.method === "string"
+  ) {
+    const linked = linkedResourceIdsFromApiUrl(meta.url);
+    if (linked.length > 0) {
+      return (
+        <div className="max-w-[14rem] font-mono text-[11px] leading-snug">
+          {linked.map((item, i) => (
+            <span key={`${item.id}-${i}`}>
+              {i > 0 ? (
+                <span className="text-muted-foreground"> · </span>
+              ) : null}
+              {item.href ? (
+                <Link
+                  href={item.href}
+                  className="text-foreground underline-offset-4 hover:underline"
+                >
+                  {shortenId(item.id)}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">{shortenId(item.id)}</span>
+              )}
+            </span>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  if (event.resourceType !== "http" && event.resourceId) {
+    const href = domainResourceHref(event.resourceType, event.resourceId);
+    const display = shortenId(event.resourceId);
+    if (href) {
+      return (
+        <Link
+          href={href}
+          className="block max-w-[11rem] font-mono text-[11px] text-foreground underline-offset-4 hover:underline"
+        >
+          {display}
+        </Link>
+      );
+    }
+    return (
+      <span className="block max-w-[11rem] font-mono text-[11px] text-muted-foreground">
+        {display}
+      </span>
+    );
+  }
+
+  const parts = auditRowParts(event);
+  if (parts.objectHint) {
+    return (
+      <span className="block max-w-[11rem] font-mono text-[11px] leading-snug text-muted-foreground">
+        {parts.objectHint}
+      </span>
+    );
+  }
+
+  const fallback = getResourceLabel(event);
+  if (fallback) {
+    return (
+      <span className="line-clamp-2 max-w-[11rem] text-xs text-muted-foreground">
+        {fallback}
+      </span>
+    );
+  }
+
+  return <span className="text-xs text-muted-foreground">—</span>;
+}
+
 function getFriendlyActionLabel(event: AuditEventListItem): string {
   const raw = event.action;
   const meta = event.metadata as Record<string, unknown> | null | undefined;
@@ -904,27 +1047,34 @@ function getFriendlyActionLabel(event: AuditEventListItem): string {
     label = httpMutationPresentation(meta).headline;
   } else {
     const domainMatch =
-      /^([a-zA-Z]+)\.(create|update|delete|install|uninstall|reinstall)$/.exec(
+      /^([a-zA-Z]+)\.(create|update|delete|install|uninstall|reinstall|enable|disable|runNow)$/.exec(
         raw,
       );
     if (domainMatch) {
       const [, resource, verb] = domainMatch;
-      const verbs: Record<string, string> = {
-        create: "Created",
-        update: "Updated",
-        delete: "Deleted",
-        install: "Installed",
-        uninstall: "Uninstalled",
-        reinstall: "Reinstalled",
-      };
-      const nouns: Record<string, string> = {
-        team: "team",
-        agent: "agent",
-        mcpServer: "MCP server",
-      };
-      const v = verbs[verb] ?? verb;
-      const n = nouns[resource] ?? resource;
-      label = `${v} ${n}`;
+      if (resource === "scheduleTrigger" && verb === "runNow") {
+        label = "Started manual schedule run";
+      } else {
+        const verbs: Record<string, string> = {
+          create: "Created",
+          update: "Updated",
+          delete: "Deleted",
+          install: "Installed",
+          uninstall: "Uninstalled",
+          reinstall: "Reinstalled",
+          enable: "Enabled",
+          disable: "Disabled",
+        };
+        const nouns: Record<string, string> = {
+          team: "team",
+          agent: "agent",
+          mcpServer: "MCP server",
+          scheduleTrigger: "schedule trigger",
+        };
+        const v = verbs[verb] ?? verb;
+        const n = nouns[resource] ?? resource;
+        label = `${v} ${n}`;
+      }
     } else {
       label = raw.replace(/\./g, " ");
     }
@@ -951,6 +1101,7 @@ function getFriendlyResourceLabel(event: AuditEventListItem): string {
     team: "Team",
     agent: "Agent",
     mcpServer: "MCP server",
+    scheduleTrigger: "Scheduled trigger",
     http: "HTTP API",
   };
   return labels[event.resourceType] ?? event.resourceType;
@@ -979,6 +1130,26 @@ function renderAuditEventDetails(
         <div className="rounded-md bg-muted/60 px-3 py-2 font-mono text-xs text-muted-foreground break-all">
           {`${method} ${url}${statusCode != null ? ` → ${statusCode}` : ""}`}
         </div>
+      </div>
+    );
+  }
+
+  if (action.startsWith("scheduleTrigger.") && metadata) {
+    const name = typeof metadata.name === "string" ? metadata.name : null;
+    const runId = typeof metadata.runId === "string" ? metadata.runId : null;
+    return (
+      <div className="space-y-2">
+        {name ? <div>Trigger “{name}”</div> : null}
+        {event.resourceId ? (
+          <div className="break-all font-mono text-xs text-muted-foreground">
+            Trigger id: {event.resourceId}
+          </div>
+        ) : null}
+        {runId ? (
+          <div className="break-all font-mono text-xs text-muted-foreground">
+            Run id: {runId}
+          </div>
+        ) : null}
       </div>
     );
   }

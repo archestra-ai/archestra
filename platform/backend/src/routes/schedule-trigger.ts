@@ -9,6 +9,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { emitAuditEvent } from "@/audit/emit-audit-event";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import logger from "@/logging";
 import {
@@ -203,7 +204,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ body, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, organizationId } = request;
+
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
         organizationId,
@@ -234,6 +237,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         timezone: body.timezone,
         enabled: body.enabled ?? true,
         actorUserId: user.id,
+      });
+
+      await emitAuditEvent(request, {
+        action: "scheduleTrigger.create",
+        resourceType: "scheduleTrigger",
+        resourceId: trigger.id,
+        metadata: { name: trigger.name },
       });
 
       return reply.send(trigger);
@@ -275,7 +285,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+    async (request, reply) => {
+      const { params: { id }, body, user, organizationId, headers } = request;
+
       const existing = await findAccessibleTriggerOrThrow({
         id,
         userId: user.id,
@@ -343,6 +355,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Schedule trigger not found");
       }
 
+      await emitAuditEvent(request, {
+        action: "scheduleTrigger.update",
+        resourceType: "scheduleTrigger",
+        resourceId: id,
+        metadata: { name: updated.name },
+      });
+
       return reply.send(updated);
     },
   );
@@ -358,8 +377,10 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
-      await findAccessibleTriggerOrThrow({
+    async (request, reply) => {
+      const { params: { id }, user, organizationId, headers } = request;
+
+      const trigger = await findAccessibleTriggerOrThrow({
         id,
         userId: user.id,
         organizationId,
@@ -370,6 +391,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Schedule trigger not found");
       }
+
+      await emitAuditEvent(request, {
+        action: "scheduleTrigger.delete",
+        resourceType: "scheduleTrigger",
+        resourceId: id,
+        metadata: { name: trigger.name },
+      });
 
       return reply.send({ success: true });
     },
@@ -386,7 +414,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
+    async (request, reply) => {
+      const { params: { id }, user, organizationId, headers } = request;
+
       await findAccessibleTriggerOrThrow({
         id,
         userId: user.id,
@@ -401,6 +431,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "Schedule trigger not found");
       }
+
+      await emitAuditEvent(request, {
+        action: "scheduleTrigger.enable",
+        resourceType: "scheduleTrigger",
+        resourceId: id,
+        metadata: { name: updated.name },
+      });
 
       return reply.send(updated);
     },
@@ -417,7 +454,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
+    async (request, reply) => {
+      const { params: { id }, user, organizationId, headers } = request;
+
       await findAccessibleTriggerOrThrow({
         id,
         userId: user.id,
@@ -432,6 +471,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, "Schedule trigger not found");
       }
+
+      await emitAuditEvent(request, {
+        action: "scheduleTrigger.disable",
+        resourceType: "scheduleTrigger",
+        resourceId: id,
+        metadata: { name: updated.name },
+      });
 
       return reply.send(updated);
     },
@@ -448,7 +494,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectScheduleTriggerRunSchema),
       },
     },
-    async ({ params: { id }, user, organizationId, headers }, reply) => {
+    async (request, reply) => {
+      const { params: { id }, user, organizationId, headers } = request;
+
       const trigger = await findAccessibleTriggerOrThrow({
         id,
         userId: user.id,
@@ -470,6 +518,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { runId: run.id, triggerId: trigger.id, userId: user.id },
         "Manual schedule trigger run created",
       );
+
+      await emitAuditEvent(request, {
+        action: "scheduleTrigger.runNow",
+        resourceType: "scheduleTrigger",
+        resourceId: trigger.id,
+        metadata: { name: trigger.name, runId: run.id },
+      });
 
       return reply.send(run);
     },

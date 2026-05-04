@@ -9,6 +9,20 @@ import type { Cluster } from "@/types/cluster";
  * with a routing resolver that maps an McpServer to the correct cluster.
  */
 
+// --- Mock @/logging so we can spy on warn calls (F1 #10) -----------
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
+vi.mock("@/logging", () => ({
+  default: {
+    warn: mockLoggerWarn,
+    info: mockLoggerInfo,
+    error: mockLoggerError,
+    debug: mockLoggerDebug,
+  },
+}));
+
 // --- Mock @kubernetes/client-node (same idiom as manager.test.ts) -----------
 vi.mock("@kubernetes/client-node", () => {
   class MockKubeConfig {
@@ -393,6 +407,100 @@ describe("ClusterRegistry kubeconfig sources", () => {
     expect(call.kubeconfigYaml).toBe("apiVersion: v1\nkind: Config");
     expect(call.namespace).toBe("team-eu-ns");
     expect(result.clusterId).toBe("cluster-team-eu");
+  });
+});
+
+/**
+ * F1 — sticky cluster_id contract (per spec):
+ *   - In steady state, every mcp_server row has a non-null clusterId, set
+ *     once at install time.
+ *   - Resolver keeps a fallback for null safety, but emits a warn log when
+ *     hit. Resolution itself must continue to work.
+ *   - Once a row's clusterId is set, flipping is_personal_default later
+ *     MUST NOT change which cluster the resolver returns for that row.
+ */
+describe("ClusterRegistry F1: sticky clusterId resolution", () => {
+  test("null clusterId on mcpServer → emits warn log AND resolution still works", async () => {
+    const { ClusterModel, shared } = await importMocks();
+    setupDefaultMocks(shared);
+
+    // Pretend the row was somehow saved without a clusterId (legacy / safety net).
+    // Resolver must fall back to the same algorithm: personal-default → default.
+    vi.mocked(ClusterModel.getPersonalDefault).mockResolvedValue(null);
+    const def = makeCluster({ id: "cluster-default", name: "default" });
+    vi.mocked(ClusterModel.getDefault).mockResolvedValue(def);
+
+    const { ClusterRegistry } = await importRegistry();
+    const registry = new ClusterRegistry();
+
+    const result = await registry.resolveForServer(
+      makeMcpServer({
+        id: "srv-null-cluster",
+        ownerId: "user-1",
+        teamId: null,
+        clusterId: null,
+      } as Partial<McpServer>),
+    );
+
+    // Resolution still produces a usable cluster.
+    expect(result.clusterId).toBe("cluster-default");
+
+    // A warn log was emitted that mentions the offending row id.
+    expect(mockLoggerWarn).toHaveBeenCalled();
+    const warnCalls = mockLoggerWarn.mock.calls;
+    const serialized = warnCalls
+      .map((call) => JSON.stringify(call))
+      .join("\n");
+    expect(serialized).toMatch(/srv-null-cluster/);
+    expect(serialized).toMatch(/null|cluster_id|clusterId/i);
+  });
+
+  test("server with stable clusterId → flipping is_personal_default later does NOT change which cluster is returned", async () => {
+    const { ClusterModel, shared } = await importMocks();
+    setupDefaultMocks(shared);
+
+    // The server was installed with an explicit clusterId pointing at
+    // "cluster-A". After install, the admin marks "cluster-B" as the new
+    // is_personal_default. The resolver must keep returning cluster-A.
+    const installedCluster = makeCluster({
+      id: "cluster-A",
+      name: "installed-cluster",
+      isDefault: false,
+      isPersonalDefault: false,
+      namespace: "ns-a",
+      loadFromCluster: true,
+    });
+    vi.mocked(ClusterModel.getById).mockResolvedValue(installedCluster);
+
+    const newPersonalDefault = makeCluster({
+      id: "cluster-B",
+      name: "new-personal-default",
+      isDefault: false,
+      isPersonalDefault: true,
+      namespace: "ns-b",
+      loadFromCluster: true,
+    });
+    vi.mocked(ClusterModel.getPersonalDefault).mockResolvedValue(
+      newPersonalDefault,
+    );
+
+    const { ClusterRegistry } = await importRegistry();
+    const registry = new ClusterRegistry();
+
+    const server = makeMcpServer({
+      ownerId: "user-1",
+      teamId: null,
+      clusterId: "cluster-A",
+    } as Partial<McpServer>);
+
+    const result = await registry.resolveForServer(server);
+
+    // Stable: routed by sticky clusterId, NOT by the (newly flipped) personal-default.
+    expect(result.clusterId).toBe("cluster-A");
+    expect(result.namespace).toBe("ns-a");
+    expect(ClusterModel.getById).toHaveBeenCalledWith("cluster-A");
+    expect(ClusterModel.getPersonalDefault).not.toHaveBeenCalled();
+    expect(ClusterModel.getDefault).not.toHaveBeenCalled();
   });
 });
 

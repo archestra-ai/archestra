@@ -138,6 +138,21 @@ beforeEach(async () => {
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.
   // This allows organization tests to test both with and without existing organizations.
+
+  // The default cluster row is a system-level invariant: prod boots with it via
+  // seedDefaultCluster(), and McpServerModel.create now requires it to resolve
+  // a sticky cluster_id at install time. Seeding here mirrors prod boot.
+  // Tests that specifically need a "no default cluster" scenario can DELETE
+  // the row at the start of the test.
+  //
+  // Use raw SQL via pgliteClient (not seedDefaultCluster()) because individual
+  // test files may run vi.resetModules() / vi.mock() against @/database, which
+  // re-imports seed-default-cluster.ts with a fresh-and-uninitialized db ref.
+  // The pglite client itself is module-cache independent here, mirroring the
+  // TRUNCATE above.
+  await pgliteClient.exec(
+    `INSERT INTO "cluster" ("name", "is_default", "load_from_cluster", "is_personal_default") VALUES ('default', true, false, false)`,
+  );
 });
 
 /**

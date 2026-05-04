@@ -13,6 +13,7 @@ import type {
   UpdateMcpServer,
 } from "@/types";
 import AgentToolModel from "./agent-tool";
+import ClusterModel from "./cluster";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
@@ -64,10 +65,20 @@ class McpServerModel {
       teamId: serverData.teamId ?? null,
     });
 
+    const resolvedClusterId = await McpServerModel.resolveClusterIdForCreate({
+      explicitClusterId: serverData.clusterId ?? null,
+      ownerId: serverData.ownerId ?? null,
+      teamId: serverData.teamId ?? null,
+    });
+
     // ownerId is part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
-      .values({ ...serverData, name: mcpServerName })
+      .values({
+        ...serverData,
+        name: mcpServerName,
+        clusterId: resolvedClusterId,
+      })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
@@ -763,6 +774,28 @@ class McpServerModel {
     }
 
     return { isValid: false, errorMessage: "No catalog ID provided" };
+  }
+
+  private static async resolveClusterIdForCreate(params: {
+    explicitClusterId: string | null;
+    ownerId: string | null;
+    teamId: string | null;
+  }): Promise<string> {
+    if (params.explicitClusterId) {
+      const cluster = await ClusterModel.getById(params.explicitClusterId);
+      if (!cluster) {
+        throw new Error(`cluster ${params.explicitClusterId} not found`);
+      }
+      return cluster.id;
+    }
+
+    if (params.ownerId && !params.teamId) {
+      const personalDefault = await ClusterModel.getPersonalDefault();
+      if (personalDefault) return personalDefault.id;
+    }
+
+    const defaultCluster = await ClusterModel.getDefault();
+    return defaultCluster.id;
   }
 }
 

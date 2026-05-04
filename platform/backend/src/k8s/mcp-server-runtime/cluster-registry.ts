@@ -4,6 +4,7 @@ import {
   createK8sClients,
   type K8sClients,
 } from "@/k8s/shared";
+import logger from "@/logging";
 import ClusterModel from "@/models/cluster";
 import SecretModel from "@/models/secret";
 import type { Cluster } from "@/types/cluster";
@@ -44,6 +45,11 @@ export class ClusterRegistry {
       }
       return cluster;
     }
+
+    logger.warn(
+      { mcpServerId: mcpServer.id },
+      `mcp_server ${mcpServer.id} has null cluster_id, falling back to default resolution`,
+    );
 
     if (mcpServer.ownerId && !mcpServer.teamId) {
       const personalDefault = await ClusterModel.getPersonalDefault();

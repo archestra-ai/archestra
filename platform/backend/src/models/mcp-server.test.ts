@@ -1,5 +1,8 @@
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { seedDefaultCluster } from "@/database/seed-default-cluster";
 import { describe, expect, test } from "@/test";
+import ClusterModel from "./cluster";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
 
@@ -476,6 +479,240 @@ describe("McpServerModel", () => {
           scope: "org",
         }),
       ).toBe("notion");
+    });
+  });
+
+  /**
+   * F1 — sticky cluster_id at install time.
+   *
+   * Contract (per platform/specs/cluster-fixes/F1-sticky-cluster-id.md):
+   *   - McpServerModel.create resolves cluster_id ONCE and persists it.
+   *   - Resolution mirrors ClusterRegistry routing:
+   *       personal (ownerId set, teamId null) → personal-default if any, else default.
+   *       otherwise → default.
+   *   - Explicit clusterId on input → used as-is, validated to exist.
+   *   - The persisted row's clusterId must NEVER be null after create().
+   */
+  describe("create — sticky cluster_id", () => {
+    test("personal server with personal-default cluster present → row.clusterId equals personal-default's id", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      await seedDefaultCluster();
+      const personalDefault = await ClusterModel.create({
+        name: "personal-default-fixture",
+        isPersonalDefault: true,
+      });
+
+      const organization = await makeOrganization();
+      const owner = await makeUser();
+      await makeMember(owner.id, organization.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: owner.id,
+        userId: owner.id,
+        scope: "personal",
+        // teamId intentionally omitted — personal-scoped install
+      });
+
+      expect(server.clusterId).toBe(personalDefault.id);
+
+      // Confirm the persisted row (not just the returned object) carries the FK.
+      const [persisted] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(persisted.clusterId).toBe(personalDefault.id);
+    });
+
+    test("personal server with NO personal-default → row.clusterId equals default cluster's id", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const def = await seedDefaultCluster();
+      // Sanity: nobody marked a personal-default for this scenario.
+      expect(await ClusterModel.getPersonalDefault()).toBeNull();
+
+      const organization = await makeOrganization();
+      const owner = await makeUser();
+      await makeMember(owner.id, organization.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: owner.id,
+        userId: owner.id,
+        scope: "personal",
+      });
+
+      expect(server.clusterId).toBe(def.id);
+    });
+
+    test("team server (teamId set) → row.clusterId equals default cluster, NOT personal-default", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTeam,
+      makeUser,
+    }) => {
+      const def = await seedDefaultCluster();
+      // Even with a personal-default present, a team-scoped server must NOT use it.
+      const personalDefault = await ClusterModel.create({
+        name: "personal-default-fixture",
+        isPersonalDefault: true,
+      });
+
+      const organization = await makeOrganization();
+      const installer = await makeUser();
+      await makeMember(installer.id, organization.id);
+      const team = await makeTeam(organization.id, installer.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "team",
+        teamId: team.id,
+      });
+
+      expect(server.clusterId).toBe(def.id);
+      expect(server.clusterId).not.toBe(personalDefault.id);
+    });
+
+    test("explicit clusterId pointing at a non-existing cluster → throws", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      await seedDefaultCluster();
+      const organization = await makeOrganization();
+      const owner = await makeUser();
+      await makeMember(owner.id, organization.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+
+      const bogusClusterId = "00000000-0000-4000-8000-000000000000";
+
+      await expect(
+        McpServerModel.create({
+          name: catalog.name,
+          serverType: "remote",
+          catalogId: catalog.id,
+          ownerId: owner.id,
+          userId: owner.id,
+          scope: "personal",
+          clusterId: bogusClusterId,
+        }),
+      ).rejects.toThrow(/cluster .* not found/i);
+
+      // No partial row was persisted.
+      const rows = await db.select().from(schema.mcpServersTable);
+      expect(rows).toHaveLength(0);
+    });
+
+    test("explicit clusterId pointing at a real non-default cluster → admin override is honoured", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const def = await seedDefaultCluster();
+      const override = await ClusterModel.create({
+        name: "team-eu-cluster",
+      });
+      // Pre-condition: the override cluster is NOT the default and NOT the
+      // personal-default — otherwise the test cannot distinguish override
+      // from automatic resolution.
+      expect(override.id).not.toBe(def.id);
+      expect(override.isDefault).toBe(false);
+      expect(override.isPersonalDefault).toBe(false);
+
+      const organization = await makeOrganization();
+      const owner = await makeUser();
+      await makeMember(owner.id, organization.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: owner.id,
+        userId: owner.id,
+        scope: "personal",
+        clusterId: override.id,
+      });
+
+      expect(server.clusterId).toBe(override.id);
+      expect(server.clusterId).not.toBe(def.id);
+    });
+
+    test("create() always returns a row whose clusterId is non-null (across owner/team/builtin shapes)", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTeam,
+      makeUser,
+    }) => {
+      await seedDefaultCluster();
+
+      const organization = await makeOrganization();
+      const installer = await makeUser();
+      await makeMember(installer.id, organization.id);
+      const team = await makeTeam(organization.id, installer.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+
+      const personal = await McpServerModel.create({
+        name: `${catalog.name}-personal`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        userId: installer.id,
+        scope: "personal",
+      });
+      const teamServer = await McpServerModel.create({
+        name: `${catalog.name}-team`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "team",
+        teamId: team.id,
+      });
+      const orgServer = await McpServerModel.create({
+        name: `${catalog.name}-org`,
+        serverType: "remote",
+        catalogId: catalog.id,
+        ownerId: installer.id,
+        scope: "org",
+      });
+
+      for (const row of [personal, teamServer, orgServer]) {
+        expect(row.clusterId).not.toBeNull();
+        expect(row.clusterId).toBeTruthy();
+      }
     });
   });
 });

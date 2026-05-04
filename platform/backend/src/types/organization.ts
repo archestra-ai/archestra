@@ -268,7 +268,6 @@ export const UpdateAppearanceSettingsSchema = z.object({
   slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
-  showTwoFactor: z.boolean().optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
@@ -299,6 +298,7 @@ export const UpdateKnowledgeSettingsSchema = z.object({
 export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
     OAuthAccessTokenLifetimeSecondsSchema.optional(),
+  showTwoFactor: z.boolean().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({

@@ -18,6 +18,7 @@ import {
   organizationKeys,
   useOrganization,
   useUpdateAppearanceSettings,
+  useUpdateAuthSettings,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { ChatLinksEditor } from "./_components/chat-links-editor";
@@ -44,6 +45,10 @@ export default function OrganizationSettingsPage() {
   const updateMutation = useUpdateAppearanceSettings(
     "Organization settings updated",
     "Failed to update organization settings",
+  );
+  const updateAuthSettingsMutation = useUpdateAuthSettings(
+    "Auth settings updated",
+    "Failed to update Auth settings",
   );
   const [hasThemeChanges, setHasThemeChanges] = useState(false);
   const queryClient = useQueryClient();
@@ -204,8 +209,6 @@ export default function OrganizationSettingsPage() {
     if (animateChatPlaceholders !== null) {
       data.animateChatPlaceholders = animateChatPlaceholders;
     }
-    if (showTwoFactor !== null) data.showTwoFactor = showTwoFactor;
-
     const updatedOrganization = await updateMutation.mutateAsync(data);
     if (!updatedOrganization) {
       return;
@@ -223,6 +226,21 @@ export default function OrganizationSettingsPage() {
     setSlimChatErrorUi(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
+    setShowTwoFactor(null);
+  };
+
+  const handleSaveAuthFields = async () => {
+    if (showTwoFactor === null) {
+      return;
+    }
+
+    const updatedOrganization = await updateAuthSettingsMutation.mutateAsync({
+      showTwoFactor,
+    });
+    if (!updatedOrganization) {
+      return;
+    }
+
     setShowTwoFactor(null);
   };
 
@@ -419,7 +437,9 @@ export default function OrganizationSettingsPage() {
       {/* Unified save bar for all changes (theme + fields) */}
       <SettingsSaveBar
         hasChanges={hasThemeChanges || hasFieldChanges}
-        isSaving={updateMutation.isPending}
+        isSaving={
+          updateMutation.isPending || updateAuthSettingsMutation.isPending
+        }
         permissions={{ organizationSettings: ["update"] }}
         onSave={async () => {
           if (hasFieldChanges && hasChatLinkValidationErrors) {
@@ -435,7 +455,21 @@ export default function OrganizationSettingsPage() {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
-          if (hasFieldChanges) {
+          if (hasFieldChanges && showTwoFactor !== null) {
+            await handleSaveAuthFields();
+          }
+          if (
+            hasFieldChanges &&
+            (appName !== null ||
+              ogDescription !== null ||
+              footerText !== null ||
+              chatLinks !== null ||
+              onboardingWizardDraft !== undefined ||
+              chatErrorSupportMessage !== null ||
+              slimChatErrorUi !== null ||
+              chatPlaceholders !== null ||
+              animateChatPlaceholders !== null)
+          ) {
             await handleSaveFields();
           }
         }}

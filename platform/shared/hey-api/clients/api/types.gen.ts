@@ -39136,7 +39136,6 @@ export type UpdateAppearanceSettingsData = {
         slimChatErrorUi?: boolean;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
-        showTwoFactor?: boolean;
     };
     path?: never;
     query?: never;
@@ -39858,6 +39857,7 @@ export type UpdateConnectionSettingsResponse = UpdateConnectionSettingsResponses
 export type UpdateAuthSettingsData = {
     body: {
         oauthAccessTokenLifetimeSeconds?: number;
+        showTwoFactor?: boolean;
     };
     path?: never;
     query?: never;

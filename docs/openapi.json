@@ -145362,9 +145362,6 @@
                   },
                   "animateChatPlaceholders": {
                     "type": "boolean"
-                  },
-                  "showTwoFactor": {
-                    "type": "boolean"
                   }
                 }
               }
@@ -149162,6 +149159,9 @@
                     "type": "integer",
                     "minimum": 300,
                     "maximum": 31536000
+                  },
+                  "showTwoFactor": {
+                    "type": "boolean"
                   }
                 }
               }

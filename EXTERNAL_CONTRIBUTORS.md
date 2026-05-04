@@ -206,3 +206,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @brgmaruks
 - @abdulrhman512
 - @imtoori
+- @krishnaxgarg

@@ -2,7 +2,8 @@
 
 import { type archestraApiTypes, DocsPage } from "@shared";
 import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -48,6 +49,16 @@ import {
 type AgentRecord = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type EmailStatusFilter = "all" | "enabled" | "disabled";
 
+const EMAIL_STATUS_FILTER_VALUES: EmailStatusFilter[] = [
+  "all",
+  "enabled",
+  "disabled",
+];
+
+function isEmailStatusFilter(value: string): value is EmailStatusFilter {
+  return (EMAIL_STATUS_FILTER_VALUES as string[]).includes(value);
+}
+
 export default function EmailPage() {
   const appName = useAppName();
   const docsUrl = getFrontendDocsUrl(DocsPage.PlatformAgentTriggersEmail);
@@ -62,10 +73,49 @@ export default function EmailPage() {
   const deleteMutation = useDeleteIncomingEmailSubscription();
   const { email: allStepsCompleted } = useTriggerStatuses();
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.get("search") ?? "";
+  const statusParam = searchParams.get("status");
+  const statusFilter: EmailStatusFilter =
+    statusParam && isEmailStatusFilter(statusParam) ? statusParam : "all";
+
+  const updateFilters = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === "") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+      params.delete("page");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const setSearch = useCallback(
+    (value: string) => {
+      updateFilters({ search: value || null });
+    },
+    [updateFilters],
+  );
+
+  const setStatusFilter = useCallback(
+    (value: EmailStatusFilter) => {
+      updateFilters({ status: value === "all" ? null : value });
+    },
+    [updateFilters],
+  );
+
   const [setupOpen, setSetupOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<EmailStatusFilter>("all");
 
   const isLoading = featuresLoading || statusLoading || agentsLoading;
   const emailInfo = configData?.features.incomingEmail;

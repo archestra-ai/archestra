@@ -58,6 +58,9 @@ export function useCreateVirtualApiKey() {
       queryClient.invalidateQueries({
         queryKey: ["all-virtual-api-keys"],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys"],
+      });
     },
   });
 }
@@ -79,6 +82,9 @@ export function useDeleteVirtualApiKey() {
       toast.success("Virtual API key deleted");
       queryClient.invalidateQueries({
         queryKey: ["all-virtual-api-keys"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys"],
       });
     },
   });
@@ -108,6 +114,9 @@ export function useUpdateVirtualApiKey() {
       toast.success("Virtual API key updated");
       queryClient.invalidateQueries({
         queryKey: ["all-virtual-api-keys"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["virtual-api-keys"],
       });
     },
   });

@@ -5,7 +5,6 @@ import {
   E2eTestId,
   getDeleteVirtualKeyButtonTestId,
   getVirtualKeyRowTestId,
-  providerDisplayNames,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -29,6 +28,7 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
+  formatProviderKeySummary,
   type ProviderApiKeyMap,
   providerApiKeyMapToArray,
 } from "@/components/provider-key-mappings-field";
@@ -771,25 +771,6 @@ function formatExpiration(date: Date | string | null): string {
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {
   if (defaultSeconds === null) return null;
   return new Date(Date.now() + defaultSeconds * 1000);
-}
-
-function formatProviderKeySummary(
-  providerApiKeys: VirtualKeyWithParent["providerApiKeys"],
-): string {
-  if (providerApiKeys.length === 0) {
-    return "None";
-  }
-
-  return [
-    ...new Set(
-      providerApiKeys.map(
-        (mapping) =>
-          providerDisplayNames[
-            mapping.provider as keyof typeof providerDisplayNames
-          ] ?? mapping.provider,
-      ),
-    ),
-  ].join(", ");
 }
 
 function getDefaultVirtualKeyScope(

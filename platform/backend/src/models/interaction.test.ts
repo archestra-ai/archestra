@@ -1183,7 +1183,7 @@ describe("InteractionModel", () => {
         sessionId: "auth-attribution-session",
         authMethod: "oauth_user",
         authenticatedAppId: "app-2",
-        authenticatedAppName: "User OAuth App",
+        authenticatedAppName: "User OAuth App, Inc.",
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Second request" }],
@@ -1210,7 +1210,7 @@ describe("InteractionModel", () => {
         expect.arrayContaining(["oauth_client_credentials", "oauth_user"]),
       );
       expect(sessions.data[0].authenticatedAppNames).toEqual(
-        expect.arrayContaining(["Backend Service", "User OAuth App"]),
+        expect.arrayContaining(["Backend Service", "User OAuth App, Inc."]),
       );
     });
   });

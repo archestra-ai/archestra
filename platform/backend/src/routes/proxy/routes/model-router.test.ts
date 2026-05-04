@@ -4,6 +4,7 @@ import {
   SOURCE_HEADER,
   type SupportedProvider,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -11,6 +12,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import {
   InteractionModel,
   LlmOauthClientModel,
@@ -673,6 +675,135 @@ describe("model router proxy routes", () => {
       authenticatedAppName: "Backend Service",
       externalAgentId: "caller-supplied-label",
     });
+  });
+
+  test("rejects Model Router access tokens for disabled LLM OAuth clients", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Disabled OAuth Client Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Disabled Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
+    });
+    await db
+      .update(schema.oauthClientsTable)
+      .set({ disabled: true })
+      .where(eq(schema.oauthClientsTable.id, oauthClient.id));
+    const accessToken = "model-router-disabled-client-token";
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: createHash("sha256").update(accessToken).digest("base64url"),
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 60_000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+      referenceId: `llm-proxy:${oauthClient.id}`,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toBe("LLM OAuth client is disabled.");
+  });
+
+  test("rejects Model Router access tokens linked to revoked refresh tokens", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "model-router-revoked@example.com" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Revoked Token Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Revoked Token Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
+    });
+    const refreshId = crypto.randomUUID();
+    await db.insert(schema.oauthRefreshTokensTable).values({
+      id: refreshId,
+      token: "model-router-revoked-refresh-token",
+      clientId: oauthClient.clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+      revoked: new Date(),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+    });
+    const accessToken = "model-router-revoked-refresh-token";
+    const createdAccessToken =
+      await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: createHash("sha256").update(accessToken).digest("base64url"),
+        clientId: oauthClient.clientId,
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: `llm-proxy:${oauthClient.id}`,
+      });
+    await db
+      .update(schema.oauthAccessTokensTable)
+      .set({ refreshId })
+      .where(eq(schema.oauthAccessTokensTable.id, createdAccessToken.id));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toBe(
+      "Invalid LLM OAuth client access token.",
+    );
   });
 
   test("routes requests authenticated with a user OAuth access token from an authorization code app", async ({

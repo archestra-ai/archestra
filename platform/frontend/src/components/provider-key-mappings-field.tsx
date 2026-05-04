@@ -100,11 +100,16 @@ export function ProviderKeyMappingsField({
                 const config = PROVIDER_CONFIG[provider];
                 return (
                   <SelectItem key={provider} value={provider}>
-                    <LlmProviderApiKeyOptionLabel
-                      icon={config.icon}
-                      providerName={config.name}
-                      keyName={config.name}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Image
+                        src={config.icon}
+                        alt={config.name}
+                        width={16}
+                        height={16}
+                        className="rounded dark:invert"
+                      />
+                      <span>{config.name}</span>
+                    </div>
                   </SelectItem>
                 );
               })}
@@ -224,6 +229,25 @@ export function providerApiKeyArrayToMap(
       mapping.providerApiKeyId,
     ]),
   );
+}
+
+export function formatProviderKeySummary(
+  providerApiKeys: Array<{ provider: string }>,
+): string {
+  if (providerApiKeys.length === 0) {
+    return "None";
+  }
+
+  return [
+    ...new Set(
+      providerApiKeys.map(
+        (mapping) =>
+          providerDisplayNames[
+            mapping.provider as keyof typeof providerDisplayNames
+          ] ?? mapping.provider,
+      ),
+    ),
+  ].join(", ");
 }
 
 function groupProviderApiKeys(providerApiKeys: LlmProviderApiKeyResponse[]) {

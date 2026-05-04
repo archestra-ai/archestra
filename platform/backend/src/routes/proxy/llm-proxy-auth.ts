@@ -173,6 +173,9 @@ export async function validateLlmOAuthAccessToken(params: {
   if (accessToken.expiresAt < new Date()) {
     throw new ApiError(401, "Invalid LLM OAuth access token.");
   }
+  if (accessToken.refreshTokenRevoked) {
+    throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
   if (!hasLlmProxyScope(accessToken.scopes)) {
     throw new ApiError(403, "Access token is missing LLM proxy scope.");
   }
@@ -398,6 +401,9 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   if (!oauthClient) {
     throw new ApiError(401, "LLM OAuth client is no longer available.");
   }
+  if (oauthClient.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
   if (oauthClient.organizationId !== params.agent.organizationId) {
     throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
@@ -419,7 +425,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   );
   if (!providerApiKey) {
     throw new ApiError(
-      401,
+      500,
       "LLM OAuth client references a missing provider API key.",
     );
   }

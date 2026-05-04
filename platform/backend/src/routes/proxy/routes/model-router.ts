@@ -762,7 +762,11 @@ async function getModelRouterOAuthClientAuth(
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     OAuthAccessTokenModel.hashTokenForLookup(bearerToken),
   );
-  if (!accessToken || accessToken.expiresAt < new Date()) {
+  if (
+    !accessToken ||
+    accessToken.expiresAt < new Date() ||
+    accessToken.refreshTokenRevoked
+  ) {
     throw new ApiError(401, "Invalid LLM OAuth client access token.");
   }
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
@@ -777,6 +781,9 @@ async function getModelRouterOAuthClientAuth(
   );
   if (!oauthClient) {
     throw new ApiError(401, "LLM OAuth client is no longer available.");
+  }
+  if (oauthClient.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
   }
 
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
@@ -800,7 +807,7 @@ async function getModelRouterOAuthClientAuth(
         const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
         if (!apiKey) {
           throw new ApiError(
-            401,
+            500,
             "LLM OAuth client references a missing provider API key.",
           );
         }

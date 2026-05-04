@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, providerDisplayNames } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import {
+  formatProviderKeySummary,
   type ProviderApiKeyMap,
   providerApiKeyArrayToMap,
   providerApiKeyMapToArray,
@@ -63,6 +64,8 @@ export default function OAuthClientsPage() {
     clientId: string;
     clientSecret: string;
   } | null>(null);
+  const [rotatingOAuthClient, setRotatingOAuthClient] =
+    useState<LlmOauthClient | null>(null);
 
   const setProxyAuthAction = useSetProxyAuthAction();
   useEffect(() => {
@@ -134,17 +137,7 @@ export default function OAuthClientsPage() {
               {
                 icon: <RefreshCw className="h-4 w-4" />,
                 label: "Rotate secret",
-                onClick: async () => {
-                  const result = await rotateMutation.mutateAsync({
-                    id: row.original.id,
-                  });
-                  if (result) {
-                    setRotatedCredentials({
-                      clientId: result.clientId,
-                      clientSecret: result.clientSecret,
-                    });
-                  }
-                },
+                onClick: () => setRotatingOAuthClient(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -157,7 +150,7 @@ export default function OAuthClientsPage() {
         ),
       },
     ],
-    [rotateMutation],
+    [],
   );
 
   return (
@@ -222,6 +215,35 @@ export default function OAuthClientsPage() {
         }}
         title="Secret Rotated"
         credentials={rotatedCredentials}
+      />
+
+      <DeleteConfirmDialog
+        open={!!rotatingOAuthClient}
+        onOpenChange={(open) => {
+          if (!open) setRotatingOAuthClient(null);
+        }}
+        title="Rotate OAuth client secret"
+        description={
+          rotatingOAuthClient
+            ? `Rotate the secret for ${rotatingOAuthClient.name}? Existing integrations using the current secret will not be able to request new access tokens.`
+            : ""
+        }
+        onConfirm={async () => {
+          if (!rotatingOAuthClient) return;
+          const result = await rotateMutation.mutateAsync({
+            id: rotatingOAuthClient.id,
+          });
+          if (result) {
+            setRotatedCredentials({
+              clientId: result.clientId,
+              clientSecret: result.clientSecret,
+            });
+          }
+          setRotatingOAuthClient(null);
+        }}
+        isPending={rotateMutation.isPending}
+        confirmLabel="Rotate secret"
+        pendingLabel="Rotating..."
       />
 
       <DeleteConfirmDialog
@@ -466,6 +488,11 @@ function CredentialsDialog({
   title: string;
   credentials: { clientId: string; clientSecret: string } | null;
 }) {
+  const tokenEndpoint =
+    typeof window === "undefined"
+      ? "/api/auth/oauth2/token"
+      : new URL("/api/auth/oauth2/token", window.location.origin).toString();
+
   return (
     <FormDialog
       open={open}
@@ -489,7 +516,7 @@ function CredentialsDialog({
                 <KeyRound className="h-4 w-4" />
                 Token endpoint
               </div>
-              <CopyableCode value="/api/auth/oauth2/token" />
+              <CopyableCode value={tokenEndpoint} />
             </div>
           </>
         )}
@@ -501,23 +528,4 @@ function CredentialsDialog({
       </DialogStickyFooter>
     </FormDialog>
   );
-}
-
-function formatProviderKeySummary(
-  providerApiKeys: LlmOauthClient["providerApiKeys"],
-): string {
-  if (providerApiKeys.length === 0) {
-    return "None";
-  }
-
-  return [
-    ...new Set(
-      providerApiKeys.map(
-        (mapping) =>
-          providerDisplayNames[
-            mapping.provider as keyof typeof providerDisplayNames
-          ] ?? mapping.provider,
-      ),
-    ),
-  ].join(", ");
 }

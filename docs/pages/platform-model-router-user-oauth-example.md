@@ -1,7 +1,7 @@
 ---
 title: Model Router User OAuth
 category: Examples
-order: 8
+order: 0
 description: Build a custom OAuth app that calls the OpenAI-compatible Model Router as the signed-in user
 lastUpdated: 2026-05-04
 ---

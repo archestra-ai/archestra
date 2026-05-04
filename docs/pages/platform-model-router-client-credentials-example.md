@@ -1,7 +1,7 @@
 ---
 title: Model Router Client Credentials
 category: Examples
-order: 9
+order: 1
 description: Build a service app that calls the OpenAI-compatible Model Router with OAuth client credentials
 lastUpdated: 2026-05-04
 ---

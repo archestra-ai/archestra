@@ -148,11 +148,12 @@ export async function selectRuntimeModelFromDialog(
     await displayNameModelOption.first().click();
   }
 
-  const closeButton = dialog.getByRole("button", { name: "Close" });
-  if (await dialog.isVisible().catch(() => false)) {
-    await closeButton.click();
-  }
-  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
+  await expect(dialog)
+    .not.toBeVisible({ timeout: 2_000 })
+    .catch(async () => {
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible({ timeout: 5_000 });
+    });
 }
 
 function buildModelOptionPattern(model: RuntimeChatModel): RegExp {

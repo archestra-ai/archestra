@@ -358,7 +358,9 @@ rl.on("line", (line) => {
     await editConfigButton.click();
 
     // Wait for the settings dialog Configuration page to load
-    const settingsDialog = adminPage.getByRole("dialog");
+    const settingsDialog = adminPage.getByRole("dialog", {
+      name: `${CATALOG_ITEM_NAME} Settings`,
+    });
     await settingsDialog.waitFor({ state: "visible", timeout: 10000 });
 
     // Update the config to a valid MCP server that should start successfully

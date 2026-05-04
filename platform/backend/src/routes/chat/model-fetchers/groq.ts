@@ -5,6 +5,7 @@ import type { ModelInfo } from "./types";
 export async function fetchGroqModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.groq.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -16,6 +17,7 @@ export async function fetchGroqModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "Groq models",
+    extraHeaders,
   });
 
   return data.data.map((model) => ({

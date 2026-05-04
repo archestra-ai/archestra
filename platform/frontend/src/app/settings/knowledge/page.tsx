@@ -77,6 +77,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   provider: "openai",
   apiKey: null,
   baseUrl: null,
+  extraHeaders: [],
   scope: "org",
   teamId: null,
   vaultSecretPath: null,
@@ -210,7 +211,7 @@ function AddApiKeyDialog({
           </Button>
           <Button type="submit" disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             )}
             Test & Create
           </Button>

@@ -30,9 +30,8 @@ export function ResourceVisibilityBadge({
 
   if (scope === "org") {
     return (
-      <Badge variant="secondary" className="text-xs gap-1">
+      <Badge variant="secondary" className="text-xs">
         <Globe className="h-3 w-3" />
-        Organization
       </Badge>
     );
   }

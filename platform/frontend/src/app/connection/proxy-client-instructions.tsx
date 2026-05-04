@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
-import { Eyebrow, UnsupportedPanel } from "./mcp-client-instructions";
+import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
@@ -222,7 +222,7 @@ export function ProxyClientInstructions({
             </div>
             <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
               <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-                <code className="block truncate text-[11.5px] line-through opacity-50">
+                <code className="block truncate text-xs line-through opacity-50">
                   {originalUrl}
                 </code>
               </div>
@@ -297,7 +297,7 @@ function BedrockGenericInstructions({
         </div>
         <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-            <code className="block truncate text-[11.5px] line-through opacity-50">
+            <code className="block truncate text-xs line-through opacity-50">
               {originalUrl}
             </code>
           </div>
@@ -337,7 +337,7 @@ function BedrockGenericInstructions({
         </div>
         <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-            <code className="block truncate text-[11.5px] line-through opacity-50">
+            <code className="block truncate text-xs line-through opacity-50">
               https://api.openai.com/v1/
             </code>
           </div>

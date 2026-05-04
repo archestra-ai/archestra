@@ -6,12 +6,14 @@ import type { ModelInfo } from "./types";
 export async function fetchAnthropicModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
   const url = `${baseUrl}/v1/models?limit=100`;
 
   const response = await fetch(url, {
     headers: {
+      ...(extraHeaders ?? {}),
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
     },

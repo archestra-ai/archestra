@@ -388,7 +388,7 @@ describe("chat tool execution", () => {
     expect(updatedBinding?.agentId).toBe(testAgent.id);
   });
 
-  test("swap_agent returns error when swapping to same agent", async ({
+  test("swap_agent returns structured state when swapping to same agent", async ({
     makeConversation,
   }) => {
     const conversation = await makeConversation(testAgent.id, {
@@ -406,7 +406,16 @@ describe("chat tool execution", () => {
       { agent_name: testAgent.name },
       contextWithConvo,
     );
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      success: false,
+      code: "already_using_agent",
+      archestraError: {
+        type: "tool_state",
+        code: "already_using_agent",
+        toolName: "swap_agent",
+      },
+    });
     expect((result.content[0] as any).text).toContain("Already using agent");
   });
 
@@ -422,7 +431,7 @@ describe("chat tool execution", () => {
     );
   });
 
-  test("swap_to_default_agent returns error when no default agent configured", async ({
+  test("swap_to_default_agent returns structured state when no default agent configured", async ({
     makeConversation,
   }) => {
     const conversation = await makeConversation(testAgent.id, {
@@ -440,7 +449,16 @@ describe("chat tool execution", () => {
       {},
       contextWithConvo,
     );
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      success: false,
+      code: "no_default_agent",
+      archestraError: {
+        type: "tool_state",
+        code: "no_default_agent",
+        toolName: "swap_to_default_agent",
+      },
+    });
     expect((result.content[0] as any).text).toContain(
       "No default agent is configured",
     );
@@ -743,11 +761,20 @@ describe("chat tool execution", () => {
       { agent_name: "Inaccessible Agent" },
       memberContext,
     );
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      success: false,
+      code: "no_agent_found",
+      archestraError: {
+        type: "tool_state",
+        code: "no_agent_found",
+        toolName: "swap_agent",
+      },
+    });
     expect((result.content[0] as any).text).toContain("No agent found");
   });
 
-  test("swap_to_default_agent returns error when already on default agent", async ({
+  test("swap_to_default_agent returns structured state when already on default agent", async ({
     makeConversation,
   }) => {
     await OrganizationModel.patch(organizationId, {
@@ -769,7 +796,16 @@ describe("chat tool execution", () => {
       {},
       contextWithConvo,
     );
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      success: false,
+      code: "already_using_default_agent",
+      archestraError: {
+        type: "tool_state",
+        code: "already_using_default_agent",
+        toolName: "swap_to_default_agent",
+      },
+    });
     expect((result.content[0] as any).text).toContain(
       "Already using the default agent",
     );

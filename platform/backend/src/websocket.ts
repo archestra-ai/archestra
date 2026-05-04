@@ -4,6 +4,7 @@ import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
   type ClientWebSocketMessageType,
+  type LocalMcpInstallationState,
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
   type ServerWebSocketMessage,
@@ -879,6 +880,33 @@ class WebSocketService {
     });
     ws.close(4401, "Unauthorized");
   }
+
+  broadcastMcpInstallationStatus(
+    serverId: string,
+    status: LocalMcpInstallationState,
+    error: string | null,
+  ): void {
+    if (!this.wss) return;
+    this.broadcast({
+      type: "mcp_installation_status",
+      payload: { serverId, status, error },
+    });
+  }
 }
 
-export default new WebSocketService();
+const websocketService = new WebSocketService();
+
+/**
+ * Push an install-status update to all connected clients. Call this from
+ * any code path that writes mcp_server.local_installation_status so the UI
+ * doesn't depend on the 2s React Query poll catching the change.
+ */
+export function broadcastMcpInstallationStatus(
+  serverId: string,
+  status: LocalMcpInstallationState,
+  error: string | null = null,
+): void {
+  websocketService.broadcastMcpInstallationStatus(serverId, status, error);
+}
+
+export default websocketService;

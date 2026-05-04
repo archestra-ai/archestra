@@ -77,6 +77,16 @@ Run MCP servers in kubernetes, managing their state, API keys, OAuth.
 <img src="docs/assets/orchestrator.webp" alt="MCP Orchestrator" />
 </div>
 
+## 📚 RAG Knowledge Base
+
+Built-in retrieval-augmented Knowledge Base — no external vector database or separate retrieval service required.
+
+[Learn more about Knowledge Base →](https://archestra.ai/docs/platform-knowledge-bases)
+
+<div align="center">
+<img src="docs/assets/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp" alt="RAG Knowledge Base" />
+</div>
+
 ## 🤖 Security sub-agents
 
 Isolating dangerous tool responses from the main agent to prevent prompt injections.

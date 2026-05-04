@@ -7,11 +7,14 @@ import type { ModelInfo } from "./types";
 export async function fetchGeminiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.gemini.baseUrl;
   const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: extraHeaders ?? undefined,
+  });
 
   if (!response.ok) {
     const errorText = await response.text();

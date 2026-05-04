@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -128,7 +129,6 @@ interface ManageUsersContentProps {
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
-  variant?: "remote" | "local" | "builtin";
 }
 
 export function ManageUsersContent({
@@ -142,7 +142,6 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
-  variant,
 }: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data
   const { data: allServers = [], isFetched: serversFetched } = useMcpServers({
@@ -332,7 +331,6 @@ export function ManageUsersContent({
   const availableTeamsForShared =
     userTeams?.filter((t) => !teamsWithConnection.has(t.id)) ?? [];
   const hasOrgConnection = orgServers.length > 0;
-  const sharedServers = [...orgServers, ...teamServers];
 
   const getCredentialOwnerName = (
     mcpServer: (typeof allServers)[number],
@@ -349,13 +347,13 @@ export function ManageUsersContent({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage connections
+            Manage credentials
             <span className="text-muted-foreground font-normal">
               {label || firstServer?.name}
             </span>
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Manage connections
+            Manage credentials
           </DialogDescription>
         </DialogHeader>
       )}
@@ -371,100 +369,59 @@ export function ManageUsersContent({
                 <PlugZap />
               </EmptyMedia>
               <EmptyDescription>
-                No connections available for this server.
+                No credentials available for this server.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
-          <>
-            <YourPersonalConnection
-              server={myPersonalServer}
-              isOAuthServer={isOAuthServer}
-              canReauthenticate={canReauthenticate}
-              getReauthTooltip={getReauthTooltip}
-              canRevoke={canRevoke}
-              getRevokeTooltip={getRevokeTooltip}
-              handleReauthenticate={handleReauthenticate}
-              handleRevoke={handleRevoke}
-              isDeleting={deleteMcpServerMutation.isPending}
-              deploymentStatuses={deploymentStatuses}
-              onOpenPodLogs={onOpenPodLogs}
-              onInstall={
-                onAddPersonalConnection
-                  ? () => {
-                      onClose();
-                      onAddPersonalConnection();
-                    }
-                  : undefined
-              }
-              variant={variant}
-            />
-            <ConnectionsTable
-              title="Other personal connections"
-              servers={otherPersonalServers}
-              isOAuthServer={isOAuthServer}
-              getCredentialOwnerName={getCredentialOwnerName}
-              canReauthenticate={canReauthenticate}
-              getReauthTooltip={getReauthTooltip}
-              canRevoke={canRevoke}
-              getRevokeTooltip={getRevokeTooltip}
-              handleReauthenticate={handleReauthenticate}
-              handleRevoke={handleRevoke}
-              isDeleting={deleteMcpServerMutation.isPending}
-              deploymentStatuses={deploymentStatuses}
-              onOpenPodLogs={onOpenPodLogs}
-              alwaysShow
-            />
-            <ConnectionsTable
-              title="Shared connections"
-              servers={sharedServers}
-              isOAuthServer={isOAuthServer}
-              getCredentialOwnerName={getCredentialOwnerName}
-              canReauthenticate={canReauthenticate}
-              getReauthTooltip={getReauthTooltip}
-              canRevoke={canRevoke}
-              getRevokeTooltip={getRevokeTooltip}
-              handleReauthenticate={handleReauthenticate}
-              handleRevoke={handleRevoke}
-              isDeleting={deleteMcpServerMutation.isPending}
-              deploymentStatuses={deploymentStatuses}
-              onOpenPodLogs={onOpenPodLogs}
-              teamOptions={
-                onAddSharedConnection ? availableTeamsForShared : undefined
-              }
-              onAddForTeam={
-                onAddSharedConnection
-                  ? (teamId) => {
-                      onClose();
-                      onAddSharedConnection(teamId);
-                    }
-                  : undefined
-              }
-              onAddForOrg={
-                onAddOrgConnection && !hasOrgConnection
-                  ? () => {
-                      onClose();
-                      onAddOrgConnection();
-                    }
-                  : undefined
-              }
-              addOrgDisabled={!hasMcpServerAdminPermission}
-              addOrgDisabledReason={
-                !hasMcpServerAdminPermission
-                  ? "Only organization admins can install organization-wide"
-                  : undefined
-              }
-              alwaysShow
-              sectionTestId={
-                E2eTestId.ManageCredentialsSharedConnectionsSection
-              }
-              emptyStateTestId={
-                E2eTestId.ManageCredentialsSharedConnectionsEmptyState
-              }
-              addButtonTestId={E2eTestId.ManageCredentialsAddToTeamButton}
-              addOrgButtonTestId={E2eTestId.ManageCredentialsAddToOrgButton}
-            />
-          </>
+          <UnifiedConnectionsTable
+            myPersonalServer={myPersonalServer}
+            otherPersonalServers={otherPersonalServers}
+            teamServers={teamServers}
+            orgServers={orgServers}
+            isOAuthServer={isOAuthServer}
+            getCredentialOwnerName={getCredentialOwnerName}
+            canReauthenticate={canReauthenticate}
+            getReauthTooltip={getReauthTooltip}
+            canRevoke={canRevoke}
+            getRevokeTooltip={getRevokeTooltip}
+            handleReauthenticate={handleReauthenticate}
+            handleRevoke={handleRevoke}
+            isDeleting={deleteMcpServerMutation.isPending}
+            deploymentStatuses={deploymentStatuses}
+            onOpenPodLogs={onOpenPodLogs}
+            onAddPersonal={
+              onAddPersonalConnection && !myPersonalServer
+                ? () => {
+                    onClose();
+                    onAddPersonalConnection();
+                  }
+                : undefined
+            }
+            availableTeamsForShared={availableTeamsForShared}
+            onAddForTeam={
+              onAddSharedConnection
+                ? (teamId) => {
+                    onClose();
+                    onAddSharedConnection(teamId);
+                  }
+                : undefined
+            }
+            onAddForOrg={
+              onAddOrgConnection && !hasOrgConnection
+                ? () => {
+                    onClose();
+                    onAddOrgConnection();
+                  }
+                : undefined
+            }
+            addOrgDisabled={!hasMcpServerAdminPermission}
+            addOrgDisabledReason={
+              !hasMcpServerAdminPermission
+                ? "Only organization admins can install organization-wide"
+                : undefined
+            }
+          />
         )}
       </div>
 
@@ -483,9 +440,13 @@ type ServerEntry = NonNullable<
   ReturnType<typeof useMcpServers>["data"]
 >[number];
 
-function YourPersonalConnection({
-  server,
+function UnifiedConnectionsTable({
+  myPersonalServer,
+  otherPersonalServers,
+  teamServers,
+  orgServers,
   isOAuthServer,
+  getCredentialOwnerName,
   canReauthenticate,
   getReauthTooltip,
   canRevoke,
@@ -495,11 +456,19 @@ function YourPersonalConnection({
   isDeleting,
   deploymentStatuses = {},
   onOpenPodLogs,
-  onInstall,
-  variant,
+  onAddPersonal,
+  availableTeamsForShared,
+  onAddForTeam,
+  onAddForOrg,
+  addOrgDisabled,
+  addOrgDisabledReason,
 }: {
-  server: ServerEntry | null;
+  myPersonalServer: ServerEntry | null;
+  otherPersonalServers: ServerEntry[];
+  teamServers: ServerEntry[];
+  orgServers: ServerEntry[];
   isOAuthServer: boolean;
+  getCredentialOwnerName: (s: ServerEntry) => string;
   canReauthenticate: (s: ServerEntry) => boolean;
   getReauthTooltip: (s: ServerEntry) => string;
   canRevoke: (s: ServerEntry) => boolean;
@@ -509,69 +478,251 @@ function YourPersonalConnection({
   isDeleting: boolean;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
-  onInstall?: () => void;
-  variant?: "remote" | "local" | "builtin";
+  onAddPersonal?: () => void;
+  availableTeamsForShared: Array<{ id: string; name: string }>;
+  onAddForTeam?: (teamId: string) => void;
+  onAddForOrg?: () => void;
+  addOrgDisabled?: boolean;
+  addOrgDisabledReason?: string;
 }) {
-  const isLocal = variant === "local";
-  const deploymentStatus = server ? deploymentStatuses[server.id] : undefined;
+  const rows = [
+    ...(myPersonalServer
+      ? [{ server: myPersonalServer, isYou: true } as const]
+      : []),
+    ...otherPersonalServers.map((s) => ({ server: s, isYou: false }) as const),
+    ...teamServers.map((s) => ({ server: s, isYou: false }) as const),
+    ...orgServers.map((s) => ({ server: s, isYou: false }) as const),
+  ];
+
+  const hasDeploymentStatuses = rows.some(
+    (r) => deploymentStatuses[r.server.id],
+  );
+
+  // Multi-tenant catalogs alias one pod across N caller rows. Each row's
+  // K8sDeployment instance tracks its own state independently, so the row
+  // that didn't observe the pod first stays "pending" while the other goes
+  // "failed". Pick a canonical state per podName so all rows agree.
+  const STATE_PRIORITY: Record<string, number> = {
+    failed: 4,
+    running: 3,
+    succeeded: 3,
+    pending: 2,
+    not_created: 1,
+  };
+  const canonicalStateByPod = new Map<string, string>();
+  for (const { server } of rows) {
+    const entry = deploymentStatuses[server.id];
+    if (!entry?.podName) continue;
+    const current = canonicalStateByPod.get(entry.podName);
+    if (
+      !current ||
+      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
+    ) {
+      canonicalStateByPod.set(entry.podName, entry.state);
+    }
+  }
+
+  const teamItems =
+    onAddForTeam && availableTeamsForShared.length > 0
+      ? availableTeamsForShared.map((team) => ({
+          key: `team-${team.id}`,
+          label: `Install for ${team.name}`,
+          onClick: () => onAddForTeam(team.id),
+          testId: getManageCredentialsAddToTeamOptionTestId(team.name),
+        }))
+      : [];
+
+  const installItems = [
+    ...(onAddPersonal
+      ? [
+          {
+            key: "personal",
+            label: "Install for myself",
+            onClick: onAddPersonal,
+            testId: undefined as string | undefined,
+          },
+        ]
+      : []),
+    ...(onAddForOrg
+      ? [
+          {
+            key: "org",
+            label: "Install for organization",
+            onClick: onAddForOrg,
+            disabled: !!addOrgDisabled,
+            disabledReason: addOrgDisabledReason,
+            testId: E2eTestId.ManageCredentialsAddToOrgButton,
+          },
+        ]
+      : []),
+    ...teamItems,
+  ];
+
+  const installMenu =
+    installItems.length === 0 ? null : (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            data-testid={E2eTestId.ManageCredentialsAddToTeamButton}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Install
+            <ChevronDown className="ml-1 h-3 w-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {installItems.map((item) => {
+            const disabled = "disabled" in item && item.disabled;
+            const reason =
+              "disabledReason" in item ? item.disabledReason : undefined;
+            const node = (
+              <DropdownMenuItem
+                key={item.key}
+                onClick={disabled ? undefined : item.onClick}
+                disabled={disabled}
+                data-testid={item.testId}
+              >
+                {item.label}
+              </DropdownMenuItem>
+            );
+            if (disabled && reason) {
+              return (
+                <TooltipProvider key={item.key}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>{node}</div>
+                    </TooltipTrigger>
+                    <TooltipContent>{reason}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+            }
+            return <div key={item.key}>{node}</div>;
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
+  if (rows.length === 0) {
+    return (
+      <Empty className="border rounded-md py-8">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <PlugZap />
+          </EmptyMedia>
+          <EmptyDescription>No credentials yet.</EmptyDescription>
+        </EmptyHeader>
+        {installMenu && (
+          <EmptyContent className="flex-row justify-center">
+            {installMenu}
+          </EmptyContent>
+        )}
+      </Empty>
+    );
+  }
 
   return (
-    <div>
-      <h4 className="text-sm font-medium mb-2">Your personal connection</h4>
-      {!server ? (
-        <Empty className="border rounded-md py-6 md:py-8">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <PlugZap />
-            </EmptyMedia>
-            <EmptyDescription>
-              You don&apos;t have a personal connection yet.
-            </EmptyDescription>
-          </EmptyHeader>
-          {onInstall && (
-            <EmptyContent className="flex-row justify-center">
-              <Button onClick={onInstall}>
-                {variant === "remote" ? "Connect" : "Install"}
-              </Button>
-            </EmptyContent>
-          )}
-        </Empty>
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {isLocal && <TableHead>Pod</TableHead>}
-                <TableHead>Secret Storage</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow data-testid={E2eTestId.CredentialRow}>
-                {isLocal && (
-                  <TableCell>
-                    {deploymentStatus ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPodLogs?.(server.id)}
-                        className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
-                      >
+    <div className="space-y-2">
+      {installMenu && (
+        <div className="flex items-center justify-end">{installMenu}</div>
+      )}
+      <div className="rounded-md border">
+        <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[220px]">Owner</TableHead>
+              {hasDeploymentStatuses && (
+                <TableHead className="w-[260px]">Pod</TableHead>
+              )}
+              <TableHead>Secret Storage</TableHead>
+              <TableHead>Created At</TableHead>
+              <TableHead>Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map(({ server, isYou }) => (
+              <TableRow
+                key={server.id}
+                data-testid={E2eTestId.CredentialRow}
+                data-server-id={server.id}
+              >
+                <TableCell className="font-medium max-w-[220px]">
+                  <div className="flex items-center gap-2">
+                    {isOAuthServer && server.oauthRefreshError && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Authentication failed. Please re-authenticate.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <span
+                      className="truncate"
+                      data-testid={E2eTestId.CredentialOwner}
+                    >
+                      {getCredentialOwnerName(server)}
+                    </span>
+                    {isYou && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        You
+                      </Badge>
+                    )}
+                  </div>
+                  {(server.teamId || server.scope === "org") && (
+                    <span className="text-muted-foreground text-xs block">
+                      Created by: {server.ownerEmail}
+                    </span>
+                  )}
+                </TableCell>
+                {hasDeploymentStatuses && (
+                  <TableCell className="max-w-[260px]">
+                    {(() => {
+                      const status = deploymentStatuses[server.id];
+                      if (!status) {
+                        return <span className="text-muted-foreground">—</span>;
+                      }
+                      const podName = status.podName;
+                      const effectiveState =
+                        (podName && canonicalStateByPod.get(podName)) ||
+                        status.state;
+                      const dot = (
                         <DeploymentStatusDot
                           state={
-                            (deploymentStatus.state === "not_created" ||
-                            deploymentStatus.state === "succeeded"
+                            (effectiveState === "not_created" ||
+                            effectiveState === "succeeded"
                               ? "running"
-                              : deploymentStatus.state) as DeploymentState
+                              : effectiveState) as DeploymentState
                           }
                         />
-                        <span className="truncate max-w-[150px]">
-                          {server.name}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                      );
+                      if (!podName) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
+                            {dot}
+                            <span>Pod not reported yet</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPodLogs?.(server.id)}
+                          className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
+                        >
+                          {dot}
+                          <span className="truncate min-w-0 flex-1 text-left">
+                            {podName}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   </TableCell>
                 )}
                 <TableCell className="text-muted-foreground">
@@ -617,7 +768,11 @@ function YourPersonalConnection({
                               size="sm"
                               variant="outline"
                               className="h-7 w-full text-xs"
-                              data-testid={`${E2eTestId.RevokeCredentialButton}-personal`}
+                              data-testid={
+                                isYou
+                                  ? `${E2eTestId.RevokeCredentialButton}-personal`
+                                  : `${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(server)}`
+                              }
                             >
                               <Trash className="mr-1 h-3 w-3" />
                               Revoke
@@ -634,298 +789,10 @@ function YourPersonalConnection({
                   </div>
                 </TableCell>
               </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConnectionsTable({
-  title,
-  servers,
-  isOAuthServer,
-  getCredentialOwnerName,
-  canReauthenticate,
-  getReauthTooltip,
-  canRevoke,
-  getRevokeTooltip,
-  handleReauthenticate,
-  handleRevoke,
-  isDeleting,
-  deploymentStatuses = {},
-  onOpenPodLogs,
-  teamOptions,
-  onAddForTeam,
-  onAddForOrg,
-  addOrgDisabled,
-  addOrgDisabledReason,
-  alwaysShow = false,
-  sectionTestId,
-  emptyStateTestId,
-  addButtonTestId,
-  addOrgButtonTestId,
-}: {
-  title: string;
-  servers: ServerEntry[];
-  isOAuthServer: boolean;
-  getCredentialOwnerName: (s: ServerEntry) => string;
-  canReauthenticate: (s: ServerEntry) => boolean;
-  getReauthTooltip: (s: ServerEntry) => string;
-  canRevoke: (s: ServerEntry) => boolean;
-  getRevokeTooltip: (s: ServerEntry) => string;
-  handleReauthenticate: (s: ServerEntry) => void;
-  handleRevoke: (s: ServerEntry) => void;
-  isDeleting: boolean;
-  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
-  onOpenPodLogs?: (serverId: string) => void;
-  /** Team options for dropdown add button (for shared connections) */
-  teamOptions?: Array<{ id: string; name: string }>;
-  /** Called when a team is selected from the dropdown */
-  onAddForTeam?: (teamId: string) => void;
-  /** Called when user wants to install as an organization connection */
-  onAddForOrg?: () => void;
-  /** Disable the "Add to organization" button */
-  addOrgDisabled?: boolean;
-  /** Tooltip reason when "Add to organization" is disabled */
-  addOrgDisabledReason?: string;
-  /** Always show the section even when empty and no add button */
-  alwaysShow?: boolean;
-  sectionTestId?: string;
-  emptyStateTestId?: string;
-  addButtonTestId?: string;
-  addOrgButtonTestId?: string;
-}) {
-  const hasAddButton =
-    (teamOptions && onAddForTeam) || onAddForOrg !== undefined;
-  if (servers.length === 0 && !hasAddButton && !alwaysShow) return null;
-  const hasDeploymentStatuses = servers.some((s) => deploymentStatuses[s.id]);
-
-  return (
-    <div data-testid={sectionTestId}>
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-sm font-medium">{title}</h4>
-        <div className="flex items-center gap-2">
-          {onAddForOrg && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={onAddForOrg}
-                      disabled={addOrgDisabled}
-                      data-testid={addOrgButtonTestId}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      Add to organization
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {addOrgDisabled && addOrgDisabledReason && (
-                  <TooltipContent>{addOrgDisabledReason}</TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {teamOptions && onAddForTeam && (
-            <DropdownMenu>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          disabled={teamOptions.length === 0}
-                          data-testid={addButtonTestId}
-                        >
-                          <Plus className="mr-1 h-3 w-3" />
-                          Add to team
-                          <ChevronDown className="ml-1 h-3 w-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                    </span>
-                  </TooltipTrigger>
-                  {teamOptions.length === 0 && (
-                    <TooltipContent>
-                      All teams already have a connection
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-              <DropdownMenuContent align="end">
-                {teamOptions.map((team) => (
-                  <DropdownMenuItem
-                    key={team.id}
-                    onClick={() => onAddForTeam(team.id)}
-                    data-testid={getManageCredentialsAddToTeamOptionTestId(
-                      team.name,
-                    )}
-                  >
-                    {team.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       </div>
-      {servers.length === 0 ? (
-        <div
-          className="text-center py-4 text-sm text-muted-foreground border rounded-md"
-          data-testid={emptyStateTestId}
-        >
-          No {title.toLowerCase()} yet.
-        </div>
-      ) : (
-        <div className="rounded-md border">
-          <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[200px]">Owner</TableHead>
-                {hasDeploymentStatuses && <TableHead>Pod</TableHead>}
-                <TableHead>Secret Storage</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {servers.map((mcpServer) => (
-                <TableRow
-                  key={mcpServer.id}
-                  data-testid={E2eTestId.CredentialRow}
-                  data-server-id={mcpServer.id}
-                >
-                  <TableCell className="font-medium max-w-[200px]">
-                    <div className="flex items-center gap-2">
-                      {isOAuthServer && mcpServer.oauthRefreshError && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Authentication failed. Please re-authenticate.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      <span
-                        className="truncate"
-                        data-testid={E2eTestId.CredentialOwner}
-                      >
-                        {getCredentialOwnerName(mcpServer)}
-                      </span>
-                    </div>
-                    {(mcpServer.teamId || mcpServer.scope === "org") && (
-                      <span className="text-muted-foreground text-xs block">
-                        Created by: {mcpServer.ownerEmail}
-                      </span>
-                    )}
-                  </TableCell>
-                  {hasDeploymentStatuses && (
-                    <TableCell>
-                      {deploymentStatuses[mcpServer.id] ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onOpenPodLogs?.(mcpServer.id);
-                          }}
-                          className="flex items-center gap-1.5 text-sm hover:underline cursor-pointer"
-                        >
-                          <DeploymentStatusDot
-                            state={
-                              (deploymentStatuses[mcpServer.id].state ===
-                                "not_created" ||
-                              deploymentStatuses[mcpServer.id].state ===
-                                "succeeded"
-                                ? "running"
-                                : deploymentStatuses[mcpServer.id]
-                                    .state) as DeploymentState
-                            }
-                          />
-                          <span className="truncate max-w-[150px]">
-                            {mcpServer.name}
-                          </span>
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  )}
-                  <TableCell className="text-muted-foreground">
-                    {formatSecretStorageType(mcpServer.secretStorageType)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {format(new Date(mcpServer.createdAt), "PPp")}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      {isOAuthServer && mcpServer.oauthRefreshError && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="w-full">
-                                <Button
-                                  onClick={() =>
-                                    handleReauthenticate(mcpServer)
-                                  }
-                                  disabled={!canReauthenticate(mcpServer)}
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 w-full text-xs"
-                                >
-                                  <RefreshCw className="mr-1 h-3 w-3" />
-                                  Re-authenticate
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            {!canReauthenticate(mcpServer) && (
-                              <TooltipContent>
-                                {getReauthTooltip(mcpServer)}
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="w-full">
-                              <Button
-                                onClick={() => handleRevoke(mcpServer)}
-                                disabled={isDeleting || !canRevoke(mcpServer)}
-                                size="sm"
-                                variant="outline"
-                                className="h-7 w-full text-xs"
-                                data-testid={`${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(mcpServer)}`}
-                              >
-                                <Trash className="mr-1 h-3 w-3" />
-                                Revoke
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          {!canRevoke(mcpServer) && (
-                            <TooltipContent>
-                              {getRevokeTooltip(mcpServer)}
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
     </div>
   );
 }

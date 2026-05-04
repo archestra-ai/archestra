@@ -23,3 +23,15 @@ export const UpdateClusterInputSchema = z.object({
 export type Cluster = z.infer<typeof SelectClusterSchema>;
 export type InsertClusterInput = z.input<typeof InsertClusterInputSchema>;
 export type UpdateClusterInput = z.input<typeof UpdateClusterInputSchema>;
+
+export class ClusterInUseError extends Error {
+  count: number;
+
+  constructor(id: string, count: number) {
+    super(
+      `cluster ${id} is referenced by ${count} MCP server(s); migrate or uninstall them before deleting`,
+    );
+    this.name = "ClusterInUseError";
+    this.count = count;
+  }
+}

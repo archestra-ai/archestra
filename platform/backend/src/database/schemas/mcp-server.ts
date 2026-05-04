@@ -49,7 +49,7 @@ const mcpServerTable = pgTable(
       onDelete: "set null",
     }),
     clusterId: uuid("cluster_id").references(() => clustersTable.id, {
-      onDelete: "set null",
+      onDelete: "restrict",
     }),
     scope: text("scope")
       .$type<ResourceVisibilityScope>()

@@ -6,6 +6,34 @@ import ClusterModel from "./cluster";
 import SecretModel from "./secret";
 
 /**
+ * Insert an mcp_server row that references a specific cluster.
+ *
+ * `makeMcpServer` from `@/test` does not currently expose `clusterId`, so we
+ * call it for the boilerplate (catalog, ids, defaults) and then patch the FK
+ * column directly via `db`. Returns the updated row.
+ */
+async function attachServerToCluster(
+  makeMcpServer: (
+    overrides?: Partial<{
+      name: string;
+      catalogId: string;
+      ownerId: string | null;
+      teamId: string | null;
+      scope: "org" | "team" | "personal";
+    }>,
+  ) => Promise<{ id: string }>,
+  clusterId: string,
+) {
+  const server = await makeMcpServer();
+  const [updated] = await db
+    .update(schema.mcpServersTable)
+    .set({ clusterId })
+    .where(eq(schema.mcpServersTable.id, server.id))
+    .returning();
+  return updated;
+}
+
+/**
  * Build a structurally valid kubeconfig YAML. ClusterModel validates content
  * via `validateKubeconfigContent` before persisting, so "any string" no longer
  * round-trips. The `tag` parameter just makes each fixture distinguishable so
@@ -464,6 +492,145 @@ describe("ClusterModel", () => {
       // Default row must still exist after the failed call.
       const stillThere = await ClusterModel.getById(def.id);
       expect(stillThere?.isDefault).toBe(true);
+    });
+
+    // ---------- F2: ClusterInUseError -------------------------------------
+    //
+    // Spec: `platform/specs/cluster-fixes/F2-cluster-delete-restrict.md`
+    //
+    // The typed error class (`ClusterInUseError`) is introduced by the
+    // developer in the GREEN phase. Until it lands, we assert on a stable
+    // wire-level signal: `Error` instance + a message regex containing
+    // "referenced by". Once the class exists, swap the regex assertion below
+    // for `expect(...).rejects.toBeInstanceOf(ClusterInUseError)` and assert
+    // on the `.count` field directly.
+
+    test("delete on a cluster with zero referencing mcp_server rows succeeds and the row is gone", async () => {
+      const created = await ClusterModel.create({ name: "unused-cluster" });
+
+      const result = await ClusterModel.delete(created.id);
+      expect(result).toBe(true);
+
+      const lookup = await ClusterModel.getById(created.id);
+      expect(lookup).toBeNull();
+    });
+
+    test("delete on a cluster with one referencing mcp_server row throws ClusterInUseError; cluster row and FK remain", async ({
+      makeMcpServer,
+    }) => {
+      const created = await ClusterModel.create({ name: "in-use-1" });
+      const server = await attachServerToCluster(makeMcpServer, created.id);
+
+      // Once `ClusterInUseError` lands, prefer:
+      //   await expect(ClusterModel.delete(created.id))
+      //     .rejects.toBeInstanceOf(ClusterInUseError);
+      await expect(ClusterModel.delete(created.id)).rejects.toThrow(
+        /referenced by/,
+      );
+      await expect(ClusterModel.delete(created.id)).rejects.toBeInstanceOf(
+        Error,
+      );
+
+      // Cluster row still present.
+      const stillThere = await ClusterModel.getById(created.id);
+      expect(stillThere).not.toBeNull();
+      expect(stillThere?.id).toBe(created.id);
+
+      // FK on the server row still points at the (un-deleted) cluster — i.e.
+      // the guard fired BEFORE any ON DELETE side-effect could null the FK.
+      const [serverAfter] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(serverAfter.clusterId).toBe(created.id);
+    });
+
+    test("delete on a cluster with three referencing servers throws an error whose message includes the count 3", async ({
+      makeMcpServer,
+    }) => {
+      const created = await ClusterModel.create({ name: "in-use-3" });
+      await attachServerToCluster(makeMcpServer, created.id);
+      await attachServerToCluster(makeMcpServer, created.id);
+      await attachServerToCluster(makeMcpServer, created.id);
+
+      // Once `ClusterInUseError` lands, also assert `err.count === 3`.
+      await expect(ClusterModel.delete(created.id)).rejects.toThrow(/3/);
+      await expect(ClusterModel.delete(created.id)).rejects.toThrow(
+        /referenced by/,
+      );
+    });
+
+    test("after removing all referencing mcp_server rows, retrying delete on the cluster succeeds", async ({
+      makeMcpServer,
+    }) => {
+      const created = await ClusterModel.create({ name: "soon-to-free" });
+      const server = await attachServerToCluster(makeMcpServer, created.id);
+
+      // First attempt — blocked because the server still references the cluster.
+      await expect(ClusterModel.delete(created.id)).rejects.toThrow(
+        /referenced by/,
+      );
+
+      // Caller migrates / removes the dependent server.
+      await db
+        .delete(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+
+      // Retry — now succeeds.
+      const result = await ClusterModel.delete(created.id);
+      expect(result).toBe(true);
+
+      const lookup = await ClusterModel.getById(created.id);
+      expect(lookup).toBeNull();
+    });
+  });
+
+  // ---------- F2: schema-level FK regression (test #9, optional) -----------
+  //
+  // After the developer flips the FK from `set null` to `restrict` and runs
+  // `pnpm db:generate`, the database itself must reject a direct DELETE that
+  // bypasses the model. Postgres surfaces this as SQLSTATE 23503
+  // (foreign_key_violation). The model-level guard (tests above) is the
+  // friendly path; this test is the defensive backstop.
+
+  describe("FK schema-level RESTRICT regression", () => {
+    test("deleting a cluster row directly via db.delete with referencing servers raises a Postgres FK violation (23503)", async ({
+      makeMcpServer,
+    }) => {
+      const created = await ClusterModel.create({ name: "fk-restrict" });
+      await attachServerToCluster(makeMcpServer, created.id);
+
+      // Bypass the model entirely — go straight at the table.
+      let caught: unknown = null;
+      try {
+        await db
+          .delete(schema.clustersTable)
+          .where(eq(schema.clustersTable.id, created.id));
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).not.toBeNull();
+      expect(caught).toBeInstanceOf(Error);
+
+      // Postgres FK-violation SQLSTATE. PGlite surfaces this on `err.code`,
+      // but Drizzle wraps query errors in DrizzleQueryError, so the original
+      // PG error sits on `.cause`. Check both layers.
+      const errAny = caught as {
+        code?: string;
+        message?: string;
+        cause?: { code?: string; message?: string };
+      };
+      const code = errAny.code ?? errAny.cause?.code;
+      const combinedMessage = `${errAny.message ?? ""} ${errAny.cause?.message ?? ""}`;
+      const isFkViolation =
+        code === "23503" ||
+        /foreign key|violates foreign key|restrict/i.test(combinedMessage);
+      expect(isFkViolation).toBe(true);
+
+      // The cluster row must still be there — RESTRICT prevented the delete.
+      const stillThere = await ClusterModel.getById(created.id);
+      expect(stillThere).not.toBeNull();
     });
   });
 });

@@ -1,8 +1,9 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { validateKubeconfigContent } from "@/k8s/shared";
 import {
   type Cluster,
+  ClusterInUseError,
   type InsertClusterInput,
   InsertClusterInputSchema,
   type UpdateClusterInput,
@@ -225,14 +226,23 @@ class ClusterModel {
         throw new Error("cannot delete the default cluster");
       }
 
+      const [{ count }] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.clusterId, id));
+
+      if (count > 0) {
+        throw new ClusterInUseError(id, count);
+      }
+
       if (existing.kubeconfigSecretId) {
         await SecretModel.delete(existing.kubeconfigSecretId, { tx });
       }
 
-      const result = await tx
+      await tx
         .delete(schema.clustersTable)
         .where(eq(schema.clustersTable.id, id));
-      return result.rowCount !== null && result.rowCount > 0;
+      return true;
     });
   }
 }

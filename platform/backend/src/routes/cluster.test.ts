@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import { seedDefaultCluster } from "@/database/seed-default-cluster";
 import ClusterModel from "@/models/cluster";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -321,6 +323,90 @@ describe("cluster routes", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  // ---------- F2: route-level cluster-in-use behaviour --------------------
+  //
+  // Spec: `platform/specs/cluster-fixes/F2-cluster-delete-restrict.md`
+  //
+  // Once `ClusterInUseError` lands, the route maps it to 409 and surfaces a
+  // friendly message that mentions "referenced by" plus the dependent count.
+  // Other delete failures (e.g. the existing default-cluster guard) keep
+  // their 400 mapping.
+
+  test("DELETE /api/clusters/:id for a cluster with referencing mcp_server rows returns 409 with 'referenced by' and the count", async ({
+    makeMcpServer,
+  }) => {
+    const created = await ClusterModel.create({
+      name: "in-use-via-http",
+      namespace: "ns-in-use",
+    });
+
+    // Wire two mcp_server rows to this cluster. We use the fixture for the
+    // boilerplate and patch the FK column directly because `makeMcpServer`
+    // does not expose `clusterId` yet.
+    const a = await makeMcpServer();
+    const b = await makeMcpServer();
+    await db
+      .update(schema.mcpServersTable)
+      .set({ clusterId: created.id })
+      .where(eq(schema.mcpServersTable.id, a.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ clusterId: created.id })
+      .where(eq(schema.mcpServersTable.id, b.id));
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/clusters/${created.id}`,
+    });
+
+    expect(response.statusCode).toBe(409);
+
+    // Centralized error handler shape: { error: { message, type } }.
+    const body = response.json();
+    const message: string =
+      body?.error?.message ?? body?.message ?? JSON.stringify(body);
+    expect(message).toMatch(/referenced by/);
+    expect(message).toMatch(/2/);
+
+    // The cluster must still be present — the route refused the delete.
+    expect(await ClusterModel.getById(created.id)).not.toBeNull();
+  });
+
+  test("DELETE /api/clusters/:id for an unused non-default cluster returns 204", async () => {
+    const created = await ClusterModel.create({
+      name: "unused-via-http",
+      namespace: "ns-unused",
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/clusters/${created.id}`,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(await ClusterModel.getById(created.id)).toBeNull();
+  });
+
+  test("DELETE /api/clusters/:id as non-admin returns 403 (regression)", async () => {
+    const created = await ClusterModel.create({
+      name: "no-touch-non-admin",
+      namespace: "ns-no-touch",
+    });
+
+    hasPermissionMock.mockResolvedValue({ success: false });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/clusters/${created.id}`,
+    });
+
+    expect(response.statusCode).toBe(403);
+
+    // Cluster must still be present — the auth layer rejected before any
+    // delete logic ran.
+    expect(await ClusterModel.getById(created.id)).not.toBeNull();
   });
 
   test("PATCH and DELETE invalidate the cluster registry cache for the affected id", async () => {

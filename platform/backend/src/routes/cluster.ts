@@ -12,6 +12,7 @@ import ClusterModel from "@/models/cluster";
 import SecretModel from "@/models/secret";
 import {
   ApiError,
+  ClusterInUseError,
   constructResponseSchema,
   InsertClusterInputSchema,
   SelectClusterSchema,
@@ -177,6 +178,9 @@ const clusterRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         await ClusterModel.delete(id);
       } catch (err) {
+        if (err instanceof ClusterInUseError) {
+          throw new ApiError(409, err.message);
+        }
         const message = err instanceof Error ? err.message : String(err);
         throw new ApiError(400, message);
       }

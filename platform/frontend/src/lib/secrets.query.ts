@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  SecretsManagerType,
+} from "@shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { handleApiError } from "./utils";
 
@@ -21,7 +25,16 @@ export function useSecretsType() {
   });
 }
 
+/**
+ * Reads a secret by ID. The backend only allows this when BYOS is enabled
+ * (or the specific secret is BYOS-backed) — calling it otherwise returns 403.
+ * We gate the request on the secrets-type lookup so we don't fire pointless
+ * 403s in non-BYOS deployments.
+ */
 export function useGetSecret(secretId: string | null | undefined) {
+  const { data: secretsType } = useSecretsType();
+  const byosEnabled = secretsType?.type === SecretsManagerType.BYOS_VAULT;
+
   return useQuery({
     queryKey: secretsKeys.byId(secretId ?? ""),
     queryFn: async () => {
@@ -35,7 +48,7 @@ export function useGetSecret(secretId: string | null | undefined) {
       }
       return response.data;
     },
-    enabled: !!secretId,
+    enabled: !!secretId && byosEnabled,
   });
 }
 

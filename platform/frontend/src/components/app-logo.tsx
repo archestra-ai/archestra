@@ -26,7 +26,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
 
   if (effectiveLogo) {
     return (
-      <div className={`flex ${centered ? "justify-center" : "pl-8"}`}>
+      <div className={`flex ${centered ? "justify-center" : ""}`}>
         <div className="flex flex-col items-center gap-1">
           <Image
             src={effectiveLogo}
@@ -47,7 +47,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
 
   return (
     <div
-      className={`flex items-center gap-2 ${centered ? "justify-center" : "pl-8"}`}
+      className={`flex items-center gap-2 ${centered ? "justify-center" : ""}`}
     >
       <Image
         src={DEFAULT_APP_LOGO}

@@ -11,7 +11,7 @@ import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
  * - Local execution config changed (command/args/docker/transport) - restart should be explicit
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - OAuth config changed: added or removed (remote servers)
- * - Required userConfig fields changed: added, removed, or type changed (remote servers)
+ * - Required userConfig fields changed: added, removed, or type changed (local + remote servers)
  *
  * Returns false (auto-reinstall possible) when:
  * - Only non-prompted config changed (local servers) - existing secrets can be reused
@@ -55,6 +55,23 @@ export function requiresNewUserInputForReinstall(
       logger.info(
         { catalogId: newCatalogItem.id },
         "Local execution config changed - manual reinstall required",
+      );
+      return true;
+    }
+
+    // 4. Check if required userConfig fields changed (e.g. header-backed fields
+    // added by editing the Headers section). Without this, installs end up with
+    // a credential record that has no value for the new field and the header is
+    // silently omitted on the wire.
+    if (
+      requiredUserConfigChanged(
+        getRequiredUserConfigFields(oldCatalogItem),
+        getRequiredUserConfigFields(newCatalogItem),
+      )
+    ) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Required userConfig fields changed - manual reinstall required",
       );
       return true;
     }

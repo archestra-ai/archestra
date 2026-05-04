@@ -77,8 +77,16 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   };
   showLabel?: boolean;
   showDescription?: boolean;
+  /** Optional inline content rendered after the "Environment Variables" heading. */
+  labelSuffix?: React.ReactNode;
   /** When true, non-prompted secret values will be sourced from external secrets manager (Vault) */
   useExternalSecretsManager?: boolean;
+  /**
+   * Set of env-var keys whose secret value is already stored on the server.
+   * Rows whose `key` is in this set render `••••••••` + an Update button
+   * instead of an empty input, so admins don't think the value has been wiped.
+   */
+  secretKeysWithStoredValue?: Set<string>;
   /** When true, the "Prompt on each installation" checkbox is disabled (e.g. multi-tenant servers) */
   disablePromptOnInstallation?: boolean;
   /** Tooltip message shown when the "Prompt on each installation" checkbox is disabled */
@@ -119,7 +127,9 @@ export function EnvironmentVariablesFormField<
   form,
   showLabel = true,
   showDescription = true,
+  labelSuffix,
   useExternalSecretsManager = false,
+  secretKeysWithStoredValue,
   disablePromptOnInstallation = false,
   disablePromptOnInstallationReason,
   envFrom,
@@ -152,7 +162,10 @@ export function EnvironmentVariablesFormField<
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         {showLabel && (
-          <h3 className="font-semibold text-base">Environment Variables</h3>
+          <h3 className="font-semibold text-base">
+            Environment Variables
+            {labelSuffix}
+          </h3>
         )}
         <Button
           type="button"
@@ -169,7 +182,7 @@ export function EnvironmentVariablesFormField<
             })
           }
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add Variable
         </Button>
       </div>
@@ -214,6 +227,7 @@ export function EnvironmentVariablesFormField<
               remove={remove}
               fieldNamePrefix={fieldNamePrefix}
               useExternalSecretsManager={useExternalSecretsManager}
+              secretKeysWithStoredValue={secretKeysWithStoredValue}
               disablePromptOnInstallation={disablePromptOnInstallation}
               disablePromptOnInstallationReason={
                 disablePromptOnInstallationReason
@@ -238,7 +252,7 @@ export function EnvironmentVariablesFormField<
                 envFrom.append({ type: "secret", name: "", prefix: "" })
               }
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Add Source
             </Button>
           </div>
@@ -335,7 +349,7 @@ export function EnvironmentVariablesFormField<
               })
             }
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Add Secret File
           </Button>
         </div>
@@ -524,6 +538,13 @@ export function EnvironmentVariablesFormField<
                           );
                         }
 
+                        const rowKey = form.watch(
+                          `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>,
+                        ) as string | undefined;
+                        const hasStoredSecret =
+                          !!rowKey &&
+                          secretKeysWithStoredValue?.has(rowKey) === true;
+
                         return (
                           <FormField
                             control={control}
@@ -531,7 +552,12 @@ export function EnvironmentVariablesFormField<
                               `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
                             }
                             render={({ field }) => (
-                              <AutoResizeSecretTextarea field={field} />
+                              <AutoResizeSecretTextarea
+                                field={field}
+                                placeholder={
+                                  hasStoredSecret ? "••••••••" : undefined
+                                }
+                              />
                             )}
                           />
                         );
@@ -607,9 +633,11 @@ const MAX_TEXTAREA_HEIGHT = 128;
 
 function AutoResizeSecretTextarea({
   field,
+  placeholder,
 }: {
   // biome-ignore lint/suspicious/noExplicitAny: Generic field types
   field: ControllerRenderProps<any, any>;
+  placeholder?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -632,6 +660,7 @@ function AutoResizeSecretTextarea({
           className="font-mono text-xs resize-none min-h-10 max-h-32 overflow-y-auto"
           rows={1}
           autoComplete={MCP_SECRET_AUTOCOMPLETE}
+          placeholder={placeholder}
           {...field}
           ref={(el) => {
             textareaRef.current = el;

@@ -76,7 +76,7 @@ export function CreateCatalogDialog({
       className="w-full"
       onClick={() => setStep("catalog-browse")}
     >
-      <Search className="h-4 w-4 mr-2" />
+      <Search className="h-4 w-4" />
       Select from Online Catalog
     </Button>
   );

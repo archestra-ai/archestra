@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.2.32](https://github.com/archestra-ai/archestra/compare/platform-v1.2.31...platform-v1.2.32) (2026-05-04)
+
+
+### Features
+
+* configurable metrics port via ARCHESTRA_METRICS_PORT ([#4242](https://github.com/archestra-ai/archestra/issues/4242)) ([945f0f5](https://github.com/archestra-ai/archestra/commit/945f0f58846285603a0ec5ed395292b2723dbb4d))
+
+
+### Bug Fixes
+
+* add multitenant k8s deployments ([#4288](https://github.com/archestra-ai/archestra/issues/4288)) ([1c2c478](https://github.com/archestra-ai/archestra/commit/1c2c478c655411b8e7e368b32388ec5c0b2f2d79))
+* chat agent defaults and swap tool UI states ([#4280](https://github.com/archestra-ai/archestra/issues/4280)) ([1d4aaf4](https://github.com/archestra-ai/archestra/commit/1d4aaf4e0808da7dbf4c4fa246f9767699975313))
+* disable server renaming ([#4329](https://github.com/archestra-ai/archestra/issues/4329)) ([276ef39](https://github.com/archestra-ai/archestra/commit/276ef3913fa3b7fc0e6d79190859efa71c978cbe))
+* improve MCP install UX and LLM API key defaults ([#4298](https://github.com/archestra-ai/archestra/issues/4298)) ([b96b36e](https://github.com/archestra-ai/archestra/commit/b96b36edfc9dde87279aad15ca2408be05c1b36d))
+* polish multitenant ([#4302](https://github.com/archestra-ai/archestra/issues/4302)) ([87ee4fe](https://github.com/archestra-ai/archestra/commit/87ee4fe0b599f4a196c6ab95cffa006e11252a02))
+* preserve MCP catalog headers when auth is OAuth or enterprise ([#4299](https://github.com/archestra-ai/archestra/issues/4299)) ([6aa902d](https://github.com/archestra-ai/archestra/commit/6aa902d7f9e6de0709d9d4a8a72845d490f6d28d))
+* support true multitenant local mcp servers part 1 ([#4287](https://github.com/archestra-ai/archestra/issues/4287)) ([2bd51a4](https://github.com/archestra-ai/archestra/commit/2bd51a4df3a14b997c20934725bc1fe99125cd43))
+
+
+### Miscellaneous Chores
+
+* add playwright-cli dir to git ignore ([#4265](https://github.com/archestra-ai/archestra/issues/4265)) ([a5f5336](https://github.com/archestra-ai/archestra/commit/a5f53368007f7e51a78ec006b39580ae8ae7413c))
+* address backend performance issues ([#4307](https://github.com/archestra-ai/archestra/issues/4307)) ([6f05313](https://github.com/archestra-ai/archestra/commit/6f05313d9c69a92202eabdff416eb9726d12affc))
+* **llm-proxy:** log custom header flow from chat to provider ([#4300](https://github.com/archestra-ai/archestra/issues/4300)) ([1e69ccc](https://github.com/archestra-ai/archestra/commit/1e69ccc573b116954bef164aa934a0e3c4cd7b12))
+* render existing secret envs as **** instead of empty value ([#4297](https://github.com/archestra-ai/archestra/issues/4297)) ([1e7237f](https://github.com/archestra-ai/archestra/commit/1e7237fbcfcc2328f1dad20f3704fb76b6e8ad2e))
+
 ## [1.2.31](https://github.com/archestra-ai/archestra/compare/platform-v1.2.30...platform-v1.2.31) (2026-05-01)
 
 

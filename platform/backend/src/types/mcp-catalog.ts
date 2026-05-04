@@ -172,6 +172,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
+    // Tenancy is locked after creation
+    multitenant: true,
   });
 
 export const UpdateInternalMcpCatalogSchema =

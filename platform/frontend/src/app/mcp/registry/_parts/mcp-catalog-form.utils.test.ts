@@ -669,4 +669,194 @@ describe("transformFormToApiData", () => {
     expect(values.includeBearerPrefix).toBe(false);
     expect(values.authHeaderName).toBe("");
   });
+
+  describe("preserves additionalHeaders across all auth methods", () => {
+    const additionalHeaders: McpCatalogFormValues["additionalHeaders"] = [
+      {
+        headerName: "x-api-key",
+        promptOnInstallation: true,
+        required: true,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+      },
+    ];
+
+    const baseValues: McpCatalogFormValues = {
+      name: "Headers MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders,
+      oauthConfig: {
+        client_id: "id",
+        client_secret: "secret",
+        audience: "",
+        redirect_uris: "https://app.example.com/oauth-callback",
+        scopes: "",
+        supports_resource_metadata: true,
+        grantType: "authorization_code",
+        oauthServerUrl: "",
+        authServerUrl: "",
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        wellKnownUrl: "",
+        resourceMetadataUrl: "",
+        tokenEndpoint: "https://auth.example.com/token",
+      },
+      enterpriseManagedConfig: {
+        identityProviderId: "idp-1",
+        assertionMode: "exchange",
+      },
+      localConfig: undefined,
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    const cases: McpCatalogFormValues["authMethod"][] = [
+      "oauth",
+      "oauth_client_credentials",
+      "enterprise_managed",
+      "idp_jwt",
+    ];
+
+    for (const authMethod of cases) {
+      it(`keeps additional headers when authMethod is ${authMethod}`, () => {
+        const result = transformFormToApiData({ ...baseValues, authMethod });
+        expect(result.userConfig).toMatchObject({
+          header_x_api_key: expect.objectContaining({
+            headerName: "x-api-key",
+            promptOnInstallation: true,
+          }),
+        });
+      });
+    }
+  });
+});
+
+describe("transformFormToApiData - secret env var preservation", () => {
+  type LocalEnvironment = NonNullable<
+    McpCatalogFormValues["localConfig"]
+  >["environment"];
+
+  function buildLocalFormValues(
+    environment: LocalEnvironment,
+  ): McpCatalogFormValues {
+    return {
+      name: "secret-preservation-mcp",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: "server.js",
+        environment,
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+  }
+
+  it("emits empty value (not a mask sentinel) for an unedited secret row", () => {
+    const result = transformFormToApiData(
+      buildLocalFormValues([
+        {
+          key: "API_KEY",
+          type: "secret",
+          value: "",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+      ]),
+    );
+
+    const envVar = result.localConfig?.environment?.[0];
+    expect(envVar?.key).toBe("API_KEY");
+    expect(envVar?.type).toBe("secret");
+    // The form must NOT round-trip the masked placeholder back to the API.
+    // Backend preserves stored value when value is empty/undefined.
+    const value = envVar?.value ?? "";
+    expect(value).toBe("");
+    expect(value).not.toMatch(/[•*]/);
+  });
+
+  it("emits the typed value when the user edited the secret row", () => {
+    const result = transformFormToApiData(
+      buildLocalFormValues([
+        {
+          key: "API_KEY",
+          type: "secret",
+          value: "newly-typed-secret",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+      ]),
+    );
+
+    expect(result.localConfig?.environment?.[0]?.value).toBe(
+      "newly-typed-secret",
+    );
+  });
+
+  it("preserves mixed edited / unedited secret rows independently", () => {
+    const result = transformFormToApiData(
+      buildLocalFormValues([
+        {
+          key: "EDITED",
+          type: "secret",
+          value: "fresh",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+        {
+          key: "UNTOUCHED",
+          type: "secret",
+          value: "",
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        },
+      ]),
+    );
+
+    const env = result.localConfig?.environment ?? [];
+    expect(env).toHaveLength(2);
+    expect(env[0]).toMatchObject({ key: "EDITED", value: "fresh" });
+    expect(env[1]?.key).toBe("UNTOUCHED");
+    expect(env[1]?.value ?? "").toBe("");
+  });
 });

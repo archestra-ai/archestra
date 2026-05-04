@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.31"
+    "version": "1.2.32"
   },
   "components": {
     "schemas": {
@@ -99613,9 +99613,6 @@
                       "remote",
                       "builtin"
                     ]
-                  },
-                  "multitenant": {
-                    "type": "boolean"
                   },
                   "serverUrl": {
                     "nullable": true,

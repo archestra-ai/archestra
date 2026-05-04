@@ -375,7 +375,7 @@ export function McpServerCard({
         disabled={isChatCreating}
         onClick={handleChatWithMcpServer}
       >
-        <MessageSquare className="mr-2 h-4 w-4" />
+        <MessageSquare className="h-4 w-4" />
         {isChatCreating ? "Creating..." : "Chat"}
       </Button>
     ) : null;
@@ -621,7 +621,7 @@ export function McpServerCard({
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
         )}
@@ -650,7 +650,7 @@ export function McpServerCard({
               variant="outline"
               className="flex-1"
             >
-              <User className="mr-2 h-4 w-4" />
+              <User className="h-4 w-4" />
               Install
             </PermissionButton>
           ))}
@@ -670,7 +670,7 @@ export function McpServerCard({
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
         )}
@@ -705,7 +705,7 @@ export function McpServerCard({
                       className="w-full"
                       data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                     >
-                      <Server className="mr-2 h-4 w-4" />
+                      <Server className="h-4 w-4" />
                       Install
                     </PermissionButton>
                   </div>
@@ -734,7 +734,7 @@ export function McpServerCard({
             variant="outline"
             className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
         )}
@@ -769,7 +769,7 @@ export function McpServerCard({
                       className="w-full"
                       data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
                     >
-                      <Server className="mr-2 h-4 w-4" />
+                      <Server className="h-4 w-4" />
                       Install
                     </PermissionButton>
                   </div>

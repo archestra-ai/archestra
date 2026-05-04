@@ -350,6 +350,28 @@ export type McpDeploymentStatusesMessage = {
   };
 };
 
+// MCP installation-status push (sent on every change in the DB row, no
+// subscription needed — clients filter by serverId in their query cache).
+export const LOCAL_MCP_INSTALLATION_STATES = [
+  "idle",
+  "pending",
+  "discovering-tools",
+  "success",
+  "error",
+] as const;
+
+export type LocalMcpInstallationState =
+  (typeof LOCAL_MCP_INSTALLATION_STATES)[number];
+
+export type McpInstallationStatusMessage = {
+  type: "mcp_installation_status";
+  payload: {
+    serverId: string;
+    status: LocalMcpInstallationState;
+    error: string | null;
+  };
+};
+
 export type ErrorMessage = {
   type: "error";
   payload: {
@@ -375,6 +397,7 @@ export type ServerWebSocketMessage =
   | McpExecErrorMessage
   | McpExecClosedMessage
   | McpDeploymentStatusesMessage
+  | McpInstallationStatusMessage
   | ErrorMessage;
 
 /**

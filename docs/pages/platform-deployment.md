@@ -918,29 +918,28 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
-These environment variables describe the **default** Kubernetes target. Additional clusters (and per-personal-server isolation) are managed at runtime through the **Clusters** admin UI (`Settings → Clusters`), which stores extra kubeconfigs encrypted in the database. See [Multi-cluster routing](#multi-cluster-routing-for-mcp-servers) below.
+These environment variables describe the **default** Kubernetes target. Additional clusters can be registered at runtime under `Settings → Clusters`. See [Multi-cluster routing](#multi-cluster-routing-for-mcp-servers) below.
 
 ### Multi-cluster routing for MCP servers
 
-By default every MCP server pod is created in the `ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE` of the cluster Archestra was deployed against. To prevent personal MCP servers from sharing a namespace — or even a cluster — with production workloads, an admin can register additional clusters and pick one as the personal default.
+By default every MCP server pod is created in the cluster Archestra was deployed against, in `ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`. To keep personal MCP servers off the same namespace — or the same cluster — as production workloads, admins can register extra clusters under `Settings → Clusters`.
 
-**Cluster CRUD (admin-only)** is exposed at `Settings → Clusters` and via the `/api/clusters/*` REST endpoints (`mcpServerInstallation: ["admin"]` permission). Each cluster row stores:
+For each extra cluster an admin provides:
 
-- `name` — display name
-- `namespace` — Kubernetes namespace MCP pods land in
-- `kubeconfigYaml` — kubeconfig used to talk to the cluster, encrypted at rest in the platform secret store
-- `loadFromCluster` — when `true`, ignore kubeconfig and use the platform pod's in-cluster service account
-- `isPersonalDefault` — pin this cluster as the destination for personal MCP servers
+- a name shown in the MCP server install dialog;
+- the namespace where MCP server pods will be created;
+- how Archestra connects to it: either a kubeconfig (stored encrypted) or, when it is the same cluster Archestra runs in, the platform pod's in-cluster service account;
+- whether this cluster is the default for personal MCP servers.
 
-The `default` cluster row is seeded automatically from the env vars above and cannot be deleted. The `isDefault` flag is owned by the seed and cannot be edited.
+The cluster Archestra was deployed against is registered automatically from the `ARCHESTRA_ORCHESTRATOR_*` env vars and cannot be removed.
 
-**Routing rules** (applied at `startServer` time and on every lazy load):
+When an MCP server starts, the cluster is picked in this order:
 
-1. If the MCP server has an explicit `cluster_id`, use that cluster.
-2. Otherwise, if the server is **personal** (`ownerId IS NOT NULL AND teamId IS NULL`), use the cluster marked `isPersonalDefault` (when one exists).
-3. Otherwise, fall back to the seeded default cluster (env-var configured).
+1. The cluster the server was installed into, if one was chosen at install time.
+2. The personal-default cluster, when the server belongs to a single user (not a team) and a personal default is configured.
+3. The default cluster from the env vars above.
 
-K8s clients are built lazily per cluster and cached in memory; the cache is invalidated whenever a cluster row is updated or deleted. If no personal-default cluster is configured, personal MCP servers fall back to the default cluster — existing installations keep working without action.
+If no personal-default cluster is configured, personal MCP servers stay on the default cluster, so existing installations keep working without changes.
 
 ### Observability & Metrics
 

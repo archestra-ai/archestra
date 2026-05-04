@@ -36,7 +36,7 @@ This is the simplest approach but means the real provider key is sent with every
 
 ## Virtual API Keys
 
-Virtual API keys are platform-managed bearer tokens that map to a real provider API key stored in Archestra. Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` keys remain valid. The real provider key never leaves Archestra.
+Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` keys remain valid. The real provider keys never leave Archestra.
 
 ### Benefits
 
@@ -49,7 +49,7 @@ Virtual API keys are platform-managed bearer tokens that map to a real provider 
 
 1. Go to **LLM Proxies > Proxy Auth > Virtual Keys**
 2. Create a virtual key
-3. Select either one provider API key or enable **Use for Model Router** and map provider keys
+3. Map at least one provider API key
 4. Copy the generated token (shown only once)
 
 ### Using Virtual Keys
@@ -63,17 +63,17 @@ curl -X POST "https://archestra.example.com/v1/openai/{proxyId}/chat/completions
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-The proxy resolves the virtual key to the real provider key and base URL, then forwards the request.
+The proxy resolves the virtual key to the mapped provider key and base URL, then forwards the request.
 
 ### Provider Matching
 
-Each virtual key is tied to a specific provider. Using an OpenAI virtual key on the Anthropic proxy endpoint returns a `400` error.
+Each virtual key can map one key per provider. Provider-specific proxy routes use the mapped key for that route provider. For example, an OpenAI route requires an OpenAI mapping.
 
 ### Model Router Virtual Keys
 
-Model Router routes require a virtual key with **Use for Model Router** enabled. Direct provider API keys are rejected on `/v1/model-router/*`.
+Model Router routes require a virtual key with at least one provider key mapping. Direct provider API keys are rejected on `/v1/model-router/*`.
 
-When creating or editing the virtual key, map the provider API keys it can use. Only one key can be mapped per provider. The `/models` endpoint returns models only for mapped providers, and `/responses` or `/chat/completions` can only route to those providers.
+The `/models` endpoint returns models only for mapped providers, and `/responses` or `/chat/completions` can only route to those providers.
 
 Use the same virtual key against the Model Router base URL:
 
@@ -95,11 +95,10 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 1. Go to **LLM Proxies > Proxy Auth > OAuth Clients**
 2. Create an OAuth client
 3. Select the LLM proxies it can access
-4. Select the provider API key it can use on provider-specific proxy routes
-5. Optionally enable **Use for Model Router** and map provider API keys for Model Router routes
-6. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
+4. Map the provider API keys it can use
+5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
 
-You can edit an OAuth client later to update its name, allowed LLM proxies, provider key, or Model Router mappings. Rotate the client secret when the existing secret needs to be replaced.
+You can edit an OAuth client later to update its name, allowed LLM proxies, or provider key mappings. Rotate the client secret when the existing secret needs to be replaced.
 
 ### Getting an Access Token
 
@@ -121,7 +120,7 @@ curl -X POST "https://archestra.example.com/v1/openai/{proxyId}/chat/completions
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-For provider-specific routes, the OAuth client must have a provider API key selected and that key must match the route provider.
+For provider-specific routes, the OAuth client must have a provider key mapping that matches the route provider.
 
 ### Calling the Model Router
 
@@ -132,7 +131,7 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -d '{"model": "openai:gpt-5.4", "input": "Hello"}'
 ```
 
-For Model Router routes, the OAuth client must have **Use for Model Router** enabled with a provider key mapping for the provider prefix in the requested model.
+For Model Router routes, the OAuth client must have a provider key mapping for the provider prefix in the requested model.
 
 LLM logs and traces record the authenticated OAuth client separately from `X-Archestra-Agent-Id`. Use `X-Archestra-Agent-Id` as a caller-provided label, not as proof of client identity.
 
@@ -140,7 +139,7 @@ LLM logs and traces record the authenticated OAuth client separately from `X-Arc
 
 Custom applications can also use the OAuth authorization code flow when they act on behalf of an individual user. The application redirects the user to the authorization endpoint with the `llm:proxy` scope, the user approves the consent screen, and the application exchanges the code for a user access token.
 
-User OAuth tokens do not use the LLM OAuth Clients page and do not get provider key mappings from an app registration. Provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys: personal keys, org-wide keys, and team keys for teams the user belongs to.
+User OAuth tokens do not use the LLM OAuth Clients page. Provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys: personal keys, org-wide keys, and team keys for teams the user belongs to.
 
 The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows.
 
@@ -198,4 +197,4 @@ Use cases:
 - OpenAI-compatible proxies
 - Regional endpoints
 
-When a virtual key is resolved, its parent key's base URL is used automatically.
+When a virtual key or OAuth client access token is resolved, the mapped provider key's base URL is used automatically.

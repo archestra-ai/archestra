@@ -1,30 +1,30 @@
 import { describe, expect, test } from "vitest";
 import {
-  modelRouterProviderApiKeyArrayToMap,
-  modelRouterProviderApiKeyMapToArray,
-} from "./model-router-provider-key-mappings-field";
+  providerApiKeyArrayToMap,
+  providerApiKeyMapToArray,
+} from "./provider-key-mappings-field";
 
-describe("model router provider key mapping helpers", () => {
+describe("provider key mapping helpers", () => {
   test("converts between array and map shapes", () => {
     const array = [
       { provider: "openai" as const, chatApiKeyId: "openai-key" },
       { provider: "anthropic" as const, chatApiKeyId: "anthropic-key" },
     ];
 
-    const map = modelRouterProviderApiKeyArrayToMap(array);
+    const map = providerApiKeyArrayToMap(array);
 
     expect(map).toEqual({
       openai: "openai-key",
       anthropic: "anthropic-key",
     });
-    expect(modelRouterProviderApiKeyMapToArray(map)).toEqual(
+    expect(providerApiKeyMapToArray(map)).toEqual(
       expect.arrayContaining(array),
     );
   });
 
   test("omits empty mappings from array output", () => {
     expect(
-      modelRouterProviderApiKeyMapToArray({
+      providerApiKeyMapToArray({
         openai: "openai-key",
         anthropic: "",
       }),

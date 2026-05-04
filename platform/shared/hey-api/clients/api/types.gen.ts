@@ -31847,11 +31847,8 @@ export type GetLlmOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
-        chatApiKeyId: string | null;
-        chatApiKeyName: string | null;
-        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
             chatApiKeyName: string;
@@ -31867,9 +31864,8 @@ export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLl
 export type CreateLlmOauthClientData = {
     body: {
         name: string;
-        chatApiKeyId?: string | null;
         allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
         }>;
@@ -31953,11 +31949,8 @@ export type CreateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
-        chatApiKeyId: string | null;
-        chatApiKeyName: string | null;
-        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
             chatApiKeyName: string;
@@ -32059,9 +32052,8 @@ export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof D
 export type UpdateLlmOauthClientData = {
     body: {
         name: string;
-        chatApiKeyId?: string | null;
         allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
         }>;
@@ -32147,11 +32139,8 @@ export type UpdateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
-        chatApiKeyId: string | null;
-        chatApiKeyName: string | null;
-        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
             chatApiKeyName: string;
@@ -32247,11 +32236,8 @@ export type RotateLlmOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
-        chatApiKeyId: string | null;
-        chatApiKeyName: string | null;
-        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
             chatApiKeyName: string;
@@ -45155,7 +45141,7 @@ export type GetAllVirtualApiKeysData = {
         limit?: number;
         offset?: number;
         search?: string;
-        chatApiKeyId?: string;
+        providerApiKeyId?: string;
     };
     url: '/api/llm-virtual-keys';
 };
@@ -45233,7 +45219,6 @@ export type GetAllVirtualApiKeysResponses = {
         data: Array<{
             id: string;
             organizationId: string;
-            chatApiKeyId: string | null;
             name: string;
             secretId: string;
             tokenStart: string;
@@ -45242,15 +45227,12 @@ export type GetAllVirtualApiKeysResponses = {
             expiresAt: string | null;
             createdAt: string;
             lastUsedAt: string | null;
-            parentKeyName: string | null;
-            parentKeyProvider: string | null;
-            parentKeyBaseUrl: string | null;
             teams: Array<{
                 id: string;
                 name: string;
             }>;
             authorName: string | null;
-            modelRouterProviderApiKeys: Array<{
+            providerApiKeys: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                 chatApiKeyId: string;
                 chatApiKeyName: string;
@@ -45275,11 +45257,10 @@ export type CreateVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        modelRouterProviderApiKeys?: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
         }>;
-        chatApiKeyId?: string | null;
     };
     path?: never;
     query?: never;
@@ -45358,7 +45339,6 @@ export type CreateVirtualApiKeyResponses = {
     200: {
         id: string;
         organizationId: string;
-        chatApiKeyId: string | null;
         name: string;
         secretId: string;
         tokenStart: string;
@@ -45373,7 +45353,7 @@ export type CreateVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
             chatApiKeyName: string;
@@ -45474,7 +45454,7 @@ export type UpdateVirtualApiKeyData = {
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        modelRouterProviderApiKeys?: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
         }>;
@@ -45558,7 +45538,6 @@ export type UpdateVirtualApiKeyResponses = {
     200: {
         id: string;
         organizationId: string;
-        chatApiKeyId: string | null;
         name: string;
         secretId: string;
         tokenStart: string;
@@ -45572,7 +45551,7 @@ export type UpdateVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
-        modelRouterProviderApiKeys: Array<{
+        providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             chatApiKeyId: string;
             chatApiKeyName: string;

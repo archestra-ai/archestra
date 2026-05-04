@@ -4362,7 +4362,7 @@ export const getUserTokenValue = <ThrowOnError extends boolean = false>(options?
 export const rotateUserToken = <ThrowOnError extends boolean = false>(options?: Options<RotateUserTokenData, ThrowOnError>) => (options?.client ?? client).post<RotateUserTokenResponses, RotateUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me/rotate', ...options });
 
 /**
- * Get virtual API keys visible to the current user, with parent API key info
+ * Get virtual API keys visible to the current user, with provider key mappings
  *
  * Authentication:
  *

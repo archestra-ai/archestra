@@ -310,9 +310,10 @@ describe("OpenAI cost tracking", () => {
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       name: "Backend Service",
-      chatApiKeyId: providerKey.id,
       allowedLlmProxyIds: [agent.id],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [
+        { provider: "openai", chatApiKeyId: providerKey.id },
+      ],
     });
     const accessToken = "llm-provider-route-oauth-token";
     await OAuthAccessTokenModel.createClientCredentialsToken({

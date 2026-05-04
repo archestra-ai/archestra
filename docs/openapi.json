@@ -118959,44 +118959,13 @@
                       "organizationId": {
                         "type": "string"
                       },
-                      "chatApiKeyId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "chatApiKeyName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "chatApiKeyProvider": {
-                        "nullable": true,
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure"
-                        ]
-                      },
                       "allowedLlmProxyIds": {
                         "type": "array",
                         "items": {
                           "type": "string"
                         }
                       },
-                      "modelRouterProviderApiKeys": {
+                      "providerApiKeys": {
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -119057,11 +119026,8 @@
                       "clientId",
                       "name",
                       "organizationId",
-                      "chatApiKeyId",
-                      "chatApiKeyName",
-                      "chatApiKeyProvider",
                       "allowedLlmProxyIds",
-                      "modelRouterProviderApiKeys",
+                      "providerApiKeys",
                       "disabled",
                       "createdAt",
                       "updatedAt"
@@ -119326,12 +119292,6 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
-                  "chatApiKeyId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "allowedLlmProxyIds": {
                     "minItems": 1,
                     "type": "array",
@@ -119341,7 +119301,8 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
-                  "modelRouterProviderApiKeys": {
+                  "providerApiKeys": {
+                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -119384,7 +119345,7 @@
                 "required": [
                   "name",
                   "allowedLlmProxyIds",
-                  "modelRouterProviderApiKeys"
+                  "providerApiKeys"
                 ]
               }
             }
@@ -119410,44 +119371,13 @@
                     "organizationId": {
                       "type": "string"
                     },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "chatApiKeyName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "chatApiKeyProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure"
-                      ]
-                    },
                     "allowedLlmProxyIds": {
                       "type": "array",
                       "items": {
                         "type": "string"
                       }
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -119511,11 +119441,8 @@
                     "clientId",
                     "name",
                     "organizationId",
-                    "chatApiKeyId",
-                    "chatApiKeyName",
-                    "chatApiKeyProvider",
                     "allowedLlmProxyIds",
-                    "modelRouterProviderApiKeys",
+                    "providerApiKeys",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -119782,12 +119709,6 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
-                  "chatApiKeyId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "allowedLlmProxyIds": {
                     "minItems": 1,
                     "type": "array",
@@ -119797,7 +119718,8 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
-                  "modelRouterProviderApiKeys": {
+                  "providerApiKeys": {
+                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -119840,7 +119762,7 @@
                 "required": [
                   "name",
                   "allowedLlmProxyIds",
-                  "modelRouterProviderApiKeys"
+                  "providerApiKeys"
                 ]
               }
             }
@@ -119876,44 +119798,13 @@
                     "organizationId": {
                       "type": "string"
                     },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "chatApiKeyName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "chatApiKeyProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure"
-                      ]
-                    },
                     "allowedLlmProxyIds": {
                       "type": "array",
                       "items": {
                         "type": "string"
                       }
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -119974,11 +119865,8 @@
                     "clientId",
                     "name",
                     "organizationId",
-                    "chatApiKeyId",
-                    "chatApiKeyName",
-                    "chatApiKeyProvider",
                     "allowedLlmProxyIds",
-                    "modelRouterProviderApiKeys",
+                    "providerApiKeys",
                     "disabled",
                     "createdAt",
                     "updatedAt"
@@ -120534,44 +120422,13 @@
                     "organizationId": {
                       "type": "string"
                     },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "chatApiKeyName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "chatApiKeyProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure"
-                      ]
-                    },
                     "allowedLlmProxyIds": {
                       "type": "array",
                       "items": {
                         "type": "string"
                       }
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -120635,11 +120492,8 @@
                     "clientId",
                     "name",
                     "organizationId",
-                    "chatApiKeyId",
-                    "chatApiKeyName",
-                    "chatApiKeyProvider",
                     "allowedLlmProxyIds",
-                    "modelRouterProviderApiKeys",
+                    "providerApiKeys",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -168118,7 +167972,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get virtual API keys visible to the current user, with parent API key info\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get virtual API keys visible to the current user, with provider key mappings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
         "parameters": [
           {
             "schema": {
@@ -168158,7 +168012,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "in": "query",
-            "name": "chatApiKeyId",
+            "name": "providerApiKeyId",
             "required": false
           }
         ],
@@ -168182,12 +168036,6 @@
                           },
                           "organizationId": {
                             "type": "string"
-                          },
-                          "chatApiKeyId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
                             "type": "string",
@@ -168228,18 +168076,6 @@
                             "type": "string",
                             "format": "date-time"
                           },
-                          "parentKeyName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "parentKeyProvider": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "parentKeyBaseUrl": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "teams": {
                             "type": "array",
                             "items": {
@@ -168263,7 +168099,7 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "modelRouterProviderApiKeys": {
+                          "providerApiKeys": {
                             "type": "array",
                             "items": {
                               "type": "object",
@@ -168311,7 +168147,6 @@
                         "required": [
                           "id",
                           "organizationId",
-                          "chatApiKeyId",
                           "name",
                           "secretId",
                           "tokenStart",
@@ -168320,12 +168155,9 @@
                           "expiresAt",
                           "createdAt",
                           "lastUsedAt",
-                          "parentKeyName",
-                          "parentKeyProvider",
-                          "parentKeyBaseUrl",
                           "teams",
                           "authorName",
-                          "modelRouterProviderApiKeys"
+                          "providerApiKeys"
                         ],
                         "additionalProperties": false
                       }
@@ -168653,8 +168485,8 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterProviderApiKeys": {
-                    "default": [],
+                  "providerApiKeys": {
+                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -168692,16 +168524,11 @@
                         "chatApiKeyId"
                       ]
                     }
-                  },
-                  "chatApiKeyId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
-                  "name"
+                  "name",
+                  "providerApiKeys"
                 ]
               }
             }
@@ -168722,12 +168549,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string",
@@ -168794,7 +168615,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -168842,7 +168663,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "chatApiKeyId",
                     "name",
                     "secretId",
                     "tokenStart",
@@ -168854,7 +168674,7 @@
                     "value",
                     "teams",
                     "authorName",
-                    "modelRouterProviderApiKeys"
+                    "providerApiKeys"
                   ],
                   "additionalProperties": false
                 }
@@ -169136,8 +168956,8 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterProviderApiKeys": {
-                    "default": [],
+                  "providerApiKeys": {
+                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -169178,7 +168998,8 @@
                   }
                 },
                 "required": [
-                  "name"
+                  "name",
+                  "providerApiKeys"
                 ]
               }
             }
@@ -169211,12 +169032,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string",
@@ -169280,7 +169095,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -169328,7 +169143,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "chatApiKeyId",
                     "name",
                     "secretId",
                     "tokenStart",
@@ -169339,7 +169153,7 @@
                     "lastUsedAt",
                     "teams",
                     "authorName",
-                    "modelRouterProviderApiKeys"
+                    "providerApiKeys"
                   ],
                   "additionalProperties": false
                 }

@@ -11,9 +11,8 @@ export const LlmOauthClientProviderKeySchema = z.object({
 export const LlmOauthClientMetadataSchema = z.object({
   type: z.literal(LLM_OAUTH_CLIENT_METADATA_TYPE),
   organizationId: z.string(),
-  chatApiKeyId: z.string().uuid().nullable().default(null),
   allowedLlmProxyIds: z.array(z.string().uuid()).default([]),
-  modelRouterProviderApiKeys: z.array(LlmOauthClientProviderKeySchema),
+  providerApiKeys: z.array(LlmOauthClientProviderKeySchema),
 });
 
 export const LlmOauthClientSchema = z.object({
@@ -21,11 +20,8 @@ export const LlmOauthClientSchema = z.object({
   clientId: z.string(),
   name: z.string(),
   organizationId: z.string(),
-  chatApiKeyId: z.string().nullable(),
-  chatApiKeyName: z.string().nullable(),
-  chatApiKeyProvider: SupportedProvidersSchema.nullable(),
   allowedLlmProxyIds: z.array(z.string()),
-  modelRouterProviderApiKeys: z.array(
+  providerApiKeys: z.array(
     LlmOauthClientProviderKeySchema.extend({
       chatApiKeyName: z.string(),
     }),

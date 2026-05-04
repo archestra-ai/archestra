@@ -89,7 +89,7 @@ export async function validateVirtualApiKeyToken(
 
 /**
  * Validate a platform-managed virtual API key.
- * Checks: token validity, expiration, provider match, parent key health.
+ * Checks: token validity, expiration, and provider mapping.
  * Returns the resolved real API key and optional base URL.
  *
  * Throws ApiError on validation failure.
@@ -99,17 +99,15 @@ export async function validateVirtualApiKey(
   expectedProvider: string,
 ): Promise<VirtualKeyValidationResult> {
   const resolved = await validateVirtualApiKeyToken(tokenValue);
-  if (!resolved.chatApiKey) {
+  const mappedProviderKey = (
+    await VirtualApiKeyModel.getProviderApiKeysForRouting(
+      resolved.virtualKey.id,
+    )
+  ).find((mapping) => mapping.provider === expectedProvider);
+  if (!mappedProviderKey) {
     throw new ApiError(
       400,
-      "Model Router virtual API keys cannot be used with provider-specific proxy routes",
-    );
-  }
-
-  if (resolved.chatApiKey.provider !== expectedProvider) {
-    throw new ApiError(
-      400,
-      `Virtual API key is for provider "${resolved.chatApiKey.provider}", but request is for "${expectedProvider}"`,
+      `Virtual API key is not mapped to provider "${expectedProvider}".`,
     );
   }
 
@@ -119,9 +117,9 @@ export async function validateVirtualApiKey(
   // with a clear error. For keyless providers the virtual key alone is
   // sufficient authentication.
   let apiKey: string | undefined;
-  if (resolved.chatApiKey.secretId) {
+  if (mappedProviderKey.secretId) {
     const secretValue = await getSecretValueForLlmProviderApiKey(
-      resolved.chatApiKey.secretId,
+      mappedProviderKey.secretId,
     );
     if (secretValue) {
       apiKey = secretValue as string;
@@ -129,8 +127,8 @@ export async function validateVirtualApiKey(
       logger.warn(
         {
           virtualKeyId: resolved.virtualKey.id,
-          chatApiKeyId: resolved.chatApiKey.id,
-          secretId: resolved.chatApiKey.secretId,
+          chatApiKeyId: mappedProviderKey.chatApiKeyId,
+          secretId: mappedProviderKey.secretId,
         },
         "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
       );
@@ -139,8 +137,8 @@ export async function validateVirtualApiKey(
 
   return {
     apiKey,
-    baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
-    chatApiKeyId: resolved.chatApiKey.id,
+    baseUrl: mappedProviderKey.baseUrl ?? undefined,
+    chatApiKeyId: mappedProviderKey.chatApiKeyId,
   };
 }
 
@@ -406,15 +404,18 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   if (!oauthClient.allowedLlmProxyIds.includes(params.agent.id)) {
     throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
-  if (!oauthClient.chatApiKeyId) {
+  const mappedProviderKey = oauthClient.providerApiKeys.find(
+    (mapping) => mapping.provider === params.expectedProvider,
+  );
+  if (!mappedProviderKey) {
     throw new ApiError(
       400,
-      "LLM OAuth client is not configured for provider-specific proxy routes.",
+      `LLM OAuth client is not mapped to provider "${params.expectedProvider}".`,
     );
   }
 
   const providerApiKey = await LlmProviderApiKeyModel.findById(
-    oauthClient.chatApiKeyId,
+    mappedProviderKey.chatApiKeyId,
   );
   if (!providerApiKey) {
     throw new ApiError(

@@ -122,7 +122,7 @@ describe("auth routes", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         { provider: "openai", chatApiKeyId: providerKey.id },
       ],
     });

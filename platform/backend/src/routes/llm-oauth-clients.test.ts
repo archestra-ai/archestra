@@ -55,7 +55,7 @@ describe("llmOauthClientsRoutes", () => {
       payload: {
         name: "Backend Service",
         allowedLlmProxyIds: [agent.id],
-        modelRouterProviderApiKeys: [
+        providerApiKeys: [
           {
             provider: "openai",
             chatApiKeyId: apiKey.id,
@@ -68,7 +68,7 @@ describe("llmOauthClientsRoutes", () => {
     const created = createResponse.json();
     expect(created.clientId).toMatch(/^llm_oauth_/);
     expect(created.clientSecret).toMatch(/^llm_secret_/);
-    expect(created.modelRouterProviderApiKeys).toMatchObject([
+    expect(created.providerApiKeys).toMatchObject([
       {
         provider: "openai",
         chatApiKeyId: apiKey.id,
@@ -89,7 +89,7 @@ describe("llmOauthClientsRoutes", () => {
       payload: {
         name: "Updated Backend Service",
         allowedLlmProxyIds: [agent.id],
-        modelRouterProviderApiKeys: [
+        providerApiKeys: [
           {
             provider: "openai",
             chatApiKeyId: apiKey.id,
@@ -102,7 +102,7 @@ describe("llmOauthClientsRoutes", () => {
       id: created.id,
       name: "Updated Backend Service",
       allowedLlmProxyIds: [agent.id],
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         {
           provider: "openai",
           chatApiKeyId: apiKey.id,
@@ -124,5 +124,47 @@ describe("llmOauthClientsRoutes", () => {
     });
     expect(deleteResponse.statusCode).toBe(200);
     expect(deleteResponse.json()).toEqual({ success: true });
+  });
+
+  test("rejects duplicate provider mappings", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      name: "Duplicate Mapping Proxy",
+      agentType: "llm_proxy",
+    });
+    const firstSecret = await makeSecret({ secret: { apiKey: "sk-first" } });
+    const secondSecret = await makeSecret({ secret: { apiKey: "sk-second" } });
+    const firstKey = await makeLlmProviderApiKey(
+      organizationId,
+      firstSecret.id,
+      { provider: "openai" },
+    );
+    const secondKey = await makeLlmProviderApiKey(
+      organizationId,
+      secondSecret.id,
+      { provider: "openai" },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Duplicate Mapping Client",
+        allowedLlmProxyIds: [agent.id],
+        providerApiKeys: [
+          { provider: "openai", chatApiKeyId: firstKey.id },
+          { provider: "openai", chatApiKeyId: secondKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      'Only one provider API key can be mapped for provider "openai"',
+    );
   });
 });

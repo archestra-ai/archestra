@@ -26,18 +26,16 @@ class LlmOauthClientModel {
   static async create(params: {
     organizationId: string;
     name: string;
-    chatApiKeyId?: string | null;
     allowedLlmProxyIds: string[];
-    modelRouterProviderApiKeys: LlmOauthClientProviderKey[];
+    providerApiKeys: LlmOauthClientProviderKey[];
   }) {
     const clientSecret = createClientSecret();
     const clientSecretHash = await hashClientSecret(clientSecret);
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
-      chatApiKeyId: params.chatApiKeyId ?? null,
       allowedLlmProxyIds: params.allowedLlmProxyIds,
-      modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
+      providerApiKeys: params.providerApiKeys,
     };
 
     const [client] = await db
@@ -97,6 +95,20 @@ class LlmOauthClientModel {
     return client ? (await hydrateOauthClients([client]))[0] : null;
   }
 
+  static async findByProviderApiKeyId(params: {
+    providerApiKeyId: string;
+    organizationId: string;
+  }) {
+    const clients = await LlmOauthClientModel.findAllByOrganization(
+      params.organizationId,
+    );
+    return clients.filter((client) =>
+      client.providerApiKeys.some(
+        (mapping) => mapping.chatApiKeyId === params.providerApiKeyId,
+      ),
+    );
+  }
+
   static async findClientForCredentials(params: {
     clientId: string;
     clientSecret: string;
@@ -152,16 +164,14 @@ class LlmOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
-    chatApiKeyId?: string | null;
     allowedLlmProxyIds: string[];
-    modelRouterProviderApiKeys: LlmOauthClientProviderKey[];
+    providerApiKeys: LlmOauthClientProviderKey[];
   }) {
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
-      chatApiKeyId: params.chatApiKeyId ?? null,
       allowedLlmProxyIds: params.allowedLlmProxyIds,
-      modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
+      providerApiKeys: params.providerApiKeys,
     };
 
     const [client] = await db
@@ -223,12 +233,7 @@ async function hydrateOauthClients(
           client.metadata,
         ).data;
         if (!metadata) return [];
-        return [
-          metadata.chatApiKeyId,
-          ...metadata.modelRouterProviderApiKeys.map(
-            (mapping) => mapping.chatApiKeyId,
-          ),
-        ].filter((id): id is string => !!id);
+        return metadata.providerApiKeys.map((mapping) => mapping.chatApiKeyId);
       }),
     ),
   ];
@@ -256,21 +261,12 @@ async function hydrateOauthClients(
         clientId: client.clientId,
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
-        chatApiKeyId: metadata.chatApiKeyId,
-        chatApiKeyName: metadata.chatApiKeyId
-          ? (apiKeyNames.get(metadata.chatApiKeyId) ?? metadata.chatApiKeyId)
-          : null,
-        chatApiKeyProvider:
-          apiKeyRows.find((row) => row.id === metadata.chatApiKeyId)
-            ?.provider ?? null,
         allowedLlmProxyIds: metadata.allowedLlmProxyIds,
-        modelRouterProviderApiKeys: metadata.modelRouterProviderApiKeys.map(
-          (mapping) => ({
-            ...mapping,
-            chatApiKeyName:
-              apiKeyNames.get(mapping.chatApiKeyId) ?? mapping.chatApiKeyId,
-          }),
-        ),
+        providerApiKeys: metadata.providerApiKeys.map((mapping) => ({
+          ...mapping,
+          chatApiKeyName:
+            apiKeyNames.get(mapping.chatApiKeyId) ?? mapping.chatApiKeyId,
+        })),
         disabled: client.disabled ?? false,
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,

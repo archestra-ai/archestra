@@ -96,7 +96,7 @@ async function createModelRouterVirtualKey(params: {
     organizationId: string,
     secretId: string,
     overrides?: { provider?: SupportedProvider },
-  ) => Promise<{ id: string }>;
+  ) => Promise<{ id: string; provider: SupportedProvider }>;
   apiKeyValue?: string;
   expiresAt?: Date | null;
 }) {
@@ -111,10 +111,9 @@ async function createModelRouterVirtualKey(params: {
     },
   );
   return VirtualApiKeyModel.create({
-    chatApiKeyId: chatApiKey.id,
     name: `${params.provider} model router virtual key`,
     expiresAt: params.expiresAt,
-    modelRouterProviderApiKeys: [
+    providerApiKeys: [
       {
         provider: params.provider,
         chatApiKeyId: chatApiKey.id,
@@ -620,7 +619,7 @@ describe("model router proxy routes", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         {
           provider,
           chatApiKeyId: chatApiKey.id,
@@ -850,7 +849,7 @@ describe("model router proxy routes", () => {
     expect(response.json().error.message).toBe("Virtual API key expired");
   });
 
-  test("rejects provider-specific virtual keys that are not configured for model router", async ({
+  test("accepts mapped virtual keys for model router requests", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -865,7 +864,9 @@ describe("model router proxy routes", () => {
       provider: "openai",
     });
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+      ],
       name: "regular-provider-vk",
     });
     const agent = await makeAgent({
@@ -888,10 +889,7 @@ describe("model router proxy routes", () => {
       },
     });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json().error.message).toBe(
-      "This virtual API key is not configured for Model Router usage.",
-    );
+    expect(response.statusCode).toBe(200);
   });
 
   test("rejects model router virtual keys for agents in another organization", async ({
@@ -979,11 +977,8 @@ describe("model router proxy routes", () => {
       virtualKey: { id: virtualKeyId },
       value,
     } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
       name: "model-router-openai-vk",
-      modelRouterProviderApiKeys: [
-        { provider: "openai", chatApiKeyId: chatApiKey.id },
-      ],
+      providerApiKeys: [{ provider: "openai", chatApiKeyId: chatApiKey.id }],
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -1047,11 +1042,8 @@ describe("model router proxy routes", () => {
       provider: "gemini",
     });
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: systemKey.id,
       name: "model-router-gemini-system-vk",
-      modelRouterProviderApiKeys: [
-        { provider: "gemini", chatApiKeyId: systemKey.id },
-      ],
+      providerApiKeys: [{ provider: "gemini", chatApiKeyId: systemKey.id }],
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -1196,9 +1188,8 @@ describe("model router proxy routes", () => {
       { provider: "groq" },
     );
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: openaiKey.id,
       name: "model-router-openai-groq-vk",
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         { provider: "openai", chatApiKeyId: openaiKey.id },
         { provider: "groq", chatApiKeyId: groqKey.id },
       ],
@@ -1370,9 +1361,8 @@ describe("model router proxy routes", () => {
       { provider: "groq" },
     );
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: openaiKey.id,
       name: "model-router-multi-vk",
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         { provider: "openai", chatApiKeyId: openaiKey.id },
         { provider: "groq", chatApiKeyId: groqKey.id },
       ],

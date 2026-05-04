@@ -24,9 +24,8 @@ describe("LlmOauthClientModel", () => {
     const result = await LlmOauthClientModel.create({
       organizationId: organization.id,
       name: "Backend Service",
-      chatApiKeyId: providerKey.id,
       allowedLlmProxyIds: [crypto.randomUUID()],
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         {
           provider: "anthropic",
           chatApiKeyId: providerKey.id,
@@ -38,11 +37,8 @@ describe("LlmOauthClientModel", () => {
     expect(result.oauthClient.clientId).toMatch(/^llm_oauth_/);
     expect(result.oauthClient.name).toBe("Backend Service");
     expect(result.oauthClient.organizationId).toBe(organization.id);
-    expect(result.oauthClient.chatApiKeyId).toBe(providerKey.id);
-    expect(result.oauthClient.chatApiKeyName).toBe("Primary Provider Key");
-    expect(result.oauthClient.chatApiKeyProvider).toBe("anthropic");
     expect(result.oauthClient.allowedLlmProxyIds).toHaveLength(1);
-    expect(result.oauthClient.modelRouterProviderApiKeys).toEqual([
+    expect(result.oauthClient.providerApiKeys).toEqual([
       {
         provider: "anthropic",
         chatApiKeyId: providerKey.id,
@@ -64,7 +60,7 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       name: "Worker",
       allowedLlmProxyIds: [],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [],
     });
 
     const verified = await LlmOauthClientModel.findClientForCredentials({
@@ -91,7 +87,7 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       name: "Original",
       allowedLlmProxyIds: [firstProxyId],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [],
     });
 
     expect(
@@ -107,7 +103,7 @@ describe("LlmOauthClientModel", () => {
         organizationId: otherOrganization.id,
         name: "Wrong Org",
         allowedLlmProxyIds: [],
-        modelRouterProviderApiKeys: [],
+        providerApiKeys: [],
       }),
     ).toBeNull();
 
@@ -116,7 +112,7 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       name: "Updated",
       allowedLlmProxyIds: [secondProxyId],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [],
     });
     expect(updated?.name).toBe("Updated");
     expect(updated?.allowedLlmProxyIds).toEqual([secondProxyId]);
@@ -170,7 +166,7 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       name: "LLM OAuth Client",
       allowedLlmProxyIds: [],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [],
     });
 
     const clients = await LlmOauthClientModel.findAllByOrganization(
@@ -189,7 +185,7 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       name: "Shape Check",
       allowedLlmProxyIds: [],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [],
     });
 
     const found = await LlmOauthClientModel.findByClientId(
@@ -206,7 +202,7 @@ describe("LlmOauthClientModel", () => {
       name: "Shape Check",
       organizationId: organization.id,
       allowedLlmProxyIds: [],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [],
       disabled: false,
     });
 

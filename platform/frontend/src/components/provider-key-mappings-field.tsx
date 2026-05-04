@@ -19,18 +19,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type ModelRouterProviderApiKeyMap = Partial<
-  Record<SupportedProvider, string>
->;
+export type ProviderApiKeyMap = Partial<Record<SupportedProvider, string>>;
 
-export function ModelRouterProviderKeyMappingsField({
+export function ProviderKeyMappingsField({
   providerApiKeyIds,
   onProviderApiKeyIdsChange,
   providerApiKeys,
   className,
 }: {
-  providerApiKeyIds: ModelRouterProviderApiKeyMap;
-  onProviderApiKeyIdsChange: (value: ModelRouterProviderApiKeyMap) => void;
+  providerApiKeyIds: ProviderApiKeyMap;
+  onProviderApiKeyIdsChange: (value: ProviderApiKeyMap) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
   className?: string;
 }) {
@@ -43,7 +41,7 @@ export function ModelRouterProviderKeyMappingsField({
     [providerApiKeys],
   );
   const configuredMappings = useMemo(() => {
-    return modelRouterProviderApiKeyMapToArray(providerApiKeyIds)
+    return providerApiKeyMapToArray(providerApiKeyIds)
       .map(({ provider, chatApiKeyId }) => {
         const key = providerApiKeys.find(
           (apiKey) => apiKey.id === chatApiKeyId,
@@ -208,20 +206,18 @@ export function ModelRouterProviderKeyMappingsField({
   );
 }
 
-export function modelRouterProviderApiKeyMapToArray(
-  providerApiKeyIds: ModelRouterProviderApiKeyMap,
-) {
+export function providerApiKeyMapToArray(providerApiKeyIds: ProviderApiKeyMap) {
   return Object.entries(providerApiKeyIds)
     .filter((entry): entry is [SupportedProvider, string] => Boolean(entry[1]))
     .map(([provider, chatApiKeyId]) => ({ provider, chatApiKeyId }));
 }
 
-export function modelRouterProviderApiKeyArrayToMap(
+export function providerApiKeyArrayToMap(
   providerApiKeys: Array<{
     provider: SupportedProvider;
     chatApiKeyId: string;
   }>,
-): ModelRouterProviderApiKeyMap {
+): ProviderApiKeyMap {
   return Object.fromEntries(
     providerApiKeys.map((mapping) => [mapping.provider, mapping.chatApiKeyId]),
   );

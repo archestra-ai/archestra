@@ -29,7 +29,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 ### Model Router Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/model-router/{llm-proxy-id}`
-- **Authentication**: Pass either a Model Router-enabled virtual API key or an LLM OAuth client access token in the `Authorization` header as `Bearer <key>`. Use virtual keys for generic LLM clients and OAuth client access tokens for backend services that can perform OAuth client credentials. See [Authentication](/docs/platform-llm-proxy-authentication).
+- **Authentication**: Pass either a mapped virtual API key or an LLM OAuth client access token in the `Authorization` header as `Bearer <key>`. Use virtual keys for generic LLM clients and OAuth client access tokens for backend services that can perform OAuth client credentials. See [Authentication](/docs/platform-llm-proxy-authentication).
 
 ### List Models
 

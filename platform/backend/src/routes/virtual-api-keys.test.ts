@@ -77,39 +77,51 @@ describe("virtualApiKeysRoutes", () => {
     );
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: parentKey.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+      ],
       name: "Org Visible",
       scope: "org",
       authorId: owner.id,
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: parentKey.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+      ],
       name: "My Personal",
       scope: "personal",
       authorId: owner.id,
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: parentKey.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+      ],
       name: "Other Personal",
       scope: "personal",
       authorId: outsider.id,
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: parentKey.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+      ],
       name: "Team Visible",
       scope: "team",
       authorId: owner.id,
       teamIds: [team.id],
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: parentKey.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+      ],
       name: "Other Team Key",
       scope: "team",
       authorId: outsider.id,
       teamIds: [outsiderTeam.id],
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: outsiderOrgKey.id,
+      providerApiKeys: [
+        { provider: outsiderOrgKey.provider, chatApiKeyId: outsiderOrgKey.id },
+      ],
       name: "Different Org Key",
       scope: "org",
       authorId: outsider.id,
@@ -145,7 +157,9 @@ describe("virtualApiKeysRoutes", () => {
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: parentKey.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+      ],
       name: "Admin Visible",
       scope: "org",
       authorId: user.id,
@@ -176,7 +190,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Org Key",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
         scope: "org",
         teams: [],
       },
@@ -211,7 +227,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "Team Key",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
         scope: "team",
         teams: [otherTeam.id],
       },
@@ -241,7 +259,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "my-test-key",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
 
@@ -282,8 +302,7 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "router-key",
-        chatApiKeyId: openaiKey.id,
-        modelRouterProviderApiKeys: [
+        providerApiKeys: [
           { provider: "openai", chatApiKeyId: openaiKey.id },
           { provider: "anthropic", chatApiKeyId: anthropicKey.id },
         ],
@@ -292,7 +311,7 @@ describe("virtualApiKeysRoutes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      modelRouterProviderApiKeys: expect.arrayContaining([
+      providerApiKeys: expect.arrayContaining([
         {
           provider: "openai",
           chatApiKeyId: openaiKey.id,
@@ -307,7 +326,7 @@ describe("virtualApiKeysRoutes", () => {
     });
   });
 
-  test("POST /api/llm-virtual-keys creates a model router key without a parent provider key", async ({
+  test("POST /api/llm-virtual-keys creates a key with provider mappings", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -325,19 +344,15 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "parentless-router-key",
-        chatApiKeyId: null,
-        modelRouterProviderApiKeys: [
-          { provider: "openai", chatApiKeyId: openaiKey.id },
-        ],
+        providerApiKeys: [{ provider: "openai", chatApiKeyId: openaiKey.id }],
       },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       name: "parentless-router-key",
-      chatApiKeyId: null,
       organizationId,
-      modelRouterProviderApiKeys: [
+      providerApiKeys: [
         {
           provider: "openai",
           chatApiKeyId: openaiKey.id,
@@ -347,7 +362,7 @@ describe("virtualApiKeysRoutes", () => {
     });
   });
 
-  test("POST /api/llm-virtual-keys rejects parentless non-router keys", async () => {
+  test("POST /api/llm-virtual-keys rejects keys without provider mappings", async () => {
     mockUserHasPermission.mockResolvedValue(true);
 
     const response = await app.inject({
@@ -355,13 +370,13 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "missing-parent",
-        chatApiKeyId: null,
+        providerApiKeys: [],
       },
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe(
-      "Provider API key is required unless Model Router provider keys are configured",
+    expect(response.json().error.message).toContain(
+      "At least one provider API key is required",
     );
   });
 
@@ -389,8 +404,7 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "router-key",
-        chatApiKeyId: firstKey.id,
-        modelRouterProviderApiKeys: [
+        providerApiKeys: [
           { provider: "openai", chatApiKeyId: firstKey.id },
           { provider: "openai", chatApiKeyId: secondKey.id },
         ],
@@ -420,8 +434,7 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "router-key",
-        chatApiKeyId: openaiKey.id,
-        modelRouterProviderApiKeys: [
+        providerApiKeys: [
           { provider: "anthropic", chatApiKeyId: openaiKey.id },
         ],
       },
@@ -433,7 +446,7 @@ describe("virtualApiKeysRoutes", () => {
     );
   });
 
-  test("GET /api/llm-virtual-keys?chatApiKeyId lists keys without exposing token values", async ({
+  test("GET /api/llm-virtual-keys?providerApiKeyId lists keys without exposing token values", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -449,7 +462,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "key-alpha",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
     const secondResponse = await app.inject({
@@ -457,7 +472,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "key-beta",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
 
@@ -466,7 +483,7 @@ describe("virtualApiKeysRoutes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/api/llm-virtual-keys?chatApiKeyId=${parentKey.id}`,
+      url: `/api/llm-virtual-keys?providerApiKeyId=${parentKey.id}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -494,7 +511,7 @@ describe("virtualApiKeysRoutes", () => {
     }
   });
 
-  test("GET /api/llm-virtual-keys returns paginated parent key metadata", async ({
+  test("GET /api/llm-virtual-keys returns paginated provider key metadata", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -511,7 +528,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "org-list-key-1",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
     await app.inject({
@@ -519,7 +538,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "org-list-key-2",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
 
@@ -532,9 +553,11 @@ describe("virtualApiKeysRoutes", () => {
     const body = response.json() as {
       data: Array<{
         name: string;
-        parentKeyName: string;
-        parentKeyProvider: string;
-        parentKeyBaseUrl: string | null;
+        providerApiKeys: Array<{
+          provider: string;
+          chatApiKeyId: string;
+          chatApiKeyName: string;
+        }>;
       }>;
       pagination: {
         total: number;
@@ -545,18 +568,25 @@ describe("virtualApiKeysRoutes", () => {
         hasPrev: boolean;
       };
     };
-    const listedKeys = body.data.filter(
-      (key) => key.parentKeyName === "Org Listing Parent",
+    const listedKeys = body.data.filter((key) =>
+      key.providerApiKeys.some(
+        (mapping) => mapping.chatApiKeyName === "Org Listing Parent",
+      ),
     );
     expect(body.pagination.total).toBeGreaterThanOrEqual(2);
     expect(listedKeys).toHaveLength(2);
     for (const key of listedKeys) {
-      expect(key.parentKeyProvider).toBe("openai");
-      expect(key.parentKeyBaseUrl).toBeNull();
+      expect(key.providerApiKeys).toEqual([
+        {
+          provider: "openai",
+          chatApiKeyId: parentKey.id,
+          chatApiKeyName: "Org Listing Parent",
+        },
+      ]);
     }
   });
 
-  test("GET /api/llm-virtual-keys lists model router keys without parent metadata", async ({
+  test("GET /api/llm-virtual-keys lists mapped provider keys", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -573,10 +603,7 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "router-only-list-key",
-        chatApiKeyId: null,
-        modelRouterProviderApiKeys: [
-          { provider: "openai", chatApiKeyId: openaiKey.id },
-        ],
+        providerApiKeys: [{ provider: "openai", chatApiKeyId: openaiKey.id }],
       },
     });
 
@@ -590,9 +617,13 @@ describe("virtualApiKeysRoutes", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "router-only-list-key",
-          chatApiKeyId: null,
-          parentKeyName: null,
-          parentKeyProvider: null,
+          providerApiKeys: [
+            {
+              provider: "openai",
+              chatApiKeyId: openaiKey.id,
+              chatApiKeyName: "OpenAI Router Key",
+            },
+          ],
         }),
       ]),
     );
@@ -614,7 +645,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "delete-me",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
 
@@ -630,7 +663,7 @@ describe("virtualApiKeysRoutes", () => {
 
     const listResponse = await app.inject({
       method: "GET",
-      url: `/api/llm-virtual-keys?chatApiKeyId=${parentKey.id}`,
+      url: `/api/llm-virtual-keys?providerApiKeyId=${parentKey.id}`,
     });
 
     expect(listResponse.statusCode).toBe(200);
@@ -660,7 +693,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "vk-for-keyless",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
       },
     });
 
@@ -686,7 +721,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "expired-from-the-start",
-        chatApiKeyId: parentKey.id,
+        providerApiKeys: [
+          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        ],
         expiresAt: new Date(Date.now() - 60_000).toISOString(),
       },
     });

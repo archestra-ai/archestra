@@ -654,7 +654,7 @@ async function getModelRouterAuth(
   if (!bearerToken) {
     throw new ApiError(
       401,
-      "Model router requests require a Model Router-enabled virtual API key or LLM OAuth client access token.",
+      "Model router requests require a mapped virtual API key or LLM OAuth client access token.",
     );
   }
 
@@ -665,20 +665,13 @@ async function getModelRouterAuth(
   await virtualKeyRateLimiter.check(request.ip);
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
-    const mappings =
-      await VirtualApiKeyModel.getModelRouterProviderApiKeysForRouting(
-        resolved.virtualKey.id,
-      );
+    const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+      resolved.virtualKey.id,
+    );
     if (mappings.length === 0) {
-      if (resolved.virtualKey.chatApiKeyId) {
-        throw new ApiError(
-          401,
-          "This virtual API key is not configured for Model Router usage.",
-        );
-      }
       throw new ApiError(
         401,
-        "Model Router virtual key has no provider API keys configured.",
+        "Virtual API key has no provider API keys configured.",
       );
     }
 
@@ -793,9 +786,7 @@ async function getModelRouterOAuthClientAuth(
   }
 
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
-    oauthClient.modelRouterProviderApiKeys.map(
-      (mapping) => mapping.chatApiKeyId,
-    ),
+    oauthClient.providerApiKeys.map((mapping) => mapping.chatApiKeyId),
   );
   const providerApiKeysById = new Map(
     providerApiKeys.map((apiKey) => [apiKey.id, apiKey]),
@@ -811,7 +802,7 @@ async function getModelRouterOAuthClientAuth(
       clientId: oauthClient.clientId,
     },
     providerApiKeysByProvider: new Map(
-      oauthClient.modelRouterProviderApiKeys.map((mapping) => {
+      oauthClient.providerApiKeys.map((mapping) => {
         const apiKey = providerApiKeysById.get(mapping.chatApiKeyId);
         if (!apiKey) {
           throw new ApiError(

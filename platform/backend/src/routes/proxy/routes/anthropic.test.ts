@@ -292,7 +292,9 @@ describe("Anthropic virtual key auth", () => {
         virtualKey: { id: virtualKeyId },
         value,
       } = await VirtualApiKeyModel.create({
-        chatApiKeyId: chatApiKey.id,
+        providerApiKeys: [
+          { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        ],
         name: "anthropic-auth-header-vk",
       });
 

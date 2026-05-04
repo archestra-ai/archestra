@@ -8,14 +8,11 @@ import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import {
-  type ModelRouterProviderApiKeyMap,
-  modelRouterProviderApiKeyArrayToMap,
-  modelRouterProviderApiKeyMapToArray,
-} from "@/components/model-router-provider-key-mappings-field";
-import {
-  ModelRouterAccessFields,
-  ProviderApiKeyField,
-} from "@/components/proxy-auth-provider-key-fields";
+  type ProviderApiKeyMap,
+  providerApiKeyArrayToMap,
+  providerApiKeyMapToArray,
+} from "@/components/provider-key-mappings-field";
+import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -110,24 +107,7 @@ export default function OAuthClientsPage() {
         header: "Providers",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {[
-              row.original.chatApiKeyProvider
-                ? (providerDisplayNames[
-                    row.original
-                      .chatApiKeyProvider as keyof typeof providerDisplayNames
-                  ] ?? row.original.chatApiKeyProvider)
-                : null,
-              ...new Set(
-                row.original.modelRouterProviderApiKeys.map(
-                  (mapping) =>
-                    providerDisplayNames[
-                      mapping.provider as keyof typeof providerDisplayNames
-                    ] ?? mapping.provider,
-                ),
-              ),
-            ]
-              .filter(Boolean)
-              .join(", ")}
+            {formatProviderKeySummary(row.original.providerApiKeys)}
           </span>
         ),
       },
@@ -284,26 +264,24 @@ function CreateOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
-  const [selectedParentKeyId, setSelectedParentKeyId] = useState<string>("");
   const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
-  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
-  const [providerApiKeyIds, setProviderApiKeyIds] =
-    useState<ModelRouterProviderApiKeyMap>({});
+  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
+    {},
+  );
 
-  const defaultParentKeyId = providerApiKeys[0]?.id ?? "";
   useEffect(() => {
     if (open) {
-      setSelectedParentKeyId(defaultParentKeyId);
+      setName("");
+      setSelectedProxyIds([]);
+      setProviderApiKeyIds({});
     }
-  }, [open, defaultParentKeyId]);
+  }, [open]);
 
-  const modelRouterProviderApiKeys =
-    modelRouterProviderApiKeyMapToArray(providerApiKeyIds);
+  const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
   const canSubmit =
     name.trim().length > 0 &&
     selectedProxyIds.length > 0 &&
-    (!!selectedParentKeyId ||
-      (showModelRouterFields && modelRouterProviderApiKeys.length > 0));
+    mappedProviderApiKeys.length > 0;
 
   return (
     <FormDialog
@@ -317,16 +295,11 @@ function CreateOAuthClientDialog({
           event.preventDefault();
           await onSubmit({
             name: name.trim(),
-            chatApiKeyId: selectedParentKeyId || null,
             allowedLlmProxyIds: selectedProxyIds,
-            modelRouterProviderApiKeys: showModelRouterFields
-              ? modelRouterProviderApiKeys
-              : [],
+            providerApiKeys: mappedProviderApiKeys,
           });
           setName("");
-          setSelectedParentKeyId(defaultParentKeyId);
           setSelectedProxyIds([]);
-          setShowModelRouterFields(false);
           setProviderApiKeyIds({});
         }}
       >
@@ -340,15 +313,6 @@ function CreateOAuthClientDialog({
               placeholder="support-assistant-prod"
             />
           </div>
-
-          <ProviderApiKeyField
-            value={selectedParentKeyId || "none"}
-            onValueChange={(value) =>
-              setSelectedParentKeyId(value === "none" ? "" : value)
-            }
-            providerApiKeys={providerApiKeys}
-            allowNone
-          />
 
           <div className="space-y-2">
             <Label>Allowed LLM proxies</Label>
@@ -364,10 +328,7 @@ function CreateOAuthClientDialog({
             />
           </div>
 
-          <ModelRouterAccessFields
-            id="oauth-client-model-router"
-            enabled={showModelRouterFields}
-            onEnabledChange={setShowModelRouterFields}
+          <ProviderKeyAccessFields
             providerApiKeyIds={providerApiKeyIds}
             onProviderApiKeyIdsChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
@@ -409,33 +370,24 @@ function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
-  const [selectedParentKeyId, setSelectedParentKeyId] = useState<string>("");
   const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
-  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
-  const [providerApiKeyIds, setProviderApiKeyIds] =
-    useState<ModelRouterProviderApiKeyMap>({});
+  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
+    {},
+  );
 
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
-    setSelectedParentKeyId(oauthClient.chatApiKeyId ?? "");
     setSelectedProxyIds(oauthClient.allowedLlmProxyIds);
-    setShowModelRouterFields(oauthClient.modelRouterProviderApiKeys.length > 0);
-    setProviderApiKeyIds(
-      modelRouterProviderApiKeyArrayToMap(
-        oauthClient.modelRouterProviderApiKeys,
-      ),
-    );
+    setProviderApiKeyIds(providerApiKeyArrayToMap(oauthClient.providerApiKeys));
   }, [oauthClient]);
 
-  const modelRouterProviderApiKeys =
-    modelRouterProviderApiKeyMapToArray(providerApiKeyIds);
+  const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
   const canSubmit =
     !!oauthClient &&
     name.trim().length > 0 &&
     selectedProxyIds.length > 0 &&
-    (!!selectedParentKeyId ||
-      (showModelRouterFields && modelRouterProviderApiKeys.length > 0));
+    mappedProviderApiKeys.length > 0;
 
   return (
     <FormDialog
@@ -450,11 +402,8 @@ function EditOAuthClientDialog({
           if (!oauthClient) return;
           await onSubmit(oauthClient.id, {
             name: name.trim(),
-            chatApiKeyId: selectedParentKeyId || null,
             allowedLlmProxyIds: selectedProxyIds,
-            modelRouterProviderApiKeys: showModelRouterFields
-              ? modelRouterProviderApiKeys
-              : [],
+            providerApiKeys: mappedProviderApiKeys,
           });
         }}
       >
@@ -468,15 +417,6 @@ function EditOAuthClientDialog({
               placeholder="support-assistant-prod"
             />
           </div>
-
-          <ProviderApiKeyField
-            value={selectedParentKeyId || "none"}
-            onValueChange={(value) =>
-              setSelectedParentKeyId(value === "none" ? "" : value)
-            }
-            providerApiKeys={providerApiKeys}
-            allowNone
-          />
 
           <div className="space-y-2">
             <Label>Allowed LLM proxies</Label>
@@ -492,10 +432,7 @@ function EditOAuthClientDialog({
             />
           </div>
 
-          <ModelRouterAccessFields
-            id="edit-oauth-client-model-router"
-            enabled={showModelRouterFields}
-            onEnabledChange={setShowModelRouterFields}
+          <ProviderKeyAccessFields
             providerApiKeyIds={providerApiKeyIds}
             onProviderApiKeyIdsChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
@@ -564,4 +501,23 @@ function CredentialsDialog({
       </DialogStickyFooter>
     </FormDialog>
   );
+}
+
+function formatProviderKeySummary(
+  providerApiKeys: LlmOauthClient["providerApiKeys"],
+): string {
+  if (providerApiKeys.length === 0) {
+    return "None";
+  }
+
+  return [
+    ...new Set(
+      providerApiKeys.map(
+        (mapping) =>
+          providerDisplayNames[
+            mapping.provider as keyof typeof providerDisplayNames
+          ] ?? mapping.provider,
+      ),
+    ),
+  ].join(", ");
 }

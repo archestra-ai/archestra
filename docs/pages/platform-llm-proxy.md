@@ -91,7 +91,7 @@ curl -X POST "https://your-archestra-instance/v1/model-router/{llm-proxy-id}/res
   }'
 ```
 
-The router accepts OpenAI Responses and Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns the matching OpenAI-format response. Generic OpenAI-compatible clients should use a Model Router-enabled virtual key. Backend services and bots should use an LLM OAuth client access token. See [Authentication](/docs/platform-llm-proxy-authentication) for setup and [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID details.
+The router accepts OpenAI Responses and Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns the matching OpenAI-format response. Generic OpenAI-compatible clients should use a virtual key mapped to the providers they need. Backend services and bots should use an LLM OAuth client access token. See [Authentication](/docs/platform-llm-proxy-authentication) for setup and [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID details.
 
 ## Custom Headers
 

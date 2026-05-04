@@ -20,9 +20,8 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
 
 const CreateLlmOauthClientBodySchema = z.object({
   name: z.string().min(1).max(256),
-  chatApiKeyId: z.string().uuid().nullable().optional(),
   allowedLlmProxyIds: z.array(z.string().uuid()).min(1),
-  modelRouterProviderApiKeys: z.array(LlmOauthClientProviderKeyBodySchema),
+  providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).min(1),
 });
 
 const UpdateLlmOauthClientBodySchema = CreateLlmOauthClientBodySchema;
@@ -62,9 +61,8 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
-        chatApiKeyId: body.chatApiKeyId ?? null,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
-        modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
+        providerApiKeys: body.providerApiKeys,
       });
       return reply.send({ ...oauthClient, clientSecret });
     },
@@ -88,9 +86,8 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         name: body.name,
-        chatApiKeyId: body.chatApiKeyId ?? null,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
-        modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
+        providerApiKeys: body.providerApiKeys,
       });
       if (!oauthClient) {
         throw new ApiError(404, "LLM OAuth client not found");
@@ -153,18 +150,21 @@ export default llmOauthClientsRoutes;
 
 async function validateLlmOauthClientConfig(params: {
   organizationId: string;
-  chatApiKeyId?: string | null;
   allowedLlmProxyIds: string[];
-  modelRouterProviderApiKeys: Array<{
+  providerApiKeys: Array<{
     provider: z.infer<typeof SupportedProvidersSchema>;
     chatApiKeyId: string;
   }>;
 }) {
-  if (!params.chatApiKeyId && params.modelRouterProviderApiKeys.length === 0) {
-    throw new ApiError(
-      400,
-      "Provider API key is required unless Model Router provider keys are configured",
-    );
+  const seenProviders = new Set<string>();
+  for (const mapping of params.providerApiKeys) {
+    if (seenProviders.has(mapping.provider)) {
+      throw new ApiError(
+        400,
+        `Only one provider API key can be mapped for provider "${mapping.provider}"`,
+      );
+    }
+    seenProviders.add(mapping.provider);
   }
 
   for (const proxyId of params.allowedLlmProxyIds) {
@@ -178,14 +178,7 @@ async function validateLlmOauthClientConfig(params: {
     }
   }
 
-  if (params.chatApiKeyId) {
-    const apiKey = await LlmProviderApiKeyModel.findById(params.chatApiKeyId);
-    if (!apiKey || apiKey.organizationId !== params.organizationId) {
-      throw new ApiError(404, "LLM provider API key not found");
-    }
-  }
-
-  for (const mapping of params.modelRouterProviderApiKeys) {
+  for (const mapping of params.providerApiKeys) {
     const apiKey = await LlmProviderApiKeyModel.findById(mapping.chatApiKeyId);
     if (!apiKey || apiKey.organizationId !== params.organizationId) {
       throw new ApiError(404, "LLM provider API key not found");

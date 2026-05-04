@@ -1,11 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import {
   DEFAULT_ADMIN_EMAIL,
   IDENTITY_PROVIDER_ID,
+  LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   LLM_PROXY_COMPATIBLE_OAUTH_SCOPES,
   LLM_PROXY_OAUTH_SCOPE,
-  LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   RouteId,
 } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
@@ -1142,6 +1142,5 @@ function getFirstHeaderValue(
 }
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
-  // codeql[js/insufficient-password-hash] This hashes a high-entropy OAuth bearer token for lookup, not a user password.
-  return createHash("sha256").update(oauthAccessToken).digest("base64url");
+  return OAuthAccessTokenModel.hashTokenForLookup(oauthAccessToken);
 }

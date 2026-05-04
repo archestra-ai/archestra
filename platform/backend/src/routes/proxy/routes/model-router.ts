@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   hasArchestraTokenPrefix,
   LLM_PROXY_COMPATIBLE_OAUTH_SCOPES,
@@ -768,7 +767,7 @@ async function getModelRouterOAuthClientAuth(
   bearerToken: string,
 ): Promise<ModelRouterOAuthClientAuth | ModelRouterUserOAuthAuth> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
-    createHash("sha256").update(bearerToken).digest("base64url"),
+    OAuthAccessTokenModel.hashTokenForLookup(bearerToken),
   );
   if (!accessToken || accessToken.expiresAt < new Date()) {
     throw new ApiError(401, "Invalid LLM OAuth client access token.");

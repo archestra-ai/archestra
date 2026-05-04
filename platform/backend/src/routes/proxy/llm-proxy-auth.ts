@@ -5,7 +5,6 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { createHash } from "node:crypto";
 import {
   hasArchestraTokenPrefix,
   isSupportedProvider,
@@ -168,7 +167,7 @@ export async function validateLlmOAuthAccessToken(params: {
   agent: Agent;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
-    createHash("sha256").update(params.tokenValue).digest("base64url"),
+    OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
   );
   if (!accessToken) {
     return null;

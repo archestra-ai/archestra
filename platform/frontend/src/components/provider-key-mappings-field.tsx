@@ -42,11 +42,11 @@ export function ProviderKeyMappingsField({
   );
   const configuredMappings = useMemo(() => {
     return providerApiKeyMapToArray(providerApiKeyIds)
-      .map(({ provider, chatApiKeyId }) => {
+      .map(({ provider, providerApiKeyId }) => {
         const key = providerApiKeys.find(
-          (apiKey) => apiKey.id === chatApiKeyId,
+          (apiKey) => apiKey.id === providerApiKeyId,
         );
-        return { provider, chatApiKeyId, key };
+        return { provider, providerApiKeyId, key };
       })
       .sort((a, b) =>
         getProviderName(a.provider).localeCompare(getProviderName(b.provider)),
@@ -163,7 +163,7 @@ export function ProviderKeyMappingsField({
           </div>
         ) : (
           <div className="space-y-2">
-            {configuredMappings.map(({ provider, chatApiKeyId, key }) => {
+            {configuredMappings.map(({ provider, providerApiKeyId, key }) => {
               const config = PROVIDER_CONFIG[provider];
               return (
                 <div
@@ -180,7 +180,7 @@ export function ProviderKeyMappingsField({
                     />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">
-                        {key?.name ?? chatApiKeyId}
+                        {key?.name ?? providerApiKeyId}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {config.name}
@@ -209,17 +209,20 @@ export function ProviderKeyMappingsField({
 export function providerApiKeyMapToArray(providerApiKeyIds: ProviderApiKeyMap) {
   return Object.entries(providerApiKeyIds)
     .filter((entry): entry is [SupportedProvider, string] => Boolean(entry[1]))
-    .map(([provider, chatApiKeyId]) => ({ provider, chatApiKeyId }));
+    .map(([provider, providerApiKeyId]) => ({ provider, providerApiKeyId }));
 }
 
 export function providerApiKeyArrayToMap(
   providerApiKeys: Array<{
     provider: SupportedProvider;
-    chatApiKeyId: string;
+    providerApiKeyId: string;
   }>,
 ): ProviderApiKeyMap {
   return Object.fromEntries(
-    providerApiKeys.map((mapping) => [mapping.provider, mapping.chatApiKeyId]),
+    providerApiKeys.map((mapping) => [
+      mapping.provider,
+      mapping.providerApiKeyId,
+    ]),
   );
 }
 

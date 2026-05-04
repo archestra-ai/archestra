@@ -325,7 +325,9 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
     });
     const accessToken = "llm-provider-route-oauth-token";
     await OAuthAccessTokenModel.createClientCredentialsToken({
@@ -488,7 +490,7 @@ describe("OpenAI cost tracking", () => {
       name: "Unmapped Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
-        { provider: "anthropic", chatApiKeyId: providerKey.id },
+        { provider: "anthropic", providerApiKeyId: providerKey.id },
       ],
     });
     const accessToken = "llm-provider-route-unmapped-token";
@@ -546,7 +548,9 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Expired Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
     });
     const accessToken = "llm-provider-route-expired-token";
     await OAuthAccessTokenModel.createClientCredentialsToken({
@@ -603,7 +607,9 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Wrong Scope Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
     });
     const accessToken = "llm-provider-route-wrong-scope-token";
     await OAuthAccessTokenModel.createClientCredentialsToken({

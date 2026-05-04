@@ -17,14 +17,14 @@ const virtualApiKeyProviderApiKeysTable = pgTable(
       .notNull()
       .references(() => virtualApiKeysTable.id, { onDelete: "cascade" }),
     provider: text("provider").$type<SupportedProvider>().notNull(),
-    chatApiKeyId: uuid("chat_api_key_id")
+    providerApiKeyId: uuid("provider_api_key_id")
       .notNull()
       .references(() => llmProviderApiKeysTable.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.virtualApiKeyId, table.provider] }),
-    index("idx_virtual_api_key_provider_api_key_id").on(table.chatApiKeyId),
+    index("idx_virtual_api_key_provider_api_key_id").on(table.providerApiKeyId),
   ],
 );
 

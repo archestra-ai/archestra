@@ -22,7 +22,7 @@ describe("VirtualApiKeyModel", () => {
 
     const { virtualKey, value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Test Virtual Key",
     });
@@ -48,7 +48,7 @@ describe("VirtualApiKeyModel", () => {
     const futureDate = new Date(Date.now() + 86400_000);
     const { virtualKey } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Expiring Key",
       expiresAt: futureDate,
@@ -73,7 +73,7 @@ describe("VirtualApiKeyModel", () => {
 
     const { virtualKey, teams, authorName } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Team Virtual Key",
       scope: "team",
@@ -105,13 +105,13 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Key A",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Key B",
     });
@@ -143,7 +143,7 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Other Org Key",
       scope: "org",
@@ -175,7 +175,7 @@ describe("VirtualApiKeyModel", () => {
 
     const { virtualKey } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Find Me",
     });
@@ -207,7 +207,7 @@ describe("VirtualApiKeyModel", () => {
 
     const { virtualKey } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Delete Me",
     });
@@ -245,13 +245,13 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Key 1",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Key 2",
     });
@@ -276,7 +276,7 @@ describe("VirtualApiKeyModel", () => {
 
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Validate Me",
     });
@@ -316,13 +316,13 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Virtual A",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Virtual B",
     });
@@ -335,8 +335,8 @@ describe("VirtualApiKeyModel", () => {
     expect(result.data[0].providerApiKeys).toEqual([
       {
         provider: "anthropic",
-        chatApiKeyId: chatApiKey.id,
-        chatApiKeyName: "Parent Key",
+        providerApiKeyId: chatApiKey.id,
+        providerApiKeyName: "Parent Key",
       },
     ]);
     expect(result.data.map((r) => r.name)).toContain("Virtual A");
@@ -374,13 +374,13 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: anthropicKey.provider, chatApiKeyId: anthropicKey.id },
+        { provider: anthropicKey.provider, providerApiKeyId: anthropicKey.id },
       ],
       name: "Primary Virtual Key",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: openAiKey.provider, chatApiKeyId: openAiKey.id },
+        { provider: openAiKey.provider, providerApiKeyId: openAiKey.id },
       ],
       name: "Backup Virtual Key",
     });
@@ -397,8 +397,8 @@ describe("VirtualApiKeyModel", () => {
     expect(result.data[0].providerApiKeys).toEqual([
       {
         provider: "anthropic",
-        chatApiKeyId: anthropicKey.id,
-        chatApiKeyName: "Anthropic Parent",
+        providerApiKeyId: anthropicKey.id,
+        providerApiKeyName: "Anthropic Parent",
       },
     ]);
     expect(result.pagination.total).toBe(1);
@@ -418,13 +418,13 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Virtual%Key",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Virtual Alpha Key",
     });
@@ -459,14 +459,14 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Org Key",
       scope: "org",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "My Personal Key",
       scope: "personal",
@@ -474,7 +474,7 @@ describe("VirtualApiKeyModel", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Other Personal Key",
       scope: "personal",
@@ -482,7 +482,7 @@ describe("VirtualApiKeyModel", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "My Team Key",
       scope: "team",
@@ -491,7 +491,7 @@ describe("VirtualApiKeyModel", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Other Team Key",
       scope: "team",
@@ -532,14 +532,14 @@ describe("VirtualApiKeyModel", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Org Key",
       scope: "org",
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Other Personal Key",
       scope: "personal",
@@ -575,7 +575,7 @@ describe("VirtualApiKeyModel", () => {
 
     const { virtualKey } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "Before",
       scope: "personal",
@@ -590,7 +590,7 @@ describe("VirtualApiKeyModel", () => {
       authorId: user.id,
       teamIds: [team.id],
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
     });
 

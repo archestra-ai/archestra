@@ -104,7 +104,7 @@ class LlmOauthClientModel {
     );
     return clients.filter((client) =>
       client.providerApiKeys.some(
-        (mapping) => mapping.chatApiKeyId === params.providerApiKeyId,
+        (mapping) => mapping.providerApiKeyId === params.providerApiKeyId,
       ),
     );
   }
@@ -226,19 +226,21 @@ function compareClientSecret(secret: string, storedHash: string) {
 async function hydrateOauthClients(
   clients: Array<typeof schema.oauthClientsTable.$inferSelect>,
 ) {
-  const chatApiKeyIds = [
+  const providerApiKeyIds = [
     ...new Set(
       clients.flatMap((client) => {
         const metadata = LlmOauthClientMetadataSchema.safeParse(
           client.metadata,
         ).data;
         if (!metadata) return [];
-        return metadata.providerApiKeys.map((mapping) => mapping.chatApiKeyId);
+        return metadata.providerApiKeys.map(
+          (mapping) => mapping.providerApiKeyId,
+        );
       }),
     ),
   ];
   const apiKeyRows =
-    chatApiKeyIds.length > 0
+    providerApiKeyIds.length > 0
       ? await db
           .select({
             id: schema.llmProviderApiKeysTable.id,
@@ -246,7 +248,7 @@ async function hydrateOauthClients(
             provider: schema.llmProviderApiKeysTable.provider,
           })
           .from(schema.llmProviderApiKeysTable)
-          .where(inArray(schema.llmProviderApiKeysTable.id, chatApiKeyIds))
+          .where(inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds))
       : [];
   const apiKeyNames = new Map(apiKeyRows.map((row) => [row.id, row.name]));
 
@@ -264,8 +266,9 @@ async function hydrateOauthClients(
         allowedLlmProxyIds: metadata.allowedLlmProxyIds,
         providerApiKeys: metadata.providerApiKeys.map((mapping) => ({
           ...mapping,
-          chatApiKeyName:
-            apiKeyNames.get(mapping.chatApiKeyId) ?? mapping.chatApiKeyId,
+          providerApiKeyName:
+            apiKeyNames.get(mapping.providerApiKeyId) ??
+            mapping.providerApiKeyId,
         })),
         disabled: client.disabled ?? false,
         createdAt: client.createdAt,

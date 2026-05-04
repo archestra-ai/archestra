@@ -31850,8 +31850,8 @@ export type GetLlmOauthClientsResponses = {
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
+            providerApiKeyId: string;
+            providerApiKeyName: string;
         }>;
         disabled: boolean;
         createdAt: string;
@@ -31867,7 +31867,7 @@ export type CreateLlmOauthClientData = {
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
+            providerApiKeyId: string;
         }>;
     };
     path?: never;
@@ -31952,8 +31952,8 @@ export type CreateLlmOauthClientResponses = {
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
+            providerApiKeyId: string;
+            providerApiKeyName: string;
         }>;
         disabled: boolean;
         createdAt: string;
@@ -32055,7 +32055,7 @@ export type UpdateLlmOauthClientData = {
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
+            providerApiKeyId: string;
         }>;
     };
     path: {
@@ -32142,8 +32142,8 @@ export type UpdateLlmOauthClientResponses = {
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
+            providerApiKeyId: string;
+            providerApiKeyName: string;
         }>;
         disabled: boolean;
         createdAt: string;
@@ -32239,8 +32239,8 @@ export type RotateLlmOauthClientSecretResponses = {
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
+            providerApiKeyId: string;
+            providerApiKeyName: string;
         }>;
         disabled: boolean;
         createdAt: string;
@@ -45234,8 +45234,8 @@ export type GetAllVirtualApiKeysResponses = {
             authorName: string | null;
             providerApiKeys: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-                chatApiKeyId: string;
-                chatApiKeyName: string;
+                providerApiKeyId: string;
+                providerApiKeyName: string;
             }>;
         }>;
         pagination: {
@@ -45259,7 +45259,7 @@ export type CreateVirtualApiKeyData = {
         teams?: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
+            providerApiKeyId: string;
         }>;
     };
     path?: never;
@@ -45355,8 +45355,8 @@ export type CreateVirtualApiKeyResponses = {
         authorName: string | null;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
+            providerApiKeyId: string;
+            providerApiKeyName: string;
         }>;
     };
 };
@@ -45456,7 +45456,7 @@ export type UpdateVirtualApiKeyData = {
         teams?: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
+            providerApiKeyId: string;
         }>;
     };
     path: {
@@ -45553,8 +45553,8 @@ export type UpdateVirtualApiKeyResponses = {
         authorName: string | null;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
+            providerApiKeyId: string;
+            providerApiKeyName: string;
         }>;
     };
 };

@@ -552,7 +552,7 @@ function EditVirtualKeyDialog({
       Object.fromEntries(
         virtualKey.providerApiKeys.map((mapping) => [
           mapping.provider,
-          mapping.chatApiKeyId,
+          mapping.providerApiKeyId,
         ]),
       ),
     );

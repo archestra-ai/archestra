@@ -127,7 +127,7 @@ export async function validateVirtualApiKey(
       logger.warn(
         {
           virtualKeyId: resolved.virtualKey.id,
-          chatApiKeyId: mappedProviderKey.chatApiKeyId,
+          chatApiKeyId: mappedProviderKey.providerApiKeyId,
           secretId: mappedProviderKey.secretId,
         },
         "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
@@ -138,7 +138,7 @@ export async function validateVirtualApiKey(
   return {
     apiKey,
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
-    chatApiKeyId: mappedProviderKey.chatApiKeyId,
+    chatApiKeyId: mappedProviderKey.providerApiKeyId,
   };
 }
 
@@ -415,7 +415,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   }
 
   const providerApiKey = await LlmProviderApiKeyModel.findById(
-    mappedProviderKey.chatApiKeyId,
+    mappedProviderKey.providerApiKeyId,
   );
   if (!providerApiKey) {
     throw new ApiError(

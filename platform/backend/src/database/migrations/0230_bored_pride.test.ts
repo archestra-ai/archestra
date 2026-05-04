@@ -97,7 +97,7 @@ describe("0230 migration: proxy auth provider key mappings", () => {
     expect(mapping).toMatchObject({
       virtualApiKeyId: virtualKey.id,
       provider: "openai",
-      chatApiKeyId: providerKey.id,
+      providerApiKeyId: providerKey.id,
     });
 
     const [oauthClient] = await db
@@ -111,7 +111,7 @@ describe("0230 migration: proxy auth provider key mappings", () => {
       providerApiKeys: [
         {
           provider: "openai",
-          chatApiKeyId: providerKey.id,
+          providerApiKeyId: providerKey.id,
         },
       ],
     });

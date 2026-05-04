@@ -7,8 +7,8 @@ import {
 describe("provider key mapping helpers", () => {
   test("converts between array and map shapes", () => {
     const array = [
-      { provider: "openai" as const, chatApiKeyId: "openai-key" },
-      { provider: "anthropic" as const, chatApiKeyId: "anthropic-key" },
+      { provider: "openai" as const, providerApiKeyId: "openai-key" },
+      { provider: "anthropic" as const, providerApiKeyId: "anthropic-key" },
     ];
 
     const map = providerApiKeyArrayToMap(array);
@@ -28,6 +28,6 @@ describe("provider key mapping helpers", () => {
         openai: "openai-key",
         anthropic: "",
       }),
-    ).toEqual([{ provider: "openai", chatApiKeyId: "openai-key" }]);
+    ).toEqual([{ provider: "openai", providerApiKeyId: "openai-key" }]);
   });
 });

@@ -15,7 +15,7 @@ import {
 
 const LlmOauthClientProviderKeyBodySchema = z.object({
   provider: SupportedProvidersSchema,
-  chatApiKeyId: z.string().uuid(),
+  providerApiKeyId: z.string().uuid(),
 });
 
 const CreateLlmOauthClientBodySchema = z.object({
@@ -153,7 +153,7 @@ async function validateLlmOauthClientConfig(params: {
   allowedLlmProxyIds: string[];
   providerApiKeys: Array<{
     provider: z.infer<typeof SupportedProvidersSchema>;
-    chatApiKeyId: string;
+    providerApiKeyId: string;
   }>;
 }) {
   const seenProviders = new Set<string>();
@@ -179,7 +179,9 @@ async function validateLlmOauthClientConfig(params: {
   }
 
   for (const mapping of params.providerApiKeys) {
-    const apiKey = await LlmProviderApiKeyModel.findById(mapping.chatApiKeyId);
+    const apiKey = await LlmProviderApiKeyModel.findById(
+      mapping.providerApiKeyId,
+    );
     if (!apiKey || apiKey.organizationId !== params.organizationId) {
       throw new ApiError(404, "LLM provider API key not found");
     }

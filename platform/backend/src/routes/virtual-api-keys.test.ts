@@ -78,7 +78,7 @@ describe("virtualApiKeysRoutes", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
       name: "Org Visible",
       scope: "org",
@@ -86,7 +86,7 @@ describe("virtualApiKeysRoutes", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
       name: "My Personal",
       scope: "personal",
@@ -94,7 +94,7 @@ describe("virtualApiKeysRoutes", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
       name: "Other Personal",
       scope: "personal",
@@ -102,7 +102,7 @@ describe("virtualApiKeysRoutes", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
       name: "Team Visible",
       scope: "team",
@@ -111,7 +111,7 @@ describe("virtualApiKeysRoutes", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
       name: "Other Team Key",
       scope: "team",
@@ -120,7 +120,10 @@ describe("virtualApiKeysRoutes", () => {
     });
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: outsiderOrgKey.provider, chatApiKeyId: outsiderOrgKey.id },
+        {
+          provider: outsiderOrgKey.provider,
+          providerApiKeyId: outsiderOrgKey.id,
+        },
       ],
       name: "Different Org Key",
       scope: "org",
@@ -158,7 +161,7 @@ describe("virtualApiKeysRoutes", () => {
 
     await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
       ],
       name: "Admin Visible",
       scope: "org",
@@ -191,7 +194,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "Org Key",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
         scope: "org",
         teams: [],
@@ -228,7 +231,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "Team Key",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
         scope: "team",
         teams: [otherTeam.id],
@@ -260,7 +263,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "my-test-key",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -303,8 +306,8 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "router-key",
         providerApiKeys: [
-          { provider: "openai", chatApiKeyId: openaiKey.id },
-          { provider: "anthropic", chatApiKeyId: anthropicKey.id },
+          { provider: "openai", providerApiKeyId: openaiKey.id },
+          { provider: "anthropic", providerApiKeyId: anthropicKey.id },
         ],
       },
     });
@@ -314,13 +317,13 @@ describe("virtualApiKeysRoutes", () => {
       providerApiKeys: expect.arrayContaining([
         {
           provider: "openai",
-          chatApiKeyId: openaiKey.id,
-          chatApiKeyName: "OpenAI Parent",
+          providerApiKeyId: openaiKey.id,
+          providerApiKeyName: "OpenAI Parent",
         },
         {
           provider: "anthropic",
-          chatApiKeyId: anthropicKey.id,
-          chatApiKeyName: "Anthropic Parent",
+          providerApiKeyId: anthropicKey.id,
+          providerApiKeyName: "Anthropic Parent",
         },
       ]),
     });
@@ -344,7 +347,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "parentless-router-key",
-        providerApiKeys: [{ provider: "openai", chatApiKeyId: openaiKey.id }],
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: openaiKey.id },
+        ],
       },
     });
 
@@ -355,8 +360,8 @@ describe("virtualApiKeysRoutes", () => {
       providerApiKeys: [
         {
           provider: "openai",
-          chatApiKeyId: openaiKey.id,
-          chatApiKeyName: "OpenAI Router Key",
+          providerApiKeyId: openaiKey.id,
+          providerApiKeyName: "OpenAI Router Key",
         },
       ],
     });
@@ -405,8 +410,8 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "router-key",
         providerApiKeys: [
-          { provider: "openai", chatApiKeyId: firstKey.id },
-          { provider: "openai", chatApiKeyId: secondKey.id },
+          { provider: "openai", providerApiKeyId: firstKey.id },
+          { provider: "openai", providerApiKeyId: secondKey.id },
         ],
       },
     });
@@ -435,7 +440,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "router-key",
         providerApiKeys: [
-          { provider: "anthropic", chatApiKeyId: openaiKey.id },
+          { provider: "anthropic", providerApiKeyId: openaiKey.id },
         ],
       },
     });
@@ -463,7 +468,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "key-alpha",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -473,7 +478,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "key-beta",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -529,7 +534,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "org-list-key-1",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -539,7 +544,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "org-list-key-2",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -555,8 +560,8 @@ describe("virtualApiKeysRoutes", () => {
         name: string;
         providerApiKeys: Array<{
           provider: string;
-          chatApiKeyId: string;
-          chatApiKeyName: string;
+          providerApiKeyId: string;
+          providerApiKeyName: string;
         }>;
       }>;
       pagination: {
@@ -570,7 +575,7 @@ describe("virtualApiKeysRoutes", () => {
     };
     const listedKeys = body.data.filter((key) =>
       key.providerApiKeys.some(
-        (mapping) => mapping.chatApiKeyName === "Org Listing Parent",
+        (mapping) => mapping.providerApiKeyName === "Org Listing Parent",
       ),
     );
     expect(body.pagination.total).toBeGreaterThanOrEqual(2);
@@ -579,8 +584,8 @@ describe("virtualApiKeysRoutes", () => {
       expect(key.providerApiKeys).toEqual([
         {
           provider: "openai",
-          chatApiKeyId: parentKey.id,
-          chatApiKeyName: "Org Listing Parent",
+          providerApiKeyId: parentKey.id,
+          providerApiKeyName: "Org Listing Parent",
         },
       ]);
     }
@@ -603,7 +608,9 @@ describe("virtualApiKeysRoutes", () => {
       url: "/api/llm-virtual-keys",
       payload: {
         name: "router-only-list-key",
-        providerApiKeys: [{ provider: "openai", chatApiKeyId: openaiKey.id }],
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: openaiKey.id },
+        ],
       },
     });
 
@@ -620,8 +627,8 @@ describe("virtualApiKeysRoutes", () => {
           providerApiKeys: [
             {
               provider: "openai",
-              chatApiKeyId: openaiKey.id,
-              chatApiKeyName: "OpenAI Router Key",
+              providerApiKeyId: openaiKey.id,
+              providerApiKeyName: "OpenAI Router Key",
             },
           ],
         }),
@@ -646,7 +653,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "delete-me",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -694,7 +701,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "vk-for-keyless",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
       },
     });
@@ -722,7 +729,7 @@ describe("virtualApiKeysRoutes", () => {
       payload: {
         name: "expired-from-the-start",
         providerApiKeys: [
-          { provider: parentKey.provider, chatApiKeyId: parentKey.id },
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
         ],
         expiresAt: new Date(Date.now() - 60_000).toISOString(),
       },

@@ -5,7 +5,7 @@ export const LLM_OAUTH_CLIENT_METADATA_TYPE = "llm_oauth_client";
 
 export const LlmOauthClientProviderKeySchema = z.object({
   provider: SupportedProvidersSchema,
-  chatApiKeyId: z.string().uuid(),
+  providerApiKeyId: z.string().uuid(),
 });
 
 export const LlmOauthClientMetadataSchema = z.object({
@@ -23,7 +23,7 @@ export const LlmOauthClientSchema = z.object({
   allowedLlmProxyIds: z.array(z.string()),
   providerApiKeys: z.array(
     LlmOauthClientProviderKeySchema.extend({
-      chatApiKeyName: z.string(),
+      providerApiKeyName: z.string(),
     }),
   ),
   disabled: z.boolean(),
@@ -41,5 +41,5 @@ export type LlmOauthClientMetadata = z.infer<
 export type LlmOauthClient = z.infer<typeof LlmOauthClientSchema>;
 export type LlmOauthClientProviderKey = {
   provider: SupportedProvider;
-  chatApiKeyId: string;
+  providerApiKeyId: string;
 };

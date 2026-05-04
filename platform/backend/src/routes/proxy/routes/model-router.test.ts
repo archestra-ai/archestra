@@ -120,7 +120,7 @@ async function createModelRouterVirtualKey(params: {
     providerApiKeys: [
       {
         provider: params.provider,
-        chatApiKeyId: chatApiKey.id,
+        providerApiKeyId: chatApiKey.id,
       },
     ],
   });
@@ -626,7 +626,7 @@ describe("model router proxy routes", () => {
       providerApiKeys: [
         {
           provider,
-          chatApiKeyId: chatApiKey.id,
+          providerApiKeyId: chatApiKey.id,
         },
       ],
     });
@@ -869,7 +869,7 @@ describe("model router proxy routes", () => {
     });
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "regular-provider-vk",
     });
@@ -982,7 +982,9 @@ describe("model router proxy routes", () => {
       value,
     } = await VirtualApiKeyModel.create({
       name: "model-router-openai-vk",
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: chatApiKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: chatApiKey.id },
+      ],
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -1047,7 +1049,7 @@ describe("model router proxy routes", () => {
     });
     const { value } = await VirtualApiKeyModel.create({
       name: "model-router-gemini-system-vk",
-      providerApiKeys: [{ provider: "gemini", chatApiKeyId: systemKey.id }],
+      providerApiKeys: [{ provider: "gemini", providerApiKeyId: systemKey.id }],
     });
     const agent = await makeAgent({
       organizationId: organization.id,
@@ -1194,8 +1196,8 @@ describe("model router proxy routes", () => {
     const { value } = await VirtualApiKeyModel.create({
       name: "model-router-openai-groq-vk",
       providerApiKeys: [
-        { provider: "openai", chatApiKeyId: openaiKey.id },
-        { provider: "groq", chatApiKeyId: groqKey.id },
+        { provider: "openai", providerApiKeyId: openaiKey.id },
+        { provider: "groq", providerApiKeyId: groqKey.id },
       ],
     });
     const agent = await makeAgent({
@@ -1367,8 +1369,8 @@ describe("model router proxy routes", () => {
     const { value } = await VirtualApiKeyModel.create({
       name: "model-router-multi-vk",
       providerApiKeys: [
-        { provider: "openai", chatApiKeyId: openaiKey.id },
-        { provider: "groq", chatApiKeyId: groqKey.id },
+        { provider: "openai", providerApiKeyId: openaiKey.id },
+        { provider: "groq", providerApiKeyId: groqKey.id },
       ],
     });
 

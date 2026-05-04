@@ -58,7 +58,7 @@ describe("llmOauthClientsRoutes", () => {
         providerApiKeys: [
           {
             provider: "openai",
-            chatApiKeyId: apiKey.id,
+            providerApiKeyId: apiKey.id,
           },
         ],
       },
@@ -71,7 +71,7 @@ describe("llmOauthClientsRoutes", () => {
     expect(created.providerApiKeys).toMatchObject([
       {
         provider: "openai",
-        chatApiKeyId: apiKey.id,
+        providerApiKeyId: apiKey.id,
       },
     ]);
 
@@ -92,7 +92,7 @@ describe("llmOauthClientsRoutes", () => {
         providerApiKeys: [
           {
             provider: "openai",
-            chatApiKeyId: apiKey.id,
+            providerApiKeyId: apiKey.id,
           },
         ],
       },
@@ -105,7 +105,7 @@ describe("llmOauthClientsRoutes", () => {
       providerApiKeys: [
         {
           provider: "openai",
-          chatApiKeyId: apiKey.id,
+          providerApiKeyId: apiKey.id,
         },
       ],
     });
@@ -156,8 +156,8 @@ describe("llmOauthClientsRoutes", () => {
         name: "Duplicate Mapping Client",
         allowedLlmProxyIds: [agent.id],
         providerApiKeys: [
-          { provider: "openai", chatApiKeyId: firstKey.id },
-          { provider: "openai", chatApiKeyId: secondKey.id },
+          { provider: "openai", providerApiKeyId: firstKey.id },
+          { provider: "openai", providerApiKeyId: secondKey.id },
         ],
       },
     });

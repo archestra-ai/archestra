@@ -81,8 +81,8 @@ type OpenAiWireProvider = LLMProvider<
 
 type ModelRouterMappedProviderKey = {
   provider: SupportedProvider;
-  chatApiKeyId: string;
-  chatApiKeyName: string;
+  providerApiKeyId: string;
+  providerApiKeyName: string;
   secretId: string | null;
   baseUrl: string | null;
 };
@@ -743,7 +743,7 @@ async function applyModelRouterAuthOverride(params: {
   ).llmProxyAuthOverride = {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
-    chatApiKeyId: mappedApiKey.chatApiKeyId,
+    chatApiKeyId: mappedApiKey.providerApiKeyId,
     authenticated: true,
     source: "model_router",
     authMethod: params.auth.authMethod,
@@ -780,7 +780,7 @@ async function getModelRouterOAuthClientAuth(
   }
 
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
-    oauthClient.providerApiKeys.map((mapping) => mapping.chatApiKeyId),
+    oauthClient.providerApiKeys.map((mapping) => mapping.providerApiKeyId),
   );
   const providerApiKeysById = new Map(
     providerApiKeys.map((apiKey) => [apiKey.id, apiKey]),
@@ -797,7 +797,7 @@ async function getModelRouterOAuthClientAuth(
     },
     providerApiKeysByProvider: new Map(
       oauthClient.providerApiKeys.map((mapping) => {
-        const apiKey = providerApiKeysById.get(mapping.chatApiKeyId);
+        const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
         if (!apiKey) {
           throw new ApiError(
             401,
@@ -808,8 +808,8 @@ async function getModelRouterOAuthClientAuth(
           mapping.provider,
           {
             provider: mapping.provider,
-            chatApiKeyId: apiKey.id,
-            chatApiKeyName: apiKey.name,
+            providerApiKeyId: apiKey.id,
+            providerApiKeyName: apiKey.name,
             secretId: apiKey.secretId,
             baseUrl: apiKey.baseUrl,
           },
@@ -863,8 +863,8 @@ async function getModelRouterUserOAuthAuth(params: {
     }
     providerApiKeysByProvider.set(apiKey.provider, {
       provider: apiKey.provider,
-      chatApiKeyId: apiKey.id,
-      chatApiKeyName: apiKey.name,
+      providerApiKeyId: apiKey.id,
+      providerApiKeyName: apiKey.name,
       secretId: apiKey.secretId,
       baseUrl: apiKey.baseUrl,
     });

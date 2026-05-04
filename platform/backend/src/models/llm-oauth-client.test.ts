@@ -28,7 +28,7 @@ describe("LlmOauthClientModel", () => {
       providerApiKeys: [
         {
           provider: "anthropic",
-          chatApiKeyId: providerKey.id,
+          providerApiKeyId: providerKey.id,
         },
       ],
     });
@@ -41,8 +41,8 @@ describe("LlmOauthClientModel", () => {
     expect(result.oauthClient.providerApiKeys).toEqual([
       {
         provider: "anthropic",
-        chatApiKeyId: providerKey.id,
-        chatApiKeyName: "Primary Provider Key",
+        providerApiKeyId: providerKey.id,
+        providerApiKeyName: "Primary Provider Key",
       },
     ]);
 

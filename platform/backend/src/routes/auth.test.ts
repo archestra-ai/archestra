@@ -125,7 +125,9 @@ describe("auth routes", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
     });
 
     const response = await app.inject({
@@ -177,7 +179,9 @@ describe("auth routes", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
     });
 
     const response = await app.inject({
@@ -216,7 +220,9 @@ describe("auth routes", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
     });
 
     const response = await app.inject({

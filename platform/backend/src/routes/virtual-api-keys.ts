@@ -36,7 +36,7 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
     .array(
       z.object({
         provider: SupportedProvidersSchema,
-        chatApiKeyId: z.string().uuid(),
+        providerApiKeyId: z.string().uuid(),
       }),
     )
     .min(1, "At least one provider API key is required"),
@@ -354,7 +354,7 @@ async function validateVirtualKeyScope(params: {
 }
 
 async function validateProviderApiKeys(params: {
-  mappings: Array<{ provider: SupportedProvider; chatApiKeyId: string }>;
+  mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
 }): Promise<void> {
   const { mappings, organizationId } = params;
@@ -364,7 +364,7 @@ async function validateProviderApiKeys(params: {
 
   const providers = new Set<SupportedProvider>();
   const apiKeys = await LlmProviderApiKeyModel.findByIds(
-    mappings.map((mapping) => mapping.chatApiKeyId),
+    mappings.map((mapping) => mapping.providerApiKeyId),
   );
   const apiKeysById = new Map(apiKeys.map((apiKey) => [apiKey.id, apiKey]));
 
@@ -377,7 +377,7 @@ async function validateProviderApiKeys(params: {
     }
     providers.add(mapping.provider);
 
-    const apiKey = apiKeysById.get(mapping.chatApiKeyId);
+    const apiKey = apiKeysById.get(mapping.providerApiKeyId);
     if (!apiKey || apiKey.organizationId !== organizationId) {
       throw new ApiError(404, "LLM provider API key not found");
     }

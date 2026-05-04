@@ -28,10 +28,10 @@ const FORCE_DB = true;
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
   provider: SupportedProvider;
-  chatApiKeyId: string;
+  providerApiKeyId: string;
 };
 type ProviderApiKeyInfo = ProviderApiKeyInput & {
-  chatApiKeyName: string;
+  providerApiKeyName: string;
 };
 type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
   secretId: string | null;
@@ -238,7 +238,7 @@ class VirtualApiKeyModel {
           ),
         )
         .where(
-          eq(schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId, params),
+          eq(schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId, params),
         )
         .orderBy(schema.virtualApiKeysTable.createdAt);
     }
@@ -354,7 +354,7 @@ class VirtualApiKeyModel {
       )
       .where(
         eq(
-          schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId,
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
           providerApiKeyId,
         ),
       );
@@ -517,8 +517,9 @@ class VirtualApiKeyModel {
     const rows = await db
       .select({
         provider: schema.virtualApiKeyProviderApiKeysTable.provider,
-        chatApiKeyId: schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId,
-        chatApiKeyName: schema.llmProviderApiKeysTable.name,
+        providerApiKeyId:
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+        providerApiKeyName: schema.llmProviderApiKeysTable.name,
         secretId: schema.llmProviderApiKeysTable.secretId,
         baseUrl: schema.llmProviderApiKeysTable.baseUrl,
       })
@@ -526,7 +527,7 @@ class VirtualApiKeyModel {
       .innerJoin(
         schema.llmProviderApiKeysTable,
         eq(
-          schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId,
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
           schema.llmProviderApiKeysTable.id,
         ),
       )
@@ -563,14 +564,15 @@ class VirtualApiKeyModel {
         virtualApiKeyId:
           schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
         provider: schema.virtualApiKeyProviderApiKeysTable.provider,
-        chatApiKeyId: schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId,
-        chatApiKeyName: schema.llmProviderApiKeysTable.name,
+        providerApiKeyId:
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+        providerApiKeyName: schema.llmProviderApiKeysTable.name,
       })
       .from(schema.virtualApiKeyProviderApiKeysTable)
       .innerJoin(
         schema.llmProviderApiKeysTable,
         eq(
-          schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId,
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
           schema.llmProviderApiKeysTable.id,
         ),
       )
@@ -586,8 +588,8 @@ class VirtualApiKeyModel {
       const existing = result.get(row.virtualApiKeyId) ?? [];
       existing.push({
         provider: row.provider,
-        chatApiKeyId: row.chatApiKeyId,
-        chatApiKeyName: row.chatApiKeyName,
+        providerApiKeyId: row.providerApiKeyId,
+        providerApiKeyName: row.providerApiKeyName,
       });
       result.set(row.virtualApiKeyId, existing);
     }
@@ -651,7 +653,7 @@ class VirtualApiKeyModel {
               and(
                 ...conditions,
                 eq(
-                  schema.virtualApiKeyProviderApiKeysTable.chatApiKeyId,
+                  schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
                   providerApiKeyId,
                 ),
               ),
@@ -675,7 +677,7 @@ class VirtualApiKeyModel {
                 sql`, `,
               )})
               ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
-              ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.chat_api_key_id = ${providerApiKeyId})` : sql``}
+              ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
           `
         : null;
 
@@ -684,14 +686,14 @@ class VirtualApiKeyModel {
       FROM virtual_api_keys vak
       WHERE vak.scope = 'org'
         ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
-        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.chat_api_key_id = ${providerApiKeyId})` : sql``}
+        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
       UNION
       SELECT vak.id
       FROM virtual_api_keys vak
       WHERE vak.scope = 'personal'
         AND vak.author_id = ${userId}
         ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
-        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.chat_api_key_id = ${providerApiKeyId})` : sql``}
+        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
       ${teamAccessCondition ? sql`UNION ${teamAccessCondition}` : sql``}
     `);
 
@@ -801,7 +803,9 @@ async function getOrganizationIdForProviderKeys(
   const [providerKey] = await db
     .select({ organizationId: schema.llmProviderApiKeysTable.organizationId })
     .from(schema.llmProviderApiKeysTable)
-    .where(eq(schema.llmProviderApiKeysTable.id, firstProviderKey.chatApiKeyId))
+    .where(
+      eq(schema.llmProviderApiKeysTable.id, firstProviderKey.providerApiKeyId),
+    )
     .limit(1);
 
   return providerKey?.organizationId ?? null;
@@ -855,7 +859,7 @@ async function syncProviderApiKeys(params: {
     mappings.map((mapping) => ({
       virtualApiKeyId,
       provider: mapping.provider,
-      chatApiKeyId: mapping.chatApiKeyId,
+      providerApiKeyId: mapping.providerApiKeyId,
     })),
   );
 }

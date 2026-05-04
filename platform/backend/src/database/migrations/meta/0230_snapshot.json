@@ -8865,8 +8865,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "chat_api_key_id": {
-          "name": "chat_api_key_id",
+        "provider_api_key_id": {
+          "name": "provider_api_key_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -8884,7 +8884,7 @@
           "name": "idx_virtual_api_key_provider_api_key_id",
           "columns": [
             {
-              "expression": "chat_api_key_id",
+              "expression": "provider_api_key_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -8910,12 +8910,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "virtual_api_key_provider_api_key_chat_api_key_id_chat_api_keys_id_fk": {
-          "name": "virtual_api_key_provider_api_key_chat_api_key_id_chat_api_keys_id_fk",
+        "virtual_api_key_provider_api_key_provider_api_key_id_chat_api_keys_id_fk": {
+          "name": "virtual_api_key_provider_api_key_provider_api_key_id_chat_api_keys_id_fk",
           "tableFrom": "virtual_api_key_provider_api_key",
           "tableTo": "chat_api_keys",
           "columnsFrom": [
-            "chat_api_key_id"
+            "provider_api_key_id"
           ],
           "columnsTo": [
             "id"

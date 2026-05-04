@@ -11,8 +11,8 @@ const VirtualApiKeyTeamSchema = z.object({
 
 export const VirtualApiKeyProviderMappingSchema = z.object({
   provider: SupportedProvidersSchema,
-  chatApiKeyId: z.string().uuid(),
-  chatApiKeyName: z.string(),
+  providerApiKeyId: z.string().uuid(),
+  providerApiKeyName: z.string(),
 });
 
 export const SelectVirtualApiKeySchema = createSelectSchema(

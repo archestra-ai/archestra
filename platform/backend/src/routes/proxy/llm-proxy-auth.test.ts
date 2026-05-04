@@ -87,7 +87,7 @@ describe("validateVirtualApiKey", () => {
 
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "expired-key",
       expiresAt: new Date("2020-01-01"),
@@ -113,7 +113,7 @@ describe("validateVirtualApiKey", () => {
 
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "openai-key",
     });
@@ -138,7 +138,7 @@ describe("validateVirtualApiKey", () => {
 
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "valid-key",
     });
@@ -169,7 +169,7 @@ describe("validateVirtualApiKey", () => {
 
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: chatApiKey.provider, chatApiKeyId: chatApiKey.id },
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
       name: "key-with-base-url",
     });
@@ -191,7 +191,7 @@ describe("validateVirtualApiKey", () => {
     });
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: systemKey.provider, chatApiKeyId: systemKey.id },
+        { provider: systemKey.provider, providerApiKeyId: systemKey.id },
       ],
       name: "virtual-for-system-openai-key",
     });
@@ -215,7 +215,7 @@ describe("validateVirtualApiKey", () => {
 
     const { value } = await VirtualApiKeyModel.create({
       providerApiKeys: [
-        { provider: systemKey.provider, chatApiKeyId: systemKey.id },
+        { provider: systemKey.provider, providerApiKeyId: systemKey.id },
       ],
       name: "virtual-for-system-key",
     });

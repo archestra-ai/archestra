@@ -15,7 +15,7 @@ The LLM Proxy supports direct provider API keys, virtual API keys, OAuth access 
 | Method | Best for | Model Router | Notes |
 | --- | --- | --- | --- |
 | Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
-| Virtual API key | Generic OpenAI-compatible clients and individual developers | Yes | Works with clients that only support `baseURL` and `apiKey`. |
+| Virtual API key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
 | LLM OAuth client access token | Backend services, production apps, and external bots | Yes | Uses OAuth client credentials to issue short-lived bearer tokens. |
 | User OAuth access token | Custom apps acting for an individual user | Yes | Uses the authorization code flow with consent and the `llm:model-router` scope. |
 | JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |

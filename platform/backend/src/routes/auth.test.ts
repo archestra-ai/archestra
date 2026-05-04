@@ -108,6 +108,9 @@ describe("auth routes", () => {
     makeSecret,
   }) => {
     const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
+    });
     const agent = await makeAgent({
       organizationId: organization.id,
       agentType: "llm_proxy",
@@ -122,9 +125,7 @@ describe("auth routes", () => {
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
-      providerApiKeys: [
-        { provider: "openai", chatApiKeyId: providerKey.id },
-      ],
+      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
     });
 
     const response = await app.inject({
@@ -153,6 +154,87 @@ describe("auth routes", () => {
     expect(storedToken?.clientId).toBe(oauthClient.clientId);
     expect(storedToken?.userId).toBeNull();
     expect(storedToken?.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
+  });
+
+  test("rejects LLM OAuth client credentials with an invalid secret", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: "wrong-secret",
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid_client" });
+  });
+
+  test("rejects LLM OAuth client credentials without the proxy scope", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [{ provider: "openai", chatApiKeyId: providerKey.id }],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: "mcp",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "invalid_scope",
+      error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+    });
   });
 
   test("applies organization OAuth token lifetime to user LLM proxy token responses", async ({

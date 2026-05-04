@@ -36,7 +36,7 @@ This is the simplest approach but means the real provider key is sent with every
 
 ## Virtual API Keys
 
-Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` keys remain valid. The real provider keys never leave Archestra.
+Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra.
 
 ### Benefits
 

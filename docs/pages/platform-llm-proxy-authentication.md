@@ -88,7 +88,7 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
 
 LLM OAuth clients are registered clients that call LLM proxy endpoints with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a 1-hour access token, and uses that token as the proxy bearer token.
 
-Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling an LLM proxy.
+Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling an LLM proxy. See [Model Router Client Credentials](/docs/platform-model-router-client-credentials-example) for a complete service-app example.
 
 ### Managing OAuth Clients
 

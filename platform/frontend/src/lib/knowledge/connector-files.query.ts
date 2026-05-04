@@ -207,8 +207,8 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Max batch payload size in bytes (~7 MB to stay well under Next.js 10 MB middleware limit). */
-const MAX_BATCH_BYTES = 7 * 1024 * 1024;
+
+const MAX_BATCH_BYTES = 10 * 1024 * 1024;
 
 type EncodedFile = { name: string; mimeType: string; content: string };
 

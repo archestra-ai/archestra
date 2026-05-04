@@ -30,6 +30,7 @@ const nextConfig: NextConfig = {
     incomingRequests: true,
   },
   experimental: {
+    proxyClientMaxBodySize: "15mb",
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
   },
   httpAgentOptions: {

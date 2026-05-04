@@ -555,3 +555,100 @@ describe("ClusterRegistry concurrency", () => {
     expect(r1.clients.kubeConfig).toBe(r2.clients.kubeConfig);
   });
 });
+
+/**
+ * F3 — `resolveById` is the entry point used by `McpClient` to obtain a
+ * K8sClients bundle when it already knows the cluster id (taken from the
+ * descriptor returned by `K8sDeployment.httpEndpointDescriptor`). It MUST
+ * share the same cache as `resolveForServer` so we don't pay the kubeconfig
+ * decryption cost twice.
+ *
+ * Spec: platform/specs/cluster-fixes/F3-streamable-http-multi-cluster.md
+ */
+describe("ClusterRegistry F3: resolveById", () => {
+  test("returns a cached bundle on the second call (same kubeConfig instance)", async () => {
+    const { ClusterModel, shared } = await importMocks();
+    setupDefaultMocks(shared);
+
+    const cluster = makeCluster({
+      id: "cluster-team-eu",
+      name: "team-eu",
+      isDefault: false,
+      kubeconfigSecretId: null,
+      namespace: "team-eu-ns",
+      loadFromCluster: true,
+    });
+    vi.mocked(ClusterModel.getById).mockResolvedValue(cluster);
+
+    const { ClusterRegistry } = await importRegistry();
+    const registry = new ClusterRegistry();
+
+    const first = await registry.resolveById("cluster-team-eu");
+    const second = await registry.resolveById("cluster-team-eu");
+
+    expect(first.clusterId).toBe("cluster-team-eu");
+    expect(second.clusterId).toBe("cluster-team-eu");
+
+    // Same kubeConfig reference → cache hit on second call.
+    expect(first.clients.kubeConfig).toBe(second.clients.kubeConfig);
+    // buildKubeConfig must be called exactly once.
+    expect(shared.buildKubeConfig).toHaveBeenCalledTimes(1);
+  });
+
+  test("invalidate(clusterId) clears the cache for resolveById", async () => {
+    const { ClusterModel, shared } = await importMocks();
+    setupDefaultMocks(shared);
+
+    const cluster = makeCluster({
+      id: "cluster-team-eu",
+      name: "team-eu",
+      isDefault: false,
+      kubeconfigSecretId: null,
+      namespace: "team-eu-ns",
+      loadFromCluster: true,
+    });
+    vi.mocked(ClusterModel.getById).mockResolvedValue(cluster);
+
+    const { ClusterRegistry } = await importRegistry();
+    const registry = new ClusterRegistry();
+
+    await registry.resolveById("cluster-team-eu");
+    expect(shared.buildKubeConfig).toHaveBeenCalledTimes(1);
+
+    registry.invalidate("cluster-team-eu");
+
+    await registry.resolveById("cluster-team-eu");
+    expect(shared.buildKubeConfig).toHaveBeenCalledTimes(2);
+  });
+
+  test("resolveById and resolveForServer share the cache for the same cluster", async () => {
+    // Routing scenario: a deployment is built via resolveForServer,
+    // then later mcp-client looks it up by id. Should be a cache hit.
+    const { ClusterModel, shared } = await importMocks();
+    setupDefaultMocks(shared);
+
+    const cluster = makeCluster({
+      id: "cluster-team-eu",
+      name: "team-eu",
+      isDefault: false,
+      kubeconfigSecretId: null,
+      namespace: "team-eu-ns",
+      loadFromCluster: true,
+    });
+    vi.mocked(ClusterModel.getById).mockResolvedValue(cluster);
+
+    const { ClusterRegistry } = await importRegistry();
+    const registry = new ClusterRegistry();
+
+    // 1. resolve through the server-routing path
+    const fromServer = await registry.resolveForServer(
+      makeMcpServer({ clusterId: "cluster-team-eu" } as Partial<McpServer>),
+    );
+
+    // 2. then look up the same cluster by id directly
+    const fromId = await registry.resolveById("cluster-team-eu");
+
+    expect(fromId.clients.kubeConfig).toBe(fromServer.clients.kubeConfig);
+    expect(shared.buildKubeConfig).toHaveBeenCalledTimes(1);
+  });
+});

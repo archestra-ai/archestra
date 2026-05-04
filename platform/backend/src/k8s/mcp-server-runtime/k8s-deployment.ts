@@ -19,6 +19,7 @@ import {
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
+import type { Cluster, HttpEndpointDescriptor } from "@/types/cluster";
 import {
   customYamlToDeployment,
   resolvePlaceholders,
@@ -203,6 +204,22 @@ interface K8sDeploymentOptions {
   userConfigValues?: Record<string, string>;
   environmentValues?: Record<string, string>;
   k8sExec: Exec;
+  cluster?: Cluster;
+}
+
+/**
+ * Detect the env-fallback default cluster row — the platform's own cluster.
+ * The signature must match `ClusterRegistry.build` so that the routing
+ * decision in this module stays consistent with the kubeconfig source.
+ */
+function isPlatformClusterRow(cluster: Cluster | undefined): boolean {
+  if (!cluster) return true;
+  return (
+    cluster.name === "default" &&
+    cluster.kubeconfigSecretId === null &&
+    cluster.loadFromCluster === false &&
+    cluster.namespace === null
+  );
 }
 
 /**
@@ -232,11 +249,14 @@ export default class K8sDeployment {
   private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
   private environmentValues?: Record<string, string>;
+  private cluster?: Cluster;
 
   // Track assigned port for HTTP-based MCP servers
   assignedHttpPort?: number;
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
+  // Track the structured HTTP endpoint descriptor (direct or k8s-api-proxy)
+  httpEndpointDescriptor?: HttpEndpointDescriptor;
 
   constructor(options: K8sDeploymentOptions) {
     this.mcpServer = options.mcpServer;
@@ -249,6 +269,7 @@ export default class K8sDeployment {
     this.catalogItem = options.catalogItem;
     this.userConfigValues = options.userConfigValues;
     this.environmentValues = options.environmentValues;
+    this.cluster = options.cluster;
     this.deploymentName = K8sDeployment.constructDeploymentName(
       options.mcpServer,
       options.catalogItem,
@@ -1444,22 +1465,42 @@ export default class K8sDeployment {
     const httpPort = catalogItem?.localConfig?.httpPort || 8080;
     const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
     const configuredNodePort = catalogItem?.localConfig?.nodePort;
+    const serviceName = this.constructHttpServiceName();
 
     // Ensure Service exists (pass fixed nodePort if configured)
     await this.createServiceForHttpServer(httpPort, configuredNodePort);
+
+    // External (non-platform) cluster: tunnel through the K8s API server proxy.
+    // Direct service DNS / NodePort routing only works for the platform's own
+    // cluster, so for any cluster the admin registered explicitly we surface a
+    // descriptor and let the MCP client fetch through the kube API.
+    if (!isPlatformClusterRow(this.cluster)) {
+      this.httpEndpointUrl = undefined;
+      this.httpEndpointDescriptor = {
+        kind: "k8s-api-proxy",
+        clusterId: this.cluster!.id,
+        namespace: this.namespace,
+        serviceName,
+        port: httpPort,
+        path: httpPath,
+      };
+      logger.info(
+        { mcpServerId: this.mcpServer.id, clusterId: this.cluster!.id },
+        `HTTP endpoint for ${this.deploymentName} resolved as k8s-api-proxy descriptor`,
+      );
+      return;
+    }
 
     // Resolve HTTP Endpoint URL
     let baseUrl: string;
     if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
       // In-cluster: use service DNS name
-      const serviceName = this.constructHttpServiceName();
       baseUrl = `http://${serviceName}.${this.namespace}.svc.${config.orchestrator.kubernetes.clusterDomain}:${httpPort}`;
     } else if (configuredNodePort) {
       // Local dev with fixed nodePort: use it directly (no need to read from service)
       baseUrl = `http://${config.orchestrator.kubernetes.k8sNodeHost || "localhost"}:${configuredNodePort}`;
     } else {
       // Local dev: get NodePort from service
-      const serviceName = this.constructHttpServiceName();
       try {
         const service = await this.k8sApi.readNamespacedService({
           name: serviceName,
@@ -1483,6 +1524,10 @@ export default class K8sDeployment {
 
     // Set the endpoint URL
     this.httpEndpointUrl = `${baseUrl}${httpPath}`;
+    this.httpEndpointDescriptor = {
+      kind: "direct",
+      url: this.httpEndpointUrl,
+    };
 
     logger.info(
       `HTTP endpoint URL for ${this.deploymentName}: ${this.httpEndpointUrl}`,
@@ -1664,6 +1709,10 @@ export default class K8sDeployment {
    * Helper to find the running pod for this deployment
    */
   private async findPodForDeployment(): Promise<k8s.V1Pod | undefined> {
+    return this.findRunningPodForDeployment();
+  }
+
+  private async findRunningPodForDeployment(): Promise<k8s.V1Pod | undefined> {
     try {
       const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
       const pods = await this.k8sApi.listNamespacedPod({
@@ -2848,27 +2897,55 @@ export default class K8sDeployment {
   }
 
   /**
-   * Get an HTTP endpoint URL pinned to the currently running pod.
+   * Get an HTTP endpoint pinned to the currently running pod.
    * Useful for sticky session resumption in multi-replica streamable-http deployments.
+   *
+   * For the platform's own cluster, returns a podIP-based URL.
+   * For external clusters, returns a `k8s-api-proxy` descriptor with `podName`
+   * — pod IP routing is unreachable from the platform cluster.
    */
   async getRunningPodHttpEndpoint(): Promise<
-    { endpointUrl: string; podName: string } | undefined
+    | {
+        endpointUrl?: string;
+        endpointDescriptor?: HttpEndpointDescriptor;
+        podName: string;
+      }
+    | undefined
   > {
     const needsHttp = await this.needsHttpPort();
     if (!needsHttp) {
       return undefined;
     }
 
-    const pod = await this.findPodForDeployment();
-    const podIp = pod?.status?.podIP;
+    const pod = await this.findRunningPodForDeployment();
     const podName = pod?.metadata?.name;
-    if (!podIp || !podName) {
+    if (!podName) {
       return undefined;
     }
 
     const catalogItem = await this.getCatalogItem();
     const httpPort = catalogItem?.localConfig?.httpPort || 8080;
     const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+
+    if (!isPlatformClusterRow(this.cluster)) {
+      return {
+        endpointDescriptor: {
+          kind: "k8s-api-proxy",
+          clusterId: this.cluster!.id,
+          namespace: this.namespace,
+          serviceName: this.constructHttpServiceName(),
+          port: httpPort,
+          path: httpPath,
+          podName,
+        },
+        podName,
+      };
+    }
+
+    const podIp = pod?.status?.podIP;
+    if (!podIp) {
+      return undefined;
+    }
 
     return {
       endpointUrl: `http://${podIp}:${httpPort}${httpPath}`,
@@ -2877,10 +2954,19 @@ export default class K8sDeployment {
   }
 
   /**
-   * Get the HTTP endpoint URL for streamable-http servers
+   * Get the HTTP endpoint URL for streamable-http servers.
+   * Only meaningful for `kind: "direct"` descriptors — proxy descriptors
+   * have no flat URL, so this returns undefined for them.
    */
   getHttpEndpointUrl(): string | undefined {
     return this.httpEndpointUrl;
+  }
+
+  /**
+   * Get the structured HTTP endpoint descriptor (direct or k8s-api-proxy).
+   */
+  getHttpEndpointDescriptor(): HttpEndpointDescriptor | undefined {
+    return this.httpEndpointDescriptor;
   }
 
   /**

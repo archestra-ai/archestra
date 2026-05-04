@@ -16,6 +16,7 @@ type K8sClientsBundle = {
   clients: K8sClients;
   namespace: string;
   clusterId: string;
+  cluster: Cluster;
 };
 
 export class ClusterRegistry {
@@ -24,6 +25,20 @@ export class ClusterRegistry {
 
   async resolveForServer(mcpServer: McpServer): Promise<K8sClientsBundle> {
     const cluster = await this.pickClusterForServer(mcpServer);
+    return this.getOrBuild(cluster);
+  }
+
+  async resolveById(clusterId: string): Promise<K8sClientsBundle> {
+    const cached = this.cache.get(clusterId);
+    if (cached) return cached;
+
+    const inFlight = this.inFlight.get(clusterId);
+    if (inFlight) return inFlight;
+
+    const cluster = await ClusterModel.getById(clusterId);
+    if (!cluster) {
+      throw new Error(`cluster ${clusterId} not found`);
+    }
     return this.getOrBuild(cluster);
   }
 
@@ -98,6 +113,7 @@ export class ClusterRegistry {
         clients: createK8sClients(kubeConfig, namespace),
         namespace,
         clusterId: cluster.id,
+        cluster,
       };
     }
 
@@ -128,6 +144,7 @@ export class ClusterRegistry {
       clients: createK8sClients(kubeConfig, namespace),
       namespace,
       clusterId: cluster.id,
+      cluster,
     };
   }
 }

@@ -24,6 +24,18 @@ export type Cluster = z.infer<typeof SelectClusterSchema>;
 export type InsertClusterInput = z.input<typeof InsertClusterInputSchema>;
 export type UpdateClusterInput = z.input<typeof UpdateClusterInputSchema>;
 
+export type HttpEndpointDescriptor =
+  | { kind: "direct"; url: string }
+  | {
+      kind: "k8s-api-proxy";
+      clusterId: string;
+      namespace: string;
+      serviceName: string;
+      port: number;
+      path: string;
+      podName?: string;
+    };
+
 export class ClusterInUseError extends Error {
   count: number;
 

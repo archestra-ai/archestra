@@ -12,6 +12,7 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { McpServer } from "@/types";
+import type { HttpEndpointDescriptor } from "@/types/cluster";
 import { type ClusterRegistry, clusterRegistry } from "./cluster-registry";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
@@ -287,6 +288,7 @@ export class McpServerRuntimeManager {
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
         k8sExec: bundle.clients.exec,
+        cluster: bundle.cluster,
       });
 
       // Register the deployment BEFORE starting it
@@ -457,6 +459,7 @@ export class McpServerRuntimeManager {
         namespace: bundle.namespace,
         catalogItem,
         k8sExec: bundle.clients.exec,
+        cluster: bundle.cluster,
       });
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
@@ -570,24 +573,46 @@ export class McpServerRuntimeManager {
   }
 
   /**
-   * Get the HTTP endpoint URL for a streamable-http server
+   * Get the HTTP endpoint URL for a streamable-http server.
+   * Only returns a URL for `kind: "direct"` descriptors — proxy descriptors
+   * have no flat URL.
    */
   async getHttpEndpointUrl(mcpServerId: string): Promise<string | undefined> {
-    // Try to get from memory first, or lazy-load from database
+    const descriptor = await this.getHttpEndpointDescriptor(mcpServerId);
+    if (descriptor?.kind === "direct") {
+      return descriptor.url;
+    }
+    return undefined;
+  }
+
+  /**
+   * Get the structured HTTP endpoint descriptor for a streamable-http server.
+   */
+  async getHttpEndpointDescriptor(
+    mcpServerId: string,
+  ): Promise<HttpEndpointDescriptor | undefined> {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       return undefined;
     }
-    return k8sDeployment.getHttpEndpointUrl();
+    return k8sDeployment.getHttpEndpointDescriptor();
   }
 
   /**
-   * Get a pod-pinned HTTP endpoint URL for streamable-http servers.
-   * This helps preserve MCP sessions when multiple MCP server replicas are running.
+   * Get a pod-pinned HTTP endpoint for streamable-http servers.
+   * For platform clusters returns `endpointUrl` (podIP-based); for external
+   * clusters returns `endpointDescriptor` (k8s-api-proxy with podName).
    */
   async getRunningPodHttpEndpoint(
     mcpServerId: string,
-  ): Promise<{ endpointUrl: string; podName: string } | undefined> {
+  ): Promise<
+    | {
+        endpointUrl?: string;
+        endpointDescriptor?: HttpEndpointDescriptor;
+        podName: string;
+      }
+    | undefined
+  > {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       return undefined;

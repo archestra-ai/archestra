@@ -28,7 +28,11 @@ import {
 import QuickLRU from "quick-lru";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { buildProxyFetch, buildProxyUrl } from "@/k8s/api-proxy";
+import {
+  clusterRegistry,
+  McpServerRuntimeManager,
+} from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
   InternalMcpCatalogModel,
@@ -1493,9 +1497,22 @@ class McpClient {
   ): Promise<Transport> {
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
-        const url =
-          await McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
-        if (!url) {
+        let descriptor =
+          await McpServerRuntimeManager.getHttpEndpointDescriptor(
+            targetMcpServerId,
+          );
+        if (!descriptor) {
+          // Backward-compat fallback for callers (and test setups) that only
+          // expose getHttpEndpointUrl.
+          const legacyUrl =
+            await McpServerRuntimeManager.getHttpEndpointUrl(
+              targetMcpServerId,
+            );
+          if (legacyUrl) {
+            descriptor = { kind: "direct", url: legacyUrl };
+          }
+        }
+        if (!descriptor) {
           throw new Error(
             "No HTTP endpoint URL found for streamable-http server",
           );
@@ -1505,13 +1522,20 @@ class McpClient {
         // In multi-replica MCP server deployments, we must resume sessions
         // against the same pod endpoint where the session was created.
         let sessionId: string | undefined;
-        let endpointUrl = url;
+        let endpointUrl =
+          descriptor.kind === "direct" ? descriptor.url : undefined;
+        let podPinnedDescriptor:
+          | Extract<typeof descriptor, { kind: "k8s-api-proxy" }>
+          | undefined;
         let sessionEndpointPodName: string | null = null;
+
         if (connectionKey) {
           const stored =
             await McpHttpSessionModel.findRecordByConnectionKey(connectionKey);
           if (stored) {
             sessionId = stored.sessionId;
+            // sessionEndpointUrl is opaque storage — for proxy descriptors it
+            // already contains the proxy URL (with podName variant when pinned).
             endpointUrl = stored.sessionEndpointUrl || endpointUrl;
             sessionEndpointPodName = stored.sessionEndpointPodName;
             logger.debug(
@@ -1523,23 +1547,24 @@ class McpClient {
               },
               "Using stored MCP HTTP session metadata",
             );
-          } else if (
-            config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
-          ) {
+          } else {
             const runningPodEndpoint =
               await McpServerRuntimeManager.getRunningPodHttpEndpoint(
                 targetMcpServerId,
               );
             if (runningPodEndpoint) {
-              endpointUrl = runningPodEndpoint.endpointUrl;
-              sessionEndpointPodName = runningPodEndpoint.podName;
+              if (runningPodEndpoint.endpointDescriptor?.kind === "k8s-api-proxy") {
+                podPinnedDescriptor = runningPodEndpoint.endpointDescriptor;
+                sessionEndpointPodName = runningPodEndpoint.podName;
+              } else if (
+                runningPodEndpoint.endpointUrl &&
+                config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
+              ) {
+                endpointUrl = runningPodEndpoint.endpointUrl;
+                sessionEndpointPodName = runningPodEndpoint.podName;
+              }
             }
           }
-
-          this.pendingHttpSessionMetadata.set(connectionKey, {
-            sessionEndpointUrl: endpointUrl,
-            sessionEndpointPodName,
-          });
         }
 
         const localHeaders = buildStaticCredentialHeaders({
@@ -1560,6 +1585,70 @@ class McpClient {
         }
 
         mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
+
+        // k8s-api-proxy branch: tunnel through the kube API server proxy of
+        // the target cluster. Authentication and TLS material come from the
+        // cluster's kubeconfig; the upstream MCP server's Authorization is
+        // dropped (the inner pod is reached via cluster-internal trust).
+        const proxyDescriptor = podPinnedDescriptor ?? (
+          descriptor.kind === "k8s-api-proxy" ? descriptor : undefined
+        );
+
+        if (proxyDescriptor) {
+          const bundle = await clusterRegistry.resolveById(
+            proxyDescriptor.clusterId,
+          );
+          const kubeApiHost =
+            bundle.clients.kubeConfig.getCurrentCluster()?.server;
+          if (!kubeApiHost) {
+            throw new Error(
+              `No kube API server URL for cluster ${proxyDescriptor.clusterId}`,
+            );
+          }
+
+          // Prefer stored session URL when present (sticky pod pinning across
+          // reconnects); fall back to building from the descriptor.
+          const proxyUrl =
+            endpointUrl ??
+            buildProxyUrl({
+              kubeApiHost,
+              namespace: proxyDescriptor.namespace,
+              serviceName: proxyDescriptor.serviceName,
+              podName: proxyDescriptor.podName,
+              port: proxyDescriptor.port,
+              path: proxyDescriptor.path,
+            });
+
+          const customFetch = buildProxyFetch({
+            kubeConfig: bundle.clients.kubeConfig,
+          });
+
+          if (connectionKey) {
+            this.pendingHttpSessionMetadata.set(connectionKey, {
+              sessionEndpointUrl: proxyUrl,
+              sessionEndpointPodName,
+            });
+          }
+
+          return new StreamableHTTPClientTransport(new URL(proxyUrl), {
+            sessionId,
+            requestInit: { headers: new Headers(localHeaders) },
+            fetch: customFetch,
+          });
+        }
+
+        if (!endpointUrl) {
+          throw new Error(
+            "No HTTP endpoint URL found for streamable-http server",
+          );
+        }
+
+        if (connectionKey) {
+          this.pendingHttpSessionMetadata.set(connectionKey, {
+            sessionEndpointUrl: endpointUrl,
+            sessionEndpointPodName,
+          });
+        }
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,

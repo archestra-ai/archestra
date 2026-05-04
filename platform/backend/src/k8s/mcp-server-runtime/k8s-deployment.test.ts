@@ -5178,3 +5178,277 @@ describe("K8sDeployment.streamLogs", () => {
     expect(k8sLogMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * F3 — Streamable-HTTP routing for non-platform clusters via Kubernetes
+ * API server proxy.
+ *
+ * Contract (from spec):
+ *   K8sDeployment.httpEndpointDescriptor: HttpEndpointDescriptor | undefined
+ *
+ *   - platform cluster (env-fallback default): kind === "direct", URL set
+ *     as today (httpEndpointUrl ALSO set).
+ *   - external cluster (anything else): kind === "k8s-api-proxy",
+ *     httpEndpointUrl is undefined.
+ *
+ *   The platform cluster is detected from the `Cluster` row associated
+ *   with the deployment, NOT from a global env-var. The cluster row is
+ *   threaded into K8sDeploymentOptions so each deployment knows which
+ *   cluster it lives on.
+ *
+ * Spec: platform/specs/cluster-fixes/F3-streamable-http-multi-cluster.md
+ *
+ * RED phase note: `httpEndpointDescriptor` does not exist on K8sDeployment
+ * yet, and the constructor does not accept a `cluster` option. We use
+ * `as any` casts so TypeScript stops complaining and the runtime check
+ * is what fails.
+ */
+describe("K8sDeployment F3: httpEndpointDescriptor", () => {
+  type ClusterRow = {
+    id: string;
+    name: string;
+    namespace: string | null;
+    kubeconfigSecretId: string | null;
+    loadFromCluster: boolean;
+    isDefault: boolean;
+    isPersonalDefault: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+
+  function makeClusterRow(overrides: Partial<ClusterRow> = {}): ClusterRow {
+    return {
+      id: "cluster-default",
+      name: "default",
+      namespace: null,
+      kubeconfigSecretId: null,
+      loadFromCluster: false,
+      isDefault: true,
+      isPersonalDefault: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    };
+  }
+
+  function buildHttpDeployment(opts?: {
+    cluster?: ClusterRow;
+    namespace?: string;
+  }): K8sDeployment {
+    const mcpServer = {
+      id: "http-server-id",
+      name: "http-server",
+      catalogId: "catalog-http",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    const mockReadService = vi.fn().mockRejectedValue({ statusCode: 404 });
+    const mockCreateService = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      readNamespacedService: mockReadService,
+      createNamespacedService: mockCreateService,
+    } as unknown as k8s.CoreV1Api;
+
+    const ctorOpts: Record<string, unknown> = {
+      mcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: opts?.namespace ?? "default",
+      catalogItem: null,
+    };
+    if (opts?.cluster) {
+      ctorOpts.cluster = opts.cluster;
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: Constructor option `cluster` is added by F3 GREEN
+    const deployment = new K8sDeployment(ctorOpts as any);
+
+    // biome-ignore lint/suspicious/noExplicitAny: Set catalogItem like the surrounding cluster-domain tests do.
+    (deployment as any).catalogItem = {
+      id: "catalog-http",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    };
+
+    return deployment;
+  }
+
+  test("test #1 — env-fallback default cluster row → kind: 'direct', legacy URL preserved", async () => {
+    const originalLoadFromCluster =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalClusterDomain = config.orchestrator.kubernetes.clusterDomain;
+
+    try {
+      // The env-fallback default profile (per F3 spec):
+      //   name === "default" && kubeconfigSecretId === null &&
+      //   loadFromCluster === false && namespace === null
+      const platformClusterRow = makeClusterRow({
+        id: "platform-cluster",
+        name: "default",
+        namespace: null,
+        kubeconfigSecretId: null,
+        loadFromCluster: false,
+        isDefault: true,
+      });
+
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+      config.orchestrator.kubernetes.clusterDomain = "cluster.local";
+
+      const deployment = buildHttpDeployment({
+        cluster: platformClusterRow,
+      });
+
+      // biome-ignore lint/suspicious/noExplicitAny: private method
+      await (deployment as any).ensureHttpServerConfigured();
+
+      // Legacy URL still produced — direct branch.
+      expect(deployment.httpEndpointUrl).toBe(
+        "http://mcp-http-server-service.default.svc.cluster.local:8080/mcp",
+      );
+
+      // New descriptor present and tagged "direct".
+      // biome-ignore lint/suspicious/noExplicitAny: F3 RED — field not yet declared
+      const descriptor = (deployment as any).httpEndpointDescriptor;
+      expect(descriptor).toBeDefined();
+      expect(descriptor.kind).toBe("direct");
+      expect(descriptor.url).toBe(
+        "http://mcp-http-server-service.default.svc.cluster.local:8080/mcp",
+      );
+    } finally {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalLoadFromCluster;
+      config.orchestrator.kubernetes.clusterDomain = originalClusterDomain;
+    }
+  });
+
+  test("test #2 — kubeconfigSecretId set → kind: 'k8s-api-proxy', httpEndpointUrl undefined", async () => {
+    const originalLoadFromCluster =
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+    const originalClusterDomain = config.orchestrator.kubernetes.clusterDomain;
+
+    try {
+      const externalCluster = makeClusterRow({
+        id: "cluster-team-eu",
+        name: "team-eu",
+        namespace: "team-eu-ns",
+        kubeconfigSecretId: "secret-abc",
+        loadFromCluster: false,
+        isDefault: false,
+        isPersonalDefault: false,
+      });
+
+      // Note: even if env-vars say loadFromCluster=true, the per-row
+      // cluster object is what determines the descriptor branch.
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = true;
+      config.orchestrator.kubernetes.clusterDomain = "cluster.local";
+
+      const deployment = buildHttpDeployment({
+        cluster: externalCluster,
+        namespace: "team-eu-ns",
+      });
+
+      // biome-ignore lint/suspicious/noExplicitAny: private method
+      await (deployment as any).ensureHttpServerConfigured();
+
+      // External cluster → no legacy URL (it has no meaning outside the proxy fetch context).
+      expect(deployment.httpEndpointUrl).toBeUndefined();
+
+      // biome-ignore lint/suspicious/noExplicitAny: F3 RED — field not yet declared
+      const descriptor = (deployment as any).httpEndpointDescriptor;
+      expect(descriptor).toBeDefined();
+      expect(descriptor.kind).toBe("k8s-api-proxy");
+      expect(descriptor.clusterId).toBe("cluster-team-eu");
+      expect(descriptor.namespace).toBe("team-eu-ns");
+      expect(descriptor.serviceName).toBe("mcp-http-server-service");
+      expect(descriptor.port).toBe(8080);
+      expect(descriptor.path).toBe("/mcp");
+      // Service-level descriptor: no podName.
+      expect(descriptor.podName).toBeUndefined();
+    } finally {
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster =
+        originalLoadFromCluster;
+      config.orchestrator.kubernetes.clusterDomain = originalClusterDomain;
+    }
+  });
+
+  test("test #3 — getRunningPodHttpEndpoint on external cluster → returns proxy-pod descriptor with podName", async () => {
+    const externalCluster = makeClusterRow({
+      id: "cluster-team-eu",
+      name: "team-eu",
+      namespace: "team-eu-ns",
+      kubeconfigSecretId: "secret-abc",
+      loadFromCluster: false,
+      isDefault: false,
+    });
+
+    const deployment = buildHttpDeployment({
+      cluster: externalCluster,
+      namespace: "team-eu-ns",
+    });
+
+    // The deployment must be configured first so we know serviceName/port/path.
+    // biome-ignore lint/suspicious/noExplicitAny: private method
+    await (deployment as any).ensureHttpServerConfigured();
+
+    // Stub findRunningPodForDeployment / equivalent so getRunningPodHttpEndpoint
+    // doesn't reach into the live K8s API. The exact private name we need
+    // varies by implementation — patching at multiple plausible names is safe.
+    const fakePodName = "mcp-http-server-deadbeef";
+    const fakePodIp = "10.42.13.7";
+    const fakePod = {
+      metadata: { name: fakePodName },
+      status: { podIP: fakePodIp, phase: "Running" },
+    };
+    for (const candidate of [
+      "findRunningPodForDeployment",
+      "getRunningPod",
+      "findReadyPod",
+      "getReadyPodWithIp",
+      "findRunningPodWithIp",
+    ]) {
+      // biome-ignore lint/suspicious/noExplicitAny: private method patch
+      if (typeof (deployment as any)[candidate] === "function") {
+        // biome-ignore lint/suspicious/noExplicitAny: private method patch
+        vi.spyOn(deployment as any, candidate).mockResolvedValue(fakePod);
+      }
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: method may be private
+    const result = await (deployment as any).getRunningPodHttpEndpoint();
+
+    // External cluster → must return a descriptor (not a bare endpointUrl).
+    expect(result).toBeDefined();
+    expect(result.podName).toBe(fakePodName);
+
+    // Descriptor branch: pod-proxy URL components.
+    const descriptor = result.endpointDescriptor;
+    expect(descriptor).toBeDefined();
+    expect(descriptor.kind).toBe("k8s-api-proxy");
+    expect(descriptor.clusterId).toBe("cluster-team-eu");
+    expect(descriptor.namespace).toBe("team-eu-ns");
+    expect(descriptor.port).toBe(8080);
+    expect(descriptor.path).toBe("/mcp");
+    expect(descriptor.podName).toBe(fakePodName);
+
+    // The endpointUrl bare string MUST NOT be a podIP-based URL on external
+    // clusters — the platform cannot reach foreign pod IPs directly.
+    if (typeof result.endpointUrl === "string") {
+      expect(result.endpointUrl).not.toContain(fakePodIp);
+    }
+  });
+});

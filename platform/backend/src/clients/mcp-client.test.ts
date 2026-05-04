@@ -58,21 +58,33 @@ vi.mock(
 const {
   mockUsesStreamableHttp,
   mockGetHttpEndpointUrl,
+  mockGetHttpEndpointDescriptor,
   mockGetRunningPodHttpEndpoint,
   mockGetOrLoadDeployment,
+  mockResolveById,
 } = vi.hoisted(() => ({
   mockUsesStreamableHttp: vi.fn(),
   mockGetHttpEndpointUrl: vi.fn(),
+  mockGetHttpEndpointDescriptor: vi.fn(),
   mockGetRunningPodHttpEndpoint: vi.fn(),
   mockGetOrLoadDeployment: vi.fn(),
+  mockResolveById: vi.fn(),
 }));
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
+    getHttpEndpointDescriptor: mockGetHttpEndpointDescriptor,
     getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
     getOrLoadDeployment: mockGetOrLoadDeployment,
+  },
+  ClusterRegistry: class FakeClusterRegistry {
+    resolveById = mockResolveById;
+  },
+  // Singleton-style export — some files reach for `clusterRegistry` directly.
+  clusterRegistry: {
+    resolveById: mockResolveById,
   },
 }));
 
@@ -4848,6 +4860,462 @@ describe("McpClient", () => {
         expect(result.structuredContent).toEqual(structured);
       });
     });
+  });
+});
+
+/**
+ * F3 — Streamable-HTTP routing for non-platform clusters.
+ *
+ * Integration view: `McpClient.getTransportWithKind` ("http" + "local") must
+ * use the new `httpEndpointDescriptor` from the runtime manager and:
+ *   - kind === "direct"        → existing transport, plain URL, NO custom fetch
+ *   - kind === "k8s-api-proxy" → proxy URL, custom fetch built from the
+ *     cluster's KubeConfig (auth header injected, MCP server Authorization
+ *     dropped, undici dispatcher forwarded). When podName is set, the URL
+ *     uses the pod-proxy form.
+ *
+ * Pure helpers (URL builder, header merge order, MCP `Authorization` drop,
+ * non-buffered response) are exhaustively covered in
+ * `platform/backend/src/k8s/api-proxy.test.ts` — these integration tests
+ * focus on the wiring between mcp-client and the runtime manager.
+ *
+ * Spec: platform/specs/cluster-fixes/F3-streamable-http-multi-cluster.md
+ *
+ * RED phase: `getHttpEndpointDescriptor` is mocked at the manager surface;
+ * mcp-client.ts has not been updated to call it yet. The transport for
+ * external clusters will be built with the *legacy* URL (or fail to find
+ * one), making the assertions on proxy-shaped URLs / custom fetch fail.
+ */
+describe("McpClient F3: k8s-api-proxy descriptor routing", () => {
+  let agentId: string;
+  let localMcpServerId: string;
+  let localCatalogId: string;
+
+  beforeEach(async ({ makeUser }) => {
+    await mcpClient.disconnectAll();
+
+    const agent = await AgentModel.create({
+      name: "F3 Agent",
+      scope: "org",
+      teams: [],
+    });
+    agentId = agent.id;
+
+    const testUser = await makeUser({
+      email: "f3-routing@example.com",
+    });
+
+    const localCatalog = await InternalMcpCatalogModel.create({
+      name: "f3-streamable-http-server",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+      },
+    });
+    localCatalogId = localCatalog.id;
+
+    const localMcpServer = await McpServerModel.create({
+      name: "f3-streamable-http-server",
+      catalogId: localCatalog.id,
+      serverType: "local",
+      userId: testUser.id,
+    });
+    localMcpServerId = localMcpServer.id;
+
+    vi.clearAllMocks();
+    mockCallTool.mockReset();
+    mockConnect.mockReset();
+    mockClose.mockReset();
+    mockListTools.mockReset();
+    mockPing.mockReset();
+    mockUsesStreamableHttp.mockReset();
+    mockGetHttpEndpointUrl.mockReset();
+    mockGetHttpEndpointDescriptor.mockReset();
+    mockGetRunningPodHttpEndpoint.mockReset();
+    mockGetOrLoadDeployment.mockReset();
+    mockResolveById.mockReset();
+
+    vi.spyOn(
+      McpHttpSessionModel,
+      "findRecordByConnectionKey",
+    ).mockResolvedValue(null);
+    vi.spyOn(McpHttpSessionModel, "upsert").mockResolvedValue(undefined);
+    vi.spyOn(McpHttpSessionModel, "deleteByConnectionKey").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpHttpSessionModel, "deleteStaleSession").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpHttpSessionModel, "deleteExpired").mockResolvedValue(0);
+
+    mockListTools.mockResolvedValue({ tools: [] });
+  });
+
+  test("test #4 — descriptor kind: 'direct' → transport built with legacy URL, no custom fetch", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "f3-streamable-http-server__direct_tool",
+      description: "test tool",
+      parameters: {},
+      catalogId: localCatalogId,
+    });
+
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId: localMcpServerId,
+    });
+
+    mockUsesStreamableHttp.mockResolvedValue(true);
+
+    const directUrl = "http://mcp-svc.default.svc.cluster.local:8080/mcp";
+    mockGetHttpEndpointDescriptor.mockResolvedValue({
+      kind: "direct",
+      url: directUrl,
+    });
+    // The legacy URL accessor is also expected to keep returning the same
+    // bare URL on the platform-cluster (direct) branch.
+    mockGetHttpEndpointUrl.mockReturnValue(directUrl);
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+
+    const result = await mcpClient.executeToolCall(
+      {
+        id: "call_f3_direct",
+        name: "f3-streamable-http-server__direct_tool",
+        arguments: {},
+      },
+      agentId,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(vi.mocked(StreamableHTTPClientTransport)).toHaveBeenCalled();
+    const calls = vi.mocked(StreamableHTTPClientTransport).mock.calls;
+    const [urlArg, optionsArg] = calls.at(-1) ?? [];
+    expect(urlArg).toBeInstanceOf(URL);
+    expect((urlArg as URL).toString()).toBe(directUrl);
+    // Direct branch must NOT pass a custom fetch — that is reserved for
+    // the proxy branch. The MCP SDK uses node's global fetch by default.
+    expect(
+      (optionsArg as { fetch?: unknown } | undefined)?.fetch,
+    ).toBeUndefined();
+  });
+
+  test("test #5 (integration) — descriptor kind: 'k8s-api-proxy' → transport built with proxy URL", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "f3-streamable-http-server__proxy_tool",
+      description: "test tool",
+      parameters: {},
+      catalogId: localCatalogId,
+    });
+
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId: localMcpServerId,
+    });
+
+    mockUsesStreamableHttp.mockResolvedValue(true);
+    mockGetHttpEndpointUrl.mockReturnValue(undefined);
+
+    mockGetHttpEndpointDescriptor.mockResolvedValue({
+      kind: "k8s-api-proxy",
+      clusterId: "cluster-team-eu",
+      namespace: "team-eu-ns",
+      serviceName: "mcp-f3-streamable-http-server-service",
+      port: 8080,
+      path: "/mcp",
+    });
+
+    // `McpClient` will pull a K8sClients bundle for the cluster id by calling
+    // `clusterRegistry.resolveById(clusterId)`. Return a fake bundle whose
+    // KubeConfig has a known `getCurrentCluster().server`.
+    const fakeKubeConfig = {
+      applyToFetchOptions: vi.fn(async (init?: RequestInit) => ({
+        ...(init ?? {}),
+        headers: { Authorization: "Bearer eu-cluster-token" },
+      })),
+      getCurrentCluster: vi.fn(() => ({
+        server: "https://eu-kube.example.com:6443",
+      })),
+    };
+    mockResolveById.mockResolvedValue({
+      clusterId: "cluster-team-eu",
+      namespace: "team-eu-ns",
+      clients: {
+        kubeConfig: fakeKubeConfig,
+        coreApi: {},
+        appsApi: {},
+        batchApi: {},
+        attach: {},
+        exec: {},
+        log: {},
+        namespace: "team-eu-ns",
+      },
+    });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+
+    const result = await mcpClient.executeToolCall(
+      {
+        id: "call_f3_proxy",
+        name: "f3-streamable-http-server__proxy_tool",
+        arguments: {},
+      },
+      agentId,
+    );
+
+    // The mocked transport / call succeeds → no error path before transport
+    // construction (otherwise the assertions below would never run).
+    expect(result.isError).toBe(false);
+
+    expect(vi.mocked(StreamableHTTPClientTransport)).toHaveBeenCalled();
+    const calls = vi.mocked(StreamableHTTPClientTransport).mock.calls;
+    const [urlArg, optionsArg] = calls.at(-1) ?? [];
+    expect(urlArg).toBeInstanceOf(URL);
+    const url = (urlArg as URL).toString();
+    expect(url).toBe(
+      "https://eu-kube.example.com:6443/api/v1/namespaces/team-eu-ns/services/mcp-f3-streamable-http-server-service:8080/proxy/mcp",
+    );
+
+    // Proxy branch MUST install a custom fetch implementation.
+    const opts = optionsArg as { fetch?: unknown } | undefined;
+    expect(opts?.fetch).toBeDefined();
+    expect(typeof opts?.fetch).toBe("function");
+
+    // resolveById was called with the descriptor's clusterId.
+    expect(mockResolveById).toHaveBeenCalledWith("cluster-team-eu");
+  });
+
+  test("test #6 — pod-pinned external cluster → URL uses pods/<podName>:<port>/proxy", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "f3-streamable-http-server__pod_tool",
+      description: "test tool",
+      parameters: {},
+      catalogId: localCatalogId,
+    });
+
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId: localMcpServerId,
+    });
+
+    mockUsesStreamableHttp.mockResolvedValue(true);
+    mockGetHttpEndpointUrl.mockReturnValue(undefined);
+
+    // Service-level descriptor for the initial setup (not pod-pinned yet).
+    mockGetHttpEndpointDescriptor.mockResolvedValue({
+      kind: "k8s-api-proxy",
+      clusterId: "cluster-team-eu",
+      namespace: "team-eu-ns",
+      serviceName: "mcp-f3-streamable-http-server-service",
+      port: 8080,
+      path: "/mcp",
+    });
+
+    // The runtime manager returns a pod-pinned descriptor (sticky session).
+    mockGetRunningPodHttpEndpoint.mockResolvedValue({
+      podName: "mcp-f3-pod-abc123",
+      endpointDescriptor: {
+        kind: "k8s-api-proxy",
+        clusterId: "cluster-team-eu",
+        namespace: "team-eu-ns",
+        serviceName: "mcp-f3-streamable-http-server-service",
+        port: 8080,
+        path: "/mcp",
+        podName: "mcp-f3-pod-abc123",
+      },
+    });
+
+    // Sticky session record points the connection at the pod-pinned URL.
+    vi.spyOn(
+      McpHttpSessionModel,
+      "findRecordByConnectionKey",
+    ).mockResolvedValueOnce({
+      sessionId: "sticky-session-id",
+      sessionEndpointUrl:
+        "https://eu-kube.example.com:6443/api/v1/namespaces/team-eu-ns/pods/mcp-f3-pod-abc123:8080/proxy/mcp",
+      sessionEndpointPodName: "mcp-f3-pod-abc123",
+    });
+
+    const fakeKubeConfig = {
+      applyToFetchOptions: vi.fn(async (init?: RequestInit) => ({
+        ...(init ?? {}),
+        headers: { Authorization: "Bearer eu-cluster-token" },
+      })),
+      getCurrentCluster: vi.fn(() => ({
+        server: "https://eu-kube.example.com:6443",
+      })),
+    };
+    mockResolveById.mockResolvedValue({
+      clusterId: "cluster-team-eu",
+      namespace: "team-eu-ns",
+      clients: {
+        kubeConfig: fakeKubeConfig,
+        coreApi: {},
+        appsApi: {},
+        batchApi: {},
+        attach: {},
+        exec: {},
+        log: {},
+        namespace: "team-eu-ns",
+      },
+    });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+
+    await mcpClient.executeToolCall(
+      {
+        id: "call_f3_pod",
+        name: "f3-streamable-http-server__pod_tool",
+        arguments: {},
+      },
+      agentId,
+      undefined,
+      { conversationId: "conv-f3" },
+    );
+
+    expect(vi.mocked(StreamableHTTPClientTransport)).toHaveBeenCalled();
+    const calls = vi.mocked(StreamableHTTPClientTransport).mock.calls;
+    const [urlArg] = calls.at(-1) ?? [];
+    expect(urlArg).toBeInstanceOf(URL);
+    const url = (urlArg as URL).toString();
+    // The pod-proxy URL form — no service-level segment.
+    expect(url).toContain("/pods/mcp-f3-pod-abc123:8080/proxy/mcp");
+    expect(url).not.toContain("/services/");
+  });
+
+  test("test #7 (integration) — proxy fetch drops the upstream MCP server's Authorization header", async () => {
+    // This integration test asserts the wiring: `McpClient` must NOT pass
+    // its own `Authorization` (e.g. dynamic creds for the MCP server) into
+    // the proxy fetch, OR if it does, the kubeconfig auth must overwrite
+    // it. We capture the actual fetch invocation to confirm the kubeconfig
+    // header wins. The pure-helper version of this test lives in api-proxy.test.ts.
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "f3-streamable-http-server__auth_tool",
+      description: "test tool",
+      parameters: {},
+      catalogId: localCatalogId,
+    });
+
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId: localMcpServerId,
+    });
+
+    mockUsesStreamableHttp.mockResolvedValue(true);
+    mockGetHttpEndpointUrl.mockReturnValue(undefined);
+    mockGetHttpEndpointDescriptor.mockResolvedValue({
+      kind: "k8s-api-proxy",
+      clusterId: "cluster-team-eu",
+      namespace: "team-eu-ns",
+      serviceName: "mcp-f3-streamable-http-server-service",
+      port: 8080,
+      path: "/mcp",
+    });
+
+    const fakeKubeConfig = {
+      applyToFetchOptions: vi.fn(async (init?: RequestInit) => ({
+        ...(init ?? {}),
+        headers: { Authorization: "Bearer eu-cluster-token" },
+      })),
+      getCurrentCluster: vi.fn(() => ({
+        server: "https://eu-kube.example.com:6443",
+      })),
+    };
+    mockResolveById.mockResolvedValue({
+      clusterId: "cluster-team-eu",
+      namespace: "team-eu-ns",
+      clients: {
+        kubeConfig: fakeKubeConfig,
+        coreApi: {},
+        appsApi: {},
+        batchApi: {},
+        attach: {},
+        exec: {},
+        log: {},
+        namespace: "team-eu-ns",
+      },
+    });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+
+    await mcpClient.executeToolCall(
+      {
+        id: "call_f3_auth",
+        name: "f3-streamable-http-server__auth_tool",
+        arguments: {},
+      },
+      agentId,
+    );
+
+    const calls = vi.mocked(StreamableHTTPClientTransport).mock.calls;
+    const [, optionsArg] = calls.at(-1) ?? [];
+    const opts = optionsArg as
+      | {
+          fetch?: (input: URL | string, init?: RequestInit) => Promise<Response>;
+          requestInit?: { headers?: HeadersInit };
+        }
+      | undefined;
+
+    expect(opts?.fetch).toBeDefined();
+
+    // Drive the custom fetch ourselves with a hostile MCP-server Authorization
+    // and observe what reaches global fetch.
+    const fetchSpy = vi.fn(async () => new Response("ok", { status: 200 }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    try {
+      await opts?.fetch?.(
+        new URL(
+          "https://eu-kube.example.com:6443/api/v1/namespaces/team-eu-ns/services/mcp-f3-streamable-http-server-service:8080/proxy/mcp",
+        ),
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer mcp-server-token-DROPPED",
+            "Mcp-Session-Id": "abc",
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, finalInit] = fetchSpy.mock.calls[0] as [unknown, RequestInit];
+    const finalHeaders = new Headers(finalInit.headers as HeadersInit);
+    // Cluster auth wins.
+    expect(finalHeaders.get("Authorization")).toBe("Bearer eu-cluster-token");
+    // Pass-through headers preserved.
+    expect(finalHeaders.get("Mcp-Session-Id")).toBe("abc");
+    expect(finalHeaders.get("Content-Type")).toBe("application/json");
   });
 });
 

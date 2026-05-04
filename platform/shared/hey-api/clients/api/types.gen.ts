@@ -34901,6 +34901,10 @@ export type GetMembersData = {
          * Filter by exact role name
          */
         role?: string;
+        /**
+         * When set, return only the member with this platform user id
+         */
+        userId?: string;
     };
     url: '/api/members';
 };

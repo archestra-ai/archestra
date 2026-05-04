@@ -61,6 +61,8 @@ interface DataTableProps<TData, TValue> {
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
   /** Return an optional class name for each rendered row. */
   getRowClassName?: (row: TData) => string | undefined;
+  /** Extra props for each `<tr>` (e.g. `data-*` or `id` for deep-link scroll targets). */
+  getRowProps?: (row: TData) => React.ComponentProps<"tr"> | undefined;
   /** Show a loading spinner instead of "No results" when data is being fetched */
   isLoading?: boolean;
   /** Custom empty state message (defaults to "No results") */
@@ -97,6 +99,7 @@ export function DataTable<TData, TValue>({
   getRowId,
   renderSubComponent,
   getRowClassName,
+  getRowProps,
   isLoading = false,
   emptyMessage = "No results",
   emptyIcon,
@@ -236,6 +239,7 @@ export function DataTable<TData, TValue>({
                       getRowClassName?.(row.original),
                     )}
                     onClick={(e) => onRowClick?.(row.original, e)}
+                    {...(getRowProps?.(row.original) ?? {})}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell

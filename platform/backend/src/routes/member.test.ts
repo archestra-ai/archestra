@@ -69,6 +69,30 @@ describe("member routes", () => {
     expect(payload.data[1]?.name).toBe("Alpha Example");
   });
 
+  test("filters members by platform userId (deep link)", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const target = await makeUser({ name: "Zeta Only" });
+    const other = await makeUser({ name: "Yeta Other" });
+    await makeMember(target.id, organizationId, { role: "member" });
+    await makeMember(other.id, organizationId, { role: "editor" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/members?limit=20&offset=0&userId=${encodeURIComponent(target.id)}&name=shouldBeIgnored&role=shouldBeIgnored`,
+    });
+    const payload = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.data).toHaveLength(1);
+    expect(payload.data[0]).toMatchObject({
+      name: "Zeta Only",
+      userId: target.id,
+    });
+    expect(payload.pagination.total).toBe(1);
+  });
+
   test("filters members by name or email and role", async ({
     makeMember,
     makeUser,

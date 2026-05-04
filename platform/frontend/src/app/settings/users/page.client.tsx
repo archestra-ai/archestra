@@ -195,6 +195,7 @@ function MembersTab({
   const limitFromUrl = searchParams.get("limit");
   const nameFilter = searchParams.get("name") || "";
   const roleFilter = searchParams.get("role") || "";
+  const userIdFromUrl = searchParams.get("userId") || "";
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
@@ -209,6 +210,7 @@ function MembersTab({
     offset,
     name: nameFilter || undefined,
     role: roleFilter || undefined,
+    userId: userIdFromUrl || undefined,
   });
 
   const updateMemberRole = useUpdateMemberRole();
@@ -231,6 +233,23 @@ function MembersTab({
     newRole: string;
   } | null>(null);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
+
+  useEffect(() => {
+    if (!userIdFromUrl) return;
+    const page = searchParams.get("page");
+    if (page && page !== "1") {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", "1");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [userIdFromUrl, searchParams, router, pathname]);
+
+  useEffect(() => {
+    if (!userIdFromUrl || isPending) return;
+    document
+      .getElementById(`org-member-user-${userIdFromUrl}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [userIdFromUrl, isPending, membersResponse?.data]);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -428,6 +447,18 @@ function MembersTab({
           getRowId={(row) =>
             "provider" in row ? `pending-${row.userId}` : row.id
           }
+          getRowProps={(row) =>
+            "provider" in row
+              ? undefined
+              : { id: `org-member-user-${row.userId}` }
+          }
+          getRowClassName={(row) =>
+            userIdFromUrl &&
+            !("provider" in row) &&
+            row.userId === userIdFromUrl
+              ? "bg-muted/80 ring-2 ring-inset ring-primary/35"
+              : undefined
+          }
           pagination={{
             pageIndex,
             pageSize,
@@ -435,11 +466,14 @@ function MembersTab({
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching}
-          hasActiveFilters={Boolean(nameFilter || roleFilter)}
+          hasActiveFilters={Boolean(
+            nameFilter || roleFilter || userIdFromUrl,
+          )}
           onClearFilters={() => {
             const params = new URLSearchParams(searchParams.toString());
             params.delete("name");
             params.delete("role");
+            params.delete("userId");
             params.set("page", "1");
             router.push(`${pathname}?${params.toString()}`, { scroll: false });
           }}

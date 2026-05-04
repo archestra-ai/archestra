@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
@@ -17,6 +18,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   type AuditEventListItem,
@@ -27,6 +33,24 @@ import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { formatDate } from "@/lib/utils";
 
 const EMPTY_ROWS: AuditEventListItem[] = [];
+
+function settingsUserHref(userId: string): string {
+  return `/settings/users?${new URLSearchParams({ tab: "users", userId }).toString()}`;
+}
+
+function getAuditActorUserId(event: AuditEventListItem): string | null {
+  const actor = (
+    event as AuditEventListItem & {
+      actor?: {
+        id: string;
+        name: string;
+        email: string;
+        image?: string | null;
+      } | null;
+    }
+  ).actor;
+  return event.actorUserId ?? actor?.id ?? null;
+}
 
 export default function AuditLogPageClient() {
   const { searchParams, pageIndex, pageSize, offset, updateQueryParams } =
@@ -107,53 +131,115 @@ export default function AuditLogPageClient() {
     {
       id: "actorUserId",
       header: "Actor",
-      cell: ({ row }) =>
-        row.original.actorUserId || row.original.actor ? (
-          <span className="text-xs">{getActorLabel(row.original)}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">System</span>
-        ),
+      cell: ({ row }) => {
+        const ev = row.original;
+        if (!(ev.actorUserId || ev.actor)) {
+          return <span className="text-xs text-muted-foreground">System</span>;
+        }
+        const userId = getAuditActorUserId(ev);
+        const label = (
+          <span className="line-clamp-2 max-w-[11rem] text-xs leading-snug">
+            {getActorLabel(ev)}
+          </span>
+        );
+        if (!userId) return label;
+        return (
+          <Link
+            href={settingsUserHref(userId)}
+            className="text-foreground underline-offset-4 hover:underline"
+          >
+            {label}
+          </Link>
+        );
+      },
     },
     {
       id: "action",
       header: "Action",
-      cell: ({ row }) => (
-        <Badge variant="secondary" className="text-xs">
-          {row.original.action}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const parts = auditRowParts(row.original);
+        const inner = (
+          <div className="flex min-w-0 max-w-[220px] flex-col gap-1">
+            <Badge
+              variant="secondary"
+              className="h-auto w-fit max-w-full whitespace-normal py-1.5 text-left text-xs font-normal leading-tight"
+            >
+              {parts.headline}
+            </Badge>
+            {parts.subline ? (
+              <span className="font-mono text-[10px] leading-tight text-muted-foreground">
+                {parts.subline}
+              </span>
+            ) : null}
+          </div>
+        );
+
+        if (parts.kind === "http" && parts.tooltip) {
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-block max-w-[220px] cursor-help text-left outline-none"
+                  tabIndex={0}
+                >
+                  {inner}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                align="start"
+                className="max-w-md border bg-popover px-3 py-2 font-mono text-[11px] leading-relaxed"
+              >
+                {parts.tooltip}
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+
+        return inner;
+      },
     },
     {
       id: "resourceType",
       header: "Resource",
       cell: ({ row }) => (
-        <Badge variant="outline" className="text-xs">
-          {row.original.resourceType}
+        <Badge
+          variant="outline"
+          className="max-w-[9.5rem] whitespace-normal text-left text-xs font-normal leading-snug"
+        >
+          {auditRowParts(row.original).resource}
         </Badge>
       ),
     },
     {
       id: "resourceId",
-      header: "Object",
+      header: "IDs",
       cell: ({ row }) => {
-        const label = getResourceLabel(row.original);
+        const parts = auditRowParts(row.original);
+        if (parts.objectHint) {
+          return (
+            <span className="block max-w-[11rem] font-mono text-[11px] leading-snug text-muted-foreground">
+              {parts.objectHint}
+            </span>
+          );
+        }
         const id = row.original.resourceId;
-        return (
-          <div className="min-w-0">
-            {label ? (
-              <div className="truncate text-xs">{label}</div>
-            ) : id ? (
-              <code className="text-xs">{shortenId(id)}</code>
-            ) : (
-              <span className="text-xs text-muted-foreground">—</span>
-            )}
-            {id ? (
-              <div className="truncate font-mono text-[10px] text-muted-foreground">
-                {shortenId(id)}
-              </div>
-            ) : null}
-          </div>
-        );
+        if (id) {
+          return (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {shortenId(id)}
+            </span>
+          );
+        }
+        const fallback = getResourceLabel(row.original);
+        if (fallback) {
+          return (
+            <span className="line-clamp-2 max-w-[11rem] text-xs text-muted-foreground">
+              {fallback}
+            </span>
+          );
+        }
+        return <span className="text-xs text-muted-foreground">—</span>;
       },
     },
     {
@@ -332,6 +418,8 @@ export default function AuditLogPageClient() {
 function AuditEventDetailsDialog(params: { event: AuditEventListItem }) {
   const { event } = params;
   const metadata = event.metadata ?? null;
+  const actorEmail = getActorEmailForDetails(event);
+  const actorUserLinkId = getAuditActorUserId(event);
 
   return (
     <Dialog>
@@ -340,44 +428,71 @@ function AuditEventDetailsDialog(params: { event: AuditEventListItem }) {
           Details
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Audit event</DialogTitle>
+      <DialogContent className="gap-0 sm:max-w-xl">
+        <DialogHeader className="space-y-1 pb-2 text-left">
+          <DialogTitle className="text-lg">Audit event</DialogTitle>
+          <p className="text-sm font-medium leading-snug text-foreground">
+            {getFriendlyActionLabel(event)}
+          </p>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            {event.action}
+          </p>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            <div className="text-muted-foreground">Action</div>
-            <div className="col-span-2 font-mono text-xs">{event.action}</div>
-
-            <div className="text-muted-foreground">Resource</div>
-            <div className="col-span-2 font-mono text-xs">
-              {event.resourceType}
-              {event.resourceId ? ` / ${event.resourceId}` : ""}
-            </div>
-
-            <div className="text-muted-foreground">Actor</div>
-            <div className="col-span-2 text-xs">
-              {event.actorUserId || event.actor
-                ? getActorLabel(event)
-                : "System"}
-            </div>
-
-            <div className="text-muted-foreground">IP</div>
-            <div className="col-span-2 font-mono text-xs">
-              {event.ipAddress ?? "—"}
+        <div className="space-y-4 pb-4 text-sm">
+          <div>
+            <div className="text-xs text-muted-foreground">Resource</div>
+            <div className="mt-1 min-w-0 break-words text-foreground">
+              {getFriendlyResourceLabel(event)}
+              {event.resourceId ? (
+                <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">
+                  {event.resourceId}
+                </span>
+              ) : null}
             </div>
           </div>
 
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Details</div>
-            <div className="max-h-[50vh] overflow-auto rounded-md bg-muted p-3 text-xs">
-              {renderAuditEventDetails(event, metadata)}
+          <div>
+            <div className="text-xs text-muted-foreground">Actor</div>
+            <div className="mt-1 space-y-1">
+              <p className="text-sm font-medium leading-snug text-foreground">
+                {event.actorUserId || event.actor ? (
+                  actorUserLinkId ? (
+                    <Link
+                      href={settingsUserHref(actorUserLinkId)}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {getActorLabel(event)}
+                    </Link>
+                  ) : (
+                    getActorLabel(event)
+                  )
+                ) : (
+                  "System"
+                )}
+              </p>
+              {(event.actorUserId || event.actor) && actorEmail ? (
+                <p className="break-all font-mono text-[11px] text-muted-foreground">
+                  {actorEmail}
+                </p>
+              ) : null}
             </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-muted-foreground">IP</div>
+            <div className="mt-1 font-mono text-xs">{event.ipAddress ?? "—"}</div>
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">Details</div>
+          <div className="max-h-[min(50vh,24rem)] overflow-auto rounded-lg bg-muted/50 p-4 text-sm leading-relaxed">
+            {renderAuditEventDetails(event, metadata)}
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
           <DialogClose asChild>
             <Button variant="secondary">Close</Button>
           </DialogClose>
@@ -392,18 +507,36 @@ function getActorLabel(event: AuditEventListItem): string {
     actor?: { id: string; name: string; email: string; image?: string | null } | null;
   }).actor;
 
-  if (actor?.name && actor?.email) return `${actor.name} (${actor.email})`;
-  if (actor?.email) return actor.email;
+  // Short labels for the table (no email). Details dialog uses getActorEmailForDetails for a second line.
   if (actor?.name) return actor.name;
+  if (actor?.id) return shortenId(actor.id);
 
   const id = event.actorUserId;
   if (!id) return "System";
-  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+  return shortenId(id);
+}
+
+function getActorEmailForDetails(event: AuditEventListItem): string | null {
+  const actor = (event as AuditEventListItem & {
+    actor?: { id: string; name: string; email: string; image?: string | null } | null;
+  }).actor;
+  const raw = actor?.email;
+  if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+  return null;
 }
 
 function getResourceLabel(event: AuditEventListItem): string | null {
   const metadata = event.metadata as Record<string, unknown> | null | undefined;
   if (!metadata) return null;
+
+  if (
+    event.resourceType === "http" &&
+    typeof metadata.url === "string" &&
+    typeof metadata.method === "string"
+  ) {
+    const hint = httpMutationPresentation(metadata).objectHint;
+    if (hint) return hint;
+  }
 
   // Common "name" pattern
   if (typeof metadata.name === "string" && metadata.name.trim().length > 0) {
@@ -423,6 +556,406 @@ function shortenId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
+/** Standard UUID or 32-char hex (no dashes). */
+function isUuidLike(segment: string): boolean {
+  const s = segment.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    s,
+  )
+    ? true
+    : /^[0-9a-f]{32}$/i.test(s);
+}
+
+function shortenUuidSegment(segment: string): string {
+  const s = segment.trim();
+  if (/^[0-9a-f]{32}$/i.test(s)) {
+    return `${s.slice(0, 8)}…${s.slice(-4)}`;
+  }
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  ) {
+    return s.length > 14 ? `${s.slice(0, 8)}…${s.slice(-4)}` : s;
+  }
+  return segment;
+}
+
+/** Shorten any UUID tokens embedded in free-form text (safety net). */
+function shortenUuidsInText(text: string): string {
+  return text.replace(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+    (m) => shortenUuidSegment(m),
+  );
+}
+
+const HYPHEN_SEGMENT_ACRONYMS: Record<string, string> = {
+  llm: "LLM",
+  mcp: "MCP",
+  api: "API",
+  oidc: "OIDC",
+  sso: "SSO",
+};
+
+function titleCaseHyphenSegment(segment: string): string {
+  return segment
+    .split("-")
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (HYPHEN_SEGMENT_ACRONYMS[lower]) {
+        return HYPHEN_SEGMENT_ACRONYMS[lower];
+      }
+      if (word.length === 0) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+function formatPathSegment(segment: string): string {
+  if (isUuidLike(segment)) return shortenUuidSegment(segment);
+  return titleCaseHyphenSegment(segment);
+}
+
+/** Human-readable path after /api/ (e.g. llm-models/sync → "LLM models · Sync"). UUID segments shorten to abcde…wxyz. */
+function apiPathToFriendlyLabel(pathOrUrl: string): string {
+  const path =
+    pathOrUrl.split("?")[0]?.replace(/^\/api\/?/, "").replace(/\/$/, "") ?? "";
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length === 0) return "API";
+  return segments.map(formatPathSegment).join(" · ");
+}
+
+function parseApiPath(url: string): string[] {
+  const pathOnly = url.split("?")[0] ?? "";
+  return pathOnly.replace(/^\/api\/?/, "").split("/").filter(Boolean);
+}
+
+function inferResourceCategoryFromSegments(segments: string[]): string {
+  const structural = segments.filter((s) => !isUuidLike(s));
+  if (structural.length === 0) return "API";
+  return structural.map(titleCaseHyphenSegment).join(" · ");
+}
+
+/** Table + dialog copy for generic HTTP audit rows (`http.mutation` and similar). */
+function httpMutationPresentation(
+  meta: Record<string, unknown>,
+  options?: { fullIds?: boolean },
+): {
+  headline: string;
+  subline: string | undefined;
+  resourceCategory: string;
+  objectHint: string | null;
+  tooltipLines: string[];
+} {
+  const fullIds = options?.fullIds === true;
+  const presSeg = (segment: string) => {
+    if (isUuidLike(segment)) {
+      return fullIds ? segment : shortenUuidSegment(segment);
+    }
+    return titleCaseHyphenSegment(segment);
+  };
+
+  const method = (typeof meta.method === "string" ? meta.method : "GET").toUpperCase();
+  const url = typeof meta.url === "string" ? meta.url : "";
+  const statusCode =
+    typeof meta.statusCode === "number" ? meta.statusCode : null;
+
+  const segments = parseApiPath(url);
+  const fullTooltip = `${method} ${url}${statusCode != null ? ` → ${statusCode}` : ""}`;
+  const tooltipLines = [fullIds ? fullTooltip : shortenUuidsInText(fullTooltip)];
+
+  const agIdx = segments.indexOf("agents");
+  if (agIdx !== -1 && segments[agIdx + 2] === "tools" && segments.length > agIdx + 3) {
+    const agentId = segments[agIdx + 1]!;
+    const toolId = segments[agIdx + 3]!;
+    const ag = presSeg(agentId);
+    const tl = presSeg(toolId);
+    const fingerprint = `${ag} · ${tl}`;
+    let headline = "Agent tool change";
+    if (method === "POST") headline = "Tool linked to agent";
+    else if (method === "DELETE") headline = "Tool removed from agent";
+    else if (method === "PUT" || method === "PATCH") headline = "Tool link updated";
+    return {
+      headline,
+      subline: fingerprint,
+      resourceCategory: "Agent · Tools",
+      objectHint: fingerprint,
+      tooltipLines,
+    };
+  }
+
+  if (agIdx !== -1 && segments[agIdx + 1]) {
+    const rest = segments.slice(agIdx + 2);
+    if (rest.length === 0 && !segments[agIdx + 2]) {
+      const agentId = segments[agIdx + 1]!;
+      const aid = presSeg(agentId);
+      let headline = "Agent change";
+      if (method === "DELETE") headline = "Deleted agent";
+      else if (method === "POST") headline = "Created agent";
+      else if (method === "PUT" || method === "PATCH") headline = "Updated agent";
+      return {
+        headline,
+        subline: aid,
+        resourceCategory: "Agent",
+        objectHint: aid,
+        tooltipLines,
+      };
+    }
+  }
+
+  if (segments[0] === "agents" && segments.length === 1 && method === "POST") {
+    return {
+      headline: "Created agent",
+      subline: undefined,
+      resourceCategory: "Agent",
+      objectHint: null,
+      tooltipLines,
+    };
+  }
+
+  const tmIdx = segments.indexOf("teams");
+  if (tmIdx !== -1 && segments[tmIdx + 1] && segments.length === tmIdx + 2) {
+    const teamId = segments[tmIdx + 1]!;
+    const tid = presSeg(teamId);
+    let headline = "Team change";
+    if (method === "DELETE") headline = "Deleted team";
+    else if (method === "POST") headline = "Created team";
+    else if (method === "PUT" || method === "PATCH") headline = "Updated team";
+    return {
+      headline,
+      subline: tid,
+      resourceCategory: "Team",
+      objectHint: tid,
+      tooltipLines,
+    };
+  }
+
+  if (segments[0] === "teams" && segments.length === 1 && method === "POST") {
+    return {
+      headline: "Created team",
+      subline: undefined,
+      resourceCategory: "Team",
+      objectHint: null,
+      tooltipLines,
+    };
+  }
+
+  const msIdx = segments.indexOf("mcp_server");
+  if (msIdx !== -1) {
+    const sidRaw = segments[msIdx + 1];
+    const sub = segments[msIdx + 2];
+    const sid = sidRaw ? presSeg(sidRaw) : "";
+
+    if (sub === "reinstall") {
+      return {
+        headline: "MCP server reinstalled",
+        subline: sid || undefined,
+        resourceCategory: "MCP server",
+        objectHint: sid || null,
+        tooltipLines,
+      };
+    }
+    if (sub === "reauthenticate") {
+      return {
+        headline: "MCP server reauthenticated",
+        subline: sid || undefined,
+        resourceCategory: "MCP server",
+        objectHint: sid || null,
+        tooltipLines,
+      };
+    }
+    if (sub === "tools" || sub === "inspect" || sub === "installation-status") {
+      const cat =
+        sub === "tools"
+          ? "MCP server · Tools"
+          : sub === "inspect"
+            ? "MCP server · Inspect"
+            : "MCP server · Install status";
+      return {
+        headline: `${method} · MCP server`,
+        subline: sid || undefined,
+        resourceCategory: cat,
+        objectHint: sid || null,
+        tooltipLines,
+      };
+    }
+    if (sidRaw) {
+      let headline = "MCP server change";
+      if (method === "DELETE") headline = "Deleted MCP server";
+      else if (method === "PUT" || method === "PATCH") headline = "Updated MCP server";
+      else if (method === "POST") headline = "MCP server request";
+      return {
+        headline,
+        subline: sid || undefined,
+        resourceCategory: "MCP server",
+        objectHint: sid || null,
+        tooltipLines,
+      };
+    }
+  }
+
+  if (segments[0] === "mcp_server" && segments.length === 1 && method === "POST") {
+    return {
+      headline: "Created MCP server",
+      subline: undefined,
+      resourceCategory: "MCP server",
+      objectHint: null,
+      tooltipLines,
+    };
+  }
+
+  const last = segments[segments.length - 1] ?? "";
+  const parents = segments.slice(0, -1);
+  if (last === "sync" && parents.length > 0) {
+    const target = parents.map(presSeg).join(" ");
+    const category = inferResourceCategoryFromSegments(parents);
+    return {
+      headline: `Synced ${target}`,
+      subline: undefined,
+      resourceCategory: category,
+      objectHint: null,
+      tooltipLines,
+    };
+  }
+
+  const category = inferResourceCategoryFromSegments(segments);
+  const uuidHints = segments
+    .filter((s) => isUuidLike(s))
+    .map((s) => (fullIds ? s : shortenUuidSegment(s)));
+  const objectHint = uuidHints.length > 0 ? uuidHints.join(" · ") : null;
+
+  let headline =
+    category !== "API"
+      ? `${method} · ${category}`
+      : method
+        ? `${method} request`
+        : "API request";
+  if (method === "DELETE" && category !== "API") headline = `Deleted · ${category}`;
+  else if ((method === "PUT" || method === "PATCH") && category !== "API")
+    headline = `Updated · ${category}`;
+  else if (method === "POST" && category !== "API") headline = `Created · ${category}`;
+
+  return {
+    headline,
+    subline: objectHint ?? undefined,
+    resourceCategory: category === "API" && segments.length > 0 ? "HTTP API" : category,
+    objectHint,
+    tooltipLines,
+  };
+}
+
+type AuditRowParts =
+  | {
+      kind: "http";
+      headline: string;
+      subline: string | undefined;
+      tooltip: string;
+      resource: string;
+      objectHint: string | null;
+    }
+  | {
+      kind: "domain";
+      headline: string;
+      subline: string | undefined;
+      tooltip: "";
+      resource: string;
+      objectHint: string | null;
+    };
+
+function auditRowParts(event: AuditEventListItem): AuditRowParts {
+  const meta = event.metadata as Record<string, unknown> | undefined;
+  const looksLikeHttpAudit =
+    event.action === "http.mutation" ||
+    (event.resourceType === "http" &&
+      meta &&
+      typeof meta.method === "string" &&
+      typeof meta.url === "string");
+
+  if (looksLikeHttpAudit && meta) {
+    const p = httpMutationPresentation(meta);
+    return {
+      kind: "http",
+      headline: shortenUuidsInText(p.headline),
+      subline: p.subline,
+      tooltip: p.tooltipLines.join("\n"),
+      resource: p.resourceCategory,
+      objectHint: p.objectHint,
+    };
+  }
+
+  const objectHint =
+    getResourceLabel(event) ??
+    (event.resourceId ? shortenId(event.resourceId) : null);
+
+  return {
+    kind: "domain",
+    headline: getFriendlyActionLabel(event),
+    subline: undefined,
+    tooltip: "",
+    resource: getFriendlyResourceLabel(event),
+    objectHint,
+  };
+}
+
+function getFriendlyActionLabel(event: AuditEventListItem): string {
+  const raw = event.action;
+  const meta = event.metadata as Record<string, unknown> | null | undefined;
+
+  let label: string;
+  if (raw === "http.mutation" && meta) {
+    label = httpMutationPresentation(meta).headline;
+  } else {
+    const domainMatch =
+      /^([a-zA-Z]+)\.(create|update|delete|install|uninstall|reinstall)$/.exec(
+        raw,
+      );
+    if (domainMatch) {
+      const [, resource, verb] = domainMatch;
+      const verbs: Record<string, string> = {
+        create: "Created",
+        update: "Updated",
+        delete: "Deleted",
+        install: "Installed",
+        uninstall: "Uninstalled",
+        reinstall: "Reinstalled",
+      };
+      const nouns: Record<string, string> = {
+        team: "team",
+        agent: "agent",
+        mcpServer: "MCP server",
+      };
+      const v = verbs[verb] ?? verb;
+      const n = nouns[resource] ?? resource;
+      label = `${v} ${n}`;
+    } else {
+      label = raw.replace(/\./g, " ");
+    }
+  }
+
+  return shortenUuidsInText(label);
+}
+
+function getFriendlyResourceLabel(event: AuditEventListItem): string {
+  if (event.resourceType === "http") {
+    const meta = event.metadata as Record<string, unknown> | undefined;
+    if (meta && typeof meta.url === "string" && typeof meta.method === "string") {
+      return httpMutationPresentation(meta).resourceCategory;
+    }
+    if (meta && typeof meta.url === "string") {
+      const label = apiPathToFriendlyLabel(meta.url);
+      const out = label === "API" ? "HTTP API" : label;
+      return shortenUuidsInText(out);
+    }
+    return "HTTP API";
+  }
+
+  const labels: Record<string, string> = {
+    team: "Team",
+    agent: "Agent",
+    mcpServer: "MCP server",
+    http: "HTTP API",
+  };
+  return labels[event.resourceType] ?? event.resourceType;
+}
+
 function renderAuditEventDetails(
   event: AuditEventListItem,
   metadata: Record<string, unknown> | null,
@@ -434,11 +967,17 @@ function renderAuditEventDetails(
     const url = typeof metadata.url === "string" ? metadata.url : "";
     const statusCode =
       typeof metadata.statusCode === "number" ? metadata.statusCode : null;
+    const p = httpMutationPresentation(metadata, { fullIds: true });
     return (
-      <div className="space-y-1">
-        <div className="font-mono">
-          {method} {url}
-          {statusCode ? ` → ${statusCode}` : ""}
+      <div className="space-y-3">
+        <p className="text-base font-medium text-foreground">{p.headline}</p>
+        {p.subline ? (
+          <p className="break-all font-mono text-xs text-muted-foreground">
+            {p.subline}
+          </p>
+        ) : null}
+        <div className="rounded-md bg-muted/60 px-3 py-2 font-mono text-xs text-muted-foreground break-all">
+          {`${method} ${url}${statusCode != null ? ` → ${statusCode}` : ""}`}
         </div>
       </div>
     );

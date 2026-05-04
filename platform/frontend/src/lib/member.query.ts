@@ -59,7 +59,7 @@ type RawInvitation = NonNullable<
  */
 export function useMembersPaginated(
   query: Required<Pick<MembersQuery, "limit" | "offset">> &
-    Pick<MembersQuery, "name" | "role">,
+    Pick<MembersQuery, "name" | "role" | "userId">,
 ) {
   return useQuery({
     queryKey: memberKeys.paginated(query),

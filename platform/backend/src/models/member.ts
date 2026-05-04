@@ -258,13 +258,20 @@ class MemberModel {
     pagination: { limit: number; offset: number };
     name?: string;
     role?: string;
+    /** When set, only return the member row for this platform user id (within the org). */
+    userId?: string;
   }) {
-    const { organizationId, pagination, name, role } = params;
-    const searchPattern = name ? `%${name}%` : null;
+    const { organizationId, pagination, name, role, userId } = params;
+    const exclusiveUserFilter = Boolean(userId);
+    const searchPattern =
+      !exclusiveUserFilter && name ? `%${name}%` : null;
 
     const filters = [
       eq(schema.membersTable.organizationId, organizationId),
-      ...(role ? [eq(schema.membersTable.role, role)] : []),
+      ...(userId ? [eq(schema.membersTable.userId, userId)] : []),
+      ...(!exclusiveUserFilter && role
+        ? [eq(schema.membersTable.role, role)]
+        : []),
       ...(searchPattern
         ? [
             or(

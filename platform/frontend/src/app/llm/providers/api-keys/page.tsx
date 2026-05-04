@@ -234,7 +234,7 @@ export default function ApiKeysPage() {
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="h-4 w-4" />
         Add API Key
       </PermissionButton>,
     );

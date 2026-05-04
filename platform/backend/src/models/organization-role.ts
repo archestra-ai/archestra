@@ -8,6 +8,7 @@ import {
   PredefinedRoleNameSchema,
   type Resource,
   roleDescriptions,
+  TimeInMs,
 } from "@shared";
 import {
   allAvailableActions,
@@ -19,7 +20,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
 
-const ROLE_PERMISSIONS_CACHE_TTL_MS = 30_000;
+const ROLE_PERMISSIONS_CACHE_TTL_MS = 5 * TimeInMs.Minute;
 const rolePermissionsCache = new LRUCacheManager<Permissions>({
   maxSize: 1_000,
   defaultTtl: ROLE_PERMISSIONS_CACHE_TTL_MS,

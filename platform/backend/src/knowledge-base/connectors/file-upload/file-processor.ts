@@ -22,19 +22,19 @@ const EXTENSION_TO_KIND: Record<string, FileKind> = {
   zip: "zip",
 };
 
-export interface ExtractedFile {
+interface ExtractedFile {
   filename: string;
   text: string;
   rawBytes: Buffer;
   mimeType: string;
 }
 
-export interface SkippedFile {
+interface SkippedFile {
   filename: string;
   reason: "unsupported" | "too_large" | "extraction_failed";
 }
 
-export interface ExtractionResult {
+interface ExtractionResult {
   extracted: ExtractedFile[];
   skipped: SkippedFile[];
 }

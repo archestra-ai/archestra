@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { and, count, desc, eq, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 
-export type KbUploadedFile = typeof schema.kbUploadedFilesTable.$inferSelect;
+type KbUploadedFile = typeof schema.kbUploadedFilesTable.$inferSelect;
 type KbUploadedFileInsert = typeof schema.kbUploadedFilesTable.$inferInsert;
 
 const listColumns = {

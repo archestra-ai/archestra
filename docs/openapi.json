@@ -99614,9 +99614,6 @@
                       "builtin"
                     ]
                   },
-                  "multitenant": {
-                    "type": "boolean"
-                  },
                   "serverUrl": {
                     "nullable": true,
                     "type": "string"

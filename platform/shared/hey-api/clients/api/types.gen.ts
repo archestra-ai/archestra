@@ -10603,6 +10603,76 @@ export type PostV1A2aByAgentIdResponses = {
 
 export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
+export type GetV2A2aByAgentIdWellKnownAgentJsonData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v2/a2a/{agentId}/.well-known/agent.json';
+};
+
+export type GetV2A2aByAgentIdWellKnownAgentJsonResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        description: string;
+        url: string;
+        version: string;
+        capabilities: {
+            streaming: boolean;
+            pushNotifications: boolean;
+            stateTransitionHistory: boolean;
+        };
+        defaultInputModes: Array<string>;
+        defaultOutputModes: Array<string>;
+        skills: Array<{
+            id: string;
+            name: string;
+            description: string;
+            tags: Array<string>;
+            inputModes: Array<string>;
+            outputModes: Array<string>;
+        }>;
+    };
+};
+
+export type GetV2A2aByAgentIdWellKnownAgentJsonResponse = GetV2A2aByAgentIdWellKnownAgentJsonResponses[keyof GetV2A2aByAgentIdWellKnownAgentJsonResponses];
+
+export type PostV2A2aByAgentIdData = {
+    body: {
+        jsonrpc: '2.0';
+        id: string | number;
+        method: string;
+        params?: unknown;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v2/a2a/{agentId}';
+};
+
+export type PostV2A2aByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        jsonrpc: '2.0';
+        id: string | number;
+        result?: unknown;
+        error?: {
+            code: number;
+            message: string;
+            data?: unknown;
+        };
+    };
+};
+
+export type PostV2A2aByAgentIdResponse = PostV2A2aByAgentIdResponses[keyof PostV2A2aByAgentIdResponses];
+
 export type GetAgentsData = {
     body?: never;
     path?: never;

@@ -1,3 +1,7 @@
+export { default as A2AContextModel } from "./a2a-context";
+export { default as A2AMessageModel } from "./a2a-message";
+export { default as A2ATaskModel } from "./a2a-task";
+export { default as A2ATaskApprovalRequestModel } from "./a2a-task-approval-request";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";

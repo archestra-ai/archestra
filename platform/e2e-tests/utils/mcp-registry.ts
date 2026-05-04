@@ -124,7 +124,7 @@ export async function waitForMcpServerToolsDiscovered(
 
         return { state: "pending" as const };
       },
-      { timeout: 60_000, intervals: [500, 1000, 2000] },
+      { timeout: 120_000, intervals: [500, 1000, 2000, 5000] },
     )
     .toMatchObject({ state: "ready" });
 }

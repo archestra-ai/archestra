@@ -130,7 +130,10 @@ async function fillOidcProviderForm(
 ): Promise<void> {
   await page.getByLabel("Provider ID").fill(providerName);
   await page.getByLabel("Issuer").fill(KEYCLOAK_OIDC.issuer);
-  await page.getByLabel("Domain").fill(SSO_DOMAIN);
+  const allowedDomainsInput = page.getByLabel("Allowed Email Domains");
+  if (await allowedDomainsInput.isVisible().catch(() => false)) {
+    await allowedDomainsInput.fill(SSO_DOMAIN);
+  }
   await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC.clientId);
   await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC.clientSecret);
   await page

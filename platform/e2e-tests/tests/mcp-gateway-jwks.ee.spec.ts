@@ -8,7 +8,7 @@
  * 4. Authenticate to MCP Gateway using the JWT
  * 5. Verify tool calls succeed and the Archestra user is linked in audit logs
  */
-import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX } from "../consts";
+import { API_BASE_URL, MCP_GATEWAY_URL_SUFFIX, SSO_DOMAIN } from "../consts";
 import { getKeycloakJwt } from "../utils";
 import {
   assignArchestraToolsToProfile,
@@ -44,6 +44,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
+      { domain: SSO_DOMAIN },
     );
 
     let profileId: string | undefined;

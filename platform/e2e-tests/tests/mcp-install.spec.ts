@@ -196,11 +196,43 @@ test.describe("MCP Install", () => {
     test.setTimeout(240_000);
     const CATALOG_ITEM_NAME = "e2e__bogus_image_test";
     const BOGUS_IMAGE = "image-that-doesnt-exist:123";
-    const PYTHON_MCP_SCRIPT =
-      "from mcp.server.fastmcp import FastMCP; import anyio; app=FastMCP('e2e-test', log_level='CRITICAL'); " +
-      "print_archestra_test=lambda: 'ok'; " +
-      "app.add_tool(print_archestra_test, name='print_archestra_test', description='E2E test tool'); " +
-      "anyio.run(app.run_stdio_async)";
+    const FIXED_MCP_SCRIPT = `
+const readline = require("node:readline");
+const rl = readline.createInterface({ input: process.stdin });
+setInterval(() => {}, 2147483647);
+const tool = {
+  name: "print_archestra_test",
+  description: "E2E test tool",
+  inputSchema: { type: "object", properties: {} },
+};
+function send(id, result) {
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+}
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.id === undefined) return;
+  if (message.method === "initialize") {
+    send(message.id, {
+      protocolVersion: "2024-11-05",
+      capabilities: { tools: {} },
+      serverInfo: { name: "e2e-fixed-server", version: "1.0.0" },
+    });
+    return;
+  }
+  if (message.method === "tools/list") {
+    send(message.id, { tools: [tool] });
+    return;
+  }
+  if (message.method === "tools/call") {
+    send(message.id, {
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+    return;
+  }
+  send(message.id, {});
+});
+`.replace(/\n/g, " ");
 
     // Cleanup any existing catalog item
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
@@ -252,10 +284,35 @@ test.describe("MCP Install", () => {
     // ========================================
     // STEP 2: Wait for failure status (error banner)
     // ========================================
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    await expect
+      .poll(
+        async () => {
+          const response = await archestraApiSdk.getMcpServers({
+            headers: { Cookie: cookieHeaders },
+          });
+          if (response.error) {
+            return null;
+          }
+          return (
+            response.data?.find(
+              (server) =>
+                server.catalogName === CATALOG_ITEM_NAME ||
+                server.name.startsWith(`${CATALOG_ITEM_NAME}-`),
+            )?.localInstallationStatus ?? null
+          );
+        },
+        { timeout: 120_000, intervals: [1000, 2000, 5000] },
+      )
+      .toBe("error");
+
+    await adminPage.reload();
+    await adminPage.waitForLoadState("domcontentloaded");
+
     const errorBanner = adminPage.getByTestId(
       `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
     );
-    await errorBanner.waitFor({ state: "visible", timeout: 120_000 });
+    await errorBanner.waitFor({ state: "visible", timeout: 30_000 });
 
     // ========================================
     // STEP 3: Check logs show deployment events
@@ -313,13 +370,15 @@ test.describe("MCP Install", () => {
       name: "Command",
     });
     await commandInput.clear();
-    await commandInput.fill("python");
+    await commandInput.fill("node");
+
+    await settingsDialog.getByLabel("stdio").click();
 
     const argumentsInput = settingsDialog.getByRole("textbox", {
       name: "Arguments (one per line)",
     });
     await argumentsInput.clear();
-    await argumentsInput.fill(`-c\n${PYTHON_MCP_SCRIPT}`);
+    await argumentsInput.fill(`-e\n${FIXED_MCP_SCRIPT}`);
 
     // Force manual reinstall by adding a prompted env var
     await settingsDialog.getByRole("button", { name: "Add Variable" }).click();

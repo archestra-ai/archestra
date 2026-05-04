@@ -105,6 +105,17 @@ async function getActiveOrganizationId(
   return data?.session?.activeOrganizationId ?? null;
 }
 
+async function getSessionUserEmail(
+  request: APIRequestContext,
+): Promise<string | null> {
+  const response = await request.get(`${UI_BASE_URL}/api/auth/get-session`);
+  if (!response.ok()) {
+    return null;
+  }
+  const data = await response.json();
+  return data?.user?.email ?? null;
+}
+
 /**
  * Get existing invitation for a user
  */
@@ -357,6 +368,8 @@ async function authenticateInvitedUser(params: {
 
 async function signInAsAdminForSetup(page: Page, label: string): Promise<void> {
   await sleep(100);
+  await signOut(page.request);
+  await page.context().clearCookies();
 
   const adminSignedIn = await signInUser(
     page.request,
@@ -368,6 +381,11 @@ async function signInAsAdminForSetup(page: Page, label: string): Promise<void> {
   // Establish cookie context with active organization.
   await page.goto(`${UI_BASE_URL}/chat`);
   await page.waitForLoadState("domcontentloaded");
+
+  const sessionEmail = await getSessionUserEmail(page.request);
+  expect(sessionEmail, `Admin session was not active for ${label} setup`).toBe(
+    ADMIN_EMAIL,
+  );
 }
 
 async function findCustomRole(

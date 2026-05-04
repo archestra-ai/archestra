@@ -2342,7 +2342,7 @@ class McpClient {
 
     // For local servers, retry connection a few times since the MCP server process
     // may need time to initialize even after the pod is ready
-    const maxRetries = catalogItem.serverType === "local" ? 3 : 1;
+    const maxRetries = catalogItem.serverType === "local" ? 6 : 1;
     const retryDelayMs = 5000; // 5 seconds between retries
 
     let lastError: Error | undefined;

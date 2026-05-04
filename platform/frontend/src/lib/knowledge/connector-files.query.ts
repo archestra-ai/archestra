@@ -95,16 +95,22 @@ export function useUploadConnectorFiles(connectorId: string) {
 
   return useMutation({
     mutationFn: async (files: File[]) => {
+      const encoded = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          mimeType: file.type,
+          content: await fileToBase64(file),
+        })),
+      );
+
+      const batches = splitIntoBatches(encoded);
       const allResults: UploadResult[] = [];
 
-      for (const file of files) {
-        const content = await fileToBase64(file);
+      for (const batch of batches) {
         const { data, error } = await client.post({
           url: "/api/connectors/{id}/files",
           path: { id: connectorId },
-          body: {
-            files: [{ name: file.name, mimeType: file.type, content }],
-          },
+          body: { files: batch },
         });
 
         if (error || !data) {
@@ -114,9 +120,7 @@ export function useUploadConnectorFiles(connectorId: string) {
               : typeof error === "string"
                 ? error
                 : "";
-          throw new Error(
-            `Upload failed for ${file.name}${detail ? `: ${detail}` : ""}`,
-          );
+          throw new Error(`Upload failed${detail ? `: ${detail}` : ""}`);
         }
 
         const result = data as { results: UploadResult[] };
@@ -201,6 +205,41 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Max batch payload size in bytes (~7 MB to stay well under Next.js 10 MB middleware limit). */
+const MAX_BATCH_BYTES = 7 * 1024 * 1024;
+
+type EncodedFile = { name: string; mimeType: string; content: string };
+
+/**
+ * Split encoded files into batches so each batch's estimated JSON payload
+ * stays under MAX_BATCH_BYTES.
+ */
+function splitIntoBatches(files: EncodedFile[]): EncodedFile[][] {
+  const batches: EncodedFile[][] = [];
+  let currentBatch: EncodedFile[] = [];
+  let currentSize = 0;
+
+  for (const file of files) {
+    // Estimate JSON size: base64 content + name/mimeType + JSON overhead
+    const fileSize = file.content.length + file.name.length + file.mimeType.length + 64;
+
+    if (currentBatch.length > 0 && currentSize + fileSize > MAX_BATCH_BYTES) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentSize = 0;
+    }
+
+    currentBatch.push(file);
+    currentSize += fileSize;
+  }
+
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
 }
 
 function fileToBase64(file: File): Promise<string> {

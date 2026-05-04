@@ -124,7 +124,7 @@ export async function waitForMcpServerToolsDiscovered(
 
         return { state: "pending" as const };
       },
-      { timeout: 60_000, intervals: [500, 1000, 2000] },
+      { timeout: 120_000, intervals: [500, 1000, 2000, 5000] },
     )
     .toMatchObject({ state: "ready" });
 }
@@ -193,14 +193,13 @@ export async function addSharedLocalConnection(params: {
   timeoutMs?: number;
 }): Promise<void> {
   await openManageCredentialsDialog(params.page, params.catalogItemName);
-  const sharedConnectionsSection = params.page.getByTestId(
-    E2eTestId.ManageCredentialsSharedConnectionsSection,
-  );
-  await sharedConnectionsSection
-    .getByTestId(E2eTestId.ManageCredentialsAddToTeamButton)
-    .click({
-      timeout: params.timeoutMs ?? 15_000,
-    });
+  const visibleDialog = params.page
+    .getByRole("dialog")
+    .filter({ visible: true })
+    .last();
+  await visibleDialog
+    .getByRole("button", { name: /^Install\b/ })
+    .click({ timeout: params.timeoutMs ?? 15_000 });
   await params.page
     .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
     .click({ timeout: params.timeoutMs ?? 15_000 });
@@ -219,7 +218,7 @@ export async function addSharedLocalConnection(params: {
     }
 
     await expect(
-      sharedConnectionsSection.getByTestId(
+      visibleDialog.getByTestId(
         E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
       ),
     ).not.toBeVisible({

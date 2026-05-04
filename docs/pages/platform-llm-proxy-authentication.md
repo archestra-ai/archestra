@@ -89,13 +89,15 @@ LLM applications are registered clients that call the Model Router with OAuth cl
 
 Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM applications are better when you control the service code and can request a token before calling the Model Router.
 
-### Creating Applications
+### Managing Applications
 
 1. Go to **LLM Proxies > App Access > Applications**
 2. Create an application
 3. Select the LLM proxies it can access
 4. Map the provider API keys it can route through
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
+
+You can edit an application later to update its name, allowed LLM proxies, or provider key mappings. Rotate the client secret when the existing secret needs to be replaced.
 
 ### Getting an Access Token
 

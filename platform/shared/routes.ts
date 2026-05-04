@@ -304,6 +304,7 @@ export const RouteId = {
   // LLM Application Routes
   GetLlmApplications: "getLlmApplications",
   CreateLlmApplication: "createLlmApplication",
+  UpdateLlmApplication: "updateLlmApplication",
   RotateLlmApplicationSecret: "rotateLlmApplicationSecret",
   DeleteLlmApplication: "deleteLlmApplication",
 

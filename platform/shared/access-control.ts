@@ -763,6 +763,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateLlmApplication]: {
     llmApplication: ["create"],
   },
+  [RouteId.UpdateLlmApplication]: {
+    llmApplication: ["update"],
+  },
   [RouteId.RotateLlmApplicationSecret]: {
     llmApplication: ["update"],
   },

@@ -143,6 +143,39 @@ class LlmApplicationModel {
     };
   }
 
+  static async update(params: {
+    id: string;
+    organizationId: string;
+    name: string;
+    allowedLlmProxyIds: string[];
+    modelRouterProviderApiKeys: LlmApplicationProviderKey[];
+  }) {
+    const metadata = {
+      type: LLM_APPLICATION_METADATA_TYPE,
+      organizationId: params.organizationId,
+      allowedLlmProxyIds: params.allowedLlmProxyIds,
+      modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
+    };
+
+    const [client] = await db
+      .update(schema.oauthClientsTable)
+      .set({
+        name: params.name,
+        metadata,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.oauthClientsTable.id, params.id),
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+        ),
+      )
+      .returning();
+
+    return client ? (await hydrateApplications([client]))[0] : null;
+  }
+
   static async delete(params: { id: string; organizationId: string }) {
     const result = await db
       .delete(schema.oauthClientsTable)

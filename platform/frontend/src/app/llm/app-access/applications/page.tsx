@@ -1,16 +1,18 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  providerDisplayNames,
-  type SupportedProvider,
-} from "@shared";
+import { type archestraApiTypes, providerDisplayNames } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  type ModelRouterProviderApiKeyMap,
+  ModelRouterProviderKeyMappingsField,
+  modelRouterProviderApiKeyArrayToMap,
+  modelRouterProviderApiKeyMapToArray,
+} from "@/components/model-router-provider-key-mappings-field";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -22,19 +24,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useProfiles } from "@/lib/agent.query";
 import {
   useCreateLlmApplication,
   useDeleteLlmApplication,
   useLlmApplications,
   useRotateLlmApplicationSecret,
+  useUpdateLlmApplication,
 } from "@/lib/llm-applications.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
@@ -43,12 +39,6 @@ import { useSetAppAccessAction } from "../layout";
 type LlmApplication =
   archestraApiTypes.GetLlmApplicationsResponses["200"][number];
 
-type ProviderMapping = {
-  id: string;
-  provider: SupportedProvider;
-  chatApiKeyId: string;
-};
-
 export default function ApplicationsPage() {
   const { data: applications = [], isPending } = useLlmApplications();
   const { data: llmProxies = [] } = useProfiles({
@@ -56,6 +46,7 @@ export default function ApplicationsPage() {
   });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const createMutation = useCreateLlmApplication();
+  const updateMutation = useUpdateLlmApplication();
   const rotateMutation = useRotateLlmApplicationSecret();
   const deleteMutation = useDeleteLlmApplication();
 
@@ -65,6 +56,8 @@ export default function ApplicationsPage() {
     clientSecret: string;
   } | null>(null);
   const [deletingApplication, setDeletingApplication] =
+    useState<LlmApplication | null>(null);
+  const [editingApplication, setEditingApplication] =
     useState<LlmApplication | null>(null);
   const [rotatedCredentials, setRotatedCredentials] = useState<{
     clientId: string;
@@ -143,6 +136,11 @@ export default function ApplicationsPage() {
           <TableRowActions
             actions={[
               {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit",
+                onClick: () => setEditingApplication(row.original),
+              },
+              {
                 icon: <RefreshCw className="h-4 w-4" />,
                 label: "Rotate secret",
                 onClick: async () => {
@@ -196,6 +194,25 @@ export default function ApplicationsPage() {
           }
         }}
         isSubmitting={createMutation.isPending}
+      />
+
+      <EditApplicationDialog
+        application={editingApplication}
+        onOpenChange={(open) => {
+          if (!open) setEditingApplication(null);
+        }}
+        llmProxies={llmProxies}
+        providerApiKeys={providerApiKeys}
+        onSubmit={async (id, values) => {
+          const result = await updateMutation.mutateAsync({
+            id,
+            body: values,
+          });
+          if (result) {
+            setEditingApplication(null);
+          }
+        }}
+        isSubmitting={updateMutation.isPending}
       />
 
       <CredentialsDialog
@@ -257,27 +274,13 @@ function CreateApplicationDialog({
 }) {
   const [name, setName] = useState("");
   const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
-  const [mappings, setMappings] = useState<ProviderMapping[]>([]);
-
-  const providerOptions = useMemo(
-    () =>
-      providerApiKeys.map((apiKey) => ({
-        value: apiKey.id,
-        label: `${
-          providerDisplayNames[
-            apiKey.provider as keyof typeof providerDisplayNames
-          ] ?? apiKey.provider
-        } - ${apiKey.name}`,
-        provider: apiKey.provider as SupportedProvider,
-      })),
-    [providerApiKeys],
-  );
+  const [providerApiKeyIds, setProviderApiKeyIds] =
+    useState<ModelRouterProviderApiKeyMap>({});
 
   const canSubmit =
     name.trim().length > 0 &&
     selectedProxyIds.length > 0 &&
-    mappings.length > 0 &&
-    mappings.every((mapping) => mapping.provider && mapping.chatApiKeyId);
+    modelRouterProviderApiKeyMapToArray(providerApiKeyIds).length > 0;
 
   return (
     <FormDialog
@@ -292,16 +295,12 @@ function CreateApplicationDialog({
           await onSubmit({
             name: name.trim(),
             allowedLlmProxyIds: selectedProxyIds,
-            modelRouterProviderApiKeys: mappings.map(
-              ({ provider, chatApiKeyId }) => ({
-                provider,
-                chatApiKeyId,
-              }),
-            ),
+            modelRouterProviderApiKeys:
+              modelRouterProviderApiKeyMapToArray(providerApiKeyIds),
           });
           setName("");
           setSelectedProxyIds([]);
-          setMappings([]);
+          setProviderApiKeyIds({});
         }}
       >
         <DialogBody className="space-y-4">
@@ -329,103 +328,11 @@ function CreateApplicationDialog({
             />
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <Label>Provider keys</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setMappings((current) => [
-                    ...current,
-                    {
-                      id: crypto.randomUUID(),
-                      provider: "openai",
-                      chatApiKeyId: "",
-                    },
-                  ])
-                }
-              >
-                <Plus className="h-4 w-4" />
-                Add Provider
-              </Button>
-            </div>
-
-            {mappings.map((mapping, index) => (
-              <div
-                key={mapping.id}
-                className="grid grid-cols-[1fr_1fr_auto] gap-2"
-              >
-                <Select
-                  value={mapping.provider}
-                  onValueChange={(provider: SupportedProvider) => {
-                    setMappings((current) =>
-                      current.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? { ...item, provider, chatApiKeyId: "" }
-                          : item,
-                      ),
-                    );
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[
-                      ...new Set(
-                        providerOptions.map((option) => option.provider),
-                      ),
-                    ].map((provider) => (
-                      <SelectItem key={provider} value={provider}>
-                        {providerDisplayNames[
-                          provider as keyof typeof providerDisplayNames
-                        ] ?? provider}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={mapping.chatApiKeyId}
-                  onValueChange={(chatApiKeyId) => {
-                    setMappings((current) =>
-                      current.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, chatApiKeyId } : item,
-                      ),
-                    );
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Provider key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providerOptions
-                      .filter((option) => option.provider === mapping.provider)
-                      .map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    setMappings((current) =>
-                      current.filter((_, itemIndex) => itemIndex !== index),
-                    )
-                  }
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
+          <ModelRouterProviderKeyMappingsField
+            providerApiKeyIds={providerApiKeyIds}
+            onProviderApiKeyIdsChange={setProviderApiKeyIds}
+            providerApiKeys={providerApiKeys}
+          />
         </DialogBody>
         <DialogStickyFooter>
           <Button
@@ -437,6 +344,113 @@ function CreateApplicationDialog({
           </Button>
           <Button type="submit" disabled={!canSubmit || isSubmitting}>
             Create Application
+          </Button>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
+  );
+}
+
+function EditApplicationDialog({
+  application,
+  onOpenChange,
+  llmProxies,
+  providerApiKeys,
+  onSubmit,
+  isSubmitting,
+}: {
+  application: LlmApplication | null;
+  onOpenChange: (open: boolean) => void;
+  llmProxies: archestraApiTypes.GetAllAgentsResponses["200"];
+  providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
+  onSubmit: (
+    id: string,
+    values: archestraApiTypes.UpdateLlmApplicationData["body"],
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
+  const [providerApiKeyIds, setProviderApiKeyIds] =
+    useState<ModelRouterProviderApiKeyMap>({});
+
+  useEffect(() => {
+    if (!application) return;
+    setName(application.name);
+    setSelectedProxyIds(application.allowedLlmProxyIds);
+    setProviderApiKeyIds(
+      modelRouterProviderApiKeyArrayToMap(
+        application.modelRouterProviderApiKeys,
+      ),
+    );
+  }, [application]);
+
+  const canSubmit =
+    !!application &&
+    name.trim().length > 0 &&
+    selectedProxyIds.length > 0 &&
+    modelRouterProviderApiKeyMapToArray(providerApiKeyIds).length > 0;
+
+  return (
+    <FormDialog
+      open={!!application}
+      onOpenChange={onOpenChange}
+      title="Edit Application"
+      description="Update the LLM proxies and provider keys this application can use."
+    >
+      <DialogForm
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (!application) return;
+          await onSubmit(application.id, {
+            name: name.trim(),
+            allowedLlmProxyIds: selectedProxyIds,
+            modelRouterProviderApiKeys:
+              modelRouterProviderApiKeyMapToArray(providerApiKeyIds),
+          });
+        }}
+      >
+        <DialogBody className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-application-name">Name</Label>
+            <Input
+              id="edit-application-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="support-assistant-prod"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Allowed LLM proxies</Label>
+            <MultiSelectCombobox
+              options={llmProxies.map((proxy) => ({
+                value: proxy.id,
+                label: proxy.name,
+              }))}
+              value={selectedProxyIds}
+              onChange={setSelectedProxyIds}
+              placeholder="Select LLM proxies"
+              emptyMessage="No LLM proxies found"
+            />
+          </div>
+
+          <ModelRouterProviderKeyMappingsField
+            providerApiKeyIds={providerApiKeyIds}
+            onProviderApiKeyIdsChange={setProviderApiKeyIds}
+            providerApiKeys={providerApiKeys}
+          />
+        </DialogBody>
+        <DialogStickyFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            Save Changes
           </Button>
         </DialogStickyFooter>
       </DialogForm>

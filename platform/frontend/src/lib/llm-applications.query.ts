@@ -6,6 +6,7 @@ import { handleApiError, toApiError } from "@/lib/utils";
 const {
   getLlmApplications,
   createLlmApplication,
+  updateLlmApplication,
   rotateLlmApplicationSecret,
   deleteLlmApplication,
 } = archestraApiSdk;
@@ -39,6 +40,33 @@ export function useCreateLlmApplication() {
     },
     onSuccess: () => {
       toast.success("Application created");
+      queryClient.invalidateQueries({ queryKey: ["llm-applications"] });
+    },
+  });
+}
+
+export function useUpdateLlmApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: archestraApiTypes.UpdateLlmApplicationData["body"];
+    }) => {
+      const { data, error } = await updateLlmApplication({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Application updated");
       queryClient.invalidateQueries({ queryKey: ["llm-applications"] });
     },
   });

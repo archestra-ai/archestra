@@ -34,7 +34,7 @@ describe("llmApplicationsRoutes", () => {
     await app.close();
   });
 
-  test("creates, lists, rotates, and deletes an LLM application", async ({
+  test("creates, lists, updates, rotates, and deletes an LLM application", async ({
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -82,6 +82,33 @@ describe("llmApplicationsRoutes", () => {
     expect(listResponse.statusCode).toBe(200);
     expect(listResponse.json()).toHaveLength(1);
     expect(listResponse.json()[0].name).toBe("Backend Service");
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/llm-applications/${created.id}`,
+      payload: {
+        name: "Updated Backend Service",
+        allowedLlmProxyIds: [agent.id],
+        modelRouterProviderApiKeys: [
+          {
+            provider: "openai",
+            chatApiKeyId: apiKey.id,
+          },
+        ],
+      },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json()).toMatchObject({
+      id: created.id,
+      name: "Updated Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      modelRouterProviderApiKeys: [
+        {
+          provider: "openai",
+          chatApiKeyId: apiKey.id,
+        },
+      ],
+    });
 
     const rotateResponse = await app.inject({
       method: "POST",

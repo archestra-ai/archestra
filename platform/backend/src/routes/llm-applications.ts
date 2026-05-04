@@ -26,6 +26,8 @@ const CreateLlmApplicationBodySchema = z.object({
     .min(1),
 });
 
+const UpdateLlmApplicationBodySchema = CreateLlmApplicationBodySchema;
+
 const llmApplicationsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/llm-applications",
@@ -65,6 +67,34 @@ const llmApplicationsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
       });
       return reply.send({ ...application, clientSecret });
+    },
+  );
+
+  fastify.put(
+    "/api/llm-applications/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateLlmApplication,
+        description: "Update an LLM application",
+        tags: ["LLM Applications"],
+        params: z.object({ id: z.string() }),
+        body: UpdateLlmApplicationBodySchema,
+        response: constructResponseSchema(LlmApplicationSchema),
+      },
+    },
+    async ({ params, body, organizationId }, reply) => {
+      await validateLlmApplicationConfig({ ...body, organizationId });
+      const application = await LlmApplicationModel.update({
+        id: params.id,
+        organizationId,
+        name: body.name,
+        allowedLlmProxyIds: body.allowedLlmProxyIds,
+        modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
+      });
+      if (!application) {
+        throw new ApiError(404, "LLM application not found");
+      }
+      return reply.send(application);
     },
   );
 

@@ -31484,6 +31484,195 @@ export type CreateLlmApplicationResponses = {
 
 export type CreateLlmApplicationResponse = CreateLlmApplicationResponses[keyof CreateLlmApplicationResponses];
 
+export type DeleteLlmApplicationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-applications/{id}';
+};
+
+export type DeleteLlmApplicationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteLlmApplicationError = DeleteLlmApplicationErrors[keyof DeleteLlmApplicationErrors];
+
+export type DeleteLlmApplicationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLlmApplicationResponse = DeleteLlmApplicationResponses[keyof DeleteLlmApplicationResponses];
+
+export type UpdateLlmApplicationData = {
+    body: {
+        name: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-applications/{id}';
+};
+
+export type UpdateLlmApplicationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateLlmApplicationError = UpdateLlmApplicationErrors[keyof UpdateLlmApplicationErrors];
+
+export type UpdateLlmApplicationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        clientId: string;
+        name: string;
+        organizationId: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLlmApplicationResponse = UpdateLlmApplicationResponses[keyof UpdateLlmApplicationResponses];
+
 export type RotateLlmApplicationSecretData = {
     body?: never;
     path: {
@@ -31581,91 +31770,6 @@ export type RotateLlmApplicationSecretResponses = {
 };
 
 export type RotateLlmApplicationSecretResponse = RotateLlmApplicationSecretResponses[keyof RotateLlmApplicationSecretResponses];
-
-export type DeleteLlmApplicationData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-applications/{id}';
-};
-
-export type DeleteLlmApplicationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteLlmApplicationError = DeleteLlmApplicationErrors[keyof DeleteLlmApplicationErrors];
-
-export type DeleteLlmApplicationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteLlmApplicationResponse = DeleteLlmApplicationResponses[keyof DeleteLlmApplicationResponses];
 
 export type GetLlmModelsData = {
     body?: never;

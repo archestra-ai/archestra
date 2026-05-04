@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ReactNode, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Radix Dialog / Popper need ResizeObserver as a real constructor
@@ -11,6 +12,22 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+// Radix Select pokes at PointerEvent / hasPointerCapture which jsdom lacks.
+if (
+  typeof Element !== "undefined" &&
+  !Element.prototype.hasPointerCapture
+) {
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.releasePointerCapture = () => {};
+  Element.prototype.setPointerCapture = () => {};
+}
+if (
+  typeof Element !== "undefined" &&
+  !Element.prototype.scrollIntoView
+) {
+  Element.prototype.scrollIntoView = () => {};
+}
 
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
@@ -77,8 +94,15 @@ vi.mock("sonner", () => ({
   },
 }));
 
+// The settings layout normally hosts the page-level action button. In tests we
+// render the action node directly so the «Create cluster» control is reachable.
+let setSettingsActionRef: ((node: ReactNode) => void) | null = null;
 vi.mock("@/app/settings/layout", () => ({
-  useSetSettingsAction: () => () => {},
+  useSetSettingsAction: () => {
+    return (node: ReactNode) => {
+      setSettingsActionRef?.(node);
+    };
+  },
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -88,6 +112,12 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 import ClustersSettingsPage from "./page";
 
+function SettingsActionHost() {
+  const [node, setNode] = useState<ReactNode>(null);
+  setSettingsActionRef = setNode;
+  return <div data-testid="settings-action-slot">{node}</div>;
+}
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -95,6 +125,7 @@ function renderPage() {
 
   return render(
     <QueryClientProvider client={queryClient}>
+      <SettingsActionHost />
       <ClustersSettingsPage />
     </QueryClientProvider>,
   );
@@ -102,6 +133,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setSettingsActionRef = null;
   createMutate.mockReset();
   updateMutate.mockReset();
   deleteMutate.mockReset();
@@ -182,8 +214,8 @@ describe("ClustersSettingsPage", () => {
     );
     const dialog = await screen.findByRole("dialog", { name: /cluster/i });
 
-    await user.type(within(dialog).getByLabelText(/name/i), "edge");
-    const namespaceInput = within(dialog).queryByLabelText(/namespace/i);
+    await user.type(within(dialog).getByLabelText("Name"), "edge");
+    const namespaceInput = within(dialog).queryByLabelText("Namespace");
     if (namespaceInput) {
       await user.type(namespaceInput, "edge-ns");
     }
@@ -197,21 +229,102 @@ describe("ClustersSettingsPage", () => {
     expect(submitted).toEqual(expect.objectContaining({ name: "edge" }));
   });
 
-  it("opens an edit dialog with prefilled values when an existing row is clicked", async () => {
+  it("opens an edit dialog with prefilled values via the row actions menu", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByText("my-laptop"));
+    const personalRow = screen.getByText("my-laptop").closest("tr");
+    expect(personalRow).not.toBeNull();
+    await user.click(
+      within(personalRow as HTMLElement).getByRole("button", {
+        name: /edit cluster/i,
+      }),
+    );
 
     const dialog = await screen.findByRole("dialog", { name: /cluster/i });
-    expect(within(dialog).getByLabelText(/name/i)).toHaveValue("my-laptop");
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("my-laptop");
+  });
+
+  it("editing a custom-source cluster without re-pasting kubeconfig keeps the existing secret", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const personalRow = screen.getByText("my-laptop").closest("tr");
+    expect(personalRow).not.toBeNull();
+    await user.click(
+      within(personalRow as HTMLElement).getByRole("button", {
+        name: /edit cluster/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: /cluster/i });
+    const nameInput = within(dialog).getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "my-laptop-renamed");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: /^save$|^create$/i }),
+    );
+
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    const submitted = updateMutate.mock.calls[0][0];
+    expect(submitted).toEqual(
+      expect.objectContaining({ id: "cluster-personal" }),
+    );
+    expect(submitted.body).not.toHaveProperty("kubeconfigYaml");
+    expect(submitted.body.kubeconfigYaml).toBeUndefined();
+    expect(submitted.body).toEqual(
+      expect.objectContaining({
+        name: "my-laptop-renamed",
+        loadFromCluster: false,
+      }),
+    );
+  });
+
+  it("switching kubeconfig source from custom to in-cluster sends kubeconfigYaml: null", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const personalRow = screen.getByText("my-laptop").closest("tr");
+    expect(personalRow).not.toBeNull();
+    await user.click(
+      within(personalRow as HTMLElement).getByRole("button", {
+        name: /edit cluster/i,
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: /cluster/i });
+
+    await user.click(
+      within(dialog).getByRole("combobox", { name: /kubeconfig source/i }),
+    );
+    await user.click(
+      await screen.findByRole("option", {
+        name: /in-cluster service account/i,
+      }),
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: /^save$|^create$/i }),
+    );
+
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    const submitted = updateMutate.mock.calls[0][0];
+    expect(submitted.body).toHaveProperty("kubeconfigYaml", null);
+    expect(submitted.body.loadFromCluster).toBe(true);
   });
 
   it("calls useTestCluster.mutate and surfaces the connection result", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByText("my-laptop"));
+    const personalRow = screen.getByText("my-laptop").closest("tr");
+    expect(personalRow).not.toBeNull();
+    await user.click(
+      within(personalRow as HTMLElement).getByRole("button", {
+        name: /edit cluster/i,
+      }),
+    );
     const dialog = await screen.findByRole("dialog", { name: /cluster/i });
     await user.click(
       within(dialog).getByRole("button", { name: /test connection/i }),
@@ -230,7 +343,7 @@ describe("ClustersSettingsPage", () => {
     expect(personalRow).not.toBeNull();
     await user.click(
       within(personalRow as HTMLElement).getByRole("button", {
-        name: /delete/i,
+        name: /delete cluster/i,
       }),
     );
 
@@ -244,22 +357,25 @@ describe("ClustersSettingsPage", () => {
     );
   });
 
-  it("renders a Default badge and disables delete on the default cluster", () => {
+  it("renders a System badge and exposes no destructive action on the default cluster", () => {
     renderPage();
 
     const defaultRow = screen.getByText("default").closest("tr");
     expect(defaultRow).not.toBeNull();
     expect(
-      within(defaultRow as HTMLElement).getByText(/default/i),
+      within(defaultRow as HTMLElement).getByText(/system/i),
     ).toBeInTheDocument();
 
-    const deleteButton = within(defaultRow as HTMLElement).queryByRole(
-      "button",
-      { name: /delete/i },
-    );
-    if (deleteButton) {
-      expect(deleteButton).toBeDisabled();
-    }
+    expect(
+      within(defaultRow as HTMLElement).queryByRole("button", {
+        name: /delete cluster/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(defaultRow as HTMLElement).queryByRole("button", {
+        name: /edit cluster/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("exposes a personal-default toggle on each cluster row", () => {
@@ -271,6 +387,31 @@ describe("ClustersSettingsPage", () => {
       within(personalRow as HTMLElement).getByRole("switch", {
         name: /personal default|default for me/i,
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("toggles the kubeconfig YAML textarea based on the source selector", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: /create cluster|add cluster/i }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: /cluster/i });
+
+    expect(
+      within(dialog).queryByLabelText(/kubeconfig \(yaml\)/i),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole("combobox", { name: /kubeconfig source/i }),
+    );
+    await user.click(
+      await screen.findByRole("option", { name: /custom kubeconfig/i }),
+    );
+
+    expect(
+      within(dialog).getByLabelText(/kubeconfig \(yaml\)/i),
     ).toBeInTheDocument();
   });
 });

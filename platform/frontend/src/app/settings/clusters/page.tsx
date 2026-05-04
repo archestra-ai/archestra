@@ -1,27 +1,31 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Switch } from "@/components/ui/switch";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type Cluster,
   useClusters,
@@ -31,35 +35,46 @@ import {
   useUpdateCluster,
 } from "@/lib/clusters/cluster.query";
 
+type KubeconfigSource = "in-cluster" | "custom" | "default";
+
 type ClusterFormValues = {
   name: string;
   namespace: string;
   kubeconfigYaml: string;
-  loadFromCluster: boolean;
-  isPersonalDefault: boolean;
+  kubeconfigSource: KubeconfigSource;
 };
 
 const EMPTY_FORM: ClusterFormValues = {
   name: "",
   namespace: "",
   kubeconfigYaml: "",
-  loadFromCluster: false,
-  isPersonalDefault: false,
+  kubeconfigSource: "default",
 };
 
 function clusterToFormValues(cluster: Cluster): ClusterFormValues {
+  let source: KubeconfigSource;
+  if (cluster.loadFromCluster) {
+    source = "in-cluster";
+  } else if (cluster.kubeconfigSecretId) {
+    source = "custom";
+  } else {
+    source = "default";
+  }
+
   return {
     name: cluster.name,
     namespace: cluster.namespace ?? "",
     kubeconfigYaml: "",
-    loadFromCluster: cluster.loadFromCluster,
-    isPersonalDefault: cluster.isPersonalDefault,
+    kubeconfigSource: source,
   };
 }
 
 export default function ClustersSettingsPage() {
   const setActionButton = useSetSettingsAction();
   const { data: clusters = [], isLoading } = useClusters();
+  const { data: canManageClusters = false } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
   const createMutation = useCreateCluster();
   const updateMutation = useUpdateCluster();
   const deleteMutation = useDeleteCluster();
@@ -70,6 +85,7 @@ export default function ClustersSettingsPage() {
   const [toDelete, setToDelete] = useState<Cluster | null>(null);
 
   const form = useForm<ClusterFormValues>({ defaultValues: EMPTY_FORM });
+  const kubeconfigSource = form.watch("kubeconfigSource");
 
   const dialogOpen = creating || editing !== null;
 
@@ -92,7 +108,18 @@ export default function ClustersSettingsPage() {
   };
 
   useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ mcpServerInstallation: ["admin"] }}
+        onClick={openCreate}
+      >
+        <Plus className="h-4 w-4" />
+        Create cluster
+      </PermissionButton>,
+    );
+
     return () => setActionButton(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setActionButton]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
@@ -100,26 +127,45 @@ export default function ClustersSettingsPage() {
     if (!trimmedName) return;
 
     const namespace = values.namespace.trim();
-    const kubeconfigYaml = values.kubeconfigYaml.trim();
+    const trimmedKubeconfigYaml = values.kubeconfigYaml.trim();
+
+    const loadFromCluster = values.kubeconfigSource === "in-cluster";
+    const kubeconfigYamlForUpdate =
+      values.kubeconfigSource === "custom"
+        ? trimmedKubeconfigYaml.length > 0
+          ? trimmedKubeconfigYaml
+          : undefined
+        : null;
+    const kubeconfigYamlForCreate =
+      values.kubeconfigSource === "custom" && trimmedKubeconfigYaml.length > 0
+        ? trimmedKubeconfigYaml
+        : undefined;
 
     if (editing) {
+      const updateBody: {
+        name: string;
+        namespace: string | null;
+        loadFromCluster: boolean;
+        kubeconfigYaml?: string | null;
+      } = {
+        name: trimmedName,
+        namespace: namespace.length > 0 ? namespace : null,
+        loadFromCluster,
+      };
+      if (kubeconfigYamlForUpdate !== undefined) {
+        updateBody.kubeconfigYaml = kubeconfigYamlForUpdate;
+      }
       await updateMutation.mutateAsync({
         id: editing.id,
-        body: {
-          name: trimmedName,
-          namespace: namespace.length > 0 ? namespace : null,
-          kubeconfigYaml: kubeconfigYaml.length > 0 ? kubeconfigYaml : null,
-          loadFromCluster: values.loadFromCluster,
-          isPersonalDefault: values.isPersonalDefault,
-        },
+        body: updateBody,
       });
     } else {
       await createMutation.mutateAsync({
         name: trimmedName,
         namespace: namespace.length > 0 ? namespace : null,
-        kubeconfigYaml: kubeconfigYaml.length > 0 ? kubeconfigYaml : undefined,
-        loadFromCluster: values.loadFromCluster,
-        isPersonalDefault: values.isPersonalDefault,
+        kubeconfigYaml: kubeconfigYamlForCreate,
+        loadFromCluster,
+        isPersonalDefault: false,
       });
     }
 
@@ -158,90 +204,109 @@ export default function ClustersSettingsPage() {
     [clusters],
   );
 
+  const columns: ColumnDef<Cluster>[] = useMemo(() => {
+    const baseColumns: ColumnDef<Cluster>[] = [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{row.original.name}</span>
+            {row.original.isDefault && (
+              <Badge variant="secondary">System</Badge>
+            )}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "namespace",
+        header: "Namespace",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.namespace ?? "—"}
+          </span>
+        ),
+      },
+      {
+        id: "kubeconfig",
+        header: "Kubeconfig",
+        cell: ({ row }) => {
+          const cluster = row.original;
+          const label = cluster.loadFromCluster
+            ? "In-cluster"
+            : cluster.kubeconfigSecretId
+              ? "Custom"
+              : cluster.isDefault
+                ? "Env / default"
+                : "Default";
+          return (
+            <span className="text-sm text-muted-foreground">{label}</span>
+          );
+        },
+      },
+      {
+        id: "personalDefault",
+        header: "Personal default",
+        cell: ({ row }) => (
+          <Switch
+            aria-label="Personal default"
+            checked={row.original.isPersonalDefault}
+            onCheckedChange={(next) =>
+              handleTogglePersonalDefault(row.original, next)
+            }
+          />
+        ),
+      },
+    ];
+
+    if (!canManageClusters) {
+      return baseColumns;
+    }
+
+    return [
+      ...baseColumns,
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => {
+          if (row.original.isDefault) {
+            return <TableRowActions actions={[]} />;
+          }
+          return (
+            <TableRowActions
+              actions={[
+                {
+                  icon: <Pencil className="h-4 w-4" />,
+                  label: "Edit cluster",
+                  onClick: () => openEdit(row.original),
+                },
+                {
+                  icon: <Trash2 className="h-4 w-4" />,
+                  label: "Delete cluster",
+                  onClick: () => setToDelete(row.original),
+                  variant: "destructive",
+                },
+              ]}
+            />
+          );
+        },
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManageClusters]);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <PermissionButton
-          permissions={{ mcpServerInstallation: ["admin"] }}
-          onClick={openCreate}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create cluster
-        </PermissionButton>
-      </div>
-
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading clusters...</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Namespace</TableHead>
-              <TableHead>Kubeconfig</TableHead>
-              <TableHead>Personal default</TableHead>
-              <TableHead className="w-[80px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedClusters.map((cluster) => {
-              const kubeconfigSource = cluster.loadFromCluster
-                ? "In-cluster"
-                : cluster.kubeconfigSecretId
-                  ? "Custom"
-                  : cluster.isDefault
-                    ? "Env / default"
-                    : "Default";
-
-              return (
-                <TableRow key={cluster.id}>
-                  <TableCell>
-                    <button
-                      type="button"
-                      className="font-medium hover:underline text-left"
-                      onClick={() => openEdit(cluster)}
-                    >
-                      {cluster.name}
-                    </button>
-                    {cluster.isDefault && (
-                      <Badge variant="secondary" className="ml-2">
-                        System
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {cluster.namespace ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {kubeconfigSource}
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      aria-label="Personal default"
-                      checked={cluster.isPersonalDefault}
-                      onCheckedChange={(next) =>
-                        handleTogglePersonalDefault(cluster, next)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-label="Delete"
-                      onClick={() => setToDelete(cluster)}
-                      disabled={cluster.isDefault}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
+      <LoadingWrapper
+        isPending={isLoading}
+        loadingFallback={<LoadingSpinner />}
+      >
+        <DataTable
+          columns={columns}
+          data={sortedClusters}
+          emptyMessage="No clusters yet"
+        />
+      </LoadingWrapper>
 
       <FormDialog
         open={dialogOpen}
@@ -269,63 +334,62 @@ export default function ClustersSettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cluster-scope">Scope</Label>
+              <Label htmlFor="cluster-namespace">Namespace</Label>
               <Input
-                id="cluster-scope"
-                placeholder="Kubernetes namespace (defaults to 'default')"
+                id="cluster-namespace"
+                placeholder="default"
                 {...form.register("namespace")}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cluster-kubeconfig">Kubeconfig (YAML)</Label>
-              <Textarea
-                id="cluster-kubeconfig"
-                placeholder="Paste kubeconfig YAML or leave blank"
-                rows={8}
-                {...form.register("kubeconfigYaml")}
-              />
               <p className="text-xs text-muted-foreground">
-                Leave blank to keep the existing kubeconfig (when editing) or to
-                fall back to the platform default kubeconfig.
+                Optional. Defaults to <code>default</code>.
               </p>
             </div>
-            <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div className="space-y-1">
-                <Label htmlFor="cluster-in-cluster">
-                  Load kubeconfig from current cluster
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Use the platform pod&apos;s in-cluster service account.
-                </p>
-              </div>
-              <Switch
-                id="cluster-in-cluster"
-                aria-label="Load kubeconfig from current cluster"
-                checked={form.watch("loadFromCluster")}
-                onCheckedChange={(value) =>
-                  form.setValue("loadFromCluster", value)
+            <div className="space-y-2">
+              <Label htmlFor="cluster-kubeconfig-source">
+                Kubeconfig source
+              </Label>
+              <Select
+                value={kubeconfigSource}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "kubeconfigSource",
+                    value as KubeconfigSource,
+                  )
                 }
-              />
+              >
+                <SelectTrigger
+                  id="cluster-kubeconfig-source"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="in-cluster">
+                    In-cluster service account
+                  </SelectItem>
+                  <SelectItem value="custom">
+                    Custom kubeconfig (YAML)
+                  </SelectItem>
+                  <SelectItem value="default">Platform default</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div className="space-y-1">
-                <Label htmlFor="cluster-personal-default">
-                  Use as personal default
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Personal MCP servers without an explicit cluster will be
-                  deployed here.
-                </p>
+            {kubeconfigSource === "custom" && (
+              <div className="space-y-2">
+                <Label htmlFor="cluster-kubeconfig">Kubeconfig (YAML)</Label>
+                <Textarea
+                  id="cluster-kubeconfig"
+                  placeholder="Paste kubeconfig YAML"
+                  rows={8}
+                  {...form.register("kubeconfigYaml")}
+                />
+                {editing && (
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to keep the existing kubeconfig.
+                  </p>
+                )}
               </div>
-              <Switch
-                id="cluster-personal-default"
-                aria-label="Use as personal default"
-                checked={form.watch("isPersonalDefault")}
-                onCheckedChange={(value) =>
-                  form.setValue("isPersonalDefault", value)
-                }
-              />
-            </div>
+            )}
             {editing && (
               <div className="flex items-center gap-2">
                 <Button

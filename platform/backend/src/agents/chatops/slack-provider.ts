@@ -7,7 +7,7 @@ import {
   TimeInMs,
 } from "@shared";
 import { SocketModeClient } from "@slack/socket-mode";
-import { WebClient } from "@slack/web-api";
+import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
 import {
   type AllowedCacheKey,
   CacheKey,
@@ -17,6 +17,8 @@ import {
 import logger from "@/logging";
 import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
 import type {
+  AddApprovalRequestFormOptions,
+  ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
   ChatOpsProvider,
@@ -28,6 +30,7 @@ import type {
   IncomingChatMessage,
   SlackDbConfig,
   ThreadHistoryParams,
+  UpdateApprovalRequestOptions,
 } from "@/types";
 import {
   autoProvisionUser,
@@ -90,6 +93,22 @@ class SlackProvider implements ChatOpsProvider {
 
   setEventHandler(handler: ChatOpsEventHandler): void {
     this.eventHandler = handler;
+  }
+
+  async handleInteractivePayload(payload: unknown): Promise<void> {
+    const approvalDecision = this.parseApprovalPayload(payload);
+    if (approvalDecision) {
+      await this.eventHandler?.handleInteractiveApprovalDecision(
+        this,
+        approvalDecision,
+      );
+      return;
+    }
+
+    const selection = this.parseInteractivePayload(payload);
+    if (!selection) return;
+
+    await this.eventHandler?.handleInteractiveSelection(this, payload);
   }
 
   async initialize(): Promise<void> {
@@ -333,6 +352,77 @@ class SlackProvider implements ChatOpsProvider {
     });
 
     return (result.ts as string) || "";
+  }
+
+  async addApprovalRequestForm(
+    options: AddApprovalRequestFormOptions,
+  ): Promise<void> {
+    if (!this.client) {
+      throw new Error("SlackProvider not initialized");
+    }
+
+    const generateButton = (
+      text: string,
+      style: ColorScheme,
+      approved: boolean,
+      action: string,
+    ): Button => {
+      return {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text,
+          emoji: true,
+        },
+        action_id: `approval_decision_${options.approvalId}_${action}`,
+        value: JSON.stringify({
+          taskId: options.taskId,
+          approvalId: options.approvalId,
+          toolName: options.toolName,
+          originalMessage: options.originalMessage,
+          approved,
+        }),
+        style,
+      };
+    };
+
+    await this.client.chat.postMessage({
+      channel: options.channelId,
+      text: "",
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `\`${options.toolName}\``,
+          },
+        },
+        {
+          type: "actions",
+          elements: [
+            generateButton("Approve", "primary", true, "approve"),
+            generateButton("Decline", "danger", false, "decline"),
+          ],
+        },
+      ],
+      thread_ts: options.threadId,
+    });
+  }
+
+  async updateApprovalRequest(
+    options: UpdateApprovalRequestOptions,
+  ): Promise<void> {
+    if (!this.client) {
+      throw new Error("SlackProvider not initialized");
+    }
+    const status = options.approved
+      ? ":white_check_mark: Approved"
+      : ":x: Declined";
+    await this.client.chat.update({
+      channel: options.channelId,
+      ts: options.messageKey,
+      text: `\`${options.toolName}\`: ${status}`,
+    });
   }
 
   async sendAgentSelectionCard(params: {
@@ -666,6 +756,66 @@ class SlackProvider implements ChatOpsProvider {
       userId: p.user?.id || "unknown",
       userName: p.user?.name || "Unknown",
       responseUrl: p.response_url || "",
+    };
+  }
+
+  parseApprovalPayload(payload: unknown): ChatOpsApprovalDecision | null {
+    const p = payload as SlackInteractivePayload;
+    if (p.type !== "block_actions" || !p.actions?.length) {
+      return null;
+    }
+
+    const action = p.actions[0];
+    if (!action.action_id?.startsWith("approval_decision") || !action.value) {
+      return null;
+    }
+
+    let parsedValue: {
+      taskId?: string;
+      approvalId?: string;
+      approved?: boolean;
+      toolName?: string;
+      originalMessage: IncomingChatMessage;
+    };
+    try {
+      parsedValue = JSON.parse(action.value) as {
+        taskId?: string;
+        approvalId?: string;
+        approved?: boolean;
+        toolName?: string;
+        originalMessage: IncomingChatMessage;
+      };
+    } catch {
+      return null;
+    }
+
+    if (
+      !parsedValue.taskId ||
+      !parsedValue.approvalId ||
+      typeof parsedValue.approved !== "boolean" ||
+      !parsedValue.originalMessage
+    ) {
+      return null;
+    }
+
+    const messageTs = p.message?.ts;
+    if (!messageTs) {
+      return null;
+    }
+
+    return {
+      taskId: parsedValue.taskId,
+      approvalId: parsedValue.approvalId,
+      approved: parsedValue.approved,
+      toolName: parsedValue.toolName || "",
+      messageTs,
+      channelId: p.channel?.id || "",
+      workspaceId: p.team?.id || null,
+      threadTs: p.message?.thread_ts || p.message?.ts,
+      userId: p.user?.id || "unknown",
+      userName: p.user?.name || "Unknown",
+      responseUrl: p.response_url || "",
+      originalMessage: parsedValue.originalMessage,
     };
   }
 
@@ -1080,14 +1230,12 @@ class SlackProvider implements ChatOpsProvider {
           }
           case "interactive":
             await ack();
-            this.eventHandler
-              ?.handleInteractiveSelection(this, body)
-              .catch((error) => {
-                logger.error(
-                  { error: errorMessage(error) },
-                  "[SlackProvider] Error processing socket interactive event",
-                );
-              });
+            this.handleInteractivePayload(body).catch((error) => {
+              logger.error(
+                { error: errorMessage(error) },
+                "[SlackProvider] Error processing socket interactive event",
+              );
+            });
             break;
           case "slash_commands":
             // ack() for slash commands can include a response body

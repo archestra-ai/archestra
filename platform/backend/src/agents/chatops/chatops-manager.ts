@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
+import { A2AManager } from "@/agents/a2a/a2a-manager";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -13,14 +14,27 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
-import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import { RouteCategory } from "@/observability/tracing";
 import type {
+  ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
   IncomingChatMessage,
 } from "@/types";
+import type { InteractionSource } from "../../../../shared";
+import {
+  buildApprovalDecisionSendMessageRequest,
+  buildAttachmentsMessageParts,
+  buildSendMessageRequest,
+  extractApprovalRequestsFromSendMessageResult,
+  extractMessageFromSendMessageResult,
+} from "../a2a/a2a-helper";
+import type {
+  A2AArchestraApprovalRequest,
+  A2AProtocolSendMessageResponse,
+} from "../a2a/a2a-protocol";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
@@ -44,6 +58,13 @@ export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly a2aManager: A2AManager;
+
+  constructor() {
+    this.a2aManager = new A2AManager({
+      stateless: true,
+    });
+  }
 
   getMSTeamsProvider(): MSTeamsProvider | null {
     return this.msTeamsProvider;
@@ -225,6 +246,7 @@ export class ChatOpsManager {
     // Create providers with their config
     if (msTeamsConfig) {
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
+      this.msTeamsProvider.setEventHandler(this);
     }
     if (slackConfig) {
       this.slackProvider = new SlackProvider(slackConfig);
@@ -1272,153 +1294,22 @@ export class ChatOpsManager {
     }
 
     try {
-      // Resolve user for span attributes
-      const chatOpsUser =
-        userId !== "system" ? await UserModel.getById(userId) : null;
-
-      // Wrap A2A execution with a parent span so all LLM and MCP tool calls
-      // appear as children of a single unified trace. The provider ID (e.g.
-      // "ms-teams", "slack") is recorded as archestra.trigger.source so traces
-      // can be filtered by invocation channel.
-      const execution = await startActiveChatSpan({
-        agentName: agent.name,
-        agentId: agent.id,
-        routeCategory: RouteCategory.CHATOPS,
-        triggerSource: provider.providerId,
-        user: chatOpsUser
-          ? {
-              id: chatOpsUser.id,
-              email: chatOpsUser.email,
-              name: chatOpsUser.name,
-            }
-          : null,
-        callback: async () => {
-          // Use thread ID (or channel ID for non-threaded messages) as session ID
-          // so all messages in the same thread are grouped together in logs
-          const sessionId = buildChatOpsSessionId(
-            provider.providerId,
-            message.channelId,
-            message.threadId,
-          );
-
-          const source =
-            provider.providerId === "slack"
-              ? "chatops:slack"
-              : "chatops:ms-teams";
-
-          const attachments =
-            message.attachments && message.attachments.length > 0
-              ? message.attachments
-              : undefined;
-
-          const effectiveThreadId =
-            message.threadId ?? message.channelId ?? message.messageId;
-
-          const initialResult = await executeA2AMessage({
-            agentId: agent.id,
-            organizationId: binding.organizationId,
-            message: fullMessage,
-            userId,
-            sessionId,
-            source,
-            attachments,
-            chatOpsBindingId: binding.id,
-            chatOpsThreadId: effectiveThreadId,
-          });
-
-          const initialResponse = stripThinkingBlocks(initialResult.text || "");
-
-          // If swap_agent/swap_to_default_agent created a thread-level override
-          // during execution, hand off to the new agent in the same chatops turn
-          // only when the routing agent did not already produce a visible reply.
-          const postExecOverride =
-            await ChatOpsThreadAgentOverrideModel.findByThread(
-              binding.id,
-              effectiveThreadId,
-            );
-
-          if (postExecOverride && postExecOverride.agentId !== agent.id) {
-            const swappedAgent = await AgentModel.findById(
-              postExecOverride.agentId,
-            );
-            if (swappedAgent && swappedAgent.agentType === "agent") {
-              if (initialResponse) {
-                return {
-                  result: initialResult,
-                  responseAgent: {
-                    id: swappedAgent.id,
-                    name: swappedAgent.name,
-                  },
-                };
-              }
-
-              logger.info(
-                {
-                  bindingId: binding.id,
-                  threadId: effectiveThreadId,
-                  previousAgentId: agent.id,
-                  swappedAgentId: swappedAgent.id,
-                },
-                "[ChatOps] Thread agent override detected, handing off to swapped agent",
-              );
-
-              const handoffResult = await executeA2AMessage({
-                agentId: swappedAgent.id,
-                organizationId: binding.organizationId,
-                message: fullMessage,
-                userId,
-                sessionId,
-                source,
-                attachments,
-                chatOpsBindingId: binding.id,
-                chatOpsThreadId: effectiveThreadId,
-              });
-
-              return {
-                result: handoffResult,
-                responseAgent: {
-                  id: swappedAgent.id,
-                  name: swappedAgent.name,
-                },
-              };
-            }
-          }
-
-          return {
-            result: initialResult,
-            responseAgent: agent,
-          };
-        },
+      const { result, responseAgent } = await this.executeMessage({
+        agent,
+        binding,
+        message,
+        provider,
+        fullMessage,
+        userId,
       });
 
-      const agentResponse = stripThinkingBlocks(execution.result.text || "");
-
-      if (sendReply && agentResponse) {
-        await provider.sendReply({
-          originalMessage: message,
-          text: agentResponse,
-          footer: `🤖 ${execution.responseAgent.name}`,
-          conversationReference: message.metadata?.conversationReference,
-        });
-      } else if (
-        sendReply &&
-        !agentResponse &&
-        message.metadata?.placeholderActivityId
-      ) {
-        // Agent returned no visible content but a placeholder "Thinking..."
-        // message was sent (Teams channels) — update it so it doesn't linger.
-        await provider.sendReply({
-          originalMessage: message,
-          text: "_(No response)_",
-          conversationReference: message.metadata?.conversationReference,
-        });
-      }
-
-      return {
-        success: true,
-        agentResponse,
-        interactionId: execution.result.messageId,
-      };
+      return await this.replyByMessageExecutionResult({
+        agent: responseAgent,
+        message,
+        provider,
+        sendReply,
+        result,
+      });
     } catch (error) {
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
@@ -1439,6 +1330,402 @@ export class ChatOpsManager {
       }
 
       return { success: false, error: errorMessage(error) };
+    }
+  }
+
+  private async replyByMessageExecutionResult(params: {
+    agent: { id: string; name: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    sendReply: boolean;
+    currentApprovalId?: string; // if replying from an approval flow
+    result: A2AProtocolSendMessageResponse;
+  }): Promise<ChatOpsProcessingResult> {
+    const { agent, message, provider, sendReply, currentApprovalId, result } =
+      params;
+
+    const approvalRequests =
+      extractApprovalRequestsFromSendMessageResult(result);
+    if (approvalRequests.length > 0) {
+      return await this.replyWithApprovalForm({
+        agent,
+        message,
+        provider,
+        sendReply,
+        approvalRequests,
+        currentApprovalId,
+        result,
+      });
+    }
+
+    const resultMessage = extractMessageFromSendMessageResult(result);
+    const text = resultMessage.parts.map((part) => part.text).join("\n");
+    const agentResponse = stripThinkingBlocks(text);
+
+    if (sendReply && agentResponse) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: agentResponse,
+        footer: `🤖 ${agent.name}`,
+        conversationReference: message.metadata?.conversationReference,
+      });
+    } else if (
+      sendReply &&
+      !agentResponse &&
+      message.metadata?.placeholderActivityId
+    ) {
+      // Agent returned no visible content but a placeholder "Thinking..."
+      // message was sent (Teams channels) — update it so it doesn't linger.
+      await provider.sendReply({
+        originalMessage: message,
+        text: "_(No response)_",
+        conversationReference: message.metadata?.conversationReference,
+      });
+    }
+
+    return {
+      success: true,
+      agentResponse,
+      interactionId: resultMessage.messageId,
+    };
+  }
+
+  private async replyWithApprovalForm(params: {
+    agent: { id: string; name: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    sendReply: boolean;
+    approvalRequests: A2AArchestraApprovalRequest[];
+    currentApprovalId?: string; // if replying from an approval flow
+    result: A2AProtocolSendMessageResponse;
+  }): Promise<ChatOpsProcessingResult> {
+    const {
+      agent,
+      message,
+      provider,
+      sendReply,
+      approvalRequests,
+      currentApprovalId,
+      result,
+    } = params;
+    const { task } = result;
+    if (!task) {
+      // This should never happen — approval requests are only returned in task metadata
+      throw new Error(
+        "[ChatOps] Expected task with approval requests in A2A response",
+      );
+    }
+
+    const isNewApprovalRequestBatch =
+      !currentApprovalId ||
+      !approvalRequests.find((req) => req.approvalId === currentApprovalId);
+    const resultMessage = extractMessageFromSendMessageResult(result);
+
+    if (!isNewApprovalRequestBatch) {
+      const unresolvedCount = approvalRequests.filter(
+        (req) => !req.resolved,
+      ).length;
+      await provider.sendReply({
+        originalMessage: message,
+        text: `Pending approval requests: ${unresolvedCount}`,
+        footer: `🤖 ${agent.name}`,
+        conversationReference: message.metadata?.conversationReference,
+      });
+      return {
+        success: true,
+        agentResponse: "",
+        interactionId: resultMessage.messageId,
+      };
+    }
+
+    const agentResponse = stripThinkingBlocks(
+      resultMessage?.parts.map((p) => p.text).join("\n") || "",
+    );
+
+    if (sendReply) {
+      await provider.sendReply({
+        originalMessage: message,
+        text:
+          agentResponse ||
+          "Approval required before I can continue with this action.",
+        footer: `🤖 ${agent.name}`,
+        conversationReference: message.metadata?.conversationReference,
+      });
+
+      for (const approvalRequest of approvalRequests) {
+        await provider.addApprovalRequestForm({
+          approvalId: approvalRequest.approvalId,
+          taskId: task.id,
+          channelId: message.channelId,
+          threadId: message.threadId,
+          toolName: approvalRequest.toolName,
+          originalMessage: message,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      agentResponse,
+      interactionId: resultMessage.messageId,
+    };
+  }
+
+  async executeMessage(params: {
+    agent: { id: string; name: string };
+    binding: { id: string; organizationId: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    fullMessage: string;
+    userId: string;
+  }): Promise<{
+    result: A2AProtocolSendMessageResponse;
+    responseAgent: { id: string; name: string };
+  }> {
+    const { agent, binding, message, provider, fullMessage, userId } = params;
+
+    // Use thread ID (or channel ID for non-threaded messages) as session ID
+    // so all messages in the same thread are grouped together in logs
+    const sessionId = buildChatOpsSessionId(
+      provider.providerId,
+      message.channelId,
+      message.threadId,
+    );
+    const effectiveThreadId =
+      message.threadId ?? message.channelId ?? message.messageId;
+
+    const request = buildSendMessageRequest({
+      parts: [
+        { text: fullMessage },
+        ...buildAttachmentsMessageParts(message.attachments || []),
+      ],
+    });
+    const source: InteractionSource =
+      provider.providerId === "slack" ? "chatops:slack" : "chatops:ms-teams";
+    const systemParams = {
+      sessionId,
+      source,
+      route: RouteCategory.CHATOPS,
+      chatOpsBindingId: binding.id,
+      chatOpsThreadId: effectiveThreadId,
+    };
+
+    const initialResult = await this.a2aManager.sendMessage({
+      actor: {
+        kind: "user",
+        id: userId,
+        organizationId: binding.organizationId,
+      },
+      agentId: agent.id,
+      request,
+      systemParams,
+    });
+
+    // If swap_agent/swap_to_default_agent created a thread-level override
+    // during execution, hand off to the new agent in the same chatops turn
+    // only when the routing agent did not already produce a visible reply.
+    const postExecOverride = await ChatOpsThreadAgentOverrideModel.findByThread(
+      binding.id,
+      effectiveThreadId,
+    );
+
+    if (postExecOverride && postExecOverride.agentId !== agent.id) {
+      const swappedAgent = await AgentModel.findById(postExecOverride.agentId);
+      if (swappedAgent && swappedAgent.agentType === "agent") {
+        const initialResponseTextIsEmpty =
+          stripThinkingBlocks(
+            (extractMessageFromSendMessageResult(initialResult)?.parts || [])
+              .map((p) => p.text)
+              .join("\n"),
+          ) === "";
+        const initialResponseNoApprovalRequests =
+          !extractApprovalRequestsFromSendMessageResult(initialResult)?.length;
+        const initialResponseIsEmpty =
+          initialResponseTextIsEmpty && initialResponseNoApprovalRequests;
+
+        if (!initialResponseIsEmpty) {
+          return {
+            result: initialResult,
+            responseAgent: {
+              id: swappedAgent.id,
+              name: swappedAgent.name,
+            },
+          };
+        }
+
+        logger.info(
+          {
+            bindingId: binding.id,
+            threadId: effectiveThreadId,
+            previousAgentId: agent.id,
+            swappedAgentId: swappedAgent.id,
+          },
+          "[ChatOps] Thread agent override detected, handing off to swapped agent",
+        );
+
+        const handoffResult = await this.a2aManager.sendMessage({
+          actor: {
+            kind: "user",
+            id: userId,
+            organizationId: binding.organizationId,
+          },
+          agentId: swappedAgent.id,
+          request,
+          systemParams,
+        });
+
+        return {
+          result: handoffResult,
+          responseAgent: {
+            id: swappedAgent.id,
+            name: swappedAgent.name,
+          },
+        };
+      }
+    }
+
+    return { result: initialResult, responseAgent: agent };
+  }
+
+  async handleInteractiveApprovalDecision(
+    provider: ChatOpsProvider,
+    decision: ChatOpsApprovalDecision,
+    updateApprovalRequestCallback?: () => Promise<void> | void,
+  ): Promise<void> {
+    try {
+      const email =
+        decision.approverEmail ??
+        (await provider.getUserEmail(decision.userId));
+
+      const user = await UserModel.findByEmail(email?.toLowerCase() || "");
+      if (!user) {
+        logger.error(
+          { userId: decision.userId, email },
+          "[ChatOps] Could not resolve user for approval decision",
+        );
+        return;
+      }
+
+      if (email !== decision.originalMessage.senderEmail) {
+        // Only initial requester can approve/decline
+        return;
+      }
+
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: provider.providerId,
+        channelId: decision.channelId,
+        workspaceId: decision.workspaceId,
+      });
+
+      if (!binding) {
+        logger.error(
+          { channelId: decision.channelId, workspaceId: decision.workspaceId },
+          "[ChatOps] No channel binding found for approval decision",
+        );
+        return;
+      }
+      if (!binding.agentId) {
+        logger.error(
+          {
+            bindingId: binding.id,
+            channelId: decision.channelId,
+            workspaceId: decision.workspaceId,
+          },
+          "[ChatOps] Channel binding has no agent for approval decision",
+        );
+        return;
+      }
+
+      const agent = await AgentModel.findById(binding.agentId);
+      if (!agent) {
+        logger.error(
+          { bindingId: binding.id, agentId: binding.agentId },
+          "[ChatOps] Could not find agent for approval decision",
+        );
+        return;
+      }
+
+      const originalMessage = decision.originalMessage as IncomingChatMessage;
+
+      if (provider.setTypingStatus) {
+        await provider
+          .setTypingStatus(
+            originalMessage.channelId,
+            originalMessage.threadId ?? "",
+            originalMessage.metadata,
+          )
+          .catch(() => {});
+      }
+
+      if (updateApprovalRequestCallback) {
+        await updateApprovalRequestCallback();
+      } else {
+        await provider.updateApprovalRequest({
+          channelId: decision.channelId,
+          messageKey: decision.messageTs,
+          toolName: decision.toolName,
+          approved: decision.approved,
+        });
+      }
+
+      const result = await this.a2aManager.sendMessage({
+        actor: {
+          kind: "user" as const,
+          id: user.id,
+          organizationId: binding.organizationId,
+        },
+        agentId: binding.agentId,
+        request: buildApprovalDecisionSendMessageRequest({
+          taskId: decision.taskId,
+          approvalDecisions: [
+            {
+              approvalId: decision.approvalId,
+              approved: decision.approved,
+            },
+          ],
+        }),
+        systemParams: {
+          sessionId: buildChatOpsSessionId(
+            provider.providerId,
+            decision.channelId,
+            originalMessage.threadId,
+          ),
+          source:
+            provider.providerId === "slack"
+              ? "chatops:slack"
+              : "chatops:ms-teams",
+        },
+      });
+
+      await this.replyByMessageExecutionResult({
+        agent,
+        message: originalMessage,
+        provider,
+        sendReply: true,
+        currentApprovalId: decision.approvalId,
+        result,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          error: errorMessage(error),
+          channelId: decision.channelId,
+          workspaceId: decision.workspaceId,
+        },
+        "[ChatOps] Failed to execute approval decision",
+      );
+
+      const errMsg = errorMessage(error);
+      // Show truncated error details as a subtle footer (max 500 chars)
+      const errorDetail =
+        errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
+      await provider.sendReply({
+        originalMessage: decision.originalMessage,
+        text: "Sorry, I encountered an error processing your request.",
+        footer: errorDetail,
+        conversationReference:
+          decision.originalMessage.metadata?.conversationReference,
+      });
     }
   }
 }

@@ -3,7 +3,7 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-describe("llmApplicationsRoutes", () => {
+describe("llmOauthClientsRoutes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
@@ -24,17 +24,17 @@ describe("llmApplicationsRoutes", () => {
       (request as typeof request & { user: User }).user = user;
     });
 
-    const { default: llmApplicationsRoutes } = await import(
-      "./llm-applications"
+    const { default: llmOauthClientsRoutes } = await import(
+      "./llm-oauth-clients"
     );
-    await app.register(llmApplicationsRoutes);
+    await app.register(llmOauthClientsRoutes);
   });
 
   afterEach(async () => {
     await app.close();
   });
 
-  test("creates, lists, updates, rotates, and deletes an LLM application", async ({
+  test("creates, lists, updates, rotates, and deletes an LLM OAuth client", async ({
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -51,7 +51,7 @@ describe("llmApplicationsRoutes", () => {
 
     const createResponse = await app.inject({
       method: "POST",
-      url: "/api/llm-applications",
+      url: "/api/llm-oauth-clients",
       payload: {
         name: "Backend Service",
         allowedLlmProxyIds: [agent.id],
@@ -66,7 +66,7 @@ describe("llmApplicationsRoutes", () => {
 
     expect(createResponse.statusCode).toBe(200);
     const created = createResponse.json();
-    expect(created.clientId).toMatch(/^llm_app_/);
+    expect(created.clientId).toMatch(/^llm_oauth_/);
     expect(created.clientSecret).toMatch(/^llm_secret_/);
     expect(created.modelRouterProviderApiKeys).toMatchObject([
       {
@@ -77,7 +77,7 @@ describe("llmApplicationsRoutes", () => {
 
     const listResponse = await app.inject({
       method: "GET",
-      url: "/api/llm-applications",
+      url: "/api/llm-oauth-clients",
     });
     expect(listResponse.statusCode).toBe(200);
     expect(listResponse.json()).toHaveLength(1);
@@ -85,7 +85,7 @@ describe("llmApplicationsRoutes", () => {
 
     const updateResponse = await app.inject({
       method: "PUT",
-      url: `/api/llm-applications/${created.id}`,
+      url: `/api/llm-oauth-clients/${created.id}`,
       payload: {
         name: "Updated Backend Service",
         allowedLlmProxyIds: [agent.id],
@@ -112,7 +112,7 @@ describe("llmApplicationsRoutes", () => {
 
     const rotateResponse = await app.inject({
       method: "POST",
-      url: `/api/llm-applications/${created.id}/rotate-secret`,
+      url: `/api/llm-oauth-clients/${created.id}/rotate-secret`,
     });
     expect(rotateResponse.statusCode).toBe(200);
     expect(rotateResponse.json().clientSecret).toMatch(/^llm_secret_/);
@@ -120,7 +120,7 @@ describe("llmApplicationsRoutes", () => {
 
     const deleteResponse = await app.inject({
       method: "DELETE",
-      url: `/api/llm-applications/${created.id}`,
+      url: `/api/llm-oauth-clients/${created.id}`,
     });
     expect(deleteResponse.statusCode).toBe(200);
     expect(deleteResponse.json()).toEqual({ success: true });

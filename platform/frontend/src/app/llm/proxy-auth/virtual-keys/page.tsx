@@ -75,7 +75,7 @@ import {
   useDeleteVirtualApiKey,
   useUpdateVirtualApiKey,
 } from "@/lib/virtual-api-keys.query";
-import { useSetAppAccessAction } from "../layout";
+import { useSetProxyAuthAction } from "../layout";
 
 type VirtualKeyWithParent =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
@@ -248,9 +248,9 @@ export default function VirtualKeysPage() {
     [canReadTeams, isVirtualKeyAdmin],
   );
 
-  const setAppAccessAction = useSetAppAccessAction();
+  const setProxyAuthAction = useSetProxyAuthAction();
   useEffect(() => {
-    setAppAccessAction(
+    setProxyAuthAction(
       <Button
         onClick={() => setIsCreateDialogOpen(true)}
         disabled={parentableKeys.length === 0}
@@ -260,8 +260,8 @@ export default function VirtualKeysPage() {
         Create Virtual Key
       </Button>,
     );
-    return () => setAppAccessAction(null);
-  }, [setAppAccessAction, parentableKeys.length]);
+    return () => setProxyAuthAction(null);
+  }, [setProxyAuthAction, parentableKeys.length]);
 
   return (
     <>

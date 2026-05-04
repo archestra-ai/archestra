@@ -159,10 +159,10 @@ const contentNavGroups: NavGroup[] = [
               pathname.startsWith("/llm/model-providers"),
           },
           {
-            title: "App Access",
-            url: "/llm/app-access/virtual-keys",
+            title: "Proxy Auth",
+            url: "/llm/proxy-auth/virtual-keys",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/app-access"),
+              pathname.startsWith("/llm/proxy-auth"),
           },
           {
             title: "Costs & Limits",

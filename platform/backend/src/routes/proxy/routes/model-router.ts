@@ -10,7 +10,7 @@ import { z } from "zod";
 import logger from "@/logging";
 import {
   AgentModel,
-  LlmApplicationModel,
+  LlmOauthClientModel,
   LlmProviderApiKeyModel,
   ModelModel,
   OAuthAccessTokenModel,
@@ -91,10 +91,10 @@ type ModelRouterVirtualKeyAuth = {
     SupportedProvider,
     ModelRouterMappedProviderKey
   >;
-  application?: never;
+  oauthClient?: never;
 };
 
-type ModelRouterApplicationAuth = {
+type ModelRouterOAuthClientAuth = {
   authMethod: "oauth_client_credentials";
   organizationId: string;
   providerApiKeysByProvider: Map<
@@ -102,14 +102,14 @@ type ModelRouterApplicationAuth = {
     ModelRouterMappedProviderKey
   >;
   allowedLlmProxyIds: Set<string>;
-  application: {
+  oauthClient: {
     id: string;
     name: string;
     clientId: string;
   };
 };
 
-type ModelRouterAuth = ModelRouterVirtualKeyAuth | ModelRouterApplicationAuth;
+type ModelRouterAuth = ModelRouterVirtualKeyAuth | ModelRouterOAuthClientAuth;
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -606,7 +606,7 @@ function ensureModelRouterAgentAccess(params: {
     params.auth.authMethod === "oauth_client_credentials" &&
     !params.auth.allowedLlmProxyIds.has(params.agent.id)
   ) {
-    throw new ApiError(403, "LLM application cannot access this LLM Proxy.");
+    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
 }
 
@@ -619,12 +619,12 @@ async function getModelRouterAuth(
   if (!bearerToken) {
     throw new ApiError(
       401,
-      "Model router requests require a Model Router-enabled virtual API key or LLM application access token.",
+      "Model router requests require a Model Router-enabled virtual API key or LLM OAuth client access token.",
     );
   }
 
   if (!hasArchestraTokenPrefix(bearerToken)) {
-    return getModelRouterApplicationAuth(bearerToken);
+    return getModelRouterOAuthClientAuth(bearerToken);
   }
 
   await virtualKeyRateLimiter.check(request.ip);
@@ -719,32 +719,32 @@ async function applyModelRouterAuthOverride(params: {
     authenticated: true,
     source: "model_router",
     authMethod: params.auth.authMethod,
-    authenticatedApp: params.auth.application,
+    authenticatedApp: params.auth.oauthClient,
   };
 }
 
-async function getModelRouterApplicationAuth(
+async function getModelRouterOAuthClientAuth(
   bearerToken: string,
-): Promise<ModelRouterApplicationAuth> {
+): Promise<ModelRouterOAuthClientAuth> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     createHash("sha256").update(bearerToken).digest("base64url"),
   );
   if (!accessToken || accessToken.expiresAt < new Date()) {
-    throw new ApiError(401, "Invalid LLM application access token.");
+    throw new ApiError(401, "Invalid LLM OAuth client access token.");
   }
   if (!accessToken.scopes?.includes(LLM_MODEL_ROUTER_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");
   }
 
-  const application = await LlmApplicationModel.findByClientId(
+  const oauthClient = await LlmOauthClientModel.findByClientId(
     accessToken.clientId,
   );
-  if (!application) {
-    throw new ApiError(401, "LLM application is no longer available.");
+  if (!oauthClient) {
+    throw new ApiError(401, "LLM OAuth client is no longer available.");
   }
 
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
-    application.modelRouterProviderApiKeys.map(
+    oauthClient.modelRouterProviderApiKeys.map(
       (mapping) => mapping.chatApiKeyId,
     ),
   );
@@ -754,20 +754,20 @@ async function getModelRouterApplicationAuth(
 
   return {
     authMethod: "oauth_client_credentials",
-    organizationId: application.organizationId,
-    allowedLlmProxyIds: new Set(application.allowedLlmProxyIds),
-    application: {
-      id: application.id,
-      name: application.name,
-      clientId: application.clientId,
+    organizationId: oauthClient.organizationId,
+    allowedLlmProxyIds: new Set(oauthClient.allowedLlmProxyIds),
+    oauthClient: {
+      id: oauthClient.id,
+      name: oauthClient.name,
+      clientId: oauthClient.clientId,
     },
     providerApiKeysByProvider: new Map(
-      application.modelRouterProviderApiKeys.map((mapping) => {
+      oauthClient.modelRouterProviderApiKeys.map((mapping) => {
         const apiKey = providerApiKeysById.get(mapping.chatApiKeyId);
         if (!apiKey) {
           throw new ApiError(
             401,
-            "LLM application references a missing provider API key.",
+            "LLM OAuth client references a missing provider API key.",
           );
         }
         return [

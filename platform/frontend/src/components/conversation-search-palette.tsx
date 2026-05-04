@@ -151,10 +151,10 @@ const navigationItems = [
   },
   {
     icon: Key,
-    label: "App Access",
-    value: "app-access",
-    keywords: "virtual keys applications oauth client credentials llm",
-    href: "/llm/app-access/virtual-keys",
+    label: "Proxy Auth",
+    value: "proxy-auth",
+    keywords: "virtual keys oauth clients client credentials llm",
+    href: "/llm/proxy-auth/virtual-keys",
   },
   {
     icon: MessagesSquare,

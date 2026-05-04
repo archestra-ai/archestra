@@ -3,154 +3,154 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   AgentModel,
-  LlmApplicationModel,
+  LlmOauthClientModel,
   LlmProviderApiKeyModel,
 } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
-  LlmApplicationSchema,
-  LlmApplicationWithSecretSchema,
+  LlmOauthClientSchema,
+  LlmOauthClientWithSecretSchema,
 } from "@/types";
 
-const LlmApplicationProviderKeyBodySchema = z.object({
+const LlmOauthClientProviderKeyBodySchema = z.object({
   provider: SupportedProvidersSchema,
   chatApiKeyId: z.string().uuid(),
 });
 
-const CreateLlmApplicationBodySchema = z.object({
+const CreateLlmOauthClientBodySchema = z.object({
   name: z.string().min(1).max(256),
   allowedLlmProxyIds: z.array(z.string().uuid()).min(1),
   modelRouterProviderApiKeys: z
-    .array(LlmApplicationProviderKeyBodySchema)
+    .array(LlmOauthClientProviderKeyBodySchema)
     .min(1),
 });
 
-const UpdateLlmApplicationBodySchema = CreateLlmApplicationBodySchema;
+const UpdateLlmOauthClientBodySchema = CreateLlmOauthClientBodySchema;
 
-const llmApplicationsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/llm-applications",
+    "/api/llm-oauth-clients",
     {
       schema: {
-        operationId: RouteId.GetLlmApplications,
-        description: "List LLM applications that can access the Model Router",
-        tags: ["LLM Applications"],
-        response: constructResponseSchema(z.array(LlmApplicationSchema)),
+        operationId: RouteId.GetLlmOauthClients,
+        description: "List LLM OAuth clients that can access the Model Router",
+        tags: ["LLM OAuth Clients"],
+        response: constructResponseSchema(z.array(LlmOauthClientSchema)),
       },
     },
     async ({ organizationId }, reply) => {
-      const applications =
-        await LlmApplicationModel.findAllByOrganization(organizationId);
-      return reply.send(applications);
+      const oauthClients =
+        await LlmOauthClientModel.findAllByOrganization(organizationId);
+      return reply.send(oauthClients);
     },
   );
 
   fastify.post(
-    "/api/llm-applications",
+    "/api/llm-oauth-clients",
     {
       schema: {
-        operationId: RouteId.CreateLlmApplication,
+        operationId: RouteId.CreateLlmOauthClient,
         description:
-          "Create an LLM application and return its client secret once",
-        tags: ["LLM Applications"],
-        body: CreateLlmApplicationBodySchema,
-        response: constructResponseSchema(LlmApplicationWithSecretSchema),
+          "Create an LLM OAuth client and return its client secret once",
+        tags: ["LLM OAuth Clients"],
+        body: CreateLlmOauthClientBodySchema,
+        response: constructResponseSchema(LlmOauthClientWithSecretSchema),
       },
     },
     async ({ body, organizationId }, reply) => {
-      await validateLlmApplicationConfig({ ...body, organizationId });
-      const { application, clientSecret } = await LlmApplicationModel.create({
+      await validateLlmOauthClientConfig({ ...body, organizationId });
+      const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
         modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
       });
-      return reply.send({ ...application, clientSecret });
+      return reply.send({ ...oauthClient, clientSecret });
     },
   );
 
   fastify.put(
-    "/api/llm-applications/:id",
+    "/api/llm-oauth-clients/:id",
     {
       schema: {
-        operationId: RouteId.UpdateLlmApplication,
-        description: "Update an LLM application",
-        tags: ["LLM Applications"],
+        operationId: RouteId.UpdateLlmOauthClient,
+        description: "Update an LLM OAuth client",
+        tags: ["LLM OAuth Clients"],
         params: z.object({ id: z.string() }),
-        body: UpdateLlmApplicationBodySchema,
-        response: constructResponseSchema(LlmApplicationSchema),
+        body: UpdateLlmOauthClientBodySchema,
+        response: constructResponseSchema(LlmOauthClientSchema),
       },
     },
     async ({ params, body, organizationId }, reply) => {
-      await validateLlmApplicationConfig({ ...body, organizationId });
-      const application = await LlmApplicationModel.update({
+      await validateLlmOauthClientConfig({ ...body, organizationId });
+      const oauthClient = await LlmOauthClientModel.update({
         id: params.id,
         organizationId,
         name: body.name,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
         modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
       });
-      if (!application) {
-        throw new ApiError(404, "LLM application not found");
+      if (!oauthClient) {
+        throw new ApiError(404, "LLM OAuth client not found");
       }
-      return reply.send(application);
+      return reply.send(oauthClient);
     },
   );
 
   fastify.post(
-    "/api/llm-applications/:id/rotate-secret",
+    "/api/llm-oauth-clients/:id/rotate-secret",
     {
       schema: {
-        operationId: RouteId.RotateLlmApplicationSecret,
-        description: "Rotate an LLM application's client secret",
-        tags: ["LLM Applications"],
+        operationId: RouteId.RotateLlmOauthClientSecret,
+        description: "Rotate an LLM OAuth client's client secret",
+        tags: ["LLM OAuth Clients"],
         params: z.object({ id: z.string() }),
-        response: constructResponseSchema(LlmApplicationWithSecretSchema),
+        response: constructResponseSchema(LlmOauthClientWithSecretSchema),
       },
     },
     async ({ params, organizationId }, reply) => {
-      const result = await LlmApplicationModel.rotateSecret({
+      const result = await LlmOauthClientModel.rotateSecret({
         id: params.id,
         organizationId,
       });
       if (!result) {
-        throw new ApiError(404, "LLM application not found");
+        throw new ApiError(404, "LLM OAuth client not found");
       }
       return reply.send({
-        ...result.application,
+        ...result.oauthClient,
         clientSecret: result.clientSecret,
       });
     },
   );
 
   fastify.delete(
-    "/api/llm-applications/:id",
+    "/api/llm-oauth-clients/:id",
     {
       schema: {
-        operationId: RouteId.DeleteLlmApplication,
-        description: "Delete an LLM application",
-        tags: ["LLM Applications"],
+        operationId: RouteId.DeleteLlmOauthClient,
+        description: "Delete an LLM OAuth client",
+        tags: ["LLM OAuth Clients"],
         params: z.object({ id: z.string() }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params, organizationId }, reply) => {
-      const success = await LlmApplicationModel.delete({
+      const success = await LlmOauthClientModel.delete({
         id: params.id,
         organizationId,
       });
       if (!success) {
-        throw new ApiError(404, "LLM application not found");
+        throw new ApiError(404, "LLM OAuth client not found");
       }
       return reply.send({ success });
     },
   );
 };
 
-export default llmApplicationsRoutes;
+export default llmOauthClientsRoutes;
 
-async function validateLlmApplicationConfig(params: {
+async function validateLlmOauthClientConfig(params: {
   organizationId: string;
   allowedLlmProxyIds: string[];
   modelRouterProviderApiKeys: Array<{

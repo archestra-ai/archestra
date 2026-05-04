@@ -111,7 +111,7 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 Use Archestra's built-in Slack trigger when the bot should run an Archestra agent. Archestra handles provider credentials, channel bindings, and user attribution.
 
-If you build a separate Slack app that calls the Model Router directly, register it under **LLM Proxies → App Access → Applications** and use OAuth client credentials. This attributes usage to the registered app without putting provider keys in the Slack app.
+If you build a separate Slack app that calls the Model Router directly, register it under **LLM Proxies → Proxy Auth → OAuth Clients** and use OAuth client credentials. This attributes usage to the registered OAuth client without putting provider keys in the Slack app.
 
 ## Attachments
 

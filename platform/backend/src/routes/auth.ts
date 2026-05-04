@@ -11,7 +11,7 @@ import logger from "@/logging";
 import {
   AccountModel,
   AgentModel,
-  LlmApplicationModel,
+  LlmOauthClientModel,
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -26,7 +26,7 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
-import { LLM_MODEL_ROUTER_SCOPE } from "@/types/llm-application";
+import { LLM_MODEL_ROUTER_SCOPE } from "@/types/llm-oauth-client";
 import {
   isLoopbackRedirectUri,
   loopbackRedirectUriMatchesIgnoringPort,
@@ -407,7 +407,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationHeader: request.headers.authorization,
             body,
           });
-        const result = await issueLlmApplicationAccessToken({
+        const result = await issueLlmOauthClientAccessToken({
           clientId: authenticatedClientId,
           clientSecret,
           scope: body.scope as string | undefined,
@@ -882,7 +882,7 @@ function extractOAuthClientCredentials(params: {
   };
 }
 
-async function issueLlmApplicationAccessToken(params: {
+async function issueLlmOauthClientAccessToken(params: {
   clientId: string | undefined;
   clientSecret: string | undefined;
   scope: string | undefined;
@@ -913,11 +913,11 @@ async function issueLlmApplicationAccessToken(params: {
     };
   }
 
-  const application = await LlmApplicationModel.findClientForCredentials({
+  const oauthClient = await LlmOauthClientModel.findClientForCredentials({
     clientId: params.clientId,
     clientSecret: params.clientSecret,
   });
-  if (!application) {
+  if (!oauthClient) {
     return {
       ok: false,
       statusCode: 401,
@@ -929,10 +929,10 @@ async function issueLlmApplicationAccessToken(params: {
   const expiresIn = 3600;
   await OAuthAccessTokenModel.createClientCredentialsToken({
     tokenHash: hashOAuthAccessTokenForLookup(accessToken),
-    clientId: application.clientId,
+    clientId: oauthClient.clientId,
     expiresAt: new Date(Date.now() + expiresIn * 1000),
     scopes: [LLM_MODEL_ROUTER_SCOPE],
-    referenceId: `llm-model-router:${application.id}`,
+    referenceId: `llm-model-router:${oauthClient.id}`,
   });
 
   return {

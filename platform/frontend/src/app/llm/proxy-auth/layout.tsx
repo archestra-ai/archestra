@@ -7,40 +7,40 @@ import { PageLayout } from "@/components/page-layout";
 const TABS = [
   {
     label: "Virtual Keys",
-    href: "/llm/app-access/virtual-keys",
+    href: "/llm/proxy-auth/virtual-keys",
   },
   {
-    label: "Applications",
-    href: "/llm/app-access/applications",
+    label: "OAuth Clients",
+    href: "/llm/proxy-auth/oauth-clients",
   },
 ];
 
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
-  "/llm/app-access/virtual-keys": {
+  "/llm/proxy-auth/virtual-keys": {
     title: "Virtual Keys",
     description:
       "Virtual keys let OpenAI-compatible clients use the LLM Proxy without exposing real provider keys",
   },
-  "/llm/app-access/applications": {
-    title: "Applications",
+  "/llm/proxy-auth/oauth-clients": {
+    title: "OAuth Clients",
     description:
       "Register backend services and bots that authenticate to the Model Router with OAuth client credentials",
   },
 };
 
-type AppAccessLayoutContextType = {
+type ProxyAuthLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;
 };
 
-const AppAccessLayoutContext = createContext<AppAccessLayoutContextType>({
+const ProxyAuthLayoutContext = createContext<ProxyAuthLayoutContextType>({
   setActionButton: () => {},
 });
 
-export function useSetAppAccessAction() {
-  return useContext(AppAccessLayoutContext).setActionButton;
+export function useSetProxyAuthAction() {
+  return useContext(ProxyAuthLayoutContext).setActionButton;
 }
 
-export default function AppAccessLayout({
+export default function ProxyAuthLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -49,14 +49,14 @@ export default function AppAccessLayout({
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
 
   const config = PAGE_CONFIG[pathname] ?? {
-    title: "App Access",
+    title: "Proxy Auth",
     description: "",
   };
 
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
   return (
-    <AppAccessLayoutContext.Provider value={contextValue}>
+    <ProxyAuthLayoutContext.Provider value={contextValue}>
       <PageLayout
         title={config.title}
         description={config.description}
@@ -65,6 +65,6 @@ export default function AppAccessLayout({
       >
         {children}
       </PageLayout>
-    </AppAccessLayoutContext.Provider>
+    </ProxyAuthLayoutContext.Provider>
   );
 }

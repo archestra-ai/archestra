@@ -26,56 +26,56 @@ import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useProfiles } from "@/lib/agent.query";
 import {
-  useCreateLlmApplication,
-  useDeleteLlmApplication,
-  useLlmApplications,
-  useRotateLlmApplicationSecret,
-  useUpdateLlmApplication,
-} from "@/lib/llm-applications.query";
+  useCreateLlmOauthClient,
+  useDeleteLlmOauthClient,
+  useLlmOauthClients,
+  useRotateLlmOauthClientSecret,
+  useUpdateLlmOauthClient,
+} from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
-import { useSetAppAccessAction } from "../layout";
+import { useSetProxyAuthAction } from "../layout";
 
-type LlmApplication =
-  archestraApiTypes.GetLlmApplicationsResponses["200"][number];
+type LlmOauthClient =
+  archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
 
-export default function ApplicationsPage() {
-  const { data: applications = [], isPending } = useLlmApplications();
+export default function OAuthClientsPage() {
+  const { data: oauthClients = [], isPending } = useLlmOauthClients();
   const { data: llmProxies = [] } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
-  const createMutation = useCreateLlmApplication();
-  const updateMutation = useUpdateLlmApplication();
-  const rotateMutation = useRotateLlmApplicationSecret();
-  const deleteMutation = useDeleteLlmApplication();
+  const createMutation = useCreateLlmOauthClient();
+  const updateMutation = useUpdateLlmOauthClient();
+  const rotateMutation = useRotateLlmOauthClientSecret();
+  const deleteMutation = useDeleteLlmOauthClient();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{
     clientId: string;
     clientSecret: string;
   } | null>(null);
-  const [deletingApplication, setDeletingApplication] =
-    useState<LlmApplication | null>(null);
-  const [editingApplication, setEditingApplication] =
-    useState<LlmApplication | null>(null);
+  const [deletingOAuthClient, setDeletingOAuthClient] =
+    useState<LlmOauthClient | null>(null);
+  const [editingOAuthClient, setEditingOAuthClient] =
+    useState<LlmOauthClient | null>(null);
   const [rotatedCredentials, setRotatedCredentials] = useState<{
     clientId: string;
     clientSecret: string;
   } | null>(null);
 
-  const setAppAccessAction = useSetAppAccessAction();
+  const setProxyAuthAction = useSetProxyAuthAction();
   useEffect(() => {
-    setAppAccessAction(
+    setProxyAuthAction(
       <Button onClick={() => setIsCreateDialogOpen(true)}>
         <Plus className="h-4 w-4" />
-        Create Application
+        Create OAuth Client
       </Button>,
     );
-    return () => setAppAccessAction(null);
-  }, [setAppAccessAction]);
+    return () => setProxyAuthAction(null);
+  }, [setProxyAuthAction]);
 
-  const columns: ColumnDef<LlmApplication>[] = useMemo(
+  const columns: ColumnDef<LlmOauthClient>[] = useMemo(
     () => [
       {
         accessorKey: "name",
@@ -138,7 +138,7 @@ export default function ApplicationsPage() {
               {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
-                onClick: () => setEditingApplication(row.original),
+                onClick: () => setEditingOAuthClient(row.original),
               },
               {
                 icon: <RefreshCw className="h-4 w-4" />,
@@ -159,7 +159,7 @@ export default function ApplicationsPage() {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete",
                 variant: "destructive",
-                onClick: () => setDeletingApplication(row.original),
+                onClick: () => setDeletingOAuthClient(row.original),
               },
             ]}
           />
@@ -173,12 +173,12 @@ export default function ApplicationsPage() {
     <>
       <DataTable
         columns={columns}
-        data={applications}
+        data={oauthClients}
         isLoading={isPending}
-        emptyMessage="No applications registered. Create one for backend services or bots that call the Model Router."
+        emptyMessage="No OAuth clients registered. Create one for backend services or bots that call the Model Router."
       />
 
-      <CreateApplicationDialog
+      <CreateOAuthClientDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         llmProxies={llmProxies}
@@ -196,10 +196,10 @@ export default function ApplicationsPage() {
         isSubmitting={createMutation.isPending}
       />
 
-      <EditApplicationDialog
-        application={editingApplication}
+      <EditOAuthClientDialog
+        oauthClient={editingOAuthClient}
         onOpenChange={(open) => {
-          if (!open) setEditingApplication(null);
+          if (!open) setEditingOAuthClient(null);
         }}
         llmProxies={llmProxies}
         providerApiKeys={providerApiKeys}
@@ -209,7 +209,7 @@ export default function ApplicationsPage() {
             body: values,
           });
           if (result) {
-            setEditingApplication(null);
+            setEditingOAuthClient(null);
           }
         }}
         isSubmitting={updateMutation.isPending}
@@ -220,7 +220,7 @@ export default function ApplicationsPage() {
         onOpenChange={(open) => {
           if (!open) setCreatedCredentials(null);
         }}
-        title="Application Created"
+        title="OAuth Client Created"
         credentials={createdCredentials}
       />
 
@@ -234,20 +234,20 @@ export default function ApplicationsPage() {
       />
 
       <DeleteConfirmDialog
-        open={!!deletingApplication}
+        open={!!deletingOAuthClient}
         onOpenChange={(open) => {
-          if (!open) setDeletingApplication(null);
+          if (!open) setDeletingOAuthClient(null);
         }}
-        title="Delete application"
+        title="Delete OAuth client"
         description={
-          deletingApplication
-            ? `Delete ${deletingApplication.name}? Existing access tokens will stop working when they expire, and new tokens cannot be issued.`
+          deletingOAuthClient
+            ? `Delete ${deletingOAuthClient.name}? Existing access tokens will stop working when they expire, and new tokens cannot be issued.`
             : ""
         }
         onConfirm={async () => {
-          if (!deletingApplication) return;
-          await deleteMutation.mutateAsync({ id: deletingApplication.id });
-          setDeletingApplication(null);
+          if (!deletingOAuthClient) return;
+          await deleteMutation.mutateAsync({ id: deletingOAuthClient.id });
+          setDeletingOAuthClient(null);
         }}
         isPending={deleteMutation.isPending}
       />
@@ -255,7 +255,7 @@ export default function ApplicationsPage() {
   );
 }
 
-function CreateApplicationDialog({
+function CreateOAuthClientDialog({
   open,
   onOpenChange,
   llmProxies,
@@ -268,7 +268,7 @@ function CreateApplicationDialog({
   llmProxies: archestraApiTypes.GetAllAgentsResponses["200"];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
-    values: archestraApiTypes.CreateLlmApplicationData["body"],
+    values: archestraApiTypes.CreateLlmOauthClientData["body"],
   ) => Promise<void>;
   isSubmitting: boolean;
 }) {
@@ -286,7 +286,7 @@ function CreateApplicationDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Create Application"
+      title="Create OAuth Client"
       description="Register a backend service or bot that can call the Model Router with OAuth client credentials."
     >
       <DialogForm
@@ -305,9 +305,9 @@ function CreateApplicationDialog({
       >
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="application-name">Name</Label>
+            <Label htmlFor="oauth-client-name">Name</Label>
             <Input
-              id="application-name"
+              id="oauth-client-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="support-assistant-prod"
@@ -343,7 +343,7 @@ function CreateApplicationDialog({
             Cancel
           </Button>
           <Button type="submit" disabled={!canSubmit || isSubmitting}>
-            Create Application
+            Create OAuth Client
           </Button>
         </DialogStickyFooter>
       </DialogForm>
@@ -351,21 +351,21 @@ function CreateApplicationDialog({
   );
 }
 
-function EditApplicationDialog({
-  application,
+function EditOAuthClientDialog({
+  oauthClient,
   onOpenChange,
   llmProxies,
   providerApiKeys,
   onSubmit,
   isSubmitting,
 }: {
-  application: LlmApplication | null;
+  oauthClient: LlmOauthClient | null;
   onOpenChange: (open: boolean) => void;
   llmProxies: archestraApiTypes.GetAllAgentsResponses["200"];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
     id: string,
-    values: archestraApiTypes.UpdateLlmApplicationData["body"],
+    values: archestraApiTypes.UpdateLlmOauthClientData["body"],
   ) => Promise<void>;
   isSubmitting: boolean;
 }) {
@@ -375,34 +375,34 @@ function EditApplicationDialog({
     useState<ModelRouterProviderApiKeyMap>({});
 
   useEffect(() => {
-    if (!application) return;
-    setName(application.name);
-    setSelectedProxyIds(application.allowedLlmProxyIds);
+    if (!oauthClient) return;
+    setName(oauthClient.name);
+    setSelectedProxyIds(oauthClient.allowedLlmProxyIds);
     setProviderApiKeyIds(
       modelRouterProviderApiKeyArrayToMap(
-        application.modelRouterProviderApiKeys,
+        oauthClient.modelRouterProviderApiKeys,
       ),
     );
-  }, [application]);
+  }, [oauthClient]);
 
   const canSubmit =
-    !!application &&
+    !!oauthClient &&
     name.trim().length > 0 &&
     selectedProxyIds.length > 0 &&
     modelRouterProviderApiKeyMapToArray(providerApiKeyIds).length > 0;
 
   return (
     <FormDialog
-      open={!!application}
+      open={!!oauthClient}
       onOpenChange={onOpenChange}
-      title="Edit Application"
-      description="Update the LLM proxies and provider keys this application can use."
+      title="Edit OAuth Client"
+      description="Update the LLM proxies and provider keys this OAuth client can use."
     >
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
-          if (!application) return;
-          await onSubmit(application.id, {
+          if (!oauthClient) return;
+          await onSubmit(oauthClient.id, {
             name: name.trim(),
             allowedLlmProxyIds: selectedProxyIds,
             modelRouterProviderApiKeys:
@@ -412,9 +412,9 @@ function EditApplicationDialog({
       >
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="edit-application-name">Name</Label>
+            <Label htmlFor="edit-oauth-client-name">Name</Label>
             <Input
-              id="edit-application-name"
+              id="edit-oauth-client-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="support-assistant-prod"

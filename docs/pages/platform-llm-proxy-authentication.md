@@ -10,13 +10,13 @@ lastUpdated: 2026-05-03
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-The LLM Proxy supports direct provider API keys, virtual API keys, LLM application access tokens, and JWKS via an external identity provider.
+The LLM Proxy supports direct provider API keys, virtual API keys, LLM OAuth client access tokens, and JWKS via an external identity provider.
 
 | Method | Best for | Model Router | Notes |
 | --- | --- | --- | --- |
 | Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
 | Virtual API key | Generic OpenAI-compatible clients and individual developers | Yes | Works with clients that only support `baseURL` and `apiKey`. |
-| LLM application access token | Backend services, production apps, and external bots | Yes | Uses OAuth client credentials to issue short-lived bearer tokens. |
+| LLM OAuth client access token | Backend services, production apps, and external bots | Yes | Uses OAuth client credentials to issue short-lived bearer tokens. |
 | JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |
 
 ## Direct Provider API Key
@@ -46,7 +46,7 @@ Virtual API keys are platform-managed bearer tokens that map to a real provider 
 
 ### Creating Virtual Keys
 
-1. Go to **LLM Proxies > App Access > Virtual Keys**
+1. Go to **LLM Proxies > Proxy Auth > Virtual Keys**
 2. Create a virtual key
 3. Select either one provider API key or enable **Use for Model Router** and map provider keys
 4. Copy the generated token (shown only once)
@@ -83,21 +83,21 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -d '{"model": "anthropic:claude-haiku-4-5-20251001", "input": "Hello"}'
 ```
 
-## LLM Applications
+## LLM OAuth Clients
 
-LLM applications are registered clients that call the Model Router with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The application receives a `client_id` and one-time `client_secret`, exchanges them for a short-lived access token, and uses that token as the Model Router bearer token.
+LLM OAuth clients are registered clients that call the Model Router with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a short-lived access token, and uses that token as the Model Router bearer token.
 
-Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM applications are better when you control the service code and can request a token before calling the Model Router.
+Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling the Model Router.
 
-### Managing Applications
+### Managing OAuth Clients
 
-1. Go to **LLM Proxies > App Access > Applications**
-2. Create an application
+1. Go to **LLM Proxies > Proxy Auth > OAuth Clients**
+2. Create an OAuth client
 3. Select the LLM proxies it can access
 4. Map the provider API keys it can route through
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
 
-You can edit an application later to update its name, allowed LLM proxies, or provider key mappings. Rotate the client secret when the existing secret needs to be replaced.
+You can edit an OAuth client later to update its name, allowed LLM proxies, or provider key mappings. Rotate the client secret when the existing secret needs to be replaced.
 
 ### Getting an Access Token
 
@@ -119,7 +119,7 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -d '{"model": "openai:gpt-5.4", "input": "Hello"}'
 ```
 
-LLM logs and traces record the authenticated application separately from `X-Archestra-Agent-Id`. Use `X-Archestra-Agent-Id` as a caller-provided label, not as proof of app identity.
+LLM logs and traces record the authenticated OAuth client separately from `X-Archestra-Agent-Id`. Use `X-Archestra-Agent-Id` as a caller-provided label, not as proof of client identity.
 
 ## JWKS (External Identity Provider)
 

@@ -4,18 +4,18 @@ import { toast } from "sonner";
 import { handleApiError, toApiError } from "@/lib/utils";
 
 const {
-  getLlmApplications,
-  createLlmApplication,
-  updateLlmApplication,
-  rotateLlmApplicationSecret,
-  deleteLlmApplication,
+  getLlmOauthClients,
+  createLlmOauthClient,
+  updateLlmOauthClient,
+  rotateLlmOauthClientSecret,
+  deleteLlmOauthClient,
 } = archestraApiSdk;
 
-export function useLlmApplications() {
+export function useLlmOauthClients() {
   return useQuery({
-    queryKey: ["llm-applications"],
+    queryKey: ["llm-oauth-clients"],
     queryFn: async () => {
-      const { data, error } = await getLlmApplications();
+      const { data, error } = await getLlmOauthClients();
       if (error) {
         handleApiError(error);
         return [];
@@ -25,13 +25,13 @@ export function useLlmApplications() {
   });
 }
 
-export function useCreateLlmApplication() {
+export function useCreateLlmOauthClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      body: archestraApiTypes.CreateLlmApplicationData["body"],
+      body: archestraApiTypes.CreateLlmOauthClientData["body"],
     ) => {
-      const { data, error } = await createLlmApplication({ body });
+      const { data, error } = await createLlmOauthClient({ body });
       if (error) {
         handleApiError(error);
         throw toApiError(error);
@@ -39,13 +39,13 @@ export function useCreateLlmApplication() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Application created");
-      queryClient.invalidateQueries({ queryKey: ["llm-applications"] });
+      toast.success("OAuth client created");
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
 
-export function useUpdateLlmApplication() {
+export function useUpdateLlmOauthClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -53,9 +53,9 @@ export function useUpdateLlmApplication() {
       body,
     }: {
       id: string;
-      body: archestraApiTypes.UpdateLlmApplicationData["body"];
+      body: archestraApiTypes.UpdateLlmOauthClientData["body"];
     }) => {
-      const { data, error } = await updateLlmApplication({
+      const { data, error } = await updateLlmOauthClient({
         path: { id },
         body,
       });
@@ -66,17 +66,17 @@ export function useUpdateLlmApplication() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Application updated");
-      queryClient.invalidateQueries({ queryKey: ["llm-applications"] });
+      toast.success("OAuth client updated");
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
 
-export function useRotateLlmApplicationSecret() {
+export function useRotateLlmOauthClientSecret() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      const { data, error } = await rotateLlmApplicationSecret({
+      const { data, error } = await rotateLlmOauthClientSecret({
         path: { id },
       });
       if (error) {
@@ -86,17 +86,17 @@ export function useRotateLlmApplicationSecret() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Application secret rotated");
-      queryClient.invalidateQueries({ queryKey: ["llm-applications"] });
+      toast.success("OAuth client secret rotated");
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
 
-export function useDeleteLlmApplication() {
+export function useDeleteLlmOauthClient() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      const { data, error } = await deleteLlmApplication({ path: { id } });
+      const { data, error } = await deleteLlmOauthClient({ path: { id } });
       if (error) {
         handleApiError(error);
         throw toApiError(error);
@@ -104,8 +104,8 @@ export function useDeleteLlmApplication() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Application deleted");
-      queryClient.invalidateQueries({ queryKey: ["llm-applications"] });
+      toast.success("OAuth client deleted");
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }

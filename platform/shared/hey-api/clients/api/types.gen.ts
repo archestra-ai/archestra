@@ -31356,491 +31356,6 @@ export type UpdateLimitResponses = {
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
-export type GetLlmApplicationsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/llm-applications';
-};
-
-export type GetLlmApplicationsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetLlmApplicationsError = GetLlmApplicationsErrors[keyof GetLlmApplicationsErrors];
-
-export type GetLlmApplicationsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        clientId: string;
-        name: string;
-        organizationId: string;
-        allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
-        }>;
-        disabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetLlmApplicationsResponse = GetLlmApplicationsResponses[keyof GetLlmApplicationsResponses];
-
-export type CreateLlmApplicationData = {
-    body: {
-        name: string;
-        allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-        }>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/llm-applications';
-};
-
-export type CreateLlmApplicationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateLlmApplicationError = CreateLlmApplicationErrors[keyof CreateLlmApplicationErrors];
-
-export type CreateLlmApplicationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        name: string;
-        organizationId: string;
-        allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
-        }>;
-        disabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-        clientSecret: string;
-    };
-};
-
-export type CreateLlmApplicationResponse = CreateLlmApplicationResponses[keyof CreateLlmApplicationResponses];
-
-export type DeleteLlmApplicationData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-applications/{id}';
-};
-
-export type DeleteLlmApplicationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteLlmApplicationError = DeleteLlmApplicationErrors[keyof DeleteLlmApplicationErrors];
-
-export type DeleteLlmApplicationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteLlmApplicationResponse = DeleteLlmApplicationResponses[keyof DeleteLlmApplicationResponses];
-
-export type UpdateLlmApplicationData = {
-    body: {
-        name: string;
-        allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-        }>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-applications/{id}';
-};
-
-export type UpdateLlmApplicationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateLlmApplicationError = UpdateLlmApplicationErrors[keyof UpdateLlmApplicationErrors];
-
-export type UpdateLlmApplicationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        name: string;
-        organizationId: string;
-        allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
-        }>;
-        disabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateLlmApplicationResponse = UpdateLlmApplicationResponses[keyof UpdateLlmApplicationResponses];
-
-export type RotateLlmApplicationSecretData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/llm-applications/{id}/rotate-secret';
-};
-
-export type RotateLlmApplicationSecretErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RotateLlmApplicationSecretError = RotateLlmApplicationSecretErrors[keyof RotateLlmApplicationSecretErrors];
-
-export type RotateLlmApplicationSecretResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        clientId: string;
-        name: string;
-        organizationId: string;
-        allowedLlmProxyIds: Array<string>;
-        modelRouterProviderApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-            chatApiKeyId: string;
-            chatApiKeyName: string;
-        }>;
-        disabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-        clientSecret: string;
-    };
-};
-
-export type RotateLlmApplicationSecretResponse = RotateLlmApplicationSecretResponses[keyof RotateLlmApplicationSecretResponses];
-
 export type GetLlmModelsData = {
     body?: never;
     path?: never;
@@ -32250,6 +31765,491 @@ export type UpdateModelResponses = {
 };
 
 export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponses];
+
+export type GetLlmOauthClientsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-oauth-clients';
+};
+
+export type GetLlmOauthClientsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmOauthClientsError = GetLlmOauthClientsErrors[keyof GetLlmOauthClientsErrors];
+
+export type GetLlmOauthClientsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        clientId: string;
+        name: string;
+        organizationId: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLlmOauthClientsResponses];
+
+export type CreateLlmOauthClientData = {
+    body: {
+        name: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/llm-oauth-clients';
+};
+
+export type CreateLlmOauthClientErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateLlmOauthClientError = CreateLlmOauthClientErrors[keyof CreateLlmOauthClientErrors];
+
+export type CreateLlmOauthClientResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        clientId: string;
+        name: string;
+        organizationId: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        clientSecret: string;
+    };
+};
+
+export type CreateLlmOauthClientResponse = CreateLlmOauthClientResponses[keyof CreateLlmOauthClientResponses];
+
+export type DeleteLlmOauthClientData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-oauth-clients/{id}';
+};
+
+export type DeleteLlmOauthClientErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteLlmOauthClientError = DeleteLlmOauthClientErrors[keyof DeleteLlmOauthClientErrors];
+
+export type DeleteLlmOauthClientResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof DeleteLlmOauthClientResponses];
+
+export type UpdateLlmOauthClientData = {
+    body: {
+        name: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-oauth-clients/{id}';
+};
+
+export type UpdateLlmOauthClientErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateLlmOauthClientError = UpdateLlmOauthClientErrors[keyof UpdateLlmOauthClientErrors];
+
+export type UpdateLlmOauthClientResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        clientId: string;
+        name: string;
+        organizationId: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLlmOauthClientResponse = UpdateLlmOauthClientResponses[keyof UpdateLlmOauthClientResponses];
+
+export type RotateLlmOauthClientSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-oauth-clients/{id}/rotate-secret';
+};
+
+export type RotateLlmOauthClientSecretErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RotateLlmOauthClientSecretError = RotateLlmOauthClientSecretErrors[keyof RotateLlmOauthClientSecretErrors];
+
+export type RotateLlmOauthClientSecretResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        clientId: string;
+        name: string;
+        organizationId: string;
+        allowedLlmProxyIds: Array<string>;
+        modelRouterProviderApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+            chatApiKeyId: string;
+            chatApiKeyName: string;
+        }>;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        clientSecret: string;
+    };
+};
+
+export type RotateLlmOauthClientSecretResponse = RotateLlmOauthClientSecretResponses[keyof RotateLlmOauthClientSecretResponses];
 
 export type GetLlmProviderApiKeysData = {
     body?: never;

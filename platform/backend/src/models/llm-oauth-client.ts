@@ -3,36 +3,36 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
-  LLM_APPLICATION_METADATA_TYPE,
   LLM_MODEL_ROUTER_SCOPE,
-  LlmApplicationMetadataSchema,
-  type LlmApplicationProviderKey,
-} from "@/types/llm-application";
+  LLM_OAUTH_CLIENT_METADATA_TYPE,
+  LlmOauthClientMetadataSchema,
+  type LlmOauthClientProviderKey,
+} from "@/types/llm-oauth-client";
 
-class LlmApplicationModel {
+class LlmOauthClientModel {
   static async findAllByOrganization(organizationId: string) {
     const rows = await db
       .select()
       .from(schema.oauthClientsTable)
       .where(
-        sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}
+        sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}
           AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId}`,
       )
       .orderBy(schema.oauthClientsTable.createdAt);
 
-    return hydrateApplications(rows);
+    return hydrateOauthClients(rows);
   }
 
   static async create(params: {
     organizationId: string;
     name: string;
     allowedLlmProxyIds: string[];
-    modelRouterProviderApiKeys: LlmApplicationProviderKey[];
+    modelRouterProviderApiKeys: LlmOauthClientProviderKey[];
   }) {
     const clientSecret = createClientSecret();
     const clientSecretHash = await hashClientSecret(clientSecret);
     const metadata = {
-      type: LLM_APPLICATION_METADATA_TYPE,
+      type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       allowedLlmProxyIds: params.allowedLlmProxyIds,
       modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
@@ -42,7 +42,7 @@ class LlmApplicationModel {
       .insert(schema.oauthClientsTable)
       .values({
         id: crypto.randomUUID(),
-        clientId: `llm_app_${randomBytes(18).toString("base64url")}`,
+        clientId: `llm_oauth_${randomBytes(18).toString("base64url")}`,
         clientSecret: clientSecretHash,
         name: params.name,
         redirectUris: [],
@@ -59,7 +59,7 @@ class LlmApplicationModel {
       .returning();
 
     return {
-      application: (await hydrateApplications([client]))[0],
+      oauthClient: (await hydrateOauthClients([client]))[0],
       clientSecret,
     };
   }
@@ -71,13 +71,13 @@ class LlmApplicationModel {
       .where(
         and(
           eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
         ),
       )
       .limit(1);
 
-    return client ? (await hydrateApplications([client]))[0] : null;
+    return client ? (await hydrateOauthClients([client]))[0] : null;
   }
 
   static async findByClientId(clientId: string) {
@@ -87,12 +87,12 @@ class LlmApplicationModel {
       .where(
         and(
           eq(schema.oauthClientsTable.clientId, clientId),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
         ),
       )
       .limit(1);
 
-    return client ? (await hydrateApplications([client]))[0] : null;
+    return client ? (await hydrateOauthClients([client]))[0] : null;
   }
 
   static async findClientForCredentials(params: {
@@ -105,7 +105,7 @@ class LlmApplicationModel {
       .where(
         and(
           eq(schema.oauthClientsTable.clientId, params.clientId),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
         ),
       )
       .limit(1);
@@ -119,7 +119,7 @@ class LlmApplicationModel {
       return null;
     }
 
-    return (await hydrateApplications([client]))[0] ?? null;
+    return (await hydrateOauthClients([client]))[0] ?? null;
   }
 
   static async rotateSecret(params: { id: string; organizationId: string }) {
@@ -133,7 +133,7 @@ class LlmApplicationModel {
       .where(
         and(
           eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
         ),
       )
@@ -141,7 +141,7 @@ class LlmApplicationModel {
 
     if (!client) return null;
     return {
-      application: (await hydrateApplications([client]))[0],
+      oauthClient: (await hydrateOauthClients([client]))[0],
       clientSecret,
     };
   }
@@ -151,10 +151,10 @@ class LlmApplicationModel {
     organizationId: string;
     name: string;
     allowedLlmProxyIds: string[];
-    modelRouterProviderApiKeys: LlmApplicationProviderKey[];
+    modelRouterProviderApiKeys: LlmOauthClientProviderKey[];
   }) {
     const metadata = {
-      type: LLM_APPLICATION_METADATA_TYPE,
+      type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       allowedLlmProxyIds: params.allowedLlmProxyIds,
       modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
@@ -170,13 +170,13 @@ class LlmApplicationModel {
       .where(
         and(
           eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
         ),
       )
       .returning();
 
-    return client ? (await hydrateApplications([client]))[0] : null;
+    return client ? (await hydrateOauthClients([client]))[0] : null;
   }
 
   static async delete(params: { id: string; organizationId: string }) {
@@ -185,7 +185,7 @@ class LlmApplicationModel {
       .where(
         and(
           eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_APPLICATION_METADATA_TYPE}`,
+          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
         ),
       )
@@ -195,7 +195,7 @@ class LlmApplicationModel {
   }
 }
 
-export default LlmApplicationModel;
+export default LlmOauthClientModel;
 
 function createClientSecret() {
   return `llm_secret_${randomBytes(32).toString("base64url")}`;
@@ -209,13 +209,13 @@ function compareClientSecret(secret: string, storedHash: string) {
   return verifyPassword({ password: secret, hash: storedHash });
 }
 
-async function hydrateApplications(
+async function hydrateOauthClients(
   clients: Array<typeof schema.oauthClientsTable.$inferSelect>,
 ) {
   const chatApiKeyIds = [
     ...new Set(
       clients.flatMap((client) => {
-        const metadata = LlmApplicationMetadataSchema.safeParse(
+        const metadata = LlmOauthClientMetadataSchema.safeParse(
           client.metadata,
         ).data;
         return (
@@ -239,7 +239,7 @@ async function hydrateApplications(
   const apiKeyNames = new Map(apiKeyRows.map((row) => [row.id, row.name]));
 
   return clients.flatMap((client) => {
-    const metadata = LlmApplicationMetadataSchema.safeParse(
+    const metadata = LlmOauthClientMetadataSchema.safeParse(
       client.metadata,
     ).data;
     if (!metadata) return [];

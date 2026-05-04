@@ -7,7 +7,7 @@ import {
   type InteractionSource,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Database, KeyRound, Layers, MessageSquare, User } from "lucide-react";
+import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
@@ -388,38 +388,6 @@ function SessionsTable({
             className="max-w-[12.5rem]"
           />
         ),
-      },
-      {
-        id: "caller",
-        header: "Caller",
-        cell: ({ row }) => {
-          const appNames = row.original.authenticatedAppNames ?? [];
-          const authMethods = row.original.authMethods ?? [];
-          if (appNames.length > 0) {
-            return (
-              <div className="flex flex-wrap gap-1">
-                {appNames.map((appName) => (
-                  <Badge
-                    key={appName}
-                    variant="outline"
-                    className="text-xs max-w-[180px]"
-                  >
-                    <KeyRound className="h-3 w-3 mr-1 shrink-0" />
-                    <span className="truncate">{appName}</span>
-                  </Badge>
-                ))}
-              </div>
-            );
-          }
-
-          return authMethods.length > 0 ? (
-            <span className="text-xs text-muted-foreground">
-              {authMethods.join(", ")}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">Unknown</span>
-          );
-        },
       },
       {
         id: "time",

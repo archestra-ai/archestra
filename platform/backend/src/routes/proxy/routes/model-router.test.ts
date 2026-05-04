@@ -8,7 +8,7 @@ import {
 import { vi } from "vitest";
 import {
   InteractionModel,
-  LlmApplicationModel,
+  LlmOauthClientModel,
   ModelModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -590,7 +590,7 @@ describe("model router proxy routes", () => {
     expect(interactions.data[0].source).toBe("model_router");
   });
 
-  test("routes requests authenticated with an LLM application access token issued from client credentials", async ({
+  test("routes requests authenticated with an LLM OAuth client access token issued from client credentials", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -609,10 +609,10 @@ describe("model router proxy routes", () => {
     });
     const agent = await makeAgent({
       organizationId: organization.id,
-      name: "Application Model Router Agent",
+      name: "OAuth Client Model Router Agent",
       agentType: "llm_proxy",
     });
-    const { application, clientSecret } = await LlmApplicationModel.create({
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
@@ -629,7 +629,7 @@ describe("model router proxy routes", () => {
       url: "/api/auth/oauth2/token",
       payload: {
         grant_type: "client_credentials",
-        client_id: application.clientId,
+        client_id: oauthClient.clientId,
         client_secret: clientSecret,
         scope: "llm:model-router",
       },
@@ -662,7 +662,7 @@ describe("model router proxy routes", () => {
     );
     expect(interactions.data[0]).toMatchObject({
       authMethod: "oauth_client_credentials",
-      authenticatedAppId: application.id,
+      authenticatedAppId: oauthClient.id,
       authenticatedAppName: "Backend Service",
       externalAgentId: "caller-supplied-label",
     });
@@ -695,7 +695,7 @@ describe("model router proxy routes", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().error.message).toContain(
-      "Invalid LLM application access token",
+      "Invalid LLM OAuth client access token",
     );
   });
 

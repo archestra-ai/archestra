@@ -301,12 +301,12 @@ export const RouteId = {
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
-  // LLM Application Routes
-  GetLlmApplications: "getLlmApplications",
-  CreateLlmApplication: "createLlmApplication",
-  UpdateLlmApplication: "updateLlmApplication",
-  RotateLlmApplicationSecret: "rotateLlmApplicationSecret",
-  DeleteLlmApplication: "deleteLlmApplication",
+  // LLM OAuth Client Routes
+  GetLlmOauthClients: "getLlmOauthClients",
+  CreateLlmOauthClient: "createLlmOauthClient",
+  UpdateLlmOauthClient: "updateLlmOauthClient",
+  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
+  DeleteLlmOauthClient: "deleteLlmOauthClient",
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",

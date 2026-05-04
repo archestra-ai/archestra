@@ -3,7 +3,7 @@ import { IDENTITY_PROVIDER_ID } from "@shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
-import LlmApplicationModel from "@/models/llm-application";
+import LlmOauthClientModel from "@/models/llm-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -101,7 +101,7 @@ describe("auth routes", () => {
     );
   });
 
-  test("issues LLM application access tokens with client credentials", async ({
+  test("issues LLM OAuth client access tokens with client credentials", async ({
     makeAgent,
     makeLlmProviderApiKey,
     makeOrganization,
@@ -118,7 +118,7 @@ describe("auth routes", () => {
       secret.id,
       { provider: "openai" },
     );
-    const { application, clientSecret } = await LlmApplicationModel.create({
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
@@ -132,7 +132,7 @@ describe("auth routes", () => {
       url: "/api/auth/oauth2/token",
       payload: {
         grant_type: "client_credentials",
-        client_id: application.clientId,
+        client_id: oauthClient.clientId,
         client_secret: clientSecret,
         scope: "llm:model-router",
       },
@@ -150,7 +150,7 @@ describe("auth routes", () => {
       .update(response.json().access_token)
       .digest("base64url");
     const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
-    expect(storedToken?.clientId).toBe(application.clientId);
+    expect(storedToken?.clientId).toBe(oauthClient.clientId);
     expect(storedToken?.userId).toBeNull();
     expect(storedToken?.scopes).toEqual(["llm:model-router"]);
   });

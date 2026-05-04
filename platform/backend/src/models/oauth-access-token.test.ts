@@ -51,6 +51,54 @@ describe("OAuthAccessTokenModel", () => {
     });
   });
 
+  describe("createClientCredentialsToken", () => {
+    test("should create a client credentials token without a user", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "client-credentials-client",
+      });
+      const expiresAt = new Date(Date.now() + 3600000);
+
+      const created = await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: "client-credentials-token-hash",
+        clientId: client.clientId,
+        expiresAt,
+        scopes: ["llm:model-router"],
+        referenceId: "llm-oauth-client:test-client-id",
+      });
+
+      expect(created.token).toBe("client-credentials-token-hash");
+      expect(created.clientId).toBe(client.clientId);
+      expect(created.userId).toBeNull();
+      expect(created.expiresAt).toEqual(expiresAt);
+      expect(created.scopes).toEqual(["llm:model-router"]);
+      expect(created.referenceId).toBe("llm-oauth-client:test-client-id");
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "client-credentials-token-hash",
+      );
+      expect(found?.id).toBe(created.id);
+      expect(found?.refreshTokenRevoked).toBeNull();
+    });
+
+    test("should persist a null referenceId when omitted", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient();
+
+      const created = await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: "client-credentials-token-without-reference",
+        clientId: client.clientId,
+        expiresAt: new Date(Date.now() + 3600000),
+        scopes: ["llm:model-router"],
+      });
+
+      expect(created.userId).toBeNull();
+      expect(created.referenceId).toBeNull();
+    });
+  });
+
   describe("getByTokenHash", () => {
     test("should return access token when hash matches", async ({
       makeUser,

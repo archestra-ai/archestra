@@ -6,7 +6,8 @@
     "method": "POST",
     "urlPathPattern": "/gemini/v1beta/models/[^:]+:streamGenerateContent",
     "bodyPatterns": [
-      { "contains": "auth-calltime-ui-e2e" }
+      { "contains": "auth-calltime-ui-e2e" },
+      { "doesNotContain": "approval" }
     ]
   },
   "response": {

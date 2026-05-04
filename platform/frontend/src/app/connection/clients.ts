@@ -9,6 +9,18 @@ export interface ClientStep {
   language?: "json" | "toml" | "bash";
   /** Title for this step's terminal. Falls back to the parent `configFile`. */
   terminalTitle?: string;
+  /**
+   * When set, renders the inline auth-header picker (token selector +
+   * copyable `Bearer …` value) beneath this step. Used by the token-auth
+   * path so the value lives next to the step that consumes it.
+   */
+  showAuthHeader?: boolean;
+  /**
+   * When `showAuthHeader` is true and this is also true, render the raw
+   * token without the `Bearer ` prefix. For clients whose credential UI
+   * prepends the scheme automatically (e.g. n8n's Bearer Auth credential).
+   */
+  authHeaderBare?: boolean;
 }
 
 /** Parameters handed to the MCP config builder at render time. */
@@ -126,6 +138,8 @@ const OPENAI_PATH =
   "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z";
 const CURSOR_PATH =
   "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23";
+const N8N_PATH =
+  "M21.4737 5.6842c-1.1772 0-2.1663.8051-2.4468 1.8947h-2.8955c-1.235 0-2.289.893-2.492 2.111l-.1038.623a1.263 1.263 0 0 1-1.246 1.0555H11.289c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947s-2.1663.8051-2.4467 1.8947H4.973c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947C1.1311 9.4737 0 10.6047 0 12s1.131 2.5263 2.5263 2.5263c1.1772 0 2.1663-.8051 2.4468-1.8947h1.4223c.2804 1.0896 1.2696 1.8947 2.4467 1.8947 1.1772 0 2.1663-.8051 2.4468-1.8947h1.0008a1.263 1.263 0 0 1 1.2459 1.0555l.1038.623c.203 1.218 1.257 2.111 2.492 2.111h.3692c.2804 1.0895 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263c-1.1772 0-2.1664.805-2.4468 1.8947h-.3692a1.263 1.263 0 0 1-1.246-1.0555l-.1037-.623A2.52 2.52 0 0 0 13.9607 12a2.52 2.52 0 0 0 .821-1.4794l.1038-.623a1.263 1.263 0 0 1 1.2459-1.0555h2.8955c.2805 1.0896 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263m0 1.2632a1.263 1.263 0 0 1 1.2631 1.2631 1.263 1.263 0 0 1-1.2631 1.2632 1.263 1.263 0 0 1-1.2632-1.2632 1.263 1.263 0 0 1 1.2632-1.2631M2.5263 10.7368A1.263 1.263 0 0 1 3.7895 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 1.2632 12a1.263 1.263 0 0 1 1.2631-1.2632m6.3158 0A1.263 1.263 0 0 1 10.1053 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 7.579 12a1.263 1.263 0 0 1 1.2632-1.2632m10.1053 3.7895a1.263 1.263 0 0 1 1.2631 1.2632 1.263 1.263 0 0 1-1.2631 1.2631 1.263 1.263 0 0 1-1.2632-1.2631 1.263 1.263 0 0 1 1.2632-1.2632";
 export const CONNECT_CLIENTS: ConnectClient[] = [
   {
     id: "claude-code",
@@ -164,22 +178,56 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
       build: ({ provider, url, tokenPlaceholder }) => {
         if (provider === "bedrock") {
           return {
-            kind: "snippet",
-            language: "bash",
-            code: `# Route Claude Code through Archestra (Bedrock backend)
-export CLAUDE_CODE_USE_BEDROCK=1
-export ANTHROPIC_BEDROCK_BASE_URL="${url}"
-export AWS_BEARER_TOKEN_BEDROCK="${tokenPlaceholder}"
+            kind: "steps",
+            steps: [
+              {
+                title: "Open ~/.claude/settings.local.json",
+                body: "Create the file if it doesn't exist.",
+              },
+              {
+                title: "Add the Bedrock proxy settings to env",
+                body: "Merge the snippet below into the file (keep your existing keys). Update AWS_REGION if you use a different one.",
+                language: "json",
+                code: `{
+  "env": {
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "AWS_REGION": "us-east-1",
+    "ANTHROPIC_BEDROCK_BASE_URL": "${url}"
+  }
+}`,
+              },
+              {
+                title: "Export your Bedrock API key in the shell",
+                body: "Keep the token out of files on disk.",
+                language: "bash",
+                code: `export AWS_BEARER_TOKEN_BEDROCK="${tokenPlaceholder}"
 claude`,
+              },
+            ],
           };
         }
         return {
-          kind: "snippet",
-          language: "bash",
-          code: `# Route Claude Code through Archestra
-export ANTHROPIC_BASE_URL="${url}"
-export ANTHROPIC_API_KEY="${tokenPlaceholder}"
-claude`,
+          kind: "steps",
+          steps: [
+            {
+              title: "Open ~/.claude/settings.local.json",
+              body: "Create the file if it doesn't exist.",
+            },
+            {
+              title: "Add the Archestra base URL to env",
+              body: "Merge the snippet below into the file (keep your existing keys). Your Claude subscription keeps working as-is.",
+              language: "json",
+              code: `{
+  "env": {
+    "ANTHROPIC_BASE_URL": "${url}"
+  }
+}`,
+            },
+            {
+              title: "Restart Claude Code",
+              body: "New sessions will route through Archestra automatically.",
+            },
+          ],
         };
       },
     },
@@ -306,8 +354,9 @@ requires_openai_auth = true`,
     id: "n8n",
     label: "n8n",
     sub: "Workflow automation",
+    svg: N8N_PATH,
+    iconColor: "#ea4b71",
     tileBg: "#fff1ec",
-    iconOverride: { bg: "#ea4b71", fg: "#fff", glyph: "n8n" },
     mcp: {
       kind: "custom",
       supportedAuth: "both",
@@ -315,37 +364,51 @@ requires_openai_auth = true`,
       configFile: "n8n workflow",
       language: "bash",
       steps: ({ token }) => {
-        const common: ClientStep[] = [
-          {
-            title: 'Add an "MCP Client Tool" node',
-            body: 'In your AI Agent workflow, add the "MCP Client Tool" node from the AI nodes panel.',
-          },
-          {
-            title: "Configure Transport",
-            body: 'In the node settings, set the "Server Transport" dropdown to "HTTP Streamable".',
-          },
-          {
-            title: "Configure URL",
-            body: 'Copy the value below and paste it into the "Endpoint URL" field.',
-            terminalTitle: "Endpoint URL",
-            buildCommand: ({ url }) => url,
-          },
-        ];
+        const addNode: ClientStep = {
+          title: 'Add the "MCP Client Tool" node',
+          body: "From the AI nodes panel in your AI Agent workflow.",
+        };
+        const setEndpoint: ClientStep = {
+          title: "Paste the Endpoint",
+          terminalTitle: "Endpoint",
+          buildCommand: ({ url }) => url,
+        };
+        const verifyTools: ClientStep = {
+          title: "Verify tools load",
+          body: 'Set "Tools to Include" to "Selected", confirm the tools appear, then switch back to "All".',
+        };
+        const saveAndClose: ClientStep = {
+          title: "Save and close",
+        };
+
         if (token) {
           return [
-            ...common,
+            addNode,
+            setEndpoint,
             {
-              title: "Configure Auth",
-              body: 'Set "Authentication" to "Header Auth", create a new credential, set "Name" to "Authorization", and paste the header value from below into the "Value" field.',
+              title: 'Set Authentication to "Bearer Auth"',
+              body: "Create a credential and paste the value below.",
+              showAuthHeader: true,
+              authHeaderBare: true,
             },
+            verifyTools,
+            saveAndClose,
           ];
         }
         return [
-          ...common,
+          addNode,
+          setEndpoint,
           {
-            title: "Run the OAuth flow",
-            body: 'Set "Authentication" to "OAuth2" and follow n8n\'s OAuth prompts to authorize the gateway.',
+            title: 'Set Authentication to "MCP OAuth2"',
           },
+          {
+            title: "Create the MCP OAuth2 credential",
+            body: 'Click "Credential for MCP OAuth2 API" → "Create new credential". Paste the value below into "Server URL" and Save.',
+            terminalTitle: "Server URL",
+            buildCommand: ({ url }) => url,
+          },
+          verifyTools,
+          saveAndClose,
         ];
       },
     },

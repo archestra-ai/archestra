@@ -678,6 +678,7 @@ async function applyModelRouterAuthOverride(params: {
   ).llmProxyAuthOverride = {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
+    chatApiKeyId: mappedApiKey.chatApiKeyId,
     authenticated: true,
     source: "model_router",
   };

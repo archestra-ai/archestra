@@ -122,7 +122,7 @@ export function OnboardingWizardEditor({
           size="sm"
           onClick={handleAddWizard}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add onboarding wizard
         </Button>
       </div>
@@ -229,7 +229,7 @@ export function OnboardingWizardEditor({
               size="sm"
               onClick={handleAddPage}
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Add page
             </Button>
           )}

@@ -42,7 +42,7 @@ export function DateTimeRangePicker({
           !startDate && !endDate && "text-muted-foreground",
         )}
       >
-        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+        <CalendarIcon className="h-4 w-4 shrink-0" />
         {displayText || <span>Pick a date range</span>}
       </Button>
 

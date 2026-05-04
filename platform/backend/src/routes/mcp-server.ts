@@ -40,6 +40,7 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
+import { broadcastMcpInstallationStatus } from "@/websocket";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -622,6 +623,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               localInstallationStatus: "pending",
               localInstallationError: null,
             });
+            broadcastMcpInstallationStatus(mcpServer.id, "pending", null);
 
             await McpServerRuntimeManager.startServer(
               mcpServer,
@@ -665,6 +667,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   localInstallationStatus: "discovering-tools",
                   localInstallationError: null,
                 });
+                broadcastMcpInstallationStatus(
+                  mcpServer.id,
+                  "discovering-tools",
+                  null,
+                );
 
                 fastify.log.info(
                   `Attempting to fetch tools from local server: ${mcpServer.name}`,
@@ -721,6 +728,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   localInstallationStatus: "success",
                   localInstallationError: null,
                 });
+                broadcastMcpInstallationStatus(mcpServer.id, "success", null);
 
                 fastify.log.info(
                   `Successfully fetched and persisted ${tools.length} tools from local server: ${mcpServer.name}`,
@@ -739,6 +747,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   localInstallationStatus: "error",
                   localInstallationError: errorMessage,
                 });
+                broadcastMcpInstallationStatus(
+                  mcpServer.id,
+                  "error",
+                  errorMessage,
+                );
               }
             })();
 
@@ -760,6 +773,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               localInstallationStatus: "error",
               localInstallationError: `Failed to start deployment: ${errorMessage}`,
             });
+            broadcastMcpInstallationStatus(
+              mcpServer.id,
+              "error",
+              `Failed to start deployment: ${errorMessage}`,
+            );
 
             // Return the server with error status instead of throwing 500
             return reply.send({
@@ -835,6 +853,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localInstallationStatus: "success",
           localInstallationError: null,
         });
+        broadcastMcpInstallationStatus(mcpServer.id, "success", null);
 
         return reply.send({
           ...mcpServer,
@@ -1594,6 +1613,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         localInstallationStatus: "pending",
         localInstallationError: null,
       });
+      broadcastMcpInstallationStatus(id, "pending", null);
 
       // Refetch the server with updated status
       const updatedServer = await McpServerModel.findById(id);
@@ -1632,17 +1652,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await McpServerModel.update(id, {
             localInstallationStatus: "success",
           });
+          broadcastMcpInstallationStatus(id, "success", null);
           logger.info(
             { serverId: id, serverName: mcpServer.name },
             "MCP server reinstalled successfully",
           );
         } catch (error) {
           // Set status to error if reinstall fails
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
           await McpServerModel.update(id, {
             localInstallationStatus: "error",
-            localInstallationError:
-              error instanceof Error ? error.message : "Unknown error",
+            localInstallationError: errorMessage,
           });
+          broadcastMcpInstallationStatus(id, "error", errorMessage);
           logger.error(
             { err: error, serverId: id },
             "Failed to reinstall MCP server",

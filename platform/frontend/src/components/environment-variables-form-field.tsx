@@ -44,6 +44,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
@@ -72,8 +77,20 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   };
   showLabel?: boolean;
   showDescription?: boolean;
+  /** Optional inline content rendered after the "Environment Variables" heading. */
+  labelSuffix?: React.ReactNode;
   /** When true, non-prompted secret values will be sourced from external secrets manager (Vault) */
   useExternalSecretsManager?: boolean;
+  /**
+   * Set of env-var keys whose secret value is already stored on the server.
+   * Rows whose `key` is in this set render `••••••••` + an Update button
+   * instead of an empty input, so admins don't think the value has been wiped.
+   */
+  secretKeysWithStoredValue?: Set<string>;
+  /** When true, the "Prompt on each installation" checkbox is disabled (e.g. multi-tenant servers) */
+  disablePromptOnInstallation?: boolean;
+  /** Tooltip message shown when the "Prompt on each installation" checkbox is disabled */
+  disablePromptOnInstallationReason?: string;
   /** Optional envFrom field array for injecting env from K8s Secrets/ConfigMaps */
   envFrom?: {
     // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
@@ -110,7 +127,11 @@ export function EnvironmentVariablesFormField<
   form,
   showLabel = true,
   showDescription = true,
+  labelSuffix,
   useExternalSecretsManager = false,
+  secretKeysWithStoredValue,
+  disablePromptOnInstallation = false,
+  disablePromptOnInstallationReason,
   envFrom,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
@@ -141,7 +162,10 @@ export function EnvironmentVariablesFormField<
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         {showLabel && (
-          <h3 className="font-semibold text-sm">Environment Variables</h3>
+          <h3 className="font-semibold text-base">
+            Environment Variables
+            {labelSuffix}
+          </h3>
         )}
         <Button
           type="button"
@@ -158,7 +182,7 @@ export function EnvironmentVariablesFormField<
             })
           }
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add Variable
         </Button>
       </div>
@@ -173,7 +197,11 @@ export function EnvironmentVariablesFormField<
         const envVarCount = envVarFields.length;
 
         if (envVarCount === 0) {
-          return null;
+          return (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No environment variables configured.
+            </div>
+          );
         }
 
         return (
@@ -199,17 +227,22 @@ export function EnvironmentVariablesFormField<
               remove={remove}
               fieldNamePrefix={fieldNamePrefix}
               useExternalSecretsManager={useExternalSecretsManager}
+              secretKeysWithStoredValue={secretKeysWithStoredValue}
+              disablePromptOnInstallation={disablePromptOnInstallation}
+              disablePromptOnInstallationReason={
+                disablePromptOnInstallationReason
+              }
             />
           </>
         );
       })()}
 
-      {/* Environment From K8s Secrets / ConfigMaps Section */}
+      {/* Environment From k8s Secrets / ConfigMaps Section */}
       {envFrom && (
         <div className="space-y-1 mt-6">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sm">
-              Environment From K8s Secrets / ConfigMaps
+            <h3 className="font-semibold text-base">
+              Environment From k8s Secrets / ConfigMaps
             </h3>
             <Button
               type="button"
@@ -219,14 +252,21 @@ export function EnvironmentVariablesFormField<
                 envFrom.append({ type: "secret", name: "", prefix: "" })
               }
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Add Source
             </Button>
           </div>
-          <FormDescription className="text-xs">
-            Inject all keys from existing K8s Secrets or ConfigMaps as
-            environment variables.
-          </FormDescription>
+
+          {envFrom.fields.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No sources configured.
+            </div>
+          ) : (
+            <FormDescription className="text-xs">
+              Inject all keys from existing k8s Secrets or ConfigMaps as
+              environment variables.
+            </FormDescription>
+          )}
 
           {envFrom.fields.map((field, index) => (
             <div key={field.id} className="border rounded-lg p-3 space-y-3">
@@ -309,7 +349,7 @@ export function EnvironmentVariablesFormField<
               })
             }
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Add Secret File
           </Button>
         </div>
@@ -324,7 +364,11 @@ export function EnvironmentVariablesFormField<
             });
 
           if (secretFileIndices.length === 0) {
-            return null;
+            return (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                No secret files configured.
+              </div>
+            );
           }
 
           return (
@@ -335,9 +379,7 @@ export function EnvironmentVariablesFormField<
               <div className="border rounded-lg">
                 <div className="grid grid-cols-[1.5fr_0.7fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 bg-muted/50 border-b">
                   <div className="text-xs font-medium">Key</div>
-                  <div className="text-xs font-medium">
-                    Prompt on each installation
-                  </div>
+                  <div className="text-xs font-medium">Prompt user</div>
                   <div className="text-xs font-medium">Required</div>
                   <div className="text-xs font-medium">Value</div>
                   <div className="text-xs font-medium">Description</div>
@@ -376,28 +418,54 @@ export function EnvironmentVariablesFormField<
                         name={
                           `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>
                         }
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <div className="flex items-center h-10">
-                                <Checkbox
-                                  checked={field.value}
-                                  onCheckedChange={(checked) => {
-                                    field.onChange(checked);
-                                    if (!checked) {
-                                      form.setValue(
-                                        `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
-                                        // biome-ignore lint/suspicious/noExplicitAny: Generic field types require any for setValue
-                                        false as any,
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const checkbox = (
+                            <Checkbox
+                              checked={field.value}
+                              disabled={disablePromptOnInstallation}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked);
+                                if (!checked) {
+                                  form.setValue(
+                                    `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
+                                    // biome-ignore lint/suspicious/noExplicitAny: Generic field types require any for setValue
+                                    false as any,
+                                  );
+                                }
+                              }}
+                            />
+                          );
+                          return (
+                            <FormItem>
+                              <FormControl>
+                                <div className="flex items-center h-10">
+                                  {disablePromptOnInstallation &&
+                                  disablePromptOnInstallationReason ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span
+                                          // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex needed so tooltip trigger receives keyboard focus when wrapping a disabled control
+                                          tabIndex={0}
+                                          className="cursor-not-allowed"
+                                        >
+                                          {checkbox}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="max-w-xs">
+                                          {disablePromptOnInstallationReason}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ) : (
+                                    checkbox
+                                  )}
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
                       <FormField
                         control={control}
@@ -470,6 +538,13 @@ export function EnvironmentVariablesFormField<
                           );
                         }
 
+                        const rowKey = form.watch(
+                          `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>,
+                        ) as string | undefined;
+                        const hasStoredSecret =
+                          !!rowKey &&
+                          secretKeysWithStoredValue?.has(rowKey) === true;
+
                         return (
                           <FormField
                             control={control}
@@ -477,7 +552,12 @@ export function EnvironmentVariablesFormField<
                               `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
                             }
                             render={({ field }) => (
-                              <AutoResizeSecretTextarea field={field} />
+                              <AutoResizeSecretTextarea
+                                field={field}
+                                placeholder={
+                                  hasStoredSecret ? "••••••••" : undefined
+                                }
+                              />
                             )}
                           />
                         );
@@ -553,9 +633,11 @@ const MAX_TEXTAREA_HEIGHT = 128;
 
 function AutoResizeSecretTextarea({
   field,
+  placeholder,
 }: {
   // biome-ignore lint/suspicious/noExplicitAny: Generic field types
   field: ControllerRenderProps<any, any>;
+  placeholder?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -578,6 +660,7 @@ function AutoResizeSecretTextarea({
           className="font-mono text-xs resize-none min-h-10 max-h-32 overflow-y-auto"
           rows={1}
           autoComplete={MCP_SECRET_AUTOCOMPLETE}
+          placeholder={placeholder}
           {...field}
           ref={(el) => {
             textareaRef.current = el;

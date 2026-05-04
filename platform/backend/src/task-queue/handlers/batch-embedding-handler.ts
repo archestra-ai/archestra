@@ -31,8 +31,11 @@ export async function handleBatchEmbedding(
 
   const updatedRun = await ConnectorRunModel.completeBatch(connectorRunId);
 
-  // If all batches are done, update the connector's sync status
-  // Skip if run was superseded/failed — a newer run owns the connector status
+  // If all batches are done, update the connector's sync status.
+  // Skip if run was superseded/failed — a newer run owns the connector status.
+  // Also guard against a newer run having claimed the connector since this run
+  // started: if connector.lastSyncAt > run.startedAt, a newer run has
+  // optimistically written its own startedAt and we must not overwrite it.
   if (
     updatedRun &&
     updatedRun.completedBatches !== null &&
@@ -41,14 +44,33 @@ export async function handleBatchEmbedding(
     (updatedRun.status === "success" ||
       updatedRun.status === "completed_with_errors")
   ) {
-    const now = new Date();
-    await KnowledgeBaseConnectorModel.update(updatedRun.connectorId, {
-      lastSyncStatus: updatedRun.status,
-      lastSyncAt: now,
-    });
-    logger.info(
-      { runId: connectorRunId, connectorId: updatedRun.connectorId },
-      "[BatchEmbeddingHandler] All batches complete, connector run finalized",
+    const connector = await KnowledgeBaseConnectorModel.findById(
+      updatedRun.connectorId,
     );
+    const newerRunStarted =
+      connector?.lastSyncAt != null &&
+      connector.lastSyncAt > updatedRun.startedAt;
+
+    if (!newerRunStarted) {
+      const now = new Date();
+      await KnowledgeBaseConnectorModel.update(updatedRun.connectorId, {
+        lastSyncStatus: updatedRun.status,
+        lastSyncAt: now,
+      });
+      logger.info(
+        { runId: connectorRunId, connectorId: updatedRun.connectorId },
+        "[BatchEmbeddingHandler] All batches complete, connector run finalized",
+      );
+    } else {
+      logger.info(
+        {
+          runId: connectorRunId,
+          connectorId: updatedRun.connectorId,
+          runStartedAt: updatedRun.startedAt,
+          connectorLastSyncAt: connector?.lastSyncAt,
+        },
+        "[BatchEmbeddingHandler] Skipping connector update — newer run has started",
+      );
+    }
   }
 }

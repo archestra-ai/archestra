@@ -6,6 +6,7 @@ import type { ModelInfo } from "./types";
 export async function fetchXaiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.xai.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
@@ -14,6 +15,7 @@ export async function fetchXaiModels(
     url: `${baseUrl}/models`,
     apiKey,
     errorLabel: "xAI models",
+    extraHeaders,
   });
 
   return data.data.map((model) => ({

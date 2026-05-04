@@ -880,7 +880,9 @@ export function McpServerCard({
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="font-medium">Installation failed</p>
-                <p className="truncate text-xs">{installationError}</p>
+                <p className="truncate text-xs" title={installationError}>
+                  {installationError}
+                </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <Button

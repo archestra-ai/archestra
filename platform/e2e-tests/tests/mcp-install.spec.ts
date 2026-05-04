@@ -196,6 +196,8 @@ test.describe("MCP Install", () => {
     test.setTimeout(240_000);
     const CATALOG_ITEM_NAME = "e2e__bogus_image_test";
     const BOGUS_IMAGE = "image-that-doesnt-exist:123";
+    // Flatten the script for `node -e`; literal newlines can be interpreted
+    // differently when the command is passed through the container shell.
     const FIXED_MCP_SCRIPT = `
 const readline = require("node:readline");
 const rl = readline.createInterface({ input: process.stdin });

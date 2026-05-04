@@ -2304,4 +2304,116 @@ describe("mcp server inspect route", () => {
       "You can only revoke connections for teams you are a member of",
     );
   });
+
+  // ---- F4: cluster placement is admin-only -------------------------------
+  //
+  // Non-admin installers MUST NOT be able to pin an MCP server to a specific
+  // cluster. They install without clusterId; the backend resolves stickily
+  // (F1). Admins may explicitly override clusterId to a non-default cluster.
+
+  describe("F4: clusterId admin gate on install", () => {
+    test("non-admin install without clusterId succeeds and ends up on the default cluster", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      // Non-admin: every hasPermission check returns false.
+      hasPermissionMock.mockReset();
+      hasPermissionMock.mockResolvedValue({ success: false });
+      userHasPermissionMock.mockReset();
+      userHasPermissionMock.mockResolvedValue(false);
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Plain Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "info",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Plain Remote", catalogId: catalog.id },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const created = response.json();
+      // Sticky cluster_id from F1 — must be non-null.
+      expect(created.clusterId).not.toBeNull();
+      expect(created.clusterId).toBeTruthy();
+    });
+
+    test("non-admin install with explicit clusterId is rejected with 403", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const { default: ClusterModel } = await import("@/models/cluster");
+      const otherCluster = await ClusterModel.create({
+        name: "f4-non-admin-target",
+      });
+
+      hasPermissionMock.mockReset();
+      hasPermissionMock.mockResolvedValue({ success: false });
+      userHasPermissionMock.mockReset();
+      userHasPermissionMock.mockResolvedValue(false);
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Plain Remote 2",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Plain Remote 2",
+          catalogId: catalog.id,
+          clusterId: otherCluster.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toMatch(/admin/i);
+    });
+
+    test("admin install with explicit clusterId honours the override", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const { default: ClusterModel } = await import("@/models/cluster");
+      const otherCluster = await ClusterModel.create({
+        name: "f4-admin-target",
+      });
+
+      // Default beforeEach already mocks hasPermission as success: true (admin).
+      const catalog = await makeInternalMcpCatalog({
+        name: "Admin Override Remote",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "get-server-info",
+          description: "info",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: "Admin Override Remote",
+          catalogId: catalog.id,
+          clusterId: otherCluster.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().clusterId).toBe(otherCluster.id);
+    });
+  });
 });

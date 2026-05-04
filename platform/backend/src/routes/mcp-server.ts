@@ -161,6 +161,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serviceAccount,
         ...restDataFromRequestBody
       } = body;
+
+      // Cluster placement is admin-only. Non-admins must omit clusterId entirely;
+      // McpServerModel.create resolves the right cluster (personal-default for
+      // personal scope, otherwise default) and persists it stickily.
+      if (
+        restDataFromRequestBody.clusterId !== undefined &&
+        restDataFromRequestBody.clusterId !== null
+      ) {
+        const { success: canOverrideCluster } = await hasPermission(
+          { mcpServerInstallation: ["admin"] },
+          headers,
+        );
+        if (!canOverrideCluster) {
+          throw new ApiError(
+            403,
+            "Only admins may pin an MCP server to a specific cluster",
+          );
+        }
+      } else {
+        // Defensive: ensure no leftover null sneaks past — let create() resolve.
+        delete restDataFromRequestBody.clusterId;
+      }
+
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
       } = {

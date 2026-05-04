@@ -27499,7 +27499,6 @@ export type UpdateInternalMcpCatalogItemData = {
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';
-        multitenant?: boolean;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;

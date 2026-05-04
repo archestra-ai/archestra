@@ -451,7 +451,7 @@ export function transformCatalogItemToFormValues(
     description: item.description || "",
     icon: item.icon ?? null,
     serverType: item.serverType as "remote" | "local",
-    multitenant: item.serverType === "local" && authMethod !== "none",
+    multitenant: item.serverType === "local" && Boolean(item.multitenant),
     serverUrl: item.serverUrl || "",
     authMethod,
     includeBearerPrefix,

@@ -400,15 +400,13 @@ rl.on("line", (line) => {
     // ========================================
     // STEP 5: Click install/reinstall and wait for tools discovery
     // ========================================
-    // Close the settings dialog and wait for the card install action.
-    await closeOpenDialogs(adminPage, { timeoutMs: 10_000 });
-    await expect(settingsDialog).not.toBeVisible({ timeout: 10_000 });
-
-    const installActionButton = serverCard.getByRole("button", {
-      name: /^(Install|Reinstall)$/,
+    // Reinstall from the settings dialog. Failed local installations do not
+    // expose a card-level install action while the personal connection exists.
+    const reinstallActionButton = settingsDialog.getByRole("button", {
+      name: "Reinstall",
     });
-    await installActionButton.waitFor({ state: "visible", timeout: 120_000 });
-    await installActionButton.click();
+    await reinstallActionButton.waitFor({ state: "visible", timeout: 120_000 });
+    await reinstallActionButton.click();
 
     // The install dialog opens with prompted env vars
     const reinstallDialog = adminPage
@@ -418,11 +416,12 @@ rl.on("line", (line) => {
     await reinstallDialog
       .getByRole("textbox", { name: "E2E_PROMPT" })
       .fill("ready");
-    await clickButton({
-      page: adminPage,
-      options: { name: /^(Install|Reinstall)$/ },
-    });
+    await reinstallDialog
+      .getByRole("button", { name: /^(Install|Reinstall)$/ })
+      .click();
     await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
+    await closeOpenDialogs(adminPage, { timeoutMs: 10_000 });
+    await expect(settingsDialog).not.toBeVisible({ timeout: 10_000 });
 
     await expect(async () => {
       await goToMcpRegistry(adminPage);

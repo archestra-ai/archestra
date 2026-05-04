@@ -15,9 +15,9 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   DualLlmAnalysis,
+  InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
-  InteractionAuthMethod,
   ToonSkipReason,
   UnsafeContextBoundary,
 } from "@/types";

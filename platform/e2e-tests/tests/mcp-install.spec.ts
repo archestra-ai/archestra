@@ -395,6 +395,18 @@ rl.on("line", (line) => {
 
     // Save changes (dialog stays open with keepOpenOnSave)
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
+    const reinstallRequiredDialog = adminPage.getByRole("dialog", {
+      name: "Existing installations will need to reinstall",
+    });
+    if (await reinstallRequiredDialog.isVisible().catch(() => false)) {
+      await reinstallRequiredDialog
+        .getByRole("button", { name: "Save and flag for reinstall" })
+        .click();
+      await reinstallRequiredDialog.waitFor({
+        state: "hidden",
+        timeout: 15_000,
+      });
+    }
     await adminPage.waitForLoadState("domcontentloaded");
 
     // ========================================

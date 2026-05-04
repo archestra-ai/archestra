@@ -349,5 +349,5 @@ setup("setup teams and assignments", async ({ page }) => {
     marketingMembers,
   );
 
-  await page.context().storageState({ path: adminAuthFile });
+  await page.request.storageState({ path: adminAuthFile });
 });

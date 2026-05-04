@@ -208,3 +208,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @imtoori
 - @krishnaxgarg
 - @kensay98
+- @jcamposobando

@@ -1,4 +1,4 @@
-import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,7 +67,7 @@ export function EditCatalogContent({
       initialValues={item}
       onSubmit={onSubmit}
       embedded={keepOpenOnSave}
-      nameDisabled={isPlaywrightCatalogItem(item.id)}
+      nameDisabled
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       footer={({ isDirty, onReset }) => {

@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogStickyFooter,
@@ -699,13 +700,27 @@ export function McpCatalogForm({
                         <ReinstallHint show={isNameDirty} />
                       </FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="e.g., GitHub MCP Server"
-                          {...field}
-                          disabled={nameDisabled}
-                        />
+                        {nameDisabled ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Input
+                                placeholder="e.g., GitHub MCP Server"
+                                {...field}
+                                disabled
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Name cannot be changed after the server is
+                              created.
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Input
+                            placeholder="e.g., GitHub MCP Server"
+                            {...field}
+                          />
+                        )}
                       </FormControl>
-
                       <FormMessage />
                     </FormItem>
                   )}
@@ -2145,7 +2160,7 @@ function ConfirmReinstallFanoutDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {isMultitenant
@@ -2153,60 +2168,21 @@ function ConfirmReinstallFanoutDialog({
               : "Existing installations will need to reinstall"}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 text-sm">
+        <DialogBody className="text-sm">
           {isMultitenant ? (
-            <>
-              <p>
-                This is a multitenant catalog — one shared deployment serves all
-                callers. Saving these changes will{" "}
-                <strong>flag the shared deployment for reinstall</strong>, but
-                it won&apos;t restart automatically.
-              </p>
-              <p>
-                <strong>What happens next:</strong>
-              </p>
-              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                <li>
-                  The deployment keeps running with its current config until
-                  someone clicks <strong>Reinstall</strong> on the server in{" "}
-                  <code>/mcp/registry</code>.
-                </li>
-                <li>
-                  When Reinstall is clicked, the pod restarts and picks up the
-                  new config — expect a brief window where requests fail until
-                  it&apos;s ready again.
-                </li>
-              </ul>
-            </>
+            <p>
+              The shared deployment will keep running with its current config
+              until someone clicks <strong>Reinstall</strong> — expect a brief
+              restart then.
+            </p>
           ) : (
-            <>
-              <p>
-                Saving these changes will{" "}
-                <strong>flag every existing installation</strong> of this
-                catalog item as requiring a reinstall.
-              </p>
-              <p>
-                <strong>What happens next:</strong>
-              </p>
-              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                <li>
-                  Each install owner will see a <strong>Reinstall</strong>{" "}
-                  button on their server card in <code>/mcp/registry</code>.
-                </li>
-                <li>
-                  Until they click Reinstall and re-enter any new credentials,
-                  the server keeps running with its current config — nothing
-                  breaks immediately.
-                </li>
-                <li>No pods are restarted automatically by this save.</li>
-              </ul>
-              <p className="text-muted-foreground">
-                Other servers (with non-prompted changes only) reinstall in the
-                background without owner action.
-              </p>
-            </>
+            <p>
+              Every existing install will be flagged for reinstall. Owners keep
+              running on their current config until they click{" "}
+              <strong>Reinstall</strong>. Nothing restarts automatically.
+            </p>
           )}
-        </div>
+        </DialogBody>
         <DialogStickyFooter>
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel

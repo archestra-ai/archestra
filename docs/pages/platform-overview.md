@@ -45,6 +45,6 @@ Such components are not enabled for the open source Archestra:
 - Role Based Access Control (granular control over what different categories of users are able to see in the platform)
 - SSO & OIDC
 - Whitelabeling
-- Knowledge Base and RAG (we consider open sourcing parts of it)
+- Advanced access control for RAG Knowledge Base
 
 If you're willing to pilot the enterprise feature set, please don't hesitate to reach out to us at sales@archestra.ai for the PoC license.

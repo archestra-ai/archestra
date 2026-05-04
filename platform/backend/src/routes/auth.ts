@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   DEFAULT_ADMIN_EMAIL,
   IDENTITY_PROVIDER_ID,
+  LLM_MODEL_ROUTER_OAUTH_SCOPE,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   RouteId,
 } from "@shared";
@@ -31,7 +32,6 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
-import { LLM_MODEL_ROUTER_SCOPE } from "@/types/llm-oauth-client";
 import {
   isLoopbackRedirectUri,
   loopbackRedirectUriMatchesIgnoringPort,
@@ -905,15 +905,15 @@ async function issueLlmOauthClientAccessToken(params: {
   }
 
   const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
-    LLM_MODEL_ROUTER_SCOPE,
+    LLM_MODEL_ROUTER_OAUTH_SCOPE,
   ];
-  if (!requestedScopes.includes(LLM_MODEL_ROUTER_SCOPE)) {
+  if (!requestedScopes.includes(LLM_MODEL_ROUTER_OAUTH_SCOPE)) {
     return {
       ok: false,
       statusCode: 400,
       body: {
         error: "invalid_scope",
-        error_description: `${LLM_MODEL_ROUTER_SCOPE} scope is required`,
+        error_description: `${LLM_MODEL_ROUTER_OAUTH_SCOPE} scope is required`,
       },
     };
   }
@@ -936,7 +936,7 @@ async function issueLlmOauthClientAccessToken(params: {
     tokenHash: hashOAuthAccessTokenForLookup(accessToken),
     clientId: oauthClient.clientId,
     expiresAt: new Date(Date.now() + expiresIn * 1000),
-    scopes: [LLM_MODEL_ROUTER_SCOPE],
+    scopes: [LLM_MODEL_ROUTER_OAUTH_SCOPE],
     referenceId: `llm-model-router:${oauthClient.id}`,
   });
 
@@ -947,7 +947,7 @@ async function issueLlmOauthClientAccessToken(params: {
       access_token: accessToken,
       token_type: "Bearer",
       expires_in: expiresIn,
-      scope: LLM_MODEL_ROUTER_SCOPE,
+      scope: LLM_MODEL_ROUTER_OAUTH_SCOPE,
     },
   };
 }

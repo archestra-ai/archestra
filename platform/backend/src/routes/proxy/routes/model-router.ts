@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   hasArchestraTokenPrefix,
+  LLM_MODEL_ROUTER_OAUTH_SCOPE,
   RouteId,
   type SupportedProvider,
 } from "@shared";
@@ -25,7 +26,6 @@ import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
-  LLM_MODEL_ROUTER_SCOPE,
   OpenAi,
   UuidIdSchema,
 } from "@/types";
@@ -773,7 +773,7 @@ async function getModelRouterOAuthClientAuth(
   if (!accessToken || accessToken.expiresAt < new Date()) {
     throw new ApiError(401, "Invalid LLM OAuth client access token.");
   }
-  if (!accessToken.scopes?.includes(LLM_MODEL_ROUTER_SCOPE)) {
+  if (!accessToken.scopes?.includes(LLM_MODEL_ROUTER_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");
   }
   if (accessToken.userId) {

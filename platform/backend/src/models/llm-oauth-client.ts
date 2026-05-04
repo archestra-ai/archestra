@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
+import { LLM_MODEL_ROUTER_OAUTH_SCOPE } from "@shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
-  LLM_MODEL_ROUTER_SCOPE,
   LLM_OAUTH_CLIENT_METADATA_TYPE,
   LlmOauthClientMetadataSchema,
   type LlmOauthClientProviderKey,
@@ -50,7 +50,7 @@ class LlmOauthClientModel {
         grantTypes: ["client_credentials"],
         responseTypes: [],
         public: false,
-        scopes: [LLM_MODEL_ROUTER_SCOPE],
+        scopes: [LLM_MODEL_ROUTER_OAUTH_SCOPE],
         type: "service",
         metadata,
         createdAt: new Date(),

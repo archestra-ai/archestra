@@ -4,9 +4,11 @@ import type { SupportedProvider } from "./model-constants";
  * Scopes supported by the OAuth 2.1 authorization server.
  * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
  */
+export const LLM_MODEL_ROUTER_OAUTH_SCOPE = "llm:model-router";
+
 export const OAUTH_SCOPES = [
   "mcp",
-  "llm:model-router",
+  LLM_MODEL_ROUTER_OAUTH_SCOPE,
   "openid",
   "profile",
   "email",

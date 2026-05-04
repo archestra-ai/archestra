@@ -1,7 +1,6 @@
 import { type SupportedProvider, SupportedProvidersSchema } from "@shared";
 import { z } from "zod";
 
-export const LLM_MODEL_ROUTER_SCOPE = "llm:model-router";
 export const LLM_OAUTH_CLIENT_METADATA_TYPE = "llm_oauth_client";
 
 export const LlmOauthClientProviderKeySchema = z.object({

@@ -2,8 +2,8 @@
 
 import type { archestraApiTypes } from "@shared";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,8 +29,41 @@ type RequestStatus = NonNullable<
 >;
 type RequestStatusFilter = "all" | RequestStatus;
 
+const STATUS_FILTER_VALUES: RequestStatusFilter[] = [
+  "all",
+  "pending",
+  "approved",
+  "declined",
+];
+
+function isRequestStatusFilter(value: string): value is RequestStatusFilter {
+  return (STATUS_FILTER_VALUES as string[]).includes(value);
+}
+
 export default function InstallationRequestsPage() {
-  const [statusFilter, setStatusFilter] = useState<RequestStatusFilter>("all");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get("status");
+  const statusFilter: RequestStatusFilter =
+    statusParam && isRequestStatusFilter(statusParam) ? statusParam : "all";
+
+  const setStatusFilter = useCallback(
+    (value: RequestStatusFilter) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "all") {
+        params.delete("status");
+      } else {
+        params.set("status", value);
+      }
+      params.delete("page");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router, searchParams],
+  );
 
   const { data: requests, isLoading } = useMcpServerInstallationRequests(
     statusFilter === "all" ? undefined : { status: statusFilter },

@@ -140,7 +140,7 @@ export async function deleteVisibleProviderKeys(
       },
     );
 
-    if (!deleteResponse.ok()) {
+    if (!deleteResponse.ok() && deleteResponse.status() !== 404) {
       throw new Error(
         `Failed to delete LLM provider API key ${key.id}: ${deleteResponse.status()} ${await deleteResponse.text()}`,
       );

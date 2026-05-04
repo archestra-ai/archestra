@@ -91,14 +91,17 @@ export async function selectRuntimeModelFromDialog(
   page: Page,
   runtimeModel: RuntimeChatModel,
 ): Promise<void> {
+  const dialog = page.getByRole("dialog", { name: "Select Model" });
   const modelOptionPattern = buildModelOptionPattern(runtimeModel);
-  const searchInput = page.getByPlaceholder("Search models...");
-  const emptyState = page.getByText("No models found.");
-  const refreshButton = page.getByRole("button", { name: /refresh models/i });
-  const exactModelOption = page
+  const searchInput = dialog.getByPlaceholder("Search models...");
+  const emptyState = dialog.getByText("No models found.");
+  const refreshButton = dialog.getByRole("button", {
+    name: /refresh models/i,
+  });
+  const exactModelOption = dialog
     .getByRole("option")
     .filter({ hasText: `(${runtimeModel.id})` });
-  const displayNameModelOption = page
+  const displayNameModelOption = dialog
     .getByRole("option")
     .filter({ hasText: modelOptionPattern });
 
@@ -141,10 +144,16 @@ export async function selectRuntimeModelFromDialog(
       .catch(() => false)
   ) {
     await exactModelOption.first().click();
-    return;
+  } else {
+    await displayNameModelOption.first().click();
   }
 
-  await displayNameModelOption.first().click();
+  await expect(dialog)
+    .not.toBeVisible({ timeout: 2_000 })
+    .catch(async () => {
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible({ timeout: 5_000 });
+    });
 }
 
 function buildModelOptionPattern(model: RuntimeChatModel): RegExp {

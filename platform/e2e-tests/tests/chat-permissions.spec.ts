@@ -1,12 +1,12 @@
-import { WIREMOCK_BASE_URL } from "../consts";
-import { expect, test } from "../fixtures";
+import type { APIRequestContext } from "@playwright/test";
 import {
-  createLlmProviderApiKey,
-  expectChatReady,
-  goToChat,
-  goToLlmProviderApiKeysPage,
-  hasLlmProviderApiKey,
-} from "../utils";
+  getE2eRequestUrl,
+  LLM_PROVIDER_API_KEYS_ROUTE,
+  UI_BASE_URL,
+  WIREMOCK_INTERNAL_URL,
+} from "../consts";
+import { expect, test } from "../fixtures";
+import { expectChatReady, goToChat } from "../utils";
 
 const ORG_KEY_NAME = "chat-permissions-org-seed";
 
@@ -17,16 +17,7 @@ test.describe("Chat permissions — slim custom role", () => {
     adminPage,
     basicUserPage,
   }) => {
-    await goToLlmProviderApiKeysPage(adminPage);
-    if (!(await hasLlmProviderApiKey(adminPage, ORG_KEY_NAME))) {
-      await createLlmProviderApiKey(adminPage, {
-        name: ORG_KEY_NAME,
-        apiKey: "sk-e2e-test",
-        providerOptionName: "OpenAI OpenAI",
-        scope: "org",
-        baseUrl: `${WIREMOCK_BASE_URL}/v1`,
-      });
-    }
+    await ensureOrgProviderKey(adminPage.request);
 
     await goToChat(basicUserPage);
     await expectChatReady(basicUserPage);
@@ -36,3 +27,46 @@ test.describe("Chat permissions — slim custom role", () => {
     ).not.toBeVisible();
   });
 });
+
+async function ensureOrgProviderKey(request: APIRequestContext): Promise<void> {
+  const listResponse = await request.get(
+    getE2eRequestUrl(LLM_PROVIDER_API_KEYS_ROUTE),
+    {
+      headers: { Origin: UI_BASE_URL },
+    },
+  );
+
+  if (!listResponse.ok()) {
+    throw new Error(
+      `Failed to list LLM provider API keys: ${listResponse.status()} ${await listResponse.text()}`,
+    );
+  }
+
+  const keys = (await listResponse.json()) as Array<{ name: string }>;
+  if (keys.some((key) => key.name === ORG_KEY_NAME)) {
+    return;
+  }
+
+  const createResponse = await request.post(
+    getE2eRequestUrl(LLM_PROVIDER_API_KEYS_ROUTE),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: {
+        name: ORG_KEY_NAME,
+        provider: "openai",
+        apiKey: "sk-e2e-test",
+        scope: "org",
+        baseUrl: `${WIREMOCK_INTERNAL_URL}/v1`,
+      },
+    },
+  );
+
+  if (!createResponse.ok()) {
+    throw new Error(
+      `Failed to create org LLM provider API key: ${createResponse.status()} ${await createResponse.text()}`,
+    );
+  }
+}

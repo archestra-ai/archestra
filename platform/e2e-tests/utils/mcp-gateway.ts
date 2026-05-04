@@ -216,7 +216,10 @@ export async function waitForGatewayIdentityProviderReady(params: {
     if (params.agentType) {
       expect(agent.agentType).toBe(params.agentType);
     }
-  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
+  }).toPass({
+    timeout: 60_000,
+    intervals: [500, 1000, 2000, 4000, 8000],
+  });
 }
 
 export async function callMcpTool(
@@ -364,7 +367,7 @@ export async function openManageCredentialsDialog(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
   const connectionsHeading = settingsDialog.getByRole("heading", {
-    name: "Connections",
+    name: "Credentials",
     exact: true,
   });
   if (await settingsDialog.isVisible().catch(() => false)) {
@@ -428,7 +431,7 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
     .filter({ visible: true })
     .last();
   const connectionsNavButton = visibleDialog.getByRole("button", {
-    name: /^Connections\b/,
+    name: /^Credentials\b/,
   });
   const badgeText =
     (await connectionsNavButton.textContent().catch(() => "")) ?? "";

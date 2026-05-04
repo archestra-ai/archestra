@@ -4,7 +4,6 @@ import {
   DEFAULT_ADMIN_EMAIL,
   IDENTITY_PROVIDER_ID,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
-  LLM_PROXY_COMPATIBLE_OAUTH_SCOPES,
   LLM_PROXY_OAUTH_SCOPE,
   RouteId,
 } from "@shared";
@@ -908,13 +907,7 @@ async function issueLlmOauthClientAccessToken(params: {
   const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
     LLM_PROXY_OAUTH_SCOPE,
   ];
-  if (
-    !requestedScopes.some((scope) =>
-      LLM_PROXY_COMPATIBLE_OAUTH_SCOPES.includes(
-        scope as (typeof LLM_PROXY_COMPATIBLE_OAUTH_SCOPES)[number],
-      ),
-    )
-  ) {
+  if (!requestedScopes.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     return {
       ok: false,
       statusCode: 400,

@@ -8,7 +8,7 @@
 import {
   hasArchestraTokenPrefix,
   isSupportedProvider,
-  LLM_PROXY_COMPATIBLE_OAUTH_SCOPES,
+  LLM_PROXY_OAUTH_SCOPE,
 } from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -520,13 +520,7 @@ async function resolveOAuthProviderApiKey(params: {
 }
 
 function hasLlmProxyScope(scopes: string[] | null | undefined): boolean {
-  return (
-    scopes?.some((scope) =>
-      LLM_PROXY_COMPATIBLE_OAUTH_SCOPES.includes(
-        scope as (typeof LLM_PROXY_COMPATIBLE_OAUTH_SCOPES)[number],
-      ),
-    ) ?? false
-  );
+  return scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE) ?? false;
 }
 
 function isJwtLike(token: string): boolean {

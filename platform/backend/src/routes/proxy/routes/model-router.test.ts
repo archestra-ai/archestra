@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { SOURCE_HEADER, type SupportedProvider } from "@shared";
+import {
+  LLM_PROXY_OAUTH_SCOPE,
+  SOURCE_HEADER,
+  type SupportedProvider,
+} from "@shared";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -634,7 +638,7 @@ describe("model router proxy routes", () => {
         grant_type: "client_credentials",
         client_id: oauthClient.clientId,
         client_secret: clientSecret,
-        scope: "llm:model-router",
+        scope: LLM_PROXY_OAUTH_SCOPE,
       },
     });
     expect(tokenResponse.statusCode).toBe(200);
@@ -738,7 +742,7 @@ describe("model router proxy routes", () => {
       clientId,
       userId: user.id,
       expiresAt: new Date(Date.now() + 60_000),
-      scopes: ["llm:model-router"],
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
     });
     let capturedApiKey: string | undefined;
     vi.mocked(openaiAdapterFactory.createClient).mockImplementation(

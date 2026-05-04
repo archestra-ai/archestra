@@ -98,6 +98,41 @@ export interface ChatReplyOptions {
   conversationReference?: unknown;
 }
 
+export interface AddApprovalRequestFormOptions {
+  channelId: string;
+  threadId?: string;
+  approvalId: string;
+  taskId: string;
+  toolName: string;
+  originalMessage: IncomingChatMessage;
+}
+
+export interface UpdateApprovalRequestOptions {
+  channelId: string;
+  messageKey: string;
+  toolName: string;
+  approved: boolean;
+}
+
+/**
+ * Approval decision payload shared by chatops providers and approval handlers.
+ */
+export interface ChatOpsApprovalDecision {
+  taskId: string;
+  approvalId: string;
+  approved: boolean;
+  toolName: string;
+  messageTs: string;
+  channelId: string;
+  workspaceId: string | null;
+  originalMessage: IncomingChatMessage;
+  threadTs?: string;
+  userId: string;
+  userName: string;
+  responseUrl: string;
+  approverEmail?: string;
+}
+
 /**
  * File metadata from a thread history message (not yet downloaded).
  * Used to carry attachment info from provider-specific history APIs
@@ -245,6 +280,16 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
+   * Send a message with Approve/Decline buttons for a single approval request
+   */
+  addApprovalRequestForm(options: AddApprovalRequestFormOptions): Promise<void>;
+
+  /**
+   * Update the status of an existing approval request to Approved/Declined
+   */
+  updateApprovalRequest(options: UpdateApprovalRequestOptions): Promise<void>;
+
+  /**
    * Send an ephemeral message visible only to a specific user.
    * Used for welcome messages to auto-provisioned users.
    * Falls back to a regular reply if ephemeral messaging is not supported.
@@ -276,6 +321,12 @@ export interface ChatOpsProvider {
      *  Required in DMs so the reply appears in Chat tab instead of History. */
     threadId?: string;
   }): Promise<void>;
+
+  /**
+   * Handle a provider-specific interactive payload.
+   * Slack uses this to route approval clicks and agent selections.
+   */
+  handleInteractivePayload?(payload: unknown): Promise<void>;
 
   /**
    * Set a typing/loading status indicator (optional, provider-specific).
@@ -411,6 +462,11 @@ export interface ChatOpsEventHandler {
   handleIncomingMessage(
     provider: ChatOpsProvider,
     body: unknown,
+  ): Promise<void>;
+  handleInteractiveApprovalDecision(
+    provider: ChatOpsProvider,
+    decision: ChatOpsApprovalDecision,
+    updateApprovalRequestCallback?: () => Promise<void> | void,
   ): Promise<void>;
   handleInteractiveSelection(
     provider: ChatOpsProvider,

@@ -1,3 +1,7 @@
+export * from "./a2a-context";
+export * from "./a2a-message";
+export * from "./a2a-task";
+export * from "./a2a-task-approval-request";
 export * from "./account";
 export * from "./agent";
 export * from "./agent-connector-assignment";

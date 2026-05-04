@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import {
   type ScheduleTrigger,
@@ -94,14 +95,52 @@ export function ScheduleTriggersIndexPage() {
   });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const [showOtherUsers, setShowOtherUsers] = useState(false);
-  const [selectedAuthorIds, setSelectedAuthorIds] = useState<string[]>([]);
-  const [searchName, setSearchName] = useState("");
-  const [filterAgentId, setFilterAgentId] = useState<string | null>(
-    agentIdParam,
+  const {
+    pageIndex,
+    pageSize,
+    offset,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams({ defaultPageSize: 10 });
+  const showOtherUsers = searchParams.get("view") === "others";
+  const selectedAuthorIds = useMemo(() => {
+    const raw = searchParams.get("authorIds");
+    if (!raw) return [];
+    return raw.split(",").filter(Boolean);
+  }, [searchParams]);
+  const searchName = searchParams.get("search") ?? "";
+  const filterAgentId = agentIdParam;
+  const setSearchName = useCallback(
+    (value: string) => {
+      updateQueryParams({ search: value || null, page: "1" });
+    },
+    [updateQueryParams],
   );
-  const [pageSize, setPageSize] = useState(10);
-  const [pageIndex, setPageIndex] = useState(0);
+  const setFilterAgentId = useCallback(
+    (value: string | null) => {
+      updateQueryParams({ agentId: value, page: "1" });
+    },
+    [updateQueryParams],
+  );
+  const setShowOtherUsers = useCallback(
+    (value: boolean) => {
+      updateQueryParams({
+        view: value ? "others" : null,
+        authorIds: null,
+        page: "1",
+      });
+    },
+    [updateQueryParams],
+  );
+  const setSelectedAuthorIds = useCallback(
+    (ids: string[]) => {
+      updateQueryParams({
+        authorIds: ids.length > 0 ? ids.join(",") : null,
+        page: "1",
+      });
+    },
+    [updateQueryParams],
+  );
   const { data: members } = useOrganizationMembers(
     isScheduledTaskAdmin && showOtherUsers,
   );
@@ -117,7 +156,7 @@ export function ScheduleTriggersIndexPage() {
   );
   const { data: triggersResponse, isLoading } = useScheduleTriggers({
     limit: pageSize,
-    offset: pageIndex * pageSize,
+    offset,
     name: searchName || undefined,
     showAll: showOtherUsers,
     agentIds: filterAgentId ? [filterAgentId] : undefined,
@@ -275,9 +314,6 @@ export function ScheduleTriggersIndexPage() {
     setCreateFormOpen(false);
     nameTouchedRef.current = false;
     setFormState(DEFAULT_FORM_STATE());
-    if (agentIdParam) {
-      router.replace("/scheduled-tasks");
-    }
   };
 
   const submitForm = async () => {
@@ -403,16 +439,15 @@ export function ScheduleTriggersIndexPage() {
           objectNamePlural="tasks"
           searchFields={["name"]}
           syncQueryParams={false}
+          value={searchName}
           onSearchChange={(value) => {
             setSearchName(value);
-            setPageIndex(0);
           }}
         />
         <Select
           value={filterAgentId ?? "all"}
           onValueChange={(value) => {
             setFilterAgentId(value === "all" ? null : value);
-            setPageIndex(0);
           }}
         >
           <SelectTrigger className="w-[200px]">
@@ -432,8 +467,6 @@ export function ScheduleTriggersIndexPage() {
             value={showOtherUsers ? "others" : "mine"}
             onValueChange={(value) => {
               setShowOtherUsers(value === "others");
-              setSelectedAuthorIds([]);
-              setPageIndex(0);
             }}
           >
             <SelectTrigger className="w-[160px]">
@@ -450,7 +483,6 @@ export function ScheduleTriggersIndexPage() {
             value={selectedAuthorIds}
             onValueChange={(ids) => {
               setSelectedAuthorIds(ids);
-              setPageIndex(0);
             }}
             items={memberItems}
             placeholder="All users"
@@ -529,8 +561,7 @@ export function ScheduleTriggersIndexPage() {
           total: triggersResponse?.pagination.total ?? 0,
         }}
         onPaginationChange={(p) => {
-          setPageIndex(p.pageIndex);
-          setPageSize(p.pageSize);
+          setPagination(p);
         }}
         onRowClick={(trigger) => router.push(`/scheduled-tasks/${trigger.id}`)}
         hideSelectedCount

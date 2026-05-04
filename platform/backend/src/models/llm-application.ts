@@ -1,4 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
@@ -29,7 +30,7 @@ class LlmApplicationModel {
     modelRouterProviderApiKeys: LlmApplicationProviderKey[];
   }) {
     const clientSecret = createClientSecret();
-    const clientSecretHash = hashClientSecret(clientSecret);
+    const clientSecretHash = await hashClientSecret(clientSecret);
     const metadata = {
       type: LLM_APPLICATION_METADATA_TYPE,
       organizationId: params.organizationId,
@@ -112,7 +113,9 @@ class LlmApplicationModel {
     if (!client?.clientSecret || client.disabled) {
       return null;
     }
-    if (!compareClientSecret(params.clientSecret, client.clientSecret)) {
+    if (
+      !(await compareClientSecret(params.clientSecret, client.clientSecret))
+    ) {
       return null;
     }
 
@@ -124,7 +127,7 @@ class LlmApplicationModel {
     const [client] = await db
       .update(schema.oauthClientsTable)
       .set({
-        clientSecret: hashClientSecret(clientSecret),
+        clientSecret: await hashClientSecret(clientSecret),
         updatedAt: new Date(),
       })
       .where(
@@ -199,15 +202,11 @@ function createClientSecret() {
 }
 
 function hashClientSecret(secret: string) {
-  return createHash("sha256").update(secret).digest("base64url");
+  return hashPassword(secret);
 }
 
 function compareClientSecret(secret: string, storedHash: string) {
-  const candidate = Buffer.from(hashClientSecret(secret));
-  const expected = Buffer.from(storedHash);
-  return (
-    candidate.length === expected.length && timingSafeEqual(candidate, expected)
-  );
+  return verifyPassword({ password: secret, hash: storedHash });
 }
 
 async function hydrateApplications(

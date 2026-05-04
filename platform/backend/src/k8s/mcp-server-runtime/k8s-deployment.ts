@@ -280,8 +280,7 @@ export default class K8sDeployment {
         253,
       );
     }
-    const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
-    return `mcp-${slugified}`.substring(0, 253);
+    return `mcp-${ensureStringIsRfc1123Compliant(mcpServer.id).slice(0, 8)}`;
   }
 
   /**

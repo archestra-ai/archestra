@@ -286,156 +286,53 @@ describe("K8sDeployment.createContainerEnvFromConfig", () => {
 
 describe("K8sDeployment.constructDeploymentName", () => {
   test.each([
-    // [server name, server id, expected deployment name]
-    // Basic conversions
     {
       name: "MY-SERVER",
       id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-my-server",
+      expected: "mcp-123e4567",
     },
-    {
-      name: "TestServer",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-testserver",
-    },
-
-    // Spaces to hyphens - the original bug case
     {
       name: "firecrawl - joey",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-firecrawl-joey",
+      id: "abcd1234-e89b-12d3-a456-426614174000",
+      expected: "mcp-abcd1234",
     },
-    {
-      name: "My MCP Server",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-my-mcp-server",
-    },
-    {
-      name: "Server  Name",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server-name",
-    },
-
-    // Special characters removed
-    {
-      name: "Test@123",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-test123",
-    },
-    {
-      name: "Server(v2)",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-serverv2",
-    },
-    {
-      name: "My-Server!",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-my-server",
-    },
-
-    // Valid characters preserved
-    {
-      name: "valid-name-123",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-valid-name-123",
-    },
-    {
-      name: "a-b-c-1-2-3",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-a-b-c-1-2-3",
-    },
-
-    // Unicode characters
-    {
-      name: "Servér",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-servr",
-    },
-    {
-      name: "测试Server",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server",
-    },
-
-    // Emojis
-    {
-      name: "Server 🔥 Fast",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server-fast",
-    },
-
-    // Leading/trailing special characters
-    {
-      name: "@Server",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server",
-    },
-    {
-      name: "Server@",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server",
-    },
-
-    // Consecutive spaces and special characters
-    {
-      name: "Server    Name",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server-name",
-    },
-    {
-      name: "Test!!!Server",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-testserver",
-    },
-
-    // Dots are preserved (valid in Kubernetes DNS subdomain names)
     {
       name: "Server.v2.0",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server.v2.0",
-    },
-
-    // Multiple consecutive hyphens and dots are collapsed
-    {
-      name: "Server---Name",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server-name",
+      id: "00000000-0000-0000-0000-000000000000",
+      expected: "mcp-00000000",
     },
     {
-      name: "Server...Name",
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server.name",
+      name: "anything",
+      id: "deadbeefcafebabe1234567890abcdef",
+      expected: "mcp-deadbeef",
     },
-  ])("converts server name '$name' with id '$id' to deployment name '$expected'", ({
-    name,
-    id,
-    expected,
-  }) => {
-    // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
-    const mockServer = { name, id } as any;
-    const result = K8sDeployment.constructDeploymentName(mockServer);
-    expect(result).toBe(expected);
+  ])(
+    "derives deployment name from server id ('$id' → '$expected') regardless of name",
+    ({ name, id, expected }) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+      const mockServer = { name, id } as any;
+      const result = K8sDeployment.constructDeploymentName(mockServer);
+      expect(result).toBe(expected);
 
-    // Verify all results are valid Kubernetes DNS subdomain names
-    // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
-    expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
-    // Must be no longer than 253 characters
-    expect(result.length).toBeLessThanOrEqual(253);
-    // Must start with 'mcp-'
-    expect(result).toMatch(/^mcp-/);
-  });
+      expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+      expect(result.length).toBeLessThanOrEqual(253);
+      expect(result).toMatch(/^mcp-/);
+    },
+  );
 
-  test("handles very long server names by truncating to 253 characters", () => {
-    const longName = "a".repeat(300); // 300 character name
-    const serverId = "123e4567-e89b-12d3-a456-426614174000";
-    // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
-    const mockServer = { name: longName, id: serverId } as any;
+  test("renaming the server does not change the deployment name", () => {
+    const id = "123e4567-e89b-12d3-a456-426614174000";
+    const before = K8sDeployment.constructDeploymentName(
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+      { id, name: "old-name" } as any,
+    );
+    const after = K8sDeployment.constructDeploymentName(
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+      { id, name: "totally-different" } as any,
+    );
 
-    const result = K8sDeployment.constructDeploymentName(mockServer);
-
-    expect(result.length).toBeLessThanOrEqual(253);
-    expect(result).toMatch(/^mcp-a+$/); // Should be mcp- followed by many a's
-    expect(result.length).toBe(253); // Should be exactly 253 chars (truncated)
+    expect(before).toBe(after);
+    expect(before).toBe("mcp-123e4567");
   });
 
   test("produces consistent results for the same input", () => {
@@ -449,7 +346,7 @@ describe("K8sDeployment.constructDeploymentName", () => {
     const result2 = K8sDeployment.constructDeploymentName(mockServer);
 
     expect(result1).toBe(result2);
-    expect(result1).toBe("mcp-firecrawl-joey");
+    expect(result1).toBe("mcp-123e4567");
   });
 });
 
@@ -506,7 +403,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     );
 
     // Verify metadata
-    expect(deploymentSpec.metadata?.name).toBe("mcp-test-server");
+    expect(deploymentSpec.metadata?.name).toBe("mcp-test-ser");
     expect(deploymentSpec.metadata?.labels).toEqual({
       app: "mcp-server",
       "mcp-server-id": "test-server-id",
@@ -3344,7 +3241,7 @@ describe("K8sDeployment.deleteK8sService", () => {
     await k8sDeployment.deleteK8sService();
 
     expect(mockDeleteService).toHaveBeenCalledWith({
-      name: "mcp-test-server-service",
+      name: "mcp-test-ser-service",
       namespace: "default",
     });
   });
@@ -3422,7 +3319,7 @@ describe("K8sDeployment.constructHttpServiceName", () => {
     // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
     const serviceName = (k8sDeployment as any).constructHttpServiceName();
 
-    expect(serviceName).toBe("mcp-test-server-service");
+    expect(serviceName).toBe("mcp-test-ser-service");
     expect(serviceName.length).toBeLessThanOrEqual(63);
   });
 
@@ -3468,7 +3365,7 @@ describe("K8sDeployment.constructHttpServiceName", () => {
     // biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
     const serviceName = (k8sDeployment as any).constructHttpServiceName();
 
-    expect(serviceName).toBe("mcp-server-v2-0-service");
+    expect(serviceName).toBe("mcp-test-ser-service");
     expect(serviceName).not.toContain(".");
   });
 
@@ -3558,7 +3455,7 @@ describe("K8sDeployment.stopDeployment", () => {
     await k8sDeployment.stopDeployment();
 
     expect(mockDeleteDeployment).toHaveBeenCalledWith({
-      name: "mcp-test-server",
+      name: "mcp-test-ser",
       namespace: "default",
     });
   });
@@ -3655,11 +3552,11 @@ describe("K8sDeployment.removeDeployment", () => {
 
     // Should call all three delete operations
     expect(mockDeleteDeployment).toHaveBeenCalledWith({
-      name: "mcp-test-server",
+      name: "mcp-test-ser",
       namespace: "default",
     });
     expect(mockDeleteService).toHaveBeenCalledWith({
-      name: "mcp-test-server-service",
+      name: "mcp-test-ser-service",
       namespace: "default",
     });
     expect(mockDeleteSecret).toHaveBeenCalledWith({
@@ -3730,7 +3627,7 @@ describe("K8sDeployment.statusSummary", () => {
     expect(summary.message).toBe("Deployment not created");
     expect(summary.error).toBeNull();
     expect(summary.serverName).toBe("test-server");
-    expect(summary.deploymentName).toBe("mcp-test-server");
+    expect(summary.deploymentName).toBe("mcp-test-ser");
     expect(summary.namespace).toBe("test-namespace");
   });
 
@@ -3739,7 +3636,7 @@ describe("K8sDeployment.statusSummary", () => {
 
     const summary = k8sDeployment.statusSummary;
 
-    expect(summary.deploymentName).toBe("mcp-test-server");
+    expect(summary.deploymentName).toBe("mcp-test-ser");
     expect(summary.namespace).toBe("test-namespace");
   });
 });
@@ -3763,7 +3660,7 @@ describe("K8sDeployment.containerName", () => {
       catalogItem: null,
     });
 
-    expect(k8sDeployment.containerName).toBe("mcp-my-server");
+    expect(k8sDeployment.containerName).toBe("mcp-test-ser");
   });
 });
 
@@ -3809,7 +3706,7 @@ describe("K8sDeployment.k8sDeploymentName", () => {
       catalogItem: null,
     });
 
-    expect(k8sDeployment.k8sDeploymentName).toBe("mcp-my-mcp-server");
+    expect(k8sDeployment.k8sDeploymentName).toBe("mcp-test-ser");
   });
 });
 

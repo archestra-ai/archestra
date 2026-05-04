@@ -1166,6 +1166,7 @@ export const ollamaAdapterFactory: LLMProvider<
       apiKey: apiKey || "EMPTY",
       baseURL: options.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

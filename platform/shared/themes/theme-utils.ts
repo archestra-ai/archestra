@@ -2,16 +2,10 @@
  * Theme utilities - processes tweakcn-themes.json to extract theme data
  */
 
-import {
-  DARK_ONLY_THEMES,
-  DEFAULT_THEME_ID,
-  LIGHT_ONLY_THEMES,
-  SUPPORTED_THEMES,
-} from "./theme-config";
+import { DEFAULT_THEME_ID, SUPPORTED_THEMES } from "./theme-config";
 import themeRegistry from "./tweakcn-themes.json";
 
-// Re-export for convenience
-export { DARK_ONLY_THEMES, DEFAULT_THEME_ID, LIGHT_ONLY_THEMES };
+export { DEFAULT_THEME_ID };
 
 // Extract theme ID type from the const tuple
 export type ThemeId = (typeof SUPPORTED_THEMES)[number];

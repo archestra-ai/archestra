@@ -303,6 +303,9 @@ export function ConnectionFlow({
             <ProxyClientInstructions
               client={client}
               profileId={effectiveProxyId}
+              profileName={
+                llmProxies?.find((p) => p.id === effectiveProxyId)?.name ?? ""
+              }
               shownProviders={shownProviders}
               baseUrl={baseUrl}
             />

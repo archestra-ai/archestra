@@ -241,6 +241,7 @@ export const mistralAdapterFactory: LLMProvider<
       apiKey,
       baseURL: options.baseUrl ?? config.llm.mistral.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

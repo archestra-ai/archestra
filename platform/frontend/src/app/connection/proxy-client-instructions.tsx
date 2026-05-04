@@ -5,15 +5,15 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@shared";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, Check, Copy, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { ConnectClient } from "./clients";
-import { Eyebrow, UnsupportedPanel } from "./mcp-client-instructions";
+import type { ConnectClient, ProxyStep } from "./clients";
+import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
@@ -69,6 +69,8 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
 interface ProxyClientInstructionsProps {
   client: ConnectClient;
   profileId: string;
+  /** Display name of the LLM proxy (profile) — used as a provider id in client configs. */
+  profileName: string;
   /** When null/undefined: show all providers. Otherwise: only these. */
   shownProviders?: readonly SupportedProvider[] | null;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
@@ -77,9 +79,22 @@ interface ProxyClientInstructionsProps {
 
 const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
 
+/**
+ * Slugify the LLM proxy name into a TOML-friendly identifier (e.g. used as
+ * `[model_providers.<slug>]` in Codex's config).
+ */
+function toProxyProviderSlug(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || "archestra";
+}
+
 export function ProxyClientInstructions({
   client,
   profileId,
+  profileName,
   shownProviders,
   baseUrl,
 }: ProxyClientInstructionsProps) {
@@ -157,8 +172,9 @@ export function ProxyClientInstructions({
       providerLabel,
       url,
       tokenPlaceholder: `<your-${selectedProvider}-api-key>`,
+      proxyName: toProxyProviderSlug(profileName),
     });
-  }, [client.proxy, selectedProvider, providerLabel, url]);
+  }, [client.proxy, selectedProvider, providerLabel, url, profileName]);
 
   if (client.proxy.kind === "unsupported") {
     return <UnsupportedPanel reason={client.proxy.reason} />;
@@ -206,7 +222,7 @@ export function ProxyClientInstructions({
             </div>
             <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
               <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-                <code className="block truncate text-[11.5px] line-through opacity-50">
+                <code className="block truncate text-xs line-through opacity-50">
                   {originalUrl}
                 </code>
               </div>
@@ -225,30 +241,29 @@ export function ProxyClientInstructions({
             <TerminalBlock code={instruction.code} />
             {instruction.note && <ProxyNote note={instruction.note} />}
           </div>
+        ) : instruction.kind === "steps" ? (
+          <div className="space-y-3">
+            {instruction.note && <ProxyNote note={instruction.note} />}
+            <StepList steps={instruction.steps} />
+          </div>
         ) : (
-          <div>
-            <ol className="grid gap-4">
-              {instruction.steps.map((s, i) => (
-                <li key={s.title} className="flex gap-3">
-                  <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                    {i + 1}
+          <div className="space-y-6">
+            {instruction.sections.map((sec) => (
+              <div key={sec.title} className="space-y-3">
+                <div>
+                  <div className="text-[14px] font-semibold text-foreground">
+                    {sec.title}
                   </div>
-                  <div>
-                    <div className="text-[13.5px] font-medium text-foreground">
-                      {s.title}
-                    </div>
+                  {sec.description && (
                     <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                      {s.body}
+                      {sec.description}
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            {instruction.note && (
-              <div className="mt-3">
-                <ProxyNote note={instruction.note} />
+                  )}
+                </div>
+                <StepList steps={sec.steps} />
               </div>
-            )}
+            ))}
+            {instruction.note && <ProxyNote note={instruction.note} />}
           </div>
         )
       ) : (
@@ -282,7 +297,7 @@ function BedrockGenericInstructions({
         </div>
         <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-            <code className="block truncate text-[11.5px] line-through opacity-50">
+            <code className="block truncate text-xs line-through opacity-50">
               {originalUrl}
             </code>
           </div>
@@ -322,7 +337,7 @@ function BedrockGenericInstructions({
         </div>
         <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-            <code className="block truncate text-[11.5px] line-through opacity-50">
+            <code className="block truncate text-xs line-through opacity-50">
               https://api.openai.com/v1/
             </code>
           </div>
@@ -356,6 +371,107 @@ function NoProvidersPanel({
           : "This client doesn't support any providers that are currently enabled."}
       </p>
     </div>
+  );
+}
+
+function StepList({ steps }: { steps: ProxyStep[] }) {
+  return (
+    <ol className="grid gap-5">
+      {steps.map((s, i) => (
+        <li
+          key={s.title}
+          className="grid grid-cols-[22px_1fr] items-start gap-3"
+        >
+          <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+            {i + 1}
+          </div>
+          <div className="min-w-0 space-y-3">
+            <div>
+              <div className="text-[13.5px] font-medium text-foreground">
+                {s.title}
+              </div>
+              {s.body && (
+                <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                  {s.body}
+                </div>
+              )}
+            </div>
+            {s.fields && s.fields.length > 0 && (
+              <div className="grid gap-2">
+                {s.fields.map((f) => (
+                  <FieldRow
+                    key={f.label}
+                    label={f.label}
+                    value={f.value}
+                    copyable={f.copyable ?? true}
+                  />
+                ))}
+              </div>
+            )}
+            {s.code && <TerminalBlock code={s.code} />}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function FieldRow({
+  label,
+  value,
+  copyable,
+}: {
+  label: string;
+  value: string;
+  copyable: boolean;
+}) {
+  if (!copyable) {
+    return (
+      <div className="grid grid-cols-[140px_1fr] items-center gap-3 rounded-md border border-dashed bg-muted/30 px-4 py-3">
+        <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </div>
+        <span className="min-w-0 truncate text-[13px] italic text-muted-foreground">
+          {value}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+      <div className="grid grid-cols-[140px_1fr_auto] items-center gap-3 px-4 py-3">
+        <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-[#9ca3af]">
+          {label}
+        </div>
+        <code className="min-w-0 truncate font-mono text-[13px] text-[#e5e7eb]">
+          {value}
+        </code>
+        <FieldCopyButton value={value} />
+      </div>
+    </div>
+  );
+}
+
+function FieldCopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }, [value]);
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      aria-label="Copy to clipboard"
+      className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
+    >
+      {copied ? (
+        <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
+      ) : (
+        <Copy className="size-3.5" strokeWidth={2} />
+      )}
+    </button>
   );
 }
 
@@ -407,31 +523,33 @@ function ProviderGrid({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <Eyebrow>Select a provider</Eyebrow>
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
+        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+          Select a provider
+        </h3>
         {canCollapse && (
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
-                className="h-7 w-36 pl-7 text-[11px]"
-              />
-            </div>
+          <div className="flex items-center gap-3">
             {!searching && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[11px]"
+                className="h-9 text-xs"
                 onClick={() => setShowAll((v) => !v)}
               >
                 {showAll ? "Show fewer" : `Show all (${providers.length})`}
               </Button>
             )}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search"
+                className="h-9 w-56 rounded-full pl-8"
+              />
+            </div>
           </div>
         )}
       </div>
@@ -440,7 +558,7 @@ function ProviderGrid({
           No providers match "{query}".
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
         {visible.map((p) => {
           const isSupported = supported.includes(p);
           const isSel = selected === p;
@@ -451,15 +569,13 @@ function ProviderGrid({
               type="button"
               onClick={() => onSelect(p)}
               className={cn(
-                "flex min-h-[82px] flex-col items-start gap-2 rounded-lg border bg-card px-3 py-3 text-left shadow-sm transition-all",
-                isSel
-                  ? "border-primary ring-4 ring-primary/5"
-                  : "hover:border-muted-foreground/40",
+                "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
+                isSel && "border-primary ring-4 ring-primary/5",
                 !isSupported && "opacity-50",
               )}
             >
               <div
-                className="flex size-7 items-center justify-center rounded-md font-mono text-[13px] font-bold"
+                className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
                 style={{ background: icon.bg, color: icon.fg }}
               >
                 {icon.glyph === "aws" ? (
@@ -470,16 +586,21 @@ function ProviderGrid({
                   icon.glyph
                 )}
               </div>
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold tracking-tight text-foreground">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold tracking-tight text-foreground">
                   {providerDisplayNames[p]}
                 </div>
                 {!isSupported && (
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
                     Not compatible
                   </div>
                 )}
               </div>
+              {isSel && (
+                <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="size-2.5" strokeWidth={3} />
+                </div>
+              )}
             </button>
           );
         })}

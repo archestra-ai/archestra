@@ -120,6 +120,7 @@ export class Authnz {
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
+      url.startsWith(config.a2aV2Gateway.endpoint) ||
       // Skip OAuth well-known discovery endpoints (RFC 8414 / RFC 9728)
       url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)

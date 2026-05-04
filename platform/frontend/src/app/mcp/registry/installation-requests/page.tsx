@@ -2,7 +2,6 @@
 
 import type { archestraApiTypes } from "@shared";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type McpServerInstallationRequest,
   useMcpServerInstallationRequests,
@@ -41,28 +41,20 @@ function isRequestStatusFilter(value: string): value is RequestStatusFilter {
 }
 
 export default function InstallationRequestsPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  // Use URL-backed state for filter persistence
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+
   const statusParam = searchParams.get("status");
   const statusFilter: RequestStatusFilter =
     statusParam && isRequestStatusFilter(statusParam) ? statusParam : "all";
 
   const setStatusFilter = useCallback(
     (value: RequestStatusFilter) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value === "all") {
-        params.delete("status");
-      } else {
-        params.set("status", value);
-      }
-      params.delete("page");
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
+      updateQueryParams({
+        status: value === "all" ? null : value,
       });
     },
-    [pathname, router, searchParams],
+    [updateQueryParams],
   );
 
   const { data: requests, isLoading } = useMcpServerInstallationRequests(

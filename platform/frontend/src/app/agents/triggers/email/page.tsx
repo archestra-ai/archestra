@@ -2,7 +2,6 @@
 
 import { type archestraApiTypes, DocsPage } from "@shared";
 import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
@@ -31,6 +30,7 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { cn } from "@/lib/utils";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -73,45 +73,26 @@ export default function EmailPage() {
   const deleteMutation = useDeleteIncomingEmailSubscription();
   const { email: allStepsCompleted } = useTriggerStatuses();
 
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  // Use URL-backed state for filter persistence
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  
   const search = searchParams.get("search") ?? "";
   const statusParam = searchParams.get("status");
   const statusFilter: EmailStatusFilter =
     statusParam && isEmailStatusFilter(statusParam) ? statusParam : "all";
 
-  const updateFilters = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      for (const [key, value] of Object.entries(updates)) {
-        if (value === null || value === "") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      }
-      params.delete("page");
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
-      });
-    },
-    [pathname, router, searchParams],
-  );
-
   const setSearch = useCallback(
     (value: string) => {
-      updateFilters({ search: value || null });
+      updateQueryParams({ search: value || null });
     },
-    [updateFilters],
+    [updateQueryParams],
   );
 
   const setStatusFilter = useCallback(
     (value: EmailStatusFilter) => {
-      updateFilters({ status: value === "all" ? null : value });
+      updateQueryParams({ status: value === "all" ? null : value });
     },
-    [updateFilters],
+    [updateQueryParams],
   );
 
   const [setupOpen, setSetupOpen] = useState(false);

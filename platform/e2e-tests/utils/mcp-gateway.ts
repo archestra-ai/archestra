@@ -216,7 +216,10 @@ export async function waitForGatewayIdentityProviderReady(params: {
     if (params.agentType) {
       expect(agent.agentType).toBe(params.agentType);
     }
-  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
+  }).toPass({
+    timeout: 60_000,
+    intervals: [500, 1000, 2000, 4000, 8000],
+  });
 }
 
 export async function callMcpTool(

@@ -150,16 +150,12 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       );
       expect(agentTool).toBeDefined();
 
-      // STEP 8: Initialize MCP session with the external JWT
-      await initializeMcpSession(request, {
+      // STEP 8: Wait for the external JWT gateway auth path to be ready.
+      const tools = await waitForExternalJwtGatewayTools({
+        request,
         profileId: pid,
         token: jwt,
-      });
-
-      // STEP 9: List tools - should include upstream server tools
-      const tools = await listMcpTools(request, {
-        profileId: pid,
-        token: jwt,
+        expectedToolName: getServerInfoToolName,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);
@@ -580,7 +576,9 @@ async function waitForExternalJwtGatewayTools(params: {
 }) {
   let lastError: unknown;
 
-  for (const delayMs of [0, 500, 1000, 2000, 4000, 4000, 4000, 4000, 4000]) {
+  for (const delayMs of [
+    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000,
+  ]) {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

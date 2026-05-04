@@ -218,7 +218,7 @@ export async function addSharedLocalConnection(params: {
     }
 
     await expect(
-      sharedConnectionsSection.getByTestId(
+      visibleDialog.getByTestId(
         E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
       ),
     ).not.toBeVisible({

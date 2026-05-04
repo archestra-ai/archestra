@@ -3,6 +3,7 @@ import { archestraApiSdk, E2eTestId } from "@shared";
 import { type Page, test } from "../fixtures";
 import {
   clickButton,
+  closeOpenDialogs,
   fillRemoteServerForm,
   goToMcpRegistry,
   installMcpServer,
@@ -400,8 +401,8 @@ rl.on("line", (line) => {
     // STEP 5: Click reinstall and wait for tools discovery
     // ========================================
     // Close the settings dialog and wait for the card to show "Reinstall" button.
-    await settingsDialog.getByRole("button", { name: "Close" }).click();
-    await settingsDialog.waitFor({ state: "hidden", timeout: 10_000 });
+    await closeOpenDialogs(adminPage, { timeoutMs: 10_000 });
+    await expect(settingsDialog).not.toBeVisible({ timeout: 10_000 });
 
     const reinstallButton = serverCard.getByRole("button", {
       name: "Reinstall",

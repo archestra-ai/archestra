@@ -22,6 +22,7 @@ import type {
   Agent,
   DualLlmAnalysis,
   InsertInteraction,
+  InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
   ToolCompressionStats,
@@ -101,7 +102,7 @@ export async function calculateInteractionCosts(params: {
 export function buildInteractionRecord(params: {
   agent: Agent;
   externalAgentId?: string;
-  authMethod?: string;
+  authMethod?: InteractionAuthMethod;
   authenticatedApp?: {
     id: string;
     name: string;

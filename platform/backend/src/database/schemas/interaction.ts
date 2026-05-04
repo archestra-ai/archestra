@@ -17,6 +17,7 @@ import type {
   DualLlmAnalysis,
   InteractionRequest,
   InteractionResponse,
+  InteractionAuthMethod,
   ToonSkipReason,
   UnsafeContextBoundary,
 } from "@/types";
@@ -72,10 +73,8 @@ const interactionsTable = pgTable(
     source: varchar("source").$type<InteractionSource>(),
     /**
      * Authentication method used for the request.
-     * Values include provider_key, virtual_key, jwks, oauth_client_credentials,
-     * oauth_user, internal, and unknown.
      */
-    authMethod: varchar("auth_method"),
+    authMethod: varchar("auth_method").$type<InteractionAuthMethod>(),
     /**
      * Authenticated application identity resolved from an OAuth client
      * credentials token. This is distinct from externalAgentId, which is a

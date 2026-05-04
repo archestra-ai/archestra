@@ -328,7 +328,11 @@ function LogDetail({
   );
 }
 
-function formatAuthMethod(authMethod: string) {
+type InteractionAuthMethod = NonNullable<
+  archestraApiTypes.GetInteractionResponses["200"]["authMethod"]
+>;
+
+function formatAuthMethod(authMethod: InteractionAuthMethod) {
   switch (authMethod) {
     case "oauth_client_credentials":
       return "OAuth Client Credentials";

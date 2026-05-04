@@ -1,1 +1,0 @@
-ALTER TABLE "organization" RENAME COLUMN "mcp_oauth_access_token_lifetime_seconds" TO "oauth_access_token_lifetime_seconds";

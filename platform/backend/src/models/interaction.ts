@@ -25,10 +25,12 @@ import logger from "@/logging";
 import type {
   InsertInteraction,
   Interaction,
+  InteractionAuthMethod,
   SessionSummary,
   SortingQuery,
   UserInfo,
 } from "@/types";
+import { InteractionAuthMethodSchema } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
 
@@ -989,9 +991,7 @@ class InteractionModel {
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
-        authMethods: s.authMethods
-          ? s.authMethods.split(",").filter(Boolean)
-          : [],
+        authMethods: parseInteractionAuthMethods(s.authMethods),
         authenticatedAppNames: s.authenticatedAppNames
           ? s.authenticatedAppNames.split(",").filter(Boolean)
           : [],
@@ -1184,3 +1184,19 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+function parseInteractionAuthMethods(
+  value: string | null,
+): InteractionAuthMethod[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .filter(Boolean)
+    .flatMap((authMethod) => {
+      const result = InteractionAuthMethodSchema.safeParse(authMethod);
+      return result.success ? [result.data] : [];
+    });
+}

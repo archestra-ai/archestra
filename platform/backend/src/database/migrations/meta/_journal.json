@@ -1615,15 +1615,8 @@
     {
       "idx": 230,
       "version": "7",
-      "when": 1777900494995,
-      "tag": "0230_greedy_toro",
-      "breakpoints": true
-    },
-    {
-      "idx": 231,
-      "version": "7",
-      "when": 1777916482009,
-      "tag": "0231_demonic_sentinel",
+      "when": 1777918521553,
+      "tag": "0230_uneven_purple_man",
       "breakpoints": true
     }
   ]

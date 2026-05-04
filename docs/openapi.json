@@ -78493,7 +78493,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -78708,7 +78717,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -78779,7 +78787,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -79417,7 +79434,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -79488,7 +79504,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -79817,7 +79842,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -79888,7 +79912,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -80103,7 +80136,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -80174,7 +80206,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -80389,7 +80430,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -80460,7 +80500,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -82387,7 +82436,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -82458,7 +82506,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -82673,7 +82730,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -82744,7 +82800,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -82959,7 +83024,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -83030,7 +83094,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -83245,7 +83318,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -83316,7 +83388,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -83531,7 +83612,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -83602,7 +83682,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -83817,7 +83906,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -83888,7 +83976,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -84103,7 +84200,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -84174,7 +84270,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -84378,7 +84483,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -84449,7 +84553,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -84653,7 +84766,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -84724,7 +84836,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -84939,7 +85060,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -85010,7 +85130,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -85225,7 +85354,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -85296,7 +85424,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -85511,7 +85648,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -85582,7 +85718,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -85797,7 +85942,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -85868,7 +86012,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -86309,7 +86462,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -86380,7 +86532,16 @@
                               },
                               "authMethod": {
                                 "nullable": true,
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
                               },
                               "authenticatedAppId": {
                                 "nullable": true,
@@ -87018,7 +87179,6 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
-                              "authMethod",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -87563,7 +87723,16 @@
                           "authMethods": {
                             "type": "array",
                             "items": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "provider_key",
+                                "virtual_key",
+                                "jwks",
+                                "oauth_client_credentials",
+                                "oauth_user",
+                                "internal",
+                                "unknown"
+                              ]
                             }
                           },
                           "authenticatedAppNames": {
@@ -88531,7 +88700,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -88746,7 +88924,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -88817,7 +88994,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -89455,7 +89641,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -89526,7 +89711,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -89855,7 +90049,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -89926,7 +90119,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -90141,7 +90343,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -90212,7 +90413,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -90427,7 +90637,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -90498,7 +90707,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -92425,7 +92643,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -92496,7 +92713,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -92711,7 +92937,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -92782,7 +93007,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -92997,7 +93231,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -93068,7 +93301,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -93283,7 +93525,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -93354,7 +93595,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -93569,7 +93819,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -93640,7 +93889,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -93855,7 +94113,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -93926,7 +94183,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -94141,7 +94407,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -94212,7 +94477,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -94416,7 +94690,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -94487,7 +94760,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -94691,7 +94973,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -94762,7 +95043,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -94977,7 +95267,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -95048,7 +95337,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -95263,7 +95561,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -95334,7 +95631,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -95549,7 +95855,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -95620,7 +95925,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -95835,7 +96149,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -95906,7 +96219,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -96347,7 +96669,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -96418,7 +96739,16 @@
                         },
                         "authMethod": {
                           "nullable": true,
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
                         },
                         "authenticatedAppId": {
                           "nullable": true,
@@ -97056,7 +97386,6 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
-                        "authMethod",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",

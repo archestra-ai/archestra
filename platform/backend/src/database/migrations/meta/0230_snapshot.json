@@ -1,5 +1,5 @@
 {
-  "id": "f55e87a4-a87a-430b-aec6-9851d6503bd3",
+  "id": "584470b0-6bc2-43fd-b1e2-e7de4794bb62",
   "prevId": "76d36089-8582-4926-80e5-300e1e404080",
   "version": "7",
   "dialect": "postgresql",
@@ -6970,8 +6970,8 @@
           "notNull": true,
           "default": false
         },
-        "mcp_oauth_access_token_lifetime_seconds": {
-          "name": "mcp_oauth_access_token_lifetime_seconds",
+        "oauth_access_token_lifetime_seconds": {
+          "name": "oauth_access_token_lifetime_seconds",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

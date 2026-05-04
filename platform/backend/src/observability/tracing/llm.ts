@@ -10,7 +10,7 @@ import type { InteractionSource, SupportedProvider } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import type { Agent, GenAiOperationName } from "@/types";
+import type { Agent, GenAiOperationName, InteractionAuthMethod } from "@/types";
 import {
   ATTR_ARCHESTRA_APP_ID,
   ATTR_ARCHESTRA_APP_NAME,
@@ -72,7 +72,7 @@ export async function startActiveLlmSpan<T>(params: {
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
-  authMethod?: string;
+  authMethod?: InteractionAuthMethod;
   authenticatedApp?: { id: string; name: string; clientId: string };
   source?: InteractionSource;
   serverAddress?: string;

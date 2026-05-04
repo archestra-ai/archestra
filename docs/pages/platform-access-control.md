@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-03
+lastUpdated: 2026-05-04
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -147,11 +147,6 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeSource:delete` | Delete Knowledge Bases and Connectors |
 | `knowledgeSource:query` | Query knowledge sources for information retrieval |
 | `knowledgeSource:admin` | View all Knowledge Bases and Connectors, bypassing visibility restrictions |
-| `llmOauthClient:read` | View LLM OAuth client registrations |
-| `llmOauthClient:create` | Create LLM OAuth client registrations |
-| `llmOauthClient:update` | Modify LLM OAuth client registrations |
-| `llmOauthClient:delete` | Delete LLM OAuth client registrations |
-| `llmOauthClient:admin` | Manage all LLM OAuth client registrations |
 | `llmCost:read` | View LLM usage cost statistics and analytics |
 | `llmLimit:read` | View token usage limits |
 | `llmLimit:create` | Create new usage limits |
@@ -159,6 +154,11 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:delete` | Remove usage limits |
 | `llmModel:read` | View synced LLM models and capabilities |
 | `llmModel:update` | Modify LLM model pricing and modality settings |
+| `llmOauthClient:read` | View LLM OAuth client registrations |
+| `llmOauthClient:create` | Create LLM OAuth client registrations |
+| `llmOauthClient:update` | Modify LLM OAuth client registrations |
+| `llmOauthClient:delete` | Delete LLM OAuth client registrations |
+| `llmOauthClient:admin` | Manage all LLM OAuth client registrations |
 | `llmProviderApiKey:read` | View LLM provider API keys |
 | `llmProviderApiKey:create` | Add new LLM provider API keys |
 | `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |

@@ -47,6 +47,7 @@ import {
   type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
   type LLMProvider,
@@ -110,7 +111,7 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
-  authMethod?: string;
+  authMethod?: InteractionAuthMethod;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -133,7 +134,7 @@ export type LLMProxyAuthOverride = {
   chatApiKeyId?: string;
   authenticated: boolean;
   source?: InteractionSource;
-  authMethod?: string;
+  authMethod?: InteractionAuthMethod;
   authenticatedApp?: {
     id: string;
     name: string;

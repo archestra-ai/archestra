@@ -15,6 +15,8 @@
  * - Interrupted streams may not record interactions before usage data arrives.
  */
 
+import { createHash } from "node:crypto";
+import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -23,7 +25,12 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import config from "@/config";
-import { ModelModel } from "@/models";
+import {
+  InteractionModel,
+  LlmOauthClientModel,
+  ModelModel,
+  OAuthAccessTokenModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import type { OpenAi } from "@/types";
@@ -272,6 +279,82 @@ describe("OpenAI cost tracking", () => {
     expect(interaction.baselineCost).toBeTruthy();
     expect(typeof interaction.cost).toBe("string");
     expect(typeof interaction.baselineCost).toBe("string");
+  });
+
+  test("accepts LLM OAuth client credentials on provider-specific proxy routes", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+
+    const organization = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      {
+        provider: "openai",
+      },
+    );
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "OAuth OpenAI Proxy",
+      agentType: "llm_proxy",
+    });
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      chatApiKeyId: providerKey.id,
+      allowedLlmProxyIds: [agent.id],
+      modelRouterProviderApiKeys: [],
+    });
+    const accessToken = "llm-provider-route-oauth-token";
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: createHash("sha256").update(accessToken).digest("base64url"),
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 60_000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+      referenceId: `llm-proxy:${oauthClient.id}`,
+    });
+    let capturedApiKey: string | undefined;
+    vi.mocked(openaiAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createOpenAiTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.authMethod).toBe("oauth_client_credentials");
+    expect(interaction.authenticatedAppId).toBe(oauthClient.id);
+    expect(interaction.authenticatedAppName).toBe("Backend Service");
+    expect(capturedApiKey).toBe("sk-openai");
   });
 });
 

@@ -20,10 +20,9 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
 
 const CreateLlmOauthClientBodySchema = z.object({
   name: z.string().min(1).max(256),
+  chatApiKeyId: z.string().uuid().nullable().optional(),
   allowedLlmProxyIds: z.array(z.string().uuid()).min(1),
-  modelRouterProviderApiKeys: z
-    .array(LlmOauthClientProviderKeyBodySchema)
-    .min(1),
+  modelRouterProviderApiKeys: z.array(LlmOauthClientProviderKeyBodySchema),
 });
 
 const UpdateLlmOauthClientBodySchema = CreateLlmOauthClientBodySchema;
@@ -34,7 +33,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetLlmOauthClients,
-        description: "List LLM OAuth clients that can access the Model Router",
+        description: "List LLM OAuth clients that can access LLM proxies",
         tags: ["LLM OAuth Clients"],
         response: constructResponseSchema(z.array(LlmOauthClientSchema)),
       },
@@ -63,6 +62,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
+        chatApiKeyId: body.chatApiKeyId ?? null,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
         modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
       });
@@ -88,6 +88,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         name: body.name,
+        chatApiKeyId: body.chatApiKeyId ?? null,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
         modelRouterProviderApiKeys: body.modelRouterProviderApiKeys,
       });
@@ -152,12 +153,20 @@ export default llmOauthClientsRoutes;
 
 async function validateLlmOauthClientConfig(params: {
   organizationId: string;
+  chatApiKeyId?: string | null;
   allowedLlmProxyIds: string[];
   modelRouterProviderApiKeys: Array<{
     provider: z.infer<typeof SupportedProvidersSchema>;
     chatApiKeyId: string;
   }>;
 }) {
+  if (!params.chatApiKeyId && params.modelRouterProviderApiKeys.length === 0) {
+    throw new ApiError(
+      400,
+      "Provider API key is required unless Model Router provider keys are configured",
+    );
+  }
+
   for (const proxyId of params.allowedLlmProxyIds) {
     const agent = await AgentModel.findById(proxyId);
     if (
@@ -166,6 +175,13 @@ async function validateLlmOauthClientConfig(params: {
       agent.agentType !== "llm_proxy"
     ) {
       throw new ApiError(404, "LLM proxy not found");
+    }
+  }
+
+  if (params.chatApiKeyId) {
+    const apiKey = await LlmProviderApiKeyModel.findById(params.chatApiKeyId);
+    if (!apiKey || apiKey.organizationId !== params.organizationId) {
+      throw new ApiError(404, "LLM provider API key not found");
     }
   }
 

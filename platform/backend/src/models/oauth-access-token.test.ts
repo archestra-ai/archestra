@@ -1,3 +1,4 @@
+import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { describe, expect, test } from "@/test";
 import OAuthAccessTokenModel from "./oauth-access-token";
 
@@ -64,16 +65,16 @@ describe("OAuthAccessTokenModel", () => {
         tokenHash: "client-credentials-token-hash",
         clientId: client.clientId,
         expiresAt,
-        scopes: ["llm:model-router"],
-        referenceId: "llm-oauth-client:test-client-id",
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: "llm-proxy:test-client-id",
       });
 
       expect(created.token).toBe("client-credentials-token-hash");
       expect(created.clientId).toBe(client.clientId);
       expect(created.userId).toBeNull();
       expect(created.expiresAt).toEqual(expiresAt);
-      expect(created.scopes).toEqual(["llm:model-router"]);
-      expect(created.referenceId).toBe("llm-oauth-client:test-client-id");
+      expect(created.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
+      expect(created.referenceId).toBe("llm-proxy:test-client-id");
 
       const found = await OAuthAccessTokenModel.getByTokenHash(
         "client-credentials-token-hash",
@@ -91,7 +92,7 @@ describe("OAuthAccessTokenModel", () => {
         tokenHash: "client-credentials-token-without-reference",
         clientId: client.clientId,
         expiresAt: new Date(Date.now() + 3600000),
-        scopes: ["llm:model-router"],
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
       });
 
       expect(created.userId).toBeNull();

@@ -5,11 +5,25 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { hasArchestraTokenPrefix, isSupportedProvider } from "@shared";
+import { createHash } from "node:crypto";
+import {
+  hasArchestraTokenPrefix,
+  isSupportedProvider,
+  LLM_PROXY_COMPATIBLE_OAUTH_SCOPES,
+} from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  LlmOauthClientModel,
+  LlmProviderApiKeyModel,
+  MemberModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { type Agent, ApiError } from "@/types";
@@ -129,6 +143,56 @@ export async function validateVirtualApiKey(
     baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
     chatApiKeyId: resolved.chatApiKey.id,
   };
+}
+
+// =========================================================================
+// LLM OAuth Access Token Validation
+// =========================================================================
+
+export type LlmOAuthAccessTokenValidationResult = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  chatApiKeyId: string | undefined;
+  authMethod: "oauth_client_credentials" | "oauth_user";
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+  userId?: string;
+};
+
+export async function validateLlmOAuthAccessToken(params: {
+  tokenValue: string;
+  expectedProvider: string;
+  agent: Agent;
+}): Promise<LlmOAuthAccessTokenValidationResult | null> {
+  const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+    createHash("sha256").update(params.tokenValue).digest("base64url"),
+  );
+  if (!accessToken) {
+    return null;
+  }
+  if (accessToken.expiresAt < new Date()) {
+    throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
+  if (!hasLlmProxyScope(accessToken.scopes)) {
+    throw new ApiError(403, "Access token is missing LLM proxy scope.");
+  }
+  if (accessToken.userId) {
+    return validateUserLlmOAuthAccessToken({
+      userId: accessToken.userId,
+      clientId: accessToken.clientId,
+      expectedProvider: params.expectedProvider,
+      agent: params.agent,
+    });
+  }
+
+  return validateClientCredentialsLlmOAuthAccessToken({
+    clientId: accessToken.clientId,
+    expectedProvider: params.expectedProvider,
+    agent: params.agent,
+  });
 }
 
 // =========================================================================
@@ -327,6 +391,143 @@ export class VirtualKeyRateLimiter {
 }
 
 export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
+
+async function validateClientCredentialsLlmOAuthAccessToken(params: {
+  clientId: string;
+  expectedProvider: string;
+  agent: Agent;
+}): Promise<LlmOAuthAccessTokenValidationResult> {
+  const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient) {
+    throw new ApiError(401, "LLM OAuth client is no longer available.");
+  }
+  if (oauthClient.organizationId !== params.agent.organizationId) {
+    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
+  }
+  if (!oauthClient.allowedLlmProxyIds.includes(params.agent.id)) {
+    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
+  }
+  if (!oauthClient.chatApiKeyId) {
+    throw new ApiError(
+      400,
+      "LLM OAuth client is not configured for provider-specific proxy routes.",
+    );
+  }
+
+  const providerApiKey = await LlmProviderApiKeyModel.findById(
+    oauthClient.chatApiKeyId,
+  );
+  if (!providerApiKey) {
+    throw new ApiError(
+      401,
+      "LLM OAuth client references a missing provider API key.",
+    );
+  }
+  return resolveOAuthProviderApiKey({
+    chatApiKeyId: providerApiKey.id,
+    secretId: providerApiKey.secretId,
+    baseUrl: providerApiKey.baseUrl,
+    actualProvider: providerApiKey.provider,
+    expectedProvider: params.expectedProvider,
+    authMethod: "oauth_client_credentials",
+    authenticatedApp: {
+      id: oauthClient.id,
+      name: oauthClient.name,
+      clientId: oauthClient.clientId,
+    },
+  });
+}
+
+async function validateUserLlmOAuthAccessToken(params: {
+  userId: string;
+  clientId: string;
+  expectedProvider: string;
+  agent: Agent;
+}): Promise<LlmOAuthAccessTokenValidationResult> {
+  const member = await MemberModel.getFirstMembershipForUser(params.userId);
+  if (!member || member.organizationId !== params.agent.organizationId) {
+    throw new ApiError(401, "OAuth user is no longer available.");
+  }
+
+  const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
+    params.userId,
+    params.agent.id,
+    false,
+  );
+  if (!hasAgentAccess) {
+    throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
+  }
+  if (!isSupportedProvider(params.expectedProvider)) {
+    throw new ApiError(
+      400,
+      `OAuth user access is not supported for provider "${params.expectedProvider}".`,
+    );
+  }
+
+  const resolved = await resolveProviderApiKey({
+    organizationId: member.organizationId,
+    userId: params.userId,
+    provider: params.expectedProvider,
+  });
+  const oauthClient = await OAuthClientModel.findByClientId(params.clientId);
+
+  return {
+    apiKey: resolved.apiKey,
+    baseUrl: resolved.baseUrl ?? undefined,
+    chatApiKeyId: resolved.chatApiKeyId,
+    authMethod: "oauth_user",
+    authenticatedApp: oauthClient
+      ? {
+          id: oauthClient.id,
+          name: oauthClient.name ?? oauthClient.clientId,
+          clientId: oauthClient.clientId,
+        }
+      : undefined,
+    userId: params.userId,
+  };
+}
+
+async function resolveOAuthProviderApiKey(params: {
+  chatApiKeyId: string;
+  secretId: string | null;
+  baseUrl: string | null;
+  actualProvider: string;
+  expectedProvider: string;
+  authMethod: "oauth_client_credentials" | "oauth_user";
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+}): Promise<LlmOAuthAccessTokenValidationResult> {
+  if (params.actualProvider !== params.expectedProvider) {
+    throw new ApiError(
+      400,
+      `LLM OAuth client provider key is for provider "${params.actualProvider}", but request is for "${params.expectedProvider}"`,
+    );
+  }
+
+  const apiKey = params.secretId
+    ? await getSecretValueForLlmProviderApiKey(params.secretId)
+    : undefined;
+  return {
+    apiKey,
+    baseUrl: params.baseUrl ?? undefined,
+    chatApiKeyId: params.chatApiKeyId,
+    authMethod: params.authMethod,
+    authenticatedApp: params.authenticatedApp,
+  };
+}
+
+function hasLlmProxyScope(scopes: string[] | null | undefined): boolean {
+  return (
+    scopes?.some((scope) =>
+      LLM_PROXY_COMPATIBLE_OAUTH_SCOPES.includes(
+        scope as (typeof LLM_PROXY_COMPATIBLE_OAUTH_SCOPES)[number],
+      ),
+    ) ?? false
+  );
+}
 
 function isJwtLike(token: string): boolean {
   const parts = token.split(".");

@@ -1,3 +1,4 @@
+import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -23,6 +24,7 @@ describe("LlmOauthClientModel", () => {
     const result = await LlmOauthClientModel.create({
       organizationId: organization.id,
       name: "Backend Service",
+      chatApiKeyId: providerKey.id,
       allowedLlmProxyIds: [crypto.randomUUID()],
       modelRouterProviderApiKeys: [
         {
@@ -36,6 +38,9 @@ describe("LlmOauthClientModel", () => {
     expect(result.oauthClient.clientId).toMatch(/^llm_oauth_/);
     expect(result.oauthClient.name).toBe("Backend Service");
     expect(result.oauthClient.organizationId).toBe(organization.id);
+    expect(result.oauthClient.chatApiKeyId).toBe(providerKey.id);
+    expect(result.oauthClient.chatApiKeyName).toBe("Primary Provider Key");
+    expect(result.oauthClient.chatApiKeyProvider).toBe("anthropic");
     expect(result.oauthClient.allowedLlmProxyIds).toHaveLength(1);
     expect(result.oauthClient.modelRouterProviderApiKeys).toEqual([
       {
@@ -207,7 +212,7 @@ describe("LlmOauthClientModel", () => {
 
     expect(stored.grantTypes).toEqual(["client_credentials"]);
     expect(stored.responseTypes).toEqual([]);
-    expect(stored.scopes).toEqual(["llm:model-router"]);
+    expect(stored.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
     expect(stored.tokenEndpointAuthMethod).toBe("client_secret_post");
     expect(stored.public).toBe(false);
     expect(stored.metadata).toMatchObject({

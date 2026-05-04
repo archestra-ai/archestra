@@ -31847,6 +31847,9 @@ export type GetLlmOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        chatApiKeyId: string | null;
+        chatApiKeyName: string | null;
+        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
         modelRouterProviderApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
@@ -31864,6 +31867,7 @@ export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLl
 export type CreateLlmOauthClientData = {
     body: {
         name: string;
+        chatApiKeyId?: string | null;
         allowedLlmProxyIds: Array<string>;
         modelRouterProviderApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
@@ -31949,6 +31953,9 @@ export type CreateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        chatApiKeyId: string | null;
+        chatApiKeyName: string | null;
+        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
         modelRouterProviderApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
@@ -32052,6 +32059,7 @@ export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof D
 export type UpdateLlmOauthClientData = {
     body: {
         name: string;
+        chatApiKeyId?: string | null;
         allowedLlmProxyIds: Array<string>;
         modelRouterProviderApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
@@ -32139,6 +32147,9 @@ export type UpdateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        chatApiKeyId: string | null;
+        chatApiKeyName: string | null;
+        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
         modelRouterProviderApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
@@ -32236,6 +32247,9 @@ export type RotateLlmOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        chatApiKeyId: string | null;
+        chatApiKeyName: string | null;
+        chatApiKeyProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         allowedLlmProxyIds: Array<string>;
         modelRouterProviderApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';

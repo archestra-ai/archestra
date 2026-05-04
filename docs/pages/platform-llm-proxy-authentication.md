@@ -17,7 +17,7 @@ The LLM Proxy supports direct provider API keys, virtual API keys, OAuth access 
 | Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
 | Virtual API key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
 | LLM OAuth client access token | Backend services, production apps, and external bots | Yes | Uses OAuth client credentials to issue short-lived bearer tokens. |
-| User OAuth access token | Custom apps acting for an individual user | Yes | Uses the authorization code flow with consent and the `llm:model-router` scope. |
+| User OAuth access token | Custom apps acting for an individual user | Yes | Uses the authorization code flow with consent and the `llm:proxy` scope. |
 | JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |
 
 ## Direct Provider API Key
@@ -86,19 +86,20 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
 
 ## LLM OAuth Clients
 
-LLM OAuth clients are registered clients that call the Model Router with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a 1-hour access token, and uses that token as the Model Router bearer token.
+LLM OAuth clients are registered clients that call LLM proxy endpoints with OAuth client credentials. Use them for backend services, production apps, automation jobs, and external bots. The OAuth client receives a `client_id` and one-time `client_secret`, exchanges them for a 1-hour access token, and uses that token as the proxy bearer token.
 
-Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling the Model Router.
+Virtual keys are still the recommended path for generic LLM clients that cannot fetch OAuth tokens. LLM OAuth clients are better when you control the service code and can request a token before calling an LLM proxy.
 
 ### Managing OAuth Clients
 
 1. Go to **LLM Proxies > Proxy Auth > OAuth Clients**
 2. Create an OAuth client
 3. Select the LLM proxies it can access
-4. Map the provider API keys it can route through
-5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
+4. Select the provider API key it can use on provider-specific proxy routes
+5. Optionally enable **Use for Model Router** and map provider API keys for Model Router routes
+6. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
 
-You can edit an OAuth client later to update its name, allowed LLM proxies, or provider key mappings. Rotate the client secret when the existing secret needs to be replaced.
+You can edit an OAuth client later to update its name, allowed LLM proxies, provider key, or Model Router mappings. Rotate the client secret when the existing secret needs to be replaced.
 
 ### Getting an Access Token
 
@@ -108,8 +109,19 @@ curl -X POST "https://archestra.example.com/api/auth/oauth2/token" \
   -d "grant_type=client_credentials" \
   -d "client_id=$CLIENT_ID" \
   -d "client_secret=$CLIENT_SECRET" \
-  -d "scope=llm:model-router"
+  -d "scope=llm:proxy"
 ```
+
+### Calling Provider-Specific Routes
+
+```bash
+curl -X POST "https://archestra.example.com/v1/openai/{proxyId}/chat/completions" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+For provider-specific routes, the OAuth client must have a provider API key selected and that key must match the route provider.
 
 ### Calling the Model Router
 
@@ -120,13 +132,15 @@ curl -X POST "https://archestra.example.com/v1/model-router/{proxyId}/responses"
   -d '{"model": "openai:gpt-5.4", "input": "Hello"}'
 ```
 
+For Model Router routes, the OAuth client must have **Use for Model Router** enabled with a provider key mapping for the provider prefix in the requested model.
+
 LLM logs and traces record the authenticated OAuth client separately from `X-Archestra-Agent-Id`. Use `X-Archestra-Agent-Id` as a caller-provided label, not as proof of client identity.
 
 ### User OAuth Apps
 
-Custom applications can also use the OAuth authorization code flow when they act on behalf of an individual user. The application redirects the user to the authorization endpoint with the `llm:model-router` scope, the user approves the consent screen, and the application exchanges the code for a user access token.
+Custom applications can also use the OAuth authorization code flow when they act on behalf of an individual user. The application redirects the user to the authorization endpoint with the `llm:proxy` scope, the user approves the consent screen, and the application exchanges the code for a user access token.
 
-User OAuth tokens do not use the LLM OAuth Clients page and do not get provider key mappings from an app registration. Model Router resolves provider keys from the authorized user's accessible Model Provider keys: personal keys, org-wide keys, and team keys for teams the user belongs to.
+User OAuth tokens do not use the LLM OAuth Clients page and do not get provider key mappings from an app registration. Provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys: personal keys, org-wide keys, and team keys for teams the user belongs to.
 
 The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows.
 

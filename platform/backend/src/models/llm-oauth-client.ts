@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { LLM_MODEL_ROUTER_OAUTH_SCOPE } from "@shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -26,6 +26,7 @@ class LlmOauthClientModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    chatApiKeyId?: string | null;
     allowedLlmProxyIds: string[];
     modelRouterProviderApiKeys: LlmOauthClientProviderKey[];
   }) {
@@ -34,6 +35,7 @@ class LlmOauthClientModel {
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
+      chatApiKeyId: params.chatApiKeyId ?? null,
       allowedLlmProxyIds: params.allowedLlmProxyIds,
       modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
     };
@@ -50,7 +52,7 @@ class LlmOauthClientModel {
         grantTypes: ["client_credentials"],
         responseTypes: [],
         public: false,
-        scopes: [LLM_MODEL_ROUTER_OAUTH_SCOPE],
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
         type: "service",
         metadata,
         createdAt: new Date(),
@@ -150,12 +152,14 @@ class LlmOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
+    chatApiKeyId?: string | null;
     allowedLlmProxyIds: string[];
     modelRouterProviderApiKeys: LlmOauthClientProviderKey[];
   }) {
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
+      chatApiKeyId: params.chatApiKeyId ?? null,
       allowedLlmProxyIds: params.allowedLlmProxyIds,
       modelRouterProviderApiKeys: params.modelRouterProviderApiKeys,
     };
@@ -218,11 +222,13 @@ async function hydrateOauthClients(
         const metadata = LlmOauthClientMetadataSchema.safeParse(
           client.metadata,
         ).data;
-        return (
-          metadata?.modelRouterProviderApiKeys.map(
+        if (!metadata) return [];
+        return [
+          metadata.chatApiKeyId,
+          ...metadata.modelRouterProviderApiKeys.map(
             (mapping) => mapping.chatApiKeyId,
-          ) ?? []
-        );
+          ),
+        ].filter((id): id is string => !!id);
       }),
     ),
   ];
@@ -232,6 +238,7 @@ async function hydrateOauthClients(
           .select({
             id: schema.llmProviderApiKeysTable.id,
             name: schema.llmProviderApiKeysTable.name,
+            provider: schema.llmProviderApiKeysTable.provider,
           })
           .from(schema.llmProviderApiKeysTable)
           .where(inArray(schema.llmProviderApiKeysTable.id, chatApiKeyIds))
@@ -249,6 +256,13 @@ async function hydrateOauthClients(
         clientId: client.clientId,
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
+        chatApiKeyId: metadata.chatApiKeyId,
+        chatApiKeyName: metadata.chatApiKeyId
+          ? (apiKeyNames.get(metadata.chatApiKeyId) ?? metadata.chatApiKeyId)
+          : null,
+        chatApiKeyProvider:
+          apiKeyRows.find((row) => row.id === metadata.chatApiKeyId)
+            ?.provider ?? null,
         allowedLlmProxyIds: metadata.allowedLlmProxyIds,
         modelRouterProviderApiKeys: metadata.modelRouterProviderApiKeys.map(
           (mapping) => ({

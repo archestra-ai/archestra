@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { IDENTITY_PROVIDER_ID } from "@shared";
+import { IDENTITY_PROVIDER_ID, LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
@@ -134,7 +134,7 @@ describe("auth routes", () => {
         grant_type: "client_credentials",
         client_id: oauthClient.clientId,
         client_secret: clientSecret,
-        scope: "llm:model-router",
+        scope: LLM_PROXY_OAUTH_SCOPE,
       },
     });
 
@@ -142,7 +142,7 @@ describe("auth routes", () => {
     expect(response.json()).toMatchObject({
       token_type: "Bearer",
       expires_in: 3600,
-      scope: "llm:model-router",
+      scope: LLM_PROXY_OAUTH_SCOPE,
     });
     expect(response.json().access_token).toMatch(/^llm_at_/);
 
@@ -152,10 +152,10 @@ describe("auth routes", () => {
     const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
     expect(storedToken?.clientId).toBe(oauthClient.clientId);
     expect(storedToken?.userId).toBeNull();
-    expect(storedToken?.scopes).toEqual(["llm:model-router"]);
+    expect(storedToken?.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
   });
 
-  test("applies organization OAuth token lifetime to user Model Router token responses", async ({
+  test("applies organization OAuth token lifetime to user LLM proxy token responses", async ({
     makeMember,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -183,7 +183,7 @@ describe("auth routes", () => {
           access_token: rawAccessToken,
           token_type: "Bearer",
           expires_in: 3_600,
-          scope: "openid profile email llm:model-router",
+          scope: `openid profile email ${LLM_PROXY_OAUTH_SCOPE}`,
         }),
         {
           status: 200,
@@ -208,7 +208,7 @@ describe("auth routes", () => {
     expect(response.json()).toMatchObject({
       access_token: rawAccessToken,
       expires_in: 31_536_000,
-      scope: "openid profile email llm:model-router",
+      scope: `openid profile email ${LLM_PROXY_OAUTH_SCOPE}`,
     });
 
     const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);

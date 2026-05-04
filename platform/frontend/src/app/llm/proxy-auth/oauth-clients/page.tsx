@@ -9,10 +9,13 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import {
   type ModelRouterProviderApiKeyMap,
-  ModelRouterProviderKeyMappingsField,
   modelRouterProviderApiKeyArrayToMap,
   modelRouterProviderApiKeyMapToArray,
 } from "@/components/model-router-provider-key-mappings-field";
+import {
+  ModelRouterAccessFields,
+  ProviderApiKeyField,
+} from "@/components/proxy-auth-provider-key-fields";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -108,6 +111,12 @@ export default function OAuthClientsPage() {
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
             {[
+              row.original.chatApiKeyProvider
+                ? (providerDisplayNames[
+                    row.original
+                      .chatApiKeyProvider as keyof typeof providerDisplayNames
+                  ] ?? row.original.chatApiKeyProvider)
+                : null,
               ...new Set(
                 row.original.modelRouterProviderApiKeys.map(
                   (mapping) =>
@@ -116,7 +125,9 @@ export default function OAuthClientsPage() {
                     ] ?? mapping.provider,
                 ),
               ),
-            ].join(", ")}
+            ]
+              .filter(Boolean)
+              .join(", ")}
           </span>
         ),
       },
@@ -175,7 +186,7 @@ export default function OAuthClientsPage() {
         columns={columns}
         data={oauthClients}
         isLoading={isPending}
-        emptyMessage="No OAuth clients registered. Create one for backend services or bots that call the Model Router."
+        emptyMessage="No OAuth clients registered. Create one for backend services or bots that call LLM proxies."
       />
 
       <CreateOAuthClientDialog
@@ -273,33 +284,49 @@ function CreateOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
+  const [selectedParentKeyId, setSelectedParentKeyId] = useState<string>("");
   const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
+  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ModelRouterProviderApiKeyMap>({});
 
+  const defaultParentKeyId = providerApiKeys[0]?.id ?? "";
+  useEffect(() => {
+    if (open) {
+      setSelectedParentKeyId(defaultParentKeyId);
+    }
+  }, [open, defaultParentKeyId]);
+
+  const modelRouterProviderApiKeys =
+    modelRouterProviderApiKeyMapToArray(providerApiKeyIds);
   const canSubmit =
     name.trim().length > 0 &&
     selectedProxyIds.length > 0 &&
-    modelRouterProviderApiKeyMapToArray(providerApiKeyIds).length > 0;
+    (!!selectedParentKeyId ||
+      (showModelRouterFields && modelRouterProviderApiKeys.length > 0));
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register a backend service or bot that can call the Model Router with OAuth client credentials."
+      description="Register a backend service or bot that can call LLM proxies with OAuth client credentials."
     >
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
           await onSubmit({
             name: name.trim(),
+            chatApiKeyId: selectedParentKeyId || null,
             allowedLlmProxyIds: selectedProxyIds,
-            modelRouterProviderApiKeys:
-              modelRouterProviderApiKeyMapToArray(providerApiKeyIds),
+            modelRouterProviderApiKeys: showModelRouterFields
+              ? modelRouterProviderApiKeys
+              : [],
           });
           setName("");
+          setSelectedParentKeyId(defaultParentKeyId);
           setSelectedProxyIds([]);
+          setShowModelRouterFields(false);
           setProviderApiKeyIds({});
         }}
       >
@@ -313,6 +340,15 @@ function CreateOAuthClientDialog({
               placeholder="support-assistant-prod"
             />
           </div>
+
+          <ProviderApiKeyField
+            value={selectedParentKeyId || "none"}
+            onValueChange={(value) =>
+              setSelectedParentKeyId(value === "none" ? "" : value)
+            }
+            providerApiKeys={providerApiKeys}
+            allowNone
+          />
 
           <div className="space-y-2">
             <Label>Allowed LLM proxies</Label>
@@ -328,7 +364,10 @@ function CreateOAuthClientDialog({
             />
           </div>
 
-          <ModelRouterProviderKeyMappingsField
+          <ModelRouterAccessFields
+            id="oauth-client-model-router"
+            enabled={showModelRouterFields}
+            onEnabledChange={setShowModelRouterFields}
             providerApiKeyIds={providerApiKeyIds}
             onProviderApiKeyIdsChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
@@ -370,14 +409,18 @@ function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
+  const [selectedParentKeyId, setSelectedParentKeyId] = useState<string>("");
   const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
+  const [showModelRouterFields, setShowModelRouterFields] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ModelRouterProviderApiKeyMap>({});
 
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
+    setSelectedParentKeyId(oauthClient.chatApiKeyId ?? "");
     setSelectedProxyIds(oauthClient.allowedLlmProxyIds);
+    setShowModelRouterFields(oauthClient.modelRouterProviderApiKeys.length > 0);
     setProviderApiKeyIds(
       modelRouterProviderApiKeyArrayToMap(
         oauthClient.modelRouterProviderApiKeys,
@@ -385,11 +428,14 @@ function EditOAuthClientDialog({
     );
   }, [oauthClient]);
 
+  const modelRouterProviderApiKeys =
+    modelRouterProviderApiKeyMapToArray(providerApiKeyIds);
   const canSubmit =
     !!oauthClient &&
     name.trim().length > 0 &&
     selectedProxyIds.length > 0 &&
-    modelRouterProviderApiKeyMapToArray(providerApiKeyIds).length > 0;
+    (!!selectedParentKeyId ||
+      (showModelRouterFields && modelRouterProviderApiKeys.length > 0));
 
   return (
     <FormDialog
@@ -404,9 +450,11 @@ function EditOAuthClientDialog({
           if (!oauthClient) return;
           await onSubmit(oauthClient.id, {
             name: name.trim(),
+            chatApiKeyId: selectedParentKeyId || null,
             allowedLlmProxyIds: selectedProxyIds,
-            modelRouterProviderApiKeys:
-              modelRouterProviderApiKeyMapToArray(providerApiKeyIds),
+            modelRouterProviderApiKeys: showModelRouterFields
+              ? modelRouterProviderApiKeys
+              : [],
           });
         }}
       >
@@ -420,6 +468,15 @@ function EditOAuthClientDialog({
               placeholder="support-assistant-prod"
             />
           </div>
+
+          <ProviderApiKeyField
+            value={selectedParentKeyId || "none"}
+            onValueChange={(value) =>
+              setSelectedParentKeyId(value === "none" ? "" : value)
+            }
+            providerApiKeys={providerApiKeys}
+            allowNone
+          />
 
           <div className="space-y-2">
             <Label>Allowed LLM proxies</Label>
@@ -435,7 +492,10 @@ function EditOAuthClientDialog({
             />
           </div>
 
-          <ModelRouterProviderKeyMappingsField
+          <ModelRouterAccessFields
+            id="edit-oauth-client-model-router"
+            enabled={showModelRouterFields}
+            onEnabledChange={setShowModelRouterFields}
             providerApiKeyIds={providerApiKeyIds}
             onProviderApiKeyIdsChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys}

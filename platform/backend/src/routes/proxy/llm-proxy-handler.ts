@@ -62,6 +62,7 @@ import {
   assertAuthenticatedForKeylessProvider,
   attemptJwksAuth,
   resolveAgent,
+  validateLlmOAuthAccessToken,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
@@ -288,8 +289,9 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyId: string | undefined;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
-  const authenticatedApp = authOverride?.authenticatedApp;
+  let authenticatedApp = authOverride?.authenticatedApp;
   if (authOverride?.userId) {
     userId = authOverride.userId;
     resolvedUser = await UserModel.getById(userId);
@@ -329,6 +331,30 @@ export async function handleLLMProxy<
   // a "Bearer:<token>" sentinel so downstream client creation can distinguish
   // auth tokens from raw API keys. Normalize both forms before virtual-key lookup.
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
+  if (
+    !wasJwksAuthenticated &&
+    !authOverride &&
+    rawApiKey &&
+    !hasArchestraTokenPrefix(rawApiKey)
+  ) {
+    const oauthResult = await validateLlmOAuthAccessToken({
+      tokenValue: rawApiKey,
+      expectedProvider: providerName,
+      agent: resolvedAgent,
+    });
+    if (oauthResult) {
+      apiKey = oauthResult.apiKey;
+      perKeyBaseUrl = oauthResult.baseUrl;
+      perKeyChatApiKeyId = oauthResult.chatApiKeyId;
+      wasOAuthAuthenticated = true;
+      authMethod = oauthResult.authMethod;
+      authenticatedApp = oauthResult.authenticatedApp;
+      if (oauthResult.userId) {
+        userId = oauthResult.userId;
+        resolvedUser = await UserModel.getById(userId);
+      }
+    }
+  }
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
@@ -383,7 +409,7 @@ export async function handleLLMProxy<
   // 5. Enforce authentication for keyless providers on external requests
   assertAuthenticatedForKeylessProvider(
     apiKey,
-    wasVirtualKeyResolved,
+    wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
     request.ip,
   );

@@ -2483,7 +2483,7 @@ export const updateModel = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * List LLM OAuth clients that can access the Model Router
+ * List LLM OAuth clients that can access LLM proxies
  *
  * Authentication:
  *

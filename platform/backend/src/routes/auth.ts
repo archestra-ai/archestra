@@ -3,7 +3,8 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   DEFAULT_ADMIN_EMAIL,
   IDENTITY_PROVIDER_ID,
-  LLM_MODEL_ROUTER_OAUTH_SCOPE,
+  LLM_PROXY_COMPATIBLE_OAUTH_SCOPES,
+  LLM_PROXY_OAUTH_SCOPE,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   RouteId,
 } from "@shared";
@@ -905,15 +906,21 @@ async function issueLlmOauthClientAccessToken(params: {
   }
 
   const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
-    LLM_MODEL_ROUTER_OAUTH_SCOPE,
+    LLM_PROXY_OAUTH_SCOPE,
   ];
-  if (!requestedScopes.includes(LLM_MODEL_ROUTER_OAUTH_SCOPE)) {
+  if (
+    !requestedScopes.some((scope) =>
+      LLM_PROXY_COMPATIBLE_OAUTH_SCOPES.includes(
+        scope as (typeof LLM_PROXY_COMPATIBLE_OAUTH_SCOPES)[number],
+      ),
+    )
+  ) {
     return {
       ok: false,
       statusCode: 400,
       body: {
         error: "invalid_scope",
-        error_description: `${LLM_MODEL_ROUTER_OAUTH_SCOPE} scope is required`,
+        error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
       },
     };
   }
@@ -936,8 +943,8 @@ async function issueLlmOauthClientAccessToken(params: {
     tokenHash: hashOAuthAccessTokenForLookup(accessToken),
     clientId: oauthClient.clientId,
     expiresAt: new Date(Date.now() + expiresIn * 1000),
-    scopes: [LLM_MODEL_ROUTER_OAUTH_SCOPE],
-    referenceId: `llm-model-router:${oauthClient.id}`,
+    scopes: [LLM_PROXY_OAUTH_SCOPE],
+    referenceId: `llm-proxy:${oauthClient.id}`,
   });
 
   return {
@@ -947,7 +954,7 @@ async function issueLlmOauthClientAccessToken(params: {
       access_token: accessToken,
       token_type: "Bearer",
       expires_in: expiresIn,
-      scope: LLM_MODEL_ROUTER_OAUTH_SCOPE,
+      scope: LLM_PROXY_OAUTH_SCOPE,
     },
   };
 }

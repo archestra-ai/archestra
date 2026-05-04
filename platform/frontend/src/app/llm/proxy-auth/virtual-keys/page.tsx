@@ -2,10 +2,8 @@
 
 import {
   type archestraApiTypes,
-  DocsPage,
   E2eTestId,
   getDeleteVirtualKeyButtonTestId,
-  getDocsUrl,
   getVirtualKeyRowTestId,
 } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -29,20 +27,19 @@ import {
   type LlmProviderApiKeyResponse,
   PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
-import {
-  LlmProviderApiKeyFilterSelect,
-  LlmProviderApiKeySelectItems,
-} from "@/components/llm-provider-options";
+import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   type ModelRouterProviderApiKeyMap,
-  ModelRouterProviderKeyMappingsField,
   modelRouterProviderApiKeyMapToArray,
 } from "@/components/model-router-provider-key-mappings-field";
+import {
+  ModelRouterAccessFields,
+  ProviderApiKeyField,
+} from "@/components/proxy-auth-provider-key-fields";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   DialogBody,
@@ -52,12 +49,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import {
-  Select,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -523,12 +514,13 @@ function CreateVirtualKeyDialog({
                 />
               </div>
 
-              <ModelRouterVirtualKeyFields
+              <ModelRouterAccessFields
                 enabled={showModelRouterFields}
                 onEnabledChange={setShowModelRouterFields}
                 providerApiKeyIds={modelRouterProviderApiKeyIds}
                 onProviderApiKeyIdsChange={setModelRouterProviderApiKeyIds}
                 providerApiKeys={parentableKeys}
+                id="model-router-virtual-key"
               />
             </>
           )}
@@ -730,12 +722,13 @@ function EditVirtualKeyDialog({
             />
           </div>
 
-          <ModelRouterVirtualKeyFields
+          <ModelRouterAccessFields
             enabled={showModelRouterFields}
             onEnabledChange={setShowModelRouterFields}
             providerApiKeyIds={modelRouterProviderApiKeyIds}
             onProviderApiKeyIdsChange={setModelRouterProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
+            id="edit-model-router-virtual-key"
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
@@ -808,102 +801,6 @@ function DeleteVirtualKeyDialog({
         );
       }}
     />
-  );
-}
-
-function ModelRouterVirtualKeyFields({
-  enabled,
-  onEnabledChange,
-  providerApiKeyIds,
-  onProviderApiKeyIdsChange,
-  providerApiKeys,
-}: {
-  enabled: boolean;
-  onEnabledChange: (value: boolean) => void;
-  providerApiKeyIds: ModelRouterProviderApiKeyMap;
-  onProviderApiKeyIdsChange: (value: ModelRouterProviderApiKeyMap) => void;
-  providerApiKeys: LlmProviderApiKeyResponse[];
-}) {
-  const docsUrl = getDocsUrl(
-    DocsPage.PlatformLlmProxyAuthentication,
-    "model-router-virtual-keys",
-  );
-
-  return (
-    <div className="space-y-4 rounded-md border p-4">
-      <div className="flex items-start gap-3">
-        <Checkbox
-          id="model-router-virtual-key"
-          checked={enabled}
-          onCheckedChange={(checked) => onEnabledChange(checked === true)}
-          className="mt-0.5"
-        />
-        <div className="space-y-1">
-          <Label htmlFor="model-router-virtual-key" className="font-medium">
-            Use for Model Router
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            Map provider API keys for OpenAI-compatible Model Router requests.{" "}
-            <a
-              href={docsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2"
-            >
-              View docs
-            </a>
-          </p>
-        </div>
-      </div>
-
-      {enabled && (
-        <div className="space-y-4 border-t pt-4">
-          <ModelRouterProviderKeyMappingsField
-            providerApiKeyIds={providerApiKeyIds}
-            onProviderApiKeyIdsChange={onProviderApiKeyIdsChange}
-            providerApiKeys={providerApiKeys}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProviderApiKeyField({
-  value,
-  onValueChange,
-  providerApiKeys,
-}: {
-  value: string;
-  onValueChange: (value: string) => void;
-  providerApiKeys: LlmProviderApiKeyResponse[];
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>Provider API Key</Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger
-          className="w-full"
-          data-testid={E2eTestId.VirtualKeyParentKeySelect}
-        >
-          <SelectValue placeholder="Select an API key" />
-        </SelectTrigger>
-        <SelectContent>
-          <LlmProviderApiKeySelectItems
-            options={providerApiKeys.map((key) => {
-              const config = PROVIDER_CONFIG[key.provider];
-              return {
-                value: key.id,
-                icon: config.icon,
-                providerName: config.name,
-                keyName: key.name,
-                secondaryLabel: config.name,
-              };
-            })}
-          />
-        </SelectContent>
-      </Select>
-    </div>
   );
 }
 

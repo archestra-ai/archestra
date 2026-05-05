@@ -66,7 +66,7 @@ import {
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useSetProviderAction } from "../layout";
+import { useSetModelProvidersAction } from "../layout";
 
 const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -226,9 +226,9 @@ export default function ApiKeysPage() {
   const editFormValues = editForm.watch();
   const isEditValid = Boolean(editFormValues.name);
 
-  const setProviderAction = useSetProviderAction();
+  const setModelProvidersAction = useSetModelProvidersAction();
   useEffect(() => {
-    setProviderAction(
+    setModelProvidersAction(
       <PermissionButton
         permissions={{ llmProviderApiKey: ["create"] }}
         onClick={() => setIsCreateDialogOpen(true)}
@@ -238,8 +238,8 @@ export default function ApiKeysPage() {
         Add API Key
       </PermissionButton>,
     );
-    return () => setProviderAction(null);
-  }, [setProviderAction]);
+    return () => setModelProvidersAction(null);
+  }, [setModelProvidersAction]);
 
   const apiKeys = queriedApiKeys;
 

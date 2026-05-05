@@ -1,7 +1,13 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 class OAuthAccessTokenModel {
+  static hashTokenForLookup(oauthAccessToken: string): string {
+    // codeql[js/insufficient-password-hash] This hashes a high-entropy OAuth bearer token for lookup, not a user password.
+    return createHash("sha256").update(oauthAccessToken).digest("base64url");
+  }
+
   /**
    * Create an OAuth access token row.
    */
@@ -20,6 +26,29 @@ class OAuthAccessTokenModel {
         token: params.tokenHash,
         clientId: params.clientId,
         userId: params.userId,
+        expiresAt: params.expiresAt,
+        scopes: params.scopes,
+        referenceId: params.referenceId ?? null,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return accessToken;
+  }
+
+  static async createClientCredentialsToken(params: {
+    tokenHash: string;
+    clientId: string;
+    expiresAt: Date;
+    scopes: string[];
+    referenceId?: string | null;
+  }) {
+    const [accessToken] = await db
+      .insert(schema.oauthAccessTokensTable)
+      .values({
+        id: crypto.randomUUID(),
+        token: params.tokenHash,
+        clientId: params.clientId,
         expiresAt: params.expiresAt,
         scopes: params.scopes,
         referenceId: params.referenceId ?? null,

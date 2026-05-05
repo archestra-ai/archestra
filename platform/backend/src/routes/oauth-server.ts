@@ -129,6 +129,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         grant_types_supported: [
           "authorization_code",
           "refresh_token",
+          "client_credentials",
           JWT_BEARER_GRANT_TYPE,
         ],
         token_endpoint_auth_methods_supported: [

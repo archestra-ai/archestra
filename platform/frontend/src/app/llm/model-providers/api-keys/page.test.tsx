@@ -17,7 +17,7 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("../layout", () => ({
-  useSetProviderAction: () => mockSetProviderAction,
+  useSetModelProvidersAction: () => mockSetProviderAction,
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({

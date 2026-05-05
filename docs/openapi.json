@@ -80150,6 +80150,27 @@
                                   "knowledge:query-expansion"
                                 ]
                               },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
                               },
@@ -80355,6 +80376,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -80420,6 +80443,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "type": "object",
@@ -81049,6 +81093,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -81114,6 +81160,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "type": "object",
@@ -81434,6 +81501,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -81499,6 +81568,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/GeminiGenerateContentRequest"
@@ -81705,6 +81795,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -81770,6 +81862,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/AnthropicMessagesRequest"
@@ -81976,6 +82089,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -82041,6 +82156,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "type": "object",
@@ -83959,6 +84095,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -84024,6 +84162,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -84230,6 +84389,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -84295,6 +84456,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -84501,6 +84683,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -84566,6 +84750,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -84772,6 +84977,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -84837,6 +85044,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -85043,6 +85271,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -85108,6 +85338,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -85314,6 +85565,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -85379,6 +85632,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -85585,6 +85859,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -85650,6 +85926,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/VllmChatCompletionRequest"
@@ -85845,6 +86142,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -85910,6 +86209,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/OllamaChatCompletionRequest"
@@ -86105,6 +86425,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -86170,6 +86492,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/CohereChatRequest"
@@ -86376,6 +86719,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -86441,6 +86786,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/ZhipuaiChatCompletionRequest"
@@ -86647,6 +87013,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -86712,6 +87080,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/DeepSeekChatCompletionRequest"
@@ -86918,6 +87307,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -86983,6 +87374,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/MinimaxChatCompletionRequest"
@@ -87189,6 +87601,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -87254,6 +87668,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -87686,6 +88121,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -87751,6 +88188,27 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion"
                                 ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "request": {
                                 "type": "object",
@@ -88380,6 +88838,8 @@
                               "userId",
                               "sessionId",
                               "sessionSource",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
                               "request",
                               "response",
                               "type",
@@ -88919,6 +89379,27 @@
                               "type": "string"
                             }
                           },
+                          "authMethods": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "provider_key",
+                                "virtual_key",
+                                "jwks",
+                                "oauth_client_credentials",
+                                "oauth_user",
+                                "internal",
+                                "unknown"
+                              ]
+                            }
+                          },
+                          "authenticatedAppNames": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "userNames": {
                             "type": "array",
                             "items": {
@@ -88960,6 +89441,8 @@
                           "profileName",
                           "externalAgentIds",
                           "externalAgentIdLabels",
+                          "authMethods",
+                          "authenticatedAppNames",
                           "userNames",
                           "lastInteractionRequest",
                           "lastInteractionType",
@@ -89874,6 +90357,27 @@
                             "knowledge:query-expansion"
                           ]
                         },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
                         },
@@ -90079,6 +90583,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -90144,6 +90650,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "type": "object",
@@ -90773,6 +91300,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -90838,6 +91367,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "type": "object",
@@ -91158,6 +91708,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -91223,6 +91775,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/GeminiGenerateContentRequest"
@@ -91429,6 +92002,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -91494,6 +92069,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/AnthropicMessagesRequest"
@@ -91700,6 +92296,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -91765,6 +92363,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "type": "object",
@@ -93683,6 +94302,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -93748,6 +94369,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -93954,6 +94596,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -94019,6 +94663,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -94225,6 +94890,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -94290,6 +94957,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -94496,6 +95184,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -94561,6 +95251,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -94767,6 +95478,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -94832,6 +95545,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -95038,6 +95772,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -95103,6 +95839,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -95309,6 +96066,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -95374,6 +96133,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/VllmChatCompletionRequest"
@@ -95569,6 +96349,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -95634,6 +96416,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/OllamaChatCompletionRequest"
@@ -95829,6 +96632,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -95894,6 +96699,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/CohereChatRequest"
@@ -96100,6 +96926,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -96165,6 +96993,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/ZhipuaiChatCompletionRequest"
@@ -96371,6 +97220,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -96436,6 +97287,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/DeepSeekChatCompletionRequest"
@@ -96642,6 +97514,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -96707,6 +97581,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/MinimaxChatCompletionRequest"
@@ -96913,6 +97808,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -96978,6 +97875,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "$ref": "#/components/schemas/XaiChatCompletionRequest"
@@ -97410,6 +98328,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -97475,6 +98395,27 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion"
                           ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "request": {
                           "type": "object",
@@ -98104,6 +99045,8 @@
                         "userId",
                         "sessionId",
                         "sessionSource",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
                         "request",
                         "response",
                         "type",
@@ -119642,6 +120585,1817 @@
           "kind": "static",
           "permissions": [
             "llmModel:update"
+          ]
+        }
+      }
+    },
+    "/api/llm-oauth-clients": {
+      "get": {
+        "operationId": "getLlmOauthClients",
+        "tags": [
+          "LLM OAuth Clients"
+        ],
+        "description": "List LLM OAuth clients that can access LLM proxies\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:read`: View LLM OAuth client registrations",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "clientId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "allowedLlmProxyIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "providerApiKeys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "azure"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "providerApiKeyName": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId",
+                            "providerApiKeyName"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "clientId",
+                      "name",
+                      "organizationId",
+                      "allowedLlmProxyIds",
+                      "providerApiKeys",
+                      "disabled",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmOauthClient:read"
+          ]
+        }
+      },
+      "post": {
+        "operationId": "createLlmOauthClient",
+        "tags": [
+          "LLM OAuth Clients"
+        ],
+        "description": "Create an LLM OAuth client and return its client secret once\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:create`: Create LLM OAuth client registrations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "allowedLlmProxyIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "providerApiKeys": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "azure"
+                          ]
+                        },
+                        "providerApiKeyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "providerApiKeyId"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "allowedLlmProxyIds",
+                  "providerApiKeys"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "allowedLlmProxyIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "providerApiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "providerApiKeyId",
+                          "providerApiKeyName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "disabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "clientId",
+                    "name",
+                    "organizationId",
+                    "allowedLlmProxyIds",
+                    "providerApiKeys",
+                    "disabled",
+                    "createdAt",
+                    "updatedAt",
+                    "clientSecret"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmOauthClient:create"
+          ]
+        }
+      }
+    },
+    "/api/llm-oauth-clients/{id}": {
+      "put": {
+        "operationId": "updateLlmOauthClient",
+        "tags": [
+          "LLM OAuth Clients"
+        ],
+        "description": "Update an LLM OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:update`: Modify LLM OAuth client registrations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "allowedLlmProxyIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "providerApiKeys": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "azure"
+                          ]
+                        },
+                        "providerApiKeyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "providerApiKeyId"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "allowedLlmProxyIds",
+                  "providerApiKeys"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "allowedLlmProxyIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "providerApiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "providerApiKeyId",
+                          "providerApiKeyName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "disabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "clientId",
+                    "name",
+                    "organizationId",
+                    "allowedLlmProxyIds",
+                    "providerApiKeys",
+                    "disabled",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmOauthClient:update"
+          ]
+        }
+      },
+      "delete": {
+        "operationId": "deleteLlmOauthClient",
+        "tags": [
+          "LLM OAuth Clients"
+        ],
+        "description": "Delete an LLM OAuth client\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:delete`: Delete LLM OAuth client registrations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmOauthClient:delete"
+          ]
+        }
+      }
+    },
+    "/api/llm-oauth-clients/{id}/rotate-secret": {
+      "post": {
+        "operationId": "rotateLlmOauthClientSecret",
+        "tags": [
+          "LLM OAuth Clients"
+        ],
+        "description": "Rotate an LLM OAuth client's client secret\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmOauthClient:update`: Modify LLM OAuth client registrations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "allowedLlmProxyIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "providerApiKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure"
+                            ]
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "providerApiKeyId",
+                          "providerApiKeyName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "disabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "clientId",
+                    "name",
+                    "organizationId",
+                    "allowedLlmProxyIds",
+                    "providerApiKeys",
+                    "disabled",
+                    "createdAt",
+                    "updatedAt",
+                    "clientSecret"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmOauthClient:update"
           ]
         }
       }
@@ -143749,7 +146503,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -143856,7 +146610,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -144267,9 +147021,6 @@
                   },
                   "animateChatPlaceholders": {
                     "type": "boolean"
-                  },
-                  "showTwoFactor": {
-                    "type": "boolean"
                   }
                 }
               }
@@ -144546,7 +147297,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -144653,7 +147404,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -145611,7 +148362,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -145718,7 +148469,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -146278,7 +149029,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -146385,7 +149136,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -146963,7 +149714,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -147070,7 +149821,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -147692,7 +150443,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -147799,7 +150550,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -148049,13 +150800,13 @@
         }
       }
     },
-    "/api/organization/mcp-settings": {
+    "/api/organization/auth-settings": {
       "patch": {
-        "operationId": "updateMcpSettings",
+        "operationId": "updateAuthSettings",
         "tags": [
           "Organization"
         ],
-        "description": "Update MCP settings (OAuth access token lifetime)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Update organization Auth settings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -148063,10 +150814,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "mcpOauthAccessTokenLifetimeSeconds": {
+                  "oauthAccessTokenLifetimeSeconds": {
                     "type": "integer",
                     "minimum": 300,
                     "maximum": 31536000
+                  },
+                  "showTwoFactor": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -148343,7 +151097,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -148450,7 +151204,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -149010,7 +151764,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -149117,7 +151871,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -149644,7 +152398,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -149751,7 +152505,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -150591,7 +153345,7 @@
                     "showTwoFactor": {
                       "type": "boolean"
                     },
-                    "mcpOauthAccessTokenLifetimeSeconds": {
+                    "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
                       "minimum": 300,
                       "maximum": 31536000
@@ -150698,7 +153452,7 @@
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "showTwoFactor",
-                    "mcpOauthAccessTokenLifetimeSeconds",
+                    "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -166877,7 +169631,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get virtual API keys visible to the current user, with parent API key info\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "description": "Get virtual API keys visible to the current user, with provider key mappings\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
         "parameters": [
           {
             "schema": {
@@ -166917,7 +169671,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "in": "query",
-            "name": "chatApiKeyId",
+            "name": "providerApiKeyId",
             "required": false
           }
         ],
@@ -166941,12 +169695,6 @@
                           },
                           "organizationId": {
                             "type": "string"
-                          },
-                          "chatApiKeyId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
                             "type": "string",
@@ -166987,18 +169735,6 @@
                             "type": "string",
                             "format": "date-time"
                           },
-                          "parentKeyName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "parentKeyProvider": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "parentKeyBaseUrl": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "teams": {
                             "type": "array",
                             "items": {
@@ -167022,7 +169758,7 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "modelRouterProviderApiKeys": {
+                          "providerApiKeys": {
                             "type": "array",
                             "items": {
                               "type": "object",
@@ -167049,19 +169785,19 @@
                                     "azure"
                                   ]
                                 },
-                                "chatApiKeyId": {
+                                "providerApiKeyId": {
                                   "type": "string",
                                   "format": "uuid",
                                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
-                                "chatApiKeyName": {
+                                "providerApiKeyName": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "provider",
-                                "chatApiKeyId",
-                                "chatApiKeyName"
+                                "providerApiKeyId",
+                                "providerApiKeyName"
                               ],
                               "additionalProperties": false
                             }
@@ -167070,7 +169806,6 @@
                         "required": [
                           "id",
                           "organizationId",
-                          "chatApiKeyId",
                           "name",
                           "secretId",
                           "tokenStart",
@@ -167079,12 +169814,9 @@
                           "expiresAt",
                           "createdAt",
                           "lastUsedAt",
-                          "parentKeyName",
-                          "parentKeyProvider",
-                          "parentKeyBaseUrl",
                           "teams",
                           "authorName",
-                          "modelRouterProviderApiKeys"
+                          "providerApiKeys"
                         ],
                         "additionalProperties": false
                       }
@@ -167412,8 +170144,8 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterProviderApiKeys": {
-                    "default": [],
+                  "providerApiKeys": {
+                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -167440,7 +170172,7 @@
                             "azure"
                           ]
                         },
-                        "chatApiKeyId": {
+                        "providerApiKeyId": {
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -167448,19 +170180,14 @@
                       },
                       "required": [
                         "provider",
-                        "chatApiKeyId"
+                        "providerApiKeyId"
                       ]
                     }
-                  },
-                  "chatApiKeyId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
-                  "name"
+                  "name",
+                  "providerApiKeys"
                 ]
               }
             }
@@ -167481,12 +170208,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string",
@@ -167553,7 +170274,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -167580,19 +170301,19 @@
                               "azure"
                             ]
                           },
-                          "chatApiKeyId": {
+                          "providerApiKeyId": {
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "chatApiKeyName": {
+                          "providerApiKeyName": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "provider",
-                          "chatApiKeyId",
-                          "chatApiKeyName"
+                          "providerApiKeyId",
+                          "providerApiKeyName"
                         ],
                         "additionalProperties": false
                       }
@@ -167601,7 +170322,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "chatApiKeyId",
                     "name",
                     "secretId",
                     "tokenStart",
@@ -167613,7 +170333,7 @@
                     "value",
                     "teams",
                     "authorName",
-                    "modelRouterProviderApiKeys"
+                    "providerApiKeys"
                   ],
                   "additionalProperties": false
                 }
@@ -167895,8 +170615,8 @@
                       "type": "string"
                     }
                   },
-                  "modelRouterProviderApiKeys": {
-                    "default": [],
+                  "providerApiKeys": {
+                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -167923,7 +170643,7 @@
                             "azure"
                           ]
                         },
-                        "chatApiKeyId": {
+                        "providerApiKeyId": {
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -167931,13 +170651,14 @@
                       },
                       "required": [
                         "provider",
-                        "chatApiKeyId"
+                        "providerApiKeyId"
                       ]
                     }
                   }
                 },
                 "required": [
-                  "name"
+                  "name",
+                  "providerApiKeys"
                 ]
               }
             }
@@ -167970,12 +170691,6 @@
                     },
                     "organizationId": {
                       "type": "string"
-                    },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string",
@@ -168039,7 +170754,7 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "modelRouterProviderApiKeys": {
+                    "providerApiKeys": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -168066,19 +170781,19 @@
                               "azure"
                             ]
                           },
-                          "chatApiKeyId": {
+                          "providerApiKeyId": {
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "chatApiKeyName": {
+                          "providerApiKeyName": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "provider",
-                          "chatApiKeyId",
-                          "chatApiKeyName"
+                          "providerApiKeyId",
+                          "providerApiKeyName"
                         ],
                         "additionalProperties": false
                       }
@@ -168087,7 +170802,6 @@
                   "required": [
                     "id",
                     "organizationId",
-                    "chatApiKeyId",
                     "name",
                     "secretId",
                     "tokenStart",
@@ -168098,7 +170812,7 @@
                     "lastUsedAt",
                     "teams",
                     "authorName",
-                    "modelRouterProviderApiKeys"
+                    "providerApiKeys"
                   ],
                   "additionalProperties": false
                 }

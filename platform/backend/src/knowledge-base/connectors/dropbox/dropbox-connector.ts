@@ -8,11 +8,7 @@ import type {
   DropboxConfig,
 } from "@/types";
 import { DropboxConfigSchema } from "@/types";
-import {
-  BaseConnector,
-  buildCheckpoint,
-  extractErrorMessage,
-} from "../base-connector";
+import { BaseConnector, buildCheckpoint } from "../base-connector";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
@@ -56,29 +52,24 @@ export class DropboxConnector extends BaseConnector {
   async validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }> {
-    const parsed = parseDropboxConfig(config);
-    if (!parsed) {
-      return { valid: false, error: "Invalid Dropbox configuration" };
-    }
-    return { valid: true };
+    return this.validateConfigWithSchema({
+      config,
+      parser: parseDropboxConfig,
+      label: "Dropbox",
+    });
   }
 
   async testConnection(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
   }): Promise<{ success: boolean; error?: string }> {
-    this.log.debug("Testing Dropbox connection");
-
-    try {
-      const dbx = getDropboxClient(params.credentials);
-      await dbx.usersGetCurrentAccount();
-      this.log.debug("Dropbox connection test successful");
-      return { success: true };
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      this.log.error({ error: message }, "Dropbox connection test failed");
-      return { success: false, error: `Connection failed: ${message}` };
-    }
+    return this.runConnectionTest({
+      label: "Dropbox",
+      probe: async () => {
+        const dbx = getDropboxClient(params.credentials);
+        await dbx.usersGetCurrentAccount();
+      },
+    });
   }
 
   async *sync(params: {

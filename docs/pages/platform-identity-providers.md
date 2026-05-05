@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Index of identity-related configuration in Archestra — SSO sign-in, downstream token exchange, role mapping, team sync, and per-provider walkthroughs"
 order: 2
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -114,7 +114,7 @@ Optional:
 
 - **Discovery Endpoint:** the `.well-known/openid-configuration` URL (defaults to issuer + `/.well-known/openid-configuration`)
 - **Authorization / Token / User Info / JWKS endpoints:** override the discovery defaults
-- **Scopes:** additional OAuth scopes (default: `openid`, `email`, `profile`)
+- **Scopes:** additional OAuth scopes (default: `openid`, `email`, `profile`). Add the provider's groups scope, often `groups`, when role mapping or team sync reads group claims.
 - **PKCE:** enable if your provider requires it
 - **Enable RP-Initiated Logout:** sends `post_logout_redirect_uri` during sign-out (on by default; disable for providers that reject it)
 
@@ -149,4 +149,3 @@ Optional:
 - [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth) — downstream token exchange (OBO, ID-JAG, RFC 8693)
 - [Role Mapping](/docs/platform-sso-role-mapping) — map IdP claims to Archestra roles
 - [Team Sync](/docs/platform-sso-team-sync) — sync IdP groups to Archestra teams
-

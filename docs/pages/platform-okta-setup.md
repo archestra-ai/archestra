@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Okta — SSO sign-in plus Okta-managed token exchange for downstream MCP tool calls"
 order: 8
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -131,6 +131,15 @@ Click **Create Provider**. Users can now sign in:
 
 Test in a private browser window with a user who is assigned to the Okta app.
 
+### Supported SSO features
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **IdP-initiated SSO** | Yes | Users can start from the Archestra tile in the Okta End-User Dashboard when using the OIN app. |
+| **SP-initiated SSO** | Yes | Users start from the Archestra sign-in page, select **Sign in with Okta**, authenticate in Okta, and return to Archestra through the OIDC callback URL. |
+| **SP-initiated SLO** | Yes | When users sign out of Archestra, Archestra can redirect them to Okta's OIDC logout endpoint. Keep **Enable RP-Initiated Logout** on unless your Okta app rejects the `post_logout_redirect_uri` parameter. |
+| **JIT provisioning** | Yes | First-time SSO users are created during login, then role mapping and team sync are applied from Okta claims. |
+
 At this point SSO is working. If you also want token exchange for downstream MCP tool calls, continue with Section 4.
 
 ## 3. Roles & Teams Sync
@@ -140,7 +149,9 @@ Role mapping and team sync are provider-agnostic and fully documented on dedicat
 - [Role Mapping](/docs/platform-sso-role-mapping)
 - [Team Sync](/docs/platform-sso-team-sync)
 
-For Okta, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in your Okta authorization server (or for the app integration). Then in Archestra, leave the default group extraction or use:
+For Okta, the most common pattern is mapping the `groups` claim to Archestra teams. Make sure the **Groups claim** is enabled in your Okta authorization server or app integration, and that the SSO provider scopes include `groups`. Okta's guide covers both pieces: [Customize tokens returned from Okta with a groups claim](https://developer.okta.com/docs/guides/customize-tokens-groups-claim/main/).
+
+Then in Archestra, leave the default group extraction or use:
 
 ```handlebars
 {{#each groups}}{{this}},{{/each}}

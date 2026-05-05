@@ -240,13 +240,20 @@ function inferEmbeddingDimensions(
     // embeddings; admins can opt into 3072 manually in the model editor.
     return 1536;
   }
+  if (
+    provider === "openrouter" &&
+    (id === "openai/text-embedding-3-small" ||
+      id === "openai/text-embedding-3-large")
+  ) {
+    return 1536;
+  }
   if (provider === "gemini" && id === "gemini-embedding-001") {
     return 3072;
   }
   if (provider === "gemini" && id === "gemini-embedding-2-preview") {
     return 3072;
   }
-  if (id === "nomic-embed-text") {
+  if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
   }
   return null;

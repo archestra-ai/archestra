@@ -68,7 +68,7 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useSetProviderAction } from "../layout";
+import { useSetModelProvidersAction } from "../layout";
 
 export default function ModelsPage() {
   const { data: models = [], isPending, refetch } = useModelsWithApiKeys();
@@ -137,9 +137,9 @@ export default function ModelsPage() {
     }
   }, [syncModelsMutation, refetch]);
 
-  const setProviderAction = useSetProviderAction();
+  const setModelProvidersAction = useSetModelProvidersAction();
   useEffect(() => {
-    setProviderAction(
+    setModelProvidersAction(
       <Button onClick={handleRefresh} disabled={isRefreshingModels}>
         <RefreshCw
           className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
@@ -147,8 +147,8 @@ export default function ModelsPage() {
         {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
       </Button>,
     );
-    return () => setProviderAction(null);
-  }, [setProviderAction, isRefreshingModels, handleRefresh]);
+    return () => setModelProvidersAction(null);
+  }, [setModelProvidersAction, isRefreshingModels, handleRefresh]);
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [

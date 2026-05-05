@@ -86,7 +86,9 @@ describe("validateVirtualApiKey", () => {
     });
 
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "expired-key",
       expiresAt: new Date("2020-01-01"),
     });
@@ -110,12 +112,14 @@ describe("validateVirtualApiKey", () => {
     });
 
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "openai-key",
     });
 
     await expect(validateVirtualApiKey(value, "anthropic")).rejects.toThrow(
-      'Virtual API key is for provider "openai", but request is for "anthropic"',
+      'Virtual API key is not mapped to provider "anthropic".',
     );
   });
 
@@ -133,7 +137,9 @@ describe("validateVirtualApiKey", () => {
     });
 
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "valid-key",
     });
 
@@ -162,7 +168,9 @@ describe("validateVirtualApiKey", () => {
     });
 
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "key-with-base-url",
     });
 
@@ -171,36 +179,26 @@ describe("validateVirtualApiKey", () => {
     expect(result.baseUrl).toBe("https://custom-openai.example.com/v1");
   });
 
-  test("returns undefined apiKey when chat API key has no secretId", async () => {
-    const spy = vi
-      .spyOn(VirtualApiKeyModel, "validateToken")
-      .mockResolvedValue({
-        virtualKey: {
-          id: "vk-1",
-          chatApiKeyId: "ck-1",
-          name: "test",
-          tokenStart: ARCHESTRA_TOKEN_PREFIX,
-          secretId: "secret-1",
-          expiresAt: null,
-          lastUsedAt: null,
-          createdAt: new Date(),
-        },
-        chatApiKey: {
-          id: "ck-1",
-          provider: "openai",
-          secretId: null,
-          baseUrl: null,
-        },
-      } as never);
+  test("returns undefined apiKey when provider key has no secretId", async ({
+    makeOrganization,
+  }) => {
+    const { LlmProviderApiKeyModel } = await import("@/models");
+    const org = await makeOrganization();
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId: org.id,
+      name: "OpenAI system key",
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      providerApiKeys: [
+        { provider: systemKey.provider, providerApiKeyId: systemKey.id },
+      ],
+      name: "virtual-for-system-openai-key",
+    });
 
-    const result = await validateVirtualApiKey(
-      `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}test_token`,
-      "openai",
-    );
+    const result = await validateVirtualApiKey(value, "openai");
     expect(result.apiKey).toBeUndefined();
     expect(result.baseUrl).toBeUndefined();
-
-    spy.mockRestore();
   });
 
   test("returns undefined apiKey for system key (no secret) without throwing", async ({
@@ -216,7 +214,9 @@ describe("validateVirtualApiKey", () => {
     });
 
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: systemKey.id,
+      providerApiKeys: [
+        { provider: systemKey.provider, providerApiKeyId: systemKey.id },
+      ],
       name: "virtual-for-system-key",
     });
 

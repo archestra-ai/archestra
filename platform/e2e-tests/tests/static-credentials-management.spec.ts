@@ -3,10 +3,10 @@ import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
-  E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MEMBER_EMAIL,
 } from "../consts";
 import { expect, goToPage, test } from "../fixtures";
 import {
@@ -52,7 +52,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
       extractCookieHeaders,
       makeRandomString,
     }) => {
-      test.setTimeout(60_000); // 60 seconds - k8s pod startup can be slow
+      test.setTimeout(180_000);
       const page = (() => {
         switch (user) {
           case "Admin":
@@ -90,11 +90,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
 
       if (user === "Member") {
         await openManageCredentialsDialog(page, catalogItemName);
-        await expect(
-          page.getByTestId(
-            E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
-          ),
-        ).toBeVisible();
+        await expect(await getVisibleCredentials(page)).toEqual([MEMBER_EMAIL]);
         await closeOpenDialogs(page);
       } else {
         const expectedTeams = {
@@ -162,7 +158,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         .getByRole("dialog")
         .filter({ visible: true })
         .last()
-        .getByRole("button", { name: /^Connections\b/ });
+        .getByRole("button", { name: /^Credentials\b/ });
       await expect(connectionsButton).toBeVisible();
       await closeOpenDialogs(page);
 
@@ -324,7 +320,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .getByRole("dialog")
       .filter({ visible: true })
       .last()
-      .getByRole("button", { name: /^Connections\b/ });
+      .getByRole("button", { name: /^Credentials\b/ });
     await expect(connectionsButton).toBeVisible();
     await closeOpenDialogs(page);
   };

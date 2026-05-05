@@ -1,19 +1,19 @@
-name: Random Issue and PR Assignee
+name: Random Issue Assignee and PR Reviewer
 
 on:
   issues:
     types: [opened]
-  # PRs from forks need a write-capable token for assignment, but `pull_request`
+  # PRs from forks need a write-capable token for reviewer requests, but `pull_request`
   # workflows receive a read-only token for forked PRs. `pull_request_target`
-  # would assign immediately, but it runs in the base repository security context
+  # would request reviewers immediately, but it runs in the base repository security context
   # for untrusted PR events and has been a common source of Actions incidents.
   #
-  # A two-stage `workflow_run` flow can also assign fork PRs, but it still creates
+  # A two-stage `workflow_run` flow can also request reviewers on fork PRs, but it still creates
   # a privileged workflow triggered by PR activity and is flagged by zizmor.
   #
   # Scheduled polling is less immediate, but it runs only from the default branch,
-  # does not execute or consume PR-controlled code, and still assigns recent fork
-  # PRs within a few minutes.
+  # does not execute or consume PR-controlled code, and still requests reviewers
+  # on recent fork PRs within a few minutes.
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -25,7 +25,7 @@ env:
   CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk"]'
 
 concurrency:
-  group: random-issue-pr-assignee-${{ github.event.issue.number || github.event.pull_request.number || github.ref }}
+  group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -70,16 +70,15 @@ jobs:
 
             console.log(`Assigned #${context.issue.number} to ${selectedOwner}`);
 
-  assign-recent-prs:
-    name: Assign Recent PRs
+  request-recent-pr-reviewers:
+    name: Request Recent PR Reviewers
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      issues: write # Required to assign pull requests.
-      pull-requests: read # Required to read PR metadata.
+      pull-requests: write # Required to read PR metadata and request reviewers.
 
     steps:
-      - name: Randomly assign recent PR owners
+      - name: Randomly request recent PR reviewers
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ github.token }}
@@ -106,37 +105,52 @@ jobs:
 
                 try {
                   if (pr.draft) {
-                    console.log(`Skipping assignment because PR #${pr.number} is still a draft`);
+                    console.log(`Skipping reviewer request because PR #${pr.number} is still a draft`);
                     continue;
                   }
 
-                  const existingOwner = pr.assignees.find((assignee) =>
-                    owners.includes(assignee.login)
+                  const reviewerLogins = new Set(
+                    pr.requested_reviewers.map((reviewer) => reviewer.login)
                   );
 
-                  if (existingOwner) {
-                    console.log(`Skipping assignment because PR #${pr.number} is already assigned to ${existingOwner.login}`);
+                  for await (const reviewsResponse of github.paginate.iterator(github.rest.pulls.listReviews, {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: pr.number,
+                    per_page: 100,
+                  })) {
+                    for (const review of reviewsResponse.data) {
+                      if (review.user?.login) {
+                        reviewerLogins.add(review.user.login);
+                      }
+                    }
+                  }
+
+                  const existingReviewer = owners.find((owner) => reviewerLogins.has(owner));
+
+                  if (existingReviewer) {
+                    console.log(`Skipping reviewer request because PR #${pr.number} already has ${existingReviewer} as a reviewer`);
                     continue;
                   }
 
                   if (coreTeam.includes(pr.user.login)) {
-                    console.log(`Skipping assignment because ${pr.user.login} is on the core team`);
+                    console.log(`Skipping reviewer request because ${pr.user.login} is on the core team`);
                     continue;
                   }
 
                   const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
 
-                  await github.rest.issues.addAssignees({
+                  await github.rest.pulls.requestReviewers({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    issue_number: pr.number,
-                    assignees: [selectedOwner],
+                    pull_number: pr.number,
+                    reviewers: [selectedOwner],
                   });
 
-                  console.log(`Assigned PR #${pr.number} to ${selectedOwner}`);
+                  console.log(`Requested ${selectedOwner} to review PR #${pr.number}`);
                 } catch (error) {
                   const message = error instanceof Error ? error.message : String(error);
-                  console.error(`Failed to assign PR #${pr.number}: ${message}`);
+                  console.error(`Failed to request a reviewer for PR #${pr.number}: ${message}`);
                 }
               }
 

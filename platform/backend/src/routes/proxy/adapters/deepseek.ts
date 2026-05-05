@@ -238,6 +238,7 @@ export const deepseekAdapterFactory: LLMProvider<
       apiKey,
       baseURL: options.baseUrl ?? config.llm.deepseek.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

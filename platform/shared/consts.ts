@@ -37,9 +37,10 @@ export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 
-export const MCP_OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
-export const MCP_OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
-export const DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
+export const OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
+export const OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
+export const DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
+export const LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -110,6 +111,15 @@ export const META_HEADER = "X-Archestra-Meta";
  * When present, the proxy uses this value instead of the env-var-based config default.
  */
 export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
+
+/**
+ * Header used to pass the chat_api_keys row ID from chat → LLM proxy so the
+ * proxy can look up per-key configuration (currently `extraHeaders`) for
+ * raw-bearer calls that originate from the in-app chat. Only honored on
+ * loopback requests, like PROVIDER_BASE_URL_HEADER, to prevent external
+ * clients from spoofing arbitrary key IDs.
+ */
+export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

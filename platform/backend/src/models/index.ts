@@ -1,3 +1,7 @@
+export { default as A2AContextModel } from "./a2a-context";
+export { default as A2AMessageModel } from "./a2a-message";
+export { default as A2ATaskModel } from "./a2a-task";
+export { default as A2ATaskApprovalRequestModel } from "./a2a-task-approval-request";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
@@ -23,6 +27,7 @@ export { default as KbDocumentModel } from "./kb-document";
 export { default as KnowledgeBaseModel } from "./knowledge-base";
 export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connector";
 export { default as LimitModel, LimitValidationService } from "./limit";
+export { default as LlmOauthClientModel } from "./llm-oauth-client";
 export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
 export { default as LlmProviderApiKeyModelLinkModel } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";

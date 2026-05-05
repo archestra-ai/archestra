@@ -34,10 +34,10 @@ import {
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
+  UpdateAuthSettingsSchema,
   UpdateConnectionSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
-  UpdateMcpSettingsSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -244,13 +244,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization/mcp-settings",
+    "/api/organization/auth-settings",
     {
       schema: {
-        operationId: RouteId.UpdateMcpSettings,
-        description: "Update MCP settings (OAuth access token lifetime)",
+        operationId: RouteId.UpdateAuthSettings,
+        description: "Update organization Auth settings",
         tags: ["Organization"],
-        body: UpdateMcpSettingsSchema,
+        body: UpdateAuthSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },

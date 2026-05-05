@@ -78,7 +78,23 @@ export function ConnectorRunDetailsDialog({
                     <span className="text-amber-600">{run.itemErrors}</span>
                   </div>
                 )}
+                {(run.itemsSkipped ?? 0) > 0 && (
+                  <div>
+                    <span className="text-muted-foreground">Skipped:</span>{" "}
+                    <span className="text-muted-foreground">
+                      {run.itemsSkipped}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {(run.itemsSkipped ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {run.itemsSkipped} file(s) were skipped: no extractable text
+                  or media (e.g. empty documents, unsupported binary formats, or
+                  password-protected files). These are not indexed.
+                </p>
+              )}
 
               {/* Progress bar when totalItems is known */}
               {run.totalItems != null && run.totalItems > 0 && (

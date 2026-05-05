@@ -130,7 +130,10 @@ async function fillOidcProviderForm(
 ): Promise<void> {
   await page.getByLabel("Provider ID").fill(providerName);
   await page.getByLabel("Issuer").fill(KEYCLOAK_OIDC.issuer);
-  await page.getByLabel("Domain").fill(SSO_DOMAIN);
+  const allowedDomainsInput = page.getByLabel("Allowed Email Domains");
+  if (await allowedDomainsInput.isVisible().catch(() => false)) {
+    await allowedDomainsInput.fill(SSO_DOMAIN);
+  }
   await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC.clientId);
   await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC.clientSecret);
   await page
@@ -683,10 +686,18 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
 
     // Click on Generic OIDC card to edit (our provider)
     await openIdentityProviderDialog(page, "Generic OIDC");
+    await expect(
+      page.getByTestId(E2eTestId.IdentityProviderUpdateButton),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByLabel("Client ID")).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Update the domain (use a subdomain to keep it valid for the same email domain)
-    await page.getByLabel("Domain").clear();
-    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
+    // Update a Generic OIDC field that is rendered in the edit dialog.
+    await page.getByLabel("Client ID").clear();
+    await page
+      .getByLabel("Client ID")
+      .fill(`${KEYCLOAK_OIDC.clientId}-updated`);
 
     // Save changes
     await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();

@@ -1,3 +1,7 @@
+export { default as a2aContextsTable } from "./a2a-context";
+export { default as a2aMessagesTable } from "./a2a-message";
+export { default as a2aTasksTable } from "./a2a-task";
+export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
@@ -74,5 +78,5 @@ export { default as usersTable } from "./user";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";
 export { default as virtualApiKeysTable } from "./virtual-api-key";
-export { default as virtualApiKeyModelRouterApiKeysTable } from "./virtual-api-key-model-router-api-key";
+export { default as virtualApiKeyProviderApiKeysTable } from "./virtual-api-key-provider-api-key";
 export { default as virtualApiKeyTeamsTable } from "./virtual-api-key-team";

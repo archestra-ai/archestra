@@ -5,11 +5,24 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { hasArchestraTokenPrefix, isSupportedProvider } from "@shared";
+import {
+  hasArchestraTokenPrefix,
+  isSupportedProvider,
+  LLM_PROXY_OAUTH_SCOPE,
+} from "@shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  LlmOauthClientModel,
+  LlmProviderApiKeyModel,
+  MemberModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { type Agent, ApiError } from "@/types";
@@ -76,7 +89,7 @@ export async function validateVirtualApiKeyToken(
 
 /**
  * Validate a platform-managed virtual API key.
- * Checks: token validity, expiration, provider match, parent key health.
+ * Checks: token validity, expiration, and provider mapping.
  * Returns the resolved real API key and optional base URL.
  *
  * Throws ApiError on validation failure.
@@ -86,17 +99,15 @@ export async function validateVirtualApiKey(
   expectedProvider: string,
 ): Promise<VirtualKeyValidationResult> {
   const resolved = await validateVirtualApiKeyToken(tokenValue);
-  if (!resolved.chatApiKey) {
+  const mappedProviderKey = (
+    await VirtualApiKeyModel.getProviderApiKeysForRouting(
+      resolved.virtualKey.id,
+    )
+  ).find((mapping) => mapping.provider === expectedProvider);
+  if (!mappedProviderKey) {
     throw new ApiError(
       400,
-      "Model Router virtual API keys cannot be used with provider-specific proxy routes",
-    );
-  }
-
-  if (resolved.chatApiKey.provider !== expectedProvider) {
-    throw new ApiError(
-      400,
-      `Virtual API key is for provider "${resolved.chatApiKey.provider}", but request is for "${expectedProvider}"`,
+      `Virtual API key is not mapped to provider "${expectedProvider}".`,
     );
   }
 
@@ -106,9 +117,9 @@ export async function validateVirtualApiKey(
   // with a clear error. For keyless providers the virtual key alone is
   // sufficient authentication.
   let apiKey: string | undefined;
-  if (resolved.chatApiKey.secretId) {
+  if (mappedProviderKey.secretId) {
     const secretValue = await getSecretValueForLlmProviderApiKey(
-      resolved.chatApiKey.secretId,
+      mappedProviderKey.secretId,
     );
     if (secretValue) {
       apiKey = secretValue as string;
@@ -116,8 +127,8 @@ export async function validateVirtualApiKey(
       logger.warn(
         {
           virtualKeyId: resolved.virtualKey.id,
-          chatApiKeyId: resolved.chatApiKey.id,
-          secretId: resolved.chatApiKey.secretId,
+          chatApiKeyId: mappedProviderKey.providerApiKeyId,
+          secretId: mappedProviderKey.secretId,
         },
         "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
       );
@@ -126,9 +137,62 @@ export async function validateVirtualApiKey(
 
   return {
     apiKey,
-    baseUrl: resolved.chatApiKey.baseUrl ?? undefined,
-    chatApiKeyId: resolved.chatApiKey.id,
+    baseUrl: mappedProviderKey.baseUrl ?? undefined,
+    chatApiKeyId: mappedProviderKey.providerApiKeyId,
   };
+}
+
+// =========================================================================
+// LLM OAuth Access Token Validation
+// =========================================================================
+
+export type LlmOAuthAccessTokenValidationResult = {
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  chatApiKeyId: string | undefined;
+  authMethod: "oauth_client_credentials" | "oauth_user";
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+  userId?: string;
+};
+
+export async function validateLlmOAuthAccessToken(params: {
+  tokenValue: string;
+  expectedProvider: string;
+  agent: Agent;
+}): Promise<LlmOAuthAccessTokenValidationResult | null> {
+  const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+    OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
+  );
+  if (!accessToken) {
+    return null;
+  }
+  if (accessToken.expiresAt < new Date()) {
+    throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
+  if (accessToken.refreshTokenRevoked) {
+    throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
+  if (!hasLlmProxyScope(accessToken.scopes)) {
+    throw new ApiError(403, "Access token is missing LLM proxy scope.");
+  }
+  if (accessToken.userId) {
+    return validateUserLlmOAuthAccessToken({
+      userId: accessToken.userId,
+      clientId: accessToken.clientId,
+      expectedProvider: params.expectedProvider,
+      agent: params.agent,
+    });
+  }
+
+  return validateClientCredentialsLlmOAuthAccessToken({
+    clientId: accessToken.clientId,
+    expectedProvider: params.expectedProvider,
+    agent: params.agent,
+  });
 }
 
 // =========================================================================
@@ -327,6 +391,143 @@ export class VirtualKeyRateLimiter {
 }
 
 export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
+
+async function validateClientCredentialsLlmOAuthAccessToken(params: {
+  clientId: string;
+  expectedProvider: string;
+  agent: Agent;
+}): Promise<LlmOAuthAccessTokenValidationResult> {
+  const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient) {
+    throw new ApiError(401, "LLM OAuth client is no longer available.");
+  }
+  if (oauthClient.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
+  if (oauthClient.organizationId !== params.agent.organizationId) {
+    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
+  }
+  if (!oauthClient.allowedLlmProxyIds.includes(params.agent.id)) {
+    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
+  }
+  const mappedProviderKey = oauthClient.providerApiKeys.find(
+    (mapping) => mapping.provider === params.expectedProvider,
+  );
+  if (!mappedProviderKey) {
+    throw new ApiError(
+      400,
+      `LLM OAuth client is not mapped to provider "${params.expectedProvider}".`,
+    );
+  }
+
+  const providerApiKey = await LlmProviderApiKeyModel.findById(
+    mappedProviderKey.providerApiKeyId,
+  );
+  if (!providerApiKey) {
+    throw new ApiError(
+      500,
+      "LLM OAuth client references a missing provider API key.",
+    );
+  }
+  return resolveOAuthProviderApiKey({
+    chatApiKeyId: providerApiKey.id,
+    secretId: providerApiKey.secretId,
+    baseUrl: providerApiKey.baseUrl,
+    actualProvider: providerApiKey.provider,
+    expectedProvider: params.expectedProvider,
+    authMethod: "oauth_client_credentials",
+    authenticatedApp: {
+      id: oauthClient.id,
+      name: oauthClient.name,
+      clientId: oauthClient.clientId,
+    },
+  });
+}
+
+async function validateUserLlmOAuthAccessToken(params: {
+  userId: string;
+  clientId: string;
+  expectedProvider: string;
+  agent: Agent;
+}): Promise<LlmOAuthAccessTokenValidationResult> {
+  const member = await MemberModel.getFirstMembershipForUser(params.userId);
+  if (!member || member.organizationId !== params.agent.organizationId) {
+    throw new ApiError(401, "OAuth user is no longer available.");
+  }
+
+  const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
+    params.userId,
+    params.agent.id,
+    false,
+  );
+  if (!hasAgentAccess) {
+    throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
+  }
+  if (!isSupportedProvider(params.expectedProvider)) {
+    throw new ApiError(
+      400,
+      `OAuth user access is not supported for provider "${params.expectedProvider}".`,
+    );
+  }
+
+  const resolved = await resolveProviderApiKey({
+    organizationId: member.organizationId,
+    userId: params.userId,
+    provider: params.expectedProvider,
+  });
+  const oauthClient = await OAuthClientModel.findByClientId(params.clientId);
+
+  return {
+    apiKey: resolved.apiKey,
+    baseUrl: resolved.baseUrl ?? undefined,
+    chatApiKeyId: resolved.chatApiKeyId,
+    authMethod: "oauth_user",
+    authenticatedApp: oauthClient
+      ? {
+          id: oauthClient.id,
+          name: oauthClient.name ?? oauthClient.clientId,
+          clientId: oauthClient.clientId,
+        }
+      : undefined,
+    userId: params.userId,
+  };
+}
+
+async function resolveOAuthProviderApiKey(params: {
+  chatApiKeyId: string;
+  secretId: string | null;
+  baseUrl: string | null;
+  actualProvider: string;
+  expectedProvider: string;
+  authMethod: "oauth_client_credentials" | "oauth_user";
+  authenticatedApp?: {
+    id: string;
+    name: string;
+    clientId: string;
+  };
+}): Promise<LlmOAuthAccessTokenValidationResult> {
+  if (params.actualProvider !== params.expectedProvider) {
+    throw new ApiError(
+      400,
+      `LLM OAuth client provider key is for provider "${params.actualProvider}", but request is for "${params.expectedProvider}"`,
+    );
+  }
+
+  const apiKey = params.secretId
+    ? await getSecretValueForLlmProviderApiKey(params.secretId)
+    : undefined;
+  return {
+    apiKey,
+    baseUrl: params.baseUrl ?? undefined,
+    chatApiKeyId: params.chatApiKeyId,
+    authMethod: params.authMethod,
+    authenticatedApp: params.authenticatedApp,
+  };
+}
+
+function hasLlmProxyScope(scopes: string[] | null | undefined): boolean {
+  return scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE) ?? false;
+}
 
 function isJwtLike(token: string): boolean {
   const parts = token.split(".");

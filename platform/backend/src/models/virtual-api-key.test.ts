@@ -21,12 +21,13 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey, value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Test Virtual Key",
     });
 
     expect(virtualKey.id).toBeDefined();
-    expect(virtualKey.chatApiKeyId).toBe(chatApiKey.id);
     expect(virtualKey.name).toBe("Test Virtual Key");
     expect(virtualKey.expiresAt).toBeNull();
     expect(value).toMatch(
@@ -46,7 +47,9 @@ describe("VirtualApiKeyModel", () => {
 
     const futureDate = new Date(Date.now() + 86400_000);
     const { virtualKey } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Expiring Key",
       expiresAt: futureDate,
     });
@@ -69,7 +72,9 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey, teams, authorName } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Team Virtual Key",
       scope: "team",
       authorId: user.id,
@@ -86,10 +91,10 @@ describe("VirtualApiKeyModel", () => {
   });
 
   // =========================================================================
-  // findByChatApiKeyId
+  // findByProviderApiKeyId
   // =========================================================================
 
-  test("findByChatApiKeyId: returns all virtual keys for a chat API key", async ({
+  test("findByProviderApiKeyId: returns all virtual keys for a chat API key", async ({
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -99,28 +104,32 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Key A",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Key B",
     });
 
-    const keys = await VirtualApiKeyModel.findByChatApiKeyId(chatApiKey.id);
+    const keys = await VirtualApiKeyModel.findByProviderApiKeyId(chatApiKey.id);
     expect(keys).toHaveLength(2);
     expect(keys.map((k) => k.name)).toContain("Key A");
     expect(keys.map((k) => k.name)).toContain("Key B");
   });
 
-  test("findByChatApiKeyId: returns empty array for unknown id", async () => {
-    const keys = await VirtualApiKeyModel.findByChatApiKeyId(
+  test("findByProviderApiKeyId: returns empty array for unknown id", async () => {
+    const keys = await VirtualApiKeyModel.findByProviderApiKeyId(
       "00000000-0000-0000-0000-000000000000",
     );
     expect(keys).toHaveLength(0);
   });
 
-  test("findByChatApiKeyId: respects organization boundary for access-controlled lookups", async ({
+  test("findByProviderApiKeyId: respects organization boundary for access-controlled lookups", async ({
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -133,13 +142,15 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(orgB.id, secret.id);
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Other Org Key",
       scope: "org",
     });
 
-    const keys = await VirtualApiKeyModel.findByChatApiKeyId({
-      chatApiKeyId: chatApiKey.id,
+    const keys = await VirtualApiKeyModel.findByProviderApiKeyId({
+      providerApiKeyId: chatApiKey.id,
       organizationId: orgA.id,
       userId: user.id,
       userTeamIds: [],
@@ -163,7 +174,9 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Find Me",
     });
 
@@ -193,7 +206,9 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { virtualKey } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Delete Me",
     });
 
@@ -212,10 +227,10 @@ describe("VirtualApiKeyModel", () => {
   });
 
   // =========================================================================
-  // countByChatApiKeyId
+  // countByProviderApiKeyId
   // =========================================================================
 
-  test("countByChatApiKeyId: returns correct count", async ({
+  test("countByProviderApiKeyId: returns correct count", async ({
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -224,25 +239,33 @@ describe("VirtualApiKeyModel", () => {
     const secret = await makeSecret({ secret: { apiKey: "sk-key" } });
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
-    expect(await VirtualApiKeyModel.countByChatApiKeyId(chatApiKey.id)).toBe(0);
+    expect(
+      await VirtualApiKeyModel.countByProviderApiKeyId(chatApiKey.id),
+    ).toBe(0);
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Key 1",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Key 2",
     });
 
-    expect(await VirtualApiKeyModel.countByChatApiKeyId(chatApiKey.id)).toBe(2);
+    expect(
+      await VirtualApiKeyModel.countByProviderApiKeyId(chatApiKey.id),
+    ).toBe(2);
   });
 
   // =========================================================================
   // validateToken
   // =========================================================================
 
-  test("validateToken: validates a correct token and returns key + chat API key", async ({
+  test("validateToken: validates a correct token and returns key", async ({
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -252,18 +275,15 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     const { value } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Validate Me",
     });
 
     const result = await VirtualApiKeyModel.validateToken(value);
     expect(result).not.toBeNull();
     expect(result?.virtualKey.name).toBe("Validate Me");
-    expect(result?.chatApiKey).not.toBeNull();
-    if (!result?.chatApiKey) {
-      throw new Error("Expected parent chat API key");
-    }
-    expect(result.chatApiKey.id).toBe(chatApiKey.id);
   });
 
   test("validateToken: returns null for invalid token", async () => {
@@ -282,7 +302,7 @@ describe("VirtualApiKeyModel", () => {
   // findAllByOrganization
   // =========================================================================
 
-  test("findAllByOrganization: returns virtual keys with parent API key info", async ({
+  test("findAllByOrganization: returns virtual keys with provider API key mappings", async ({
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -295,11 +315,15 @@ describe("VirtualApiKeyModel", () => {
     });
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Virtual A",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Virtual B",
     });
 
@@ -308,8 +332,13 @@ describe("VirtualApiKeyModel", () => {
       pagination: { limit: 20, offset: 0 },
     });
     expect(result.data).toHaveLength(2);
-    expect(result.data[0].parentKeyName).toBe("Parent Key");
-    expect(result.data[0].parentKeyProvider).toBe("anthropic");
+    expect(result.data[0].providerApiKeys).toEqual([
+      {
+        provider: "anthropic",
+        providerApiKeyId: chatApiKey.id,
+        providerApiKeyName: "Parent Key",
+      },
+    ]);
     expect(result.data.map((r) => r.name)).toContain("Virtual A");
     expect(result.data.map((r) => r.name)).toContain("Virtual B");
     expect(result.pagination.total).toBe(2);
@@ -327,7 +356,7 @@ describe("VirtualApiKeyModel", () => {
     expect(result.pagination.total).toBe(0);
   });
 
-  test("findAllByOrganization: filters by search and parent chat api key", async ({
+  test("findAllByOrganization: filters by search and parent provider API key", async ({
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -344,11 +373,15 @@ describe("VirtualApiKeyModel", () => {
     });
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: anthropicKey.id,
+      providerApiKeys: [
+        { provider: anthropicKey.provider, providerApiKeyId: anthropicKey.id },
+      ],
       name: "Primary Virtual Key",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: openAiKey.id,
+      providerApiKeys: [
+        { provider: openAiKey.provider, providerApiKeyId: openAiKey.id },
+      ],
       name: "Backup Virtual Key",
     });
 
@@ -356,12 +389,18 @@ describe("VirtualApiKeyModel", () => {
       organizationId: org.id,
       pagination: { limit: 20, offset: 0 },
       search: "primary",
-      chatApiKeyId: anthropicKey.id,
+      providerApiKeyId: anthropicKey.id,
     });
 
     expect(result.data).toHaveLength(1);
     expect(result.data[0].name).toBe("Primary Virtual Key");
-    expect(result.data[0].parentKeyName).toBe("Anthropic Parent");
+    expect(result.data[0].providerApiKeys).toEqual([
+      {
+        provider: "anthropic",
+        providerApiKeyId: anthropicKey.id,
+        providerApiKeyName: "Anthropic Parent",
+      },
+    ]);
     expect(result.pagination.total).toBe(1);
   });
 
@@ -378,11 +417,15 @@ describe("VirtualApiKeyModel", () => {
     });
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Virtual%Key",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Virtual Alpha Key",
     });
 
@@ -415,31 +458,41 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Org Key",
       scope: "org",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "My Personal Key",
       scope: "personal",
       authorId: owner.id,
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Other Personal Key",
       scope: "personal",
       authorId: otherUser.id,
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "My Team Key",
       scope: "team",
       authorId: owner.id,
       teamIds: [team.id],
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Other Team Key",
       scope: "team",
       authorId: owner.id,
@@ -478,12 +531,16 @@ describe("VirtualApiKeyModel", () => {
     const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id);
 
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Org Key",
       scope: "org",
     });
     await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Other Personal Key",
       scope: "personal",
       authorId: otherUser.id,
@@ -517,7 +574,9 @@ describe("VirtualApiKeyModel", () => {
     const futureDate = new Date(Date.now() + 3600_000);
 
     const { virtualKey } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
       name: "Before",
       scope: "personal",
       authorId: user.id,
@@ -530,7 +589,9 @@ describe("VirtualApiKeyModel", () => {
       scope: "team",
       authorId: user.id,
       teamIds: [team.id],
-      modelRouterProviderApiKeys: [],
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
     });
 
     expect(updated?.name).toBe("After");

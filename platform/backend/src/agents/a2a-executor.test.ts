@@ -390,6 +390,27 @@ describe("executeA2AMessage model selection", () => {
       apiKeySource: "org",
     });
     mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "Delegated response" }],
+        };
+
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
       text: Promise.resolve("Delegated response"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
@@ -423,5 +444,10 @@ describe("executeA2AMessage model selection", () => {
       }),
     );
     expect(result.text).toBe("Delegated response");
+    expect(result.responseUiMessage).toEqual({
+      id: "msg-1",
+      role: "assistant",
+      parts: [{ type: "text", text: "Delegated response" }],
+    });
   });
 });

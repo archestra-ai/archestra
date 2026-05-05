@@ -1,7 +1,7 @@
 ---
 title: Secure Agent with Pydantic AI
 category: Examples
-order: 5
+order: 6
 ---
 
 <!-- 

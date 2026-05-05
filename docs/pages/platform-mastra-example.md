@@ -1,7 +1,7 @@
 ---
 title: Secure Agent with Mastra.ai
 category: Examples
-order: 2
+order: 3
 ---
 
 <!-- 

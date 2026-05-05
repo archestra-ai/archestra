@@ -339,7 +339,7 @@ describe("KnowledgeSettingsPage", () => {
         screen.getByRole("link", {
           name: /Sync models and configure embedding dimensions/,
         }),
-      ).toHaveAttribute("href", "/llm/providers/models");
+      ).toHaveAttribute("href", "/llm/model-providers/models");
     });
   });
 

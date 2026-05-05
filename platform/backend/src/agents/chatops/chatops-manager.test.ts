@@ -187,6 +187,8 @@ describe("ChatOpsManager security validation", () => {
       notifyMissingScopes: overrides.notifyMissingScopes ?? (async () => {}),
       downloadFiles: async () => [],
       discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
     };
   }
 
@@ -198,6 +200,11 @@ describe("ChatOpsManager security validation", () => {
       text: "Agent response",
       messageId: "test-message-id",
       finishReason: "stop",
+      responseUiMessage: {
+        id: "test-message-id",
+        role: "assistant",
+        parts: [{ type: "text", text: "Agent response" }],
+      },
     });
   }
 
@@ -849,6 +856,8 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
       notifyMissingScopes: async () => {},
       downloadFiles: async () => [],
       discoverChannels: async () => [],
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
     };
 
     const manager = new ChatOpsManager();
@@ -916,6 +925,8 @@ describe("ChatOpsManager.handleIncomingMessage missing scope notification", () =
       notifyMissingScopes: overrides.notifyMissingScopes ?? (async () => {}),
       downloadFiles: async () => [],
       discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
     };
   }
 
@@ -1376,6 +1387,8 @@ describe("ChatOpsManager attachment passthrough", () => {
       notifyMissingScopes: async () => {},
       downloadFiles: async () => [],
       discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
     };
   }
 
@@ -1409,6 +1422,11 @@ describe("ChatOpsManager attachment passthrough", () => {
         text: "I see the image",
         messageId: "msg-1",
         finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "response" }],
+        },
       });
 
     const user = await makeUser({ email: "attach-user@example.com" });
@@ -1441,12 +1459,14 @@ describe("ChatOpsManager attachment passthrough", () => {
     const testAttachments = [
       {
         contentType: "image/png",
-        contentBase64: "iVBORw0KGgo=",
+        contentBase64: Buffer.alloc(10_000).toString("base64"),
         name: "screenshot.png",
       },
       {
-        contentType: "application/pdf",
-        contentBase64: "JVBERi0x",
+        // Don't use PDF because A2A message executor doesn't support it right now
+        // contentType: "application/pdf",
+        contentType: "image/jpg",
+        contentBase64: Buffer.alloc(10_000).toString("base64"),
         name: "report.pdf",
       },
     ];
@@ -1460,7 +1480,20 @@ describe("ChatOpsManager attachment passthrough", () => {
     expect(result.success).toBe(true);
     expect(executorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        attachments: testAttachments,
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: "file",
+                mediaType: "image/png",
+              }),
+              expect.objectContaining({
+                type: "file",
+                mediaType: "image/jpg",
+              }),
+            ]),
+          }),
+        ]),
       }),
     );
   });
@@ -1478,6 +1511,11 @@ describe("ChatOpsManager attachment passthrough", () => {
         text: "Plain response",
         messageId: "msg-2",
         finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-2",
+          role: "assistant",
+          parts: [{ type: "text", text: "Plain response" }],
+        },
       });
 
     const user = await makeUser({ email: "noattach@example.com" });
@@ -1510,11 +1548,12 @@ describe("ChatOpsManager attachment passthrough", () => {
     const message = createMockMessage(); // no attachments
     await manager.processMessage({ message, provider: mockProvider });
 
-    expect(executorSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachments: undefined,
-      }),
-    );
+    const callArg = executorSpy.mock.calls[0][0];
+    for (const message of callArg.messages || []) {
+      expect(message.content).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "file" })]),
+      );
+    }
   });
 
   test("includes image attachments from thread history in follow-up messages", async ({
@@ -1526,7 +1565,7 @@ describe("ChatOpsManager attachment passthrough", () => {
   }) => {
     const historyImageAttachment = {
       contentType: "image/png",
-      contentBase64: "iVBORw0KGgoAAAA=",
+      contentBase64: Buffer.alloc(10_000).toString("base64"),
       name: "photo.png",
     };
 
@@ -1536,6 +1575,11 @@ describe("ChatOpsManager attachment passthrough", () => {
         text: "I can see the photo from earlier",
         messageId: "msg-3",
         finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "response" }],
+        },
       });
 
     const user = await makeUser({ email: "history-attach@example.com" });
@@ -1610,7 +1654,16 @@ describe("ChatOpsManager attachment passthrough", () => {
     // The image from thread history should be included in the A2A call
     expect(executorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        attachments: [historyImageAttachment],
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: "file",
+                mediaType: historyImageAttachment.contentType,
+              }),
+            ]),
+          }),
+        ]),
       }),
     );
   });
@@ -1666,6 +1719,11 @@ describe("ChatOpsManager attachment passthrough", () => {
             text: "",
             messageId: "router-msg",
             finishReason: "stop",
+            responseUiMessage: {
+              id: "router-msg",
+              role: "assistant",
+              parts: [{ type: "text", text: "" }],
+            },
           };
         }
 
@@ -1674,6 +1732,11 @@ describe("ChatOpsManager attachment passthrough", () => {
             text: "Specialist response",
             messageId: "specialist-msg",
             finishReason: "stop",
+            responseUiMessage: {
+              id: "specialist-msg",
+              role: "assistant",
+              parts: [{ type: "text", text: "Specialist response" }],
+            },
           };
         }
 
@@ -1777,6 +1840,13 @@ describe("ChatOpsManager attachment passthrough", () => {
             text: "Switched to French Agent. Bonjour!",
             messageId: "router-msg",
             finishReason: "stop",
+            responseUiMessage: {
+              id: "router-msg",
+              role: "assistant",
+              parts: [
+                { type: "text", text: "Switched to French Agent. Bonjour!" },
+              ],
+            },
           };
         }
 
@@ -1864,6 +1934,11 @@ describe("ChatOpsManager attachment passthrough", () => {
         text: "Specialist second-turn response",
         messageId: "msg-turn2",
         finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-turn2",
+          role: "assistant",
+          parts: [{ type: "text", text: "Specialist second-turn response" }],
+        },
       });
 
     const mockProvider = createMockProvider({

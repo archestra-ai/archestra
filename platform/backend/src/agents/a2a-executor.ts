@@ -4,8 +4,13 @@ import {
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
 } from "@shared";
-import type { UserContent } from "ai";
-import { NoOutputGeneratedError, stepCountIs, streamText } from "ai";
+import type { ModelMessage, UIMessage, UserContent } from "ai";
+import {
+  consumeStream as consumeReadableStream,
+  NoOutputGeneratedError,
+  stepCountIs,
+  streamText,
+} from "ai";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -41,7 +46,20 @@ export interface A2AExecuteParams {
    * Agent ID to execute. Must be an internal agent (agentType='agent').
    */
   agentId: string;
+
+  /**
+   * When provided, it's used as parameter in streamText(...).
+   * "message" param is ignored in this case.
+   */
+  messages?: ModelMessage[];
+
+  /**
+   * Legacy param, that is converted to messages: [{ role: "user", content: message }]
+   *   in streamText(...) call.
+   * It's not used when "messages" param is provided.
+   */
   message: string;
+
   organizationId: string;
   userId: string;
   /** Session ID to group related LLM requests together in logs */
@@ -73,6 +91,17 @@ export interface A2AExecuteParams {
   parentContextIsTrusted?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+
+  /** Whether to block execution when an approval-required tool is called (defaults to true) */
+  blockOnApprovalRequired?: boolean;
+
+  /**
+   * History of UI messages needed for persistance at new UIMessage generation
+   * Without it stream.toUIMessageStream(...)
+   *    throws AI_UIMessageStreamError:tool-invocation error
+   *    in case of tool invocation approval.
+   */
+  originalUiMessages?: UIMessage[];
 }
 
 /** @public — exported for testability */
@@ -80,6 +109,7 @@ export interface A2AExecuteResult {
   messageId: string;
   text: string;
   finishReason: string;
+  responseUiMessage: UIMessage;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -188,7 +218,7 @@ export async function executeA2AMessage(
       delegationChain,
       conversationId: isolationKey,
       abortSignal,
-      blockOnApprovalRequired: true, // A2A/autonomous: block tools that require human approval
+      blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
     });
 
@@ -239,26 +269,65 @@ export async function executeA2AMessage(
       capturedStreamError = error;
     };
 
+    // By-pass "messages" param when it's provided
+    // Legacy:
     // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
-    const stream = userContent
-      ? streamText({
-          model,
-          system: systemPrompt,
-          messages: [{ role: "user" as const, content: userContent }],
-          tools: mcpTools,
-          stopWhen: stepCountIs(500),
-          abortSignal,
-          onError,
-        })
-      : streamText({
-          model,
-          system: systemPrompt,
-          prompt: message + skippedNote,
-          tools: mcpTools,
-          stopWhen: stepCountIs(500),
-          abortSignal,
-          onError,
-        });
+    const stream =
+      params.messages !== undefined
+        ? streamText({
+            model,
+            system: systemPrompt,
+            messages: params.messages,
+            tools: mcpTools,
+            stopWhen: stepCountIs(500),
+            abortSignal,
+            onError,
+          })
+        : userContent
+          ? streamText({
+              model,
+              system: systemPrompt,
+              messages: [{ role: "user" as const, content: userContent }],
+              tools: mcpTools,
+              stopWhen: stepCountIs(500),
+              abortSignal,
+              onError,
+            })
+          : streamText({
+              model,
+              system: systemPrompt,
+              prompt: message + skippedNote,
+              tools: mcpTools,
+              stopWhen: stepCountIs(500),
+              abortSignal,
+              onError,
+            });
+
+    let responseUiMessage: UIMessage | undefined;
+    const uiMessageStreamConsumption = consumeReadableStream({
+      stream: stream.toUIMessageStream<UIMessage>({
+        originalMessages: params.originalUiMessages,
+        generateMessageId: () =>
+          `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        onFinish: ({ responseMessage }) => {
+          responseUiMessage = responseMessage;
+        },
+        onError: (error) => {
+          logger.error(
+            { agentId: agent.id, error },
+            "Error stream.toUIMessageStream when parsing A2A execution response",
+          );
+          throw error;
+        },
+      }),
+      onError: (error) => {
+        logger.error(
+          { agentId: agent.id, error },
+          "Error consuming UI message stream for A2A execution response",
+        );
+        throw error;
+      },
+    });
 
     // Wait for the stream to complete and get the final text.
     // When the underlying provider returns an error (e.g. 400 insufficient
@@ -269,9 +338,19 @@ export async function executeA2AMessage(
     let usage: Awaited<typeof stream.usage>;
     let finishReason: Awaited<typeof stream.finishReason>;
     try {
-      finalText = await stream.text;
-      usage = await stream.usage;
-      finishReason = await stream.finishReason;
+      [finalText, usage, finishReason] = await Promise.all([
+        stream.text,
+        stream.usage,
+        stream.finishReason,
+        uiMessageStreamConsumption,
+      ]);
+
+      if (!responseUiMessage) {
+        // This should never happen
+        throw new Error(
+          "A2A execution failed: no response UIMessage generated",
+        );
+      }
     } catch (streamError) {
       if (
         NoOutputGeneratedError.isInstance(streamError) &&
@@ -284,24 +363,22 @@ export async function executeA2AMessage(
       throw new ProviderError(mapProviderError(streamError, provider));
     }
 
-    // Generate message ID
-    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
     logger.info(
       {
         agentId: agent.id,
         provider,
         finishReason,
         usage,
-        messageId,
+        messageId: responseUiMessage.id,
       },
       "A2A execution finished",
     );
 
     return {
-      messageId,
+      messageId: responseUiMessage.id,
       text: finalText,
       finishReason: finishReason ?? "unknown",
+      responseUiMessage,
       usage: usage
         ? {
             promptTokens: usage.inputTokens ?? 0,

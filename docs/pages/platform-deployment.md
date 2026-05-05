@@ -798,7 +798,6 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
-  - Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` virtual keys remain valid.
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
 - **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
@@ -953,6 +952,10 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Default: `false` (disabled)
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
   - Set to `true` to include infrastructure spans for debugging request flows
+
+- **`ARCHESTRA_METRICS_PORT`** - TCP port for the metrics server.
+  - Default: `9050`
+  - Must be an integer between `1` and `65535`; invalid values fall back to the default with a warning
 
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
   - Default: `archestra-metrics-secret`

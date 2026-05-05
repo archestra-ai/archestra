@@ -26,7 +26,6 @@ import {
   getAzureOpenAiBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
   isAzureOpenAiEntraIdEnabled,
-  isAzureOpenAiV1BaseUrl,
 } from "./azure-openai-credentials";
 
 describe("azure-openai-credentials", () => {
@@ -62,18 +61,5 @@ describe("azure-openai-credentials", () => {
       expect.anything(),
       "https://ai.azure.com/.default",
     );
-  });
-
-  test("detects Azure OpenAI v1 base URLs", () => {
-    expect(
-      isAzureOpenAiV1BaseUrl(
-        "https://resource.services.ai.azure.com/openai/v1",
-      ),
-    ).toBe(true);
-    expect(
-      isAzureOpenAiV1BaseUrl(
-        "https://resource.openai.azure.com/openai/deployments/gpt-4o",
-      ),
-    ).toBe(false);
   });
 });

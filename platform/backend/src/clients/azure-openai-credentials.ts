@@ -27,7 +27,7 @@ export function getAzureAiFoundryBearerTokenProvider(): () => Promise<string> {
   return getAzureBearerTokenProvider(AZURE_AI_FOUNDRY_TOKEN_SCOPE);
 }
 
-export function isAzureOpenAiV1BaseUrl(baseUrl?: string): boolean {
+function isAzureOpenAiV1BaseUrl(baseUrl?: string): boolean {
   if (!baseUrl) {
     return false;
   }

@@ -111,6 +111,9 @@ function resolveSubjectTokenPreference(identityProvider: {
   if (subjectTokenType === "urn:ietf:params:oauth:token-type:access_token") {
     return "access_token";
   }
+  if (subjectTokenType === "urn:ietf:params:oauth:token-type:id_token") {
+    return "id_token";
+  }
 
   if (
     identityProvider.oidcConfig?.enterpriseManagedCredentials

@@ -524,7 +524,9 @@ class AgentToolModel {
   static async bulkCreateForAgentsAndTools(
     agentIds: string[],
     toolIds: string[],
-    options?: Partial<Pick<InsertAgentTool, "mcpServerId">>,
+    options?: Partial<
+      Pick<InsertAgentTool, "mcpServerId" | "credentialResolutionMode">
+    >,
   ): Promise<void> {
     if (agentIds.length === 0 || toolIds.length === 0) return;
 
@@ -533,6 +535,7 @@ class AgentToolModel {
       agentId: string;
       toolId: string;
       mcpServerId?: string | null;
+      credentialResolutionMode?: CredentialResolutionMode;
     }> = [];
 
     for (const agentId of agentIds) {
@@ -541,6 +544,9 @@ class AgentToolModel {
           agentId,
           toolId,
           ...(options?.mcpServerId ? { mcpServerId: options.mcpServerId } : {}),
+          ...(options?.credentialResolutionMode
+            ? { credentialResolutionMode: options.credentialResolutionMode }
+            : {}),
         });
       }
     }
@@ -573,6 +579,24 @@ class AgentToolModel {
         .insert(schema.agentToolsTable)
         .values(newAssignments)
         .onConflictDoNothing();
+    }
+
+    if (options?.mcpServerId || options?.credentialResolutionMode) {
+      await db
+        .update(schema.agentToolsTable)
+        .set({
+          ...(options.mcpServerId ? { mcpServerId: options.mcpServerId } : {}),
+          ...(options.credentialResolutionMode
+            ? { credentialResolutionMode: options.credentialResolutionMode }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            inArray(schema.agentToolsTable.agentId, agentIds),
+            inArray(schema.agentToolsTable.toolId, toolIds),
+          ),
+        );
     }
   }
 

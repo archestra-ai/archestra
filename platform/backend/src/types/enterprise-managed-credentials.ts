@@ -51,6 +51,7 @@ export const EnterpriseManagedCredentialConfigSchema = z.object({
   scopes: z.array(z.string()).optional(),
   audience: z.string().optional(),
   clientIdOverride: z.string().optional(),
+  clientSecretOverride: z.string().optional(),
   tokenInjectionMode: EnterpriseManagedTokenInjectionModeSchema.optional(),
   headerName: z.string().optional(),
   envVarName: z.string().optional(),

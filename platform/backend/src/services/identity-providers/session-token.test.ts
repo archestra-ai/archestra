@@ -172,6 +172,58 @@ describe("resolveSessionExternalIdpToken", () => {
     });
   });
 
+  test("uses the stored ID token when RFC 8693 exchange explicitly requests an ID token subject", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const identityProvider = await makeIdentityProvider(org.id, {
+      providerId: "generic-id-token-enterprise",
+      issuer: "https://idp.example.com",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+        },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: identityProvider.id,
+    });
+    const idToken = createJwt({ exp: futureExpSeconds() });
+
+    await db.insert(schema.accountsTable).values({
+      id: randomUUID(),
+      accountId: "acct-generic-id-token-enterprise",
+      providerId: "generic-id-token-enterprise",
+      userId: user.id,
+      accessToken: "wrong-access-token",
+      accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      idToken,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await resolveSessionExternalIdpToken({
+      agentId: agent.id,
+      userId: user.id,
+    });
+
+    expect(result).toEqual({
+      identityProviderId: identityProvider.id,
+      providerId: "generic-id-token-enterprise",
+      rawToken: idToken,
+    });
+  });
+
   test("uses the stored access token for Entra enterprise-managed exchange", async ({
     makeOrganization,
     makeUser,

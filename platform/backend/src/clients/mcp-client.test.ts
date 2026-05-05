@@ -27,6 +27,7 @@ const mockCallTool = vi.fn();
 const mockConnect = vi.fn();
 const mockClose = vi.fn();
 const mockListTools = vi.fn();
+const mockListResources = vi.fn();
 const mockPing = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
@@ -36,6 +37,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.callTool = mockCallTool;
     this.close = mockClose;
     this.listTools = mockListTools;
+    this.listResources = mockListResources;
     this.ping = mockPing;
   }),
 }));
@@ -121,6 +123,7 @@ describe("McpClient", () => {
     mockConnect.mockReset();
     mockClose.mockReset();
     mockListTools.mockReset();
+    mockListResources.mockReset();
     mockPing.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
@@ -144,6 +147,7 @@ describe("McpClient", () => {
 
     // Default: listTools returns empty list (fallback to stripped name)
     mockListTools.mockResolvedValue({ tools: [] });
+    mockListResources.mockResolvedValue({ resources: [] });
   });
 
   test("invalidateConnectionsForServer closes cached active connections for the server", async () => {
@@ -191,6 +195,45 @@ describe("McpClient", () => {
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
+    mockListTools.mockRejectedValueOnce(new Error("Method not found"));
+    mockListResources.mockResolvedValueOnce({
+      resources: [
+        {
+          uri: "todo://todos",
+          name: "Todos",
+          description: "Read todos",
+        },
+      ],
+    });
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const tools = await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "resource-token" },
+    });
+
+    expect(tools).toEqual([
+      {
+        name: "read_resource_todos",
+        description: "Read todos",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+        _meta: {
+          archestraResourceUri: "todo://todos",
+        },
+        annotations: undefined,
+      },
+    ]);
+    expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
   describe("executeToolCall", () => {

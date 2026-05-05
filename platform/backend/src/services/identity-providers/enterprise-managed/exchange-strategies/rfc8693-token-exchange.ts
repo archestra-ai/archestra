@@ -10,6 +10,7 @@ import {
 const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
+const ID_JAG_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id-jag";
 
 class Rfc8693TokenExchangeStrategy
   implements EnterpriseCredentialExchangeStrategy
@@ -44,7 +45,9 @@ class Rfc8693TokenExchangeStrategy
     const requestBody = new URLSearchParams({
       client_id: clientId,
       grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
-      requested_token_type: ACCESS_TOKEN_TYPE,
+      requested_token_type: mapRequestedTokenType(
+        params.enterpriseManagedConfig.requestedCredentialType,
+      ),
       subject_token: params.assertion,
       subject_token_type:
         enterpriseConfig.subjectTokenType ?? ACCESS_TOKEN_TYPE,
@@ -55,6 +58,13 @@ class Rfc8693TokenExchangeStrategy
       params.enterpriseManagedConfig.resourceIdentifier;
     if (targetAudience) {
       requestBody.set("audience", targetAudience);
+    }
+
+    if (params.enterpriseManagedConfig.resourceIdentifier) {
+      requestBody.set(
+        "resource",
+        params.enterpriseManagedConfig.resourceIdentifier,
+      );
     }
 
     if (params.enterpriseManagedConfig.requestedIssuer) {
@@ -110,7 +120,9 @@ class Rfc8693TokenExchangeStrategy
     }
 
     return {
-      credentialType: "bearer_token",
+      credentialType:
+        params.enterpriseManagedConfig.requestedCredentialType ??
+        "bearer_token",
       expiresInSeconds:
         typeof responseBody.expires_in === "number"
           ? responseBody.expires_in
@@ -165,4 +177,14 @@ function buildAuthenticatedHeaders(params: {
   throw new Error(
     "RFC 8693 token exchange does not support private_key_jwt in this implementation",
   );
+}
+
+function mapRequestedTokenType(
+  credentialType: EnterpriseCredentialExchangeParams["enterpriseManagedConfig"]["requestedCredentialType"],
+): string {
+  if (credentialType === "id_jag") {
+    return ID_JAG_TOKEN_TYPE;
+  }
+
+  return ACCESS_TOKEN_TYPE;
 }

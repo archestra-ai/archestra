@@ -53,8 +53,15 @@ export async function resolveEnterpriseTransportCredential(params: {
   }
 
   if (shouldExchangeIdJagAtProtectedResource(config)) {
+    const idJagAssertion = params.tokenAuth?.isExternalIdp
+      ? assertion.assertion
+      : await exchangeSessionAssertionForIdJag({
+          assertion: assertion.assertion,
+          identityProviderId: assertion.identityProviderId,
+          enterpriseManagedConfig: config,
+        });
     const credential = await exchangeIdJagAtProtectedResource({
-      assertion: assertion.assertion,
+      assertion: idJagAssertion,
       identityProviderId: assertion.identityProviderId,
       enterpriseManagedConfig: config,
     });
@@ -77,7 +84,24 @@ export async function resolveEnterpriseTransportCredential(params: {
   });
 }
 
-async function exchangeIdJagAtProtectedResource(params: {
+async function exchangeSessionAssertionForIdJag(params: {
+  assertion: string;
+  identityProviderId: string;
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
+}): Promise<string> {
+  const credential = await exchangeEnterpriseManagedCredential({
+    identityProviderId: params.identityProviderId,
+    assertion: params.assertion,
+    enterpriseManagedConfig: params.enterpriseManagedConfig,
+  });
+
+  return extractInjectionValue({
+    value: credential.value,
+    responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
+  });
+}
+
+export async function exchangeIdJagAtProtectedResource(params: {
   assertion: string;
   identityProviderId: string;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig;
@@ -108,9 +132,13 @@ async function exchangeIdJagAtProtectedResource(params: {
     grant_type: JWT_BEARER_GRANT_TYPE,
     assertion: params.assertion,
   });
+  if (params.enterpriseManagedConfig.scopes?.length) {
+    requestBody.set("scope", params.enterpriseManagedConfig.scopes.join(" "));
+  }
   const headers = buildProtectedResourceTokenHeaders({
     clientId,
     clientSecret:
+      params.enterpriseManagedConfig.clientSecretOverride ??
       enterpriseConfig?.clientSecret ??
       identityProvider?.oidcConfig?.clientSecret,
     tokenEndpointAuthentication:

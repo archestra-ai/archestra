@@ -20,6 +20,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateMcpServerInstallationRequest } from "@/lib/mcp/mcp-server-installation-request.query";
+import { parseArgumentsInput } from "./mcp-catalog-form.utils";
 
 const customServerRequestSchema = z
   .object({
@@ -119,10 +121,7 @@ export function CustomServerRequestDialog({
             serverType: "local" as const,
             localConfig: {
               command: values.command,
-              arguments: values.arguments
-                .split("\n")
-                .map((arg) => arg.trim())
-                .filter((arg) => arg.length > 0),
+              arguments: parseArgumentsInput(values.arguments),
               environment:
                 values.environment.length > 0 ? values.environment : undefined,
             },
@@ -276,14 +275,18 @@ export function CustomServerRequestDialog({
                     name="arguments"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Arguments (one per line)</FormLabel>
+                        <FormLabel>Arguments</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n\n— or paste a JSON array —\n\n["/path/to/server.js", "--verbose"]`}
                             rows={3}
                             {...field}
                           />
                         </FormControl>
+                        <FormDescription>
+                          One argument per line, or paste a JSON array of
+                          strings (e.g. <code>{`["--port", "8080"]`}</code>).
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

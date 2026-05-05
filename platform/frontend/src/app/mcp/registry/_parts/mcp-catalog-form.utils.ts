@@ -12,6 +12,40 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+/**
+ * Parses the Arguments textarea value into the wire-format array.
+ *
+ * Accepts two equivalent input shapes so users can paste from either
+ * source-of-truth catalog format:
+ *   - One argument per line (the legacy form storage shape).
+ *   - A JSON array of strings (the shape most public MCP catalogs publish),
+ *     e.g. `["--port", "8080"]`. Whitespace around the JSON is tolerated.
+ *
+ * Anything that isn't a JSON array of strings falls back to the line-based
+ * parser, so a stray `[` at the start of a path doesn't change behaviour.
+ */
+export function parseArgumentsInput(input: string | undefined): string[] {
+  if (!input) return [];
+  const trimmed = input.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === "string")
+      ) {
+        return parsed.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
+      }
+    } catch {
+      // Not valid JSON — treat as newline-separated input below.
+    }
+  }
+  return input
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -34,13 +68,8 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    // Accept both newline-separated and JSON-array shapes (see parseArgumentsInput).
+    const argumentsArray = parseArgumentsInput(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

@@ -1,9 +1,64 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
+  parseArgumentsInput,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+describe("parseArgumentsInput", () => {
+  it("returns an empty array for empty / whitespace input", () => {
+    expect(parseArgumentsInput(undefined)).toEqual([]);
+    expect(parseArgumentsInput("")).toEqual([]);
+    expect(parseArgumentsInput("   \n  \n")).toEqual([]);
+  });
+
+  it("splits newline-separated input and trims each line", () => {
+    expect(
+      parseArgumentsInput("/path/to/server.js\n  --verbose  \n\n--port 8080"),
+    ).toEqual(["/path/to/server.js", "--verbose", "--port 8080"]);
+  });
+
+  it("accepts a JSON array of strings (the catalog-publish shape)", () => {
+    expect(
+      parseArgumentsInput('["/path/to/server.js", "--port", "8080"]'),
+    ).toEqual(["/path/to/server.js", "--port", "8080"]);
+  });
+
+  it("tolerates whitespace and inner newlines around the JSON array", () => {
+    expect(
+      parseArgumentsInput('  \n["--verbose",\n  "--port",\n  "8080"]\n  '),
+    ).toEqual(["--verbose", "--port", "8080"]);
+  });
+
+  it("falls back to newline parsing when the JSON is malformed", () => {
+    // Looks like JSON but isn't — must not silently produce one bad arg.
+    expect(parseArgumentsInput('["--verbose", \n--port')).toEqual([
+      '["--verbose",',
+      "--port",
+    ]);
+  });
+
+  it("falls back to newline parsing when JSON contains non-string entries", () => {
+    // We require an array of strings — anything else stays line-based.
+    expect(parseArgumentsInput('["--port", 8080]')).toEqual([
+      '["--port", 8080]',
+    ]);
+  });
+
+  it("treats a single-line value with bracket characters as a literal arg", () => {
+    // A path containing `[` should not be misinterpreted as JSON.
+    expect(parseArgumentsInput("[bracketed]/path/to/file")).toEqual([
+      "[bracketed]/path/to/file",
+    ]);
+  });
+
+  it("strips empty strings from a JSON array of strings", () => {
+    expect(parseArgumentsInput('["--verbose", "", "  "]')).toEqual([
+      "--verbose",
+    ]);
+  });
+});
 
 describe("transformFormToApiData", () => {
   it("maps custom auth and additional headers into userConfig", () => {
@@ -52,6 +107,49 @@ describe("transformFormToApiData", () => {
         sensitive: false,
       }),
     });
+  });
+
+  it("accepts a JSON-array Arguments paste and serialises it as an array", () => {
+    const values: McpCatalogFormValues = {
+      name: "JSON-paste MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: '["/path/to/server.js", "--port", "8080"]',
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "/mcp",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).localConfig?.arguments).toEqual([
+      "/path/to/server.js",
+      "--port",
+      "8080",
+    ]);
   });
 
   it("includes OAuth discovery overrides in the API payload", () => {

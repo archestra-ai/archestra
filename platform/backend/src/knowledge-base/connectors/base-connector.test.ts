@@ -35,6 +35,24 @@ class TestableConnector extends BaseConnector {
   public testFlushFailures() {
     return this.flushFailures();
   }
+
+  public testValidateConfigWithSchema<T>(params: {
+    config: Record<string, unknown>;
+    parser: (raw: Record<string, unknown>) => T | null;
+    label: string;
+    invalidConfigError?: string;
+    extraChecks?: (parsed: T) => string | null;
+  }) {
+    return this.validateConfigWithSchema(params);
+  }
+
+  public testRunConnectionTest(params: {
+    label: string;
+    probe: () => Promise<void>;
+    errorContext?: (error: unknown) => Record<string, unknown>;
+  }) {
+    return this.runConnectionTest(params);
+  }
 }
 
 describe("BaseConnector", () => {
@@ -258,6 +276,145 @@ describe("BaseConnector", () => {
         type: "gitlab",
         lastSyncedAt: "2024-06-20T15:30:00.000Z",
       });
+    });
+  });
+
+  describe("validateConfigWithSchema", () => {
+    const connector = new TestableConnector();
+
+    test("returns invalid with default error when parser returns null", async () => {
+      const result = await connector.testValidateConfigWithSchema({
+        config: {},
+        parser: () => null,
+        label: "Foo",
+      });
+
+      expect(result).toEqual({
+        valid: false,
+        error: "Invalid Foo configuration",
+      });
+    });
+
+    test("returns invalid with custom error when invalidConfigError is set", async () => {
+      const result = await connector.testValidateConfigWithSchema({
+        config: {},
+        parser: () => null,
+        label: "Foo",
+        invalidConfigError: "fooBaseUrl (string) is required",
+      });
+
+      expect(result).toEqual({
+        valid: false,
+        error: "fooBaseUrl (string) is required",
+      });
+    });
+
+    test("returns valid when parser succeeds and no extraChecks provided", async () => {
+      const result = await connector.testValidateConfigWithSchema({
+        config: { url: "https://x.test" },
+        parser: (raw) => raw as { url: string },
+        label: "Foo",
+      });
+
+      expect(result).toEqual({ valid: true });
+    });
+
+    test("returns invalid when extraChecks returns an error string", async () => {
+      const result = await connector.testValidateConfigWithSchema({
+        config: { url: "ftp://x.test" },
+        parser: (raw) => raw as { url: string },
+        label: "Foo",
+        extraChecks: (parsed) =>
+          /^https?:\/\//.test(parsed.url)
+            ? null
+            : "url must be a valid HTTP(S) URL",
+      });
+
+      expect(result).toEqual({
+        valid: false,
+        error: "url must be a valid HTTP(S) URL",
+      });
+    });
+
+    test("returns valid when extraChecks returns null", async () => {
+      const result = await connector.testValidateConfigWithSchema({
+        config: { url: "https://x.test" },
+        parser: (raw) => raw as { url: string },
+        label: "Foo",
+        extraChecks: () => null,
+      });
+
+      expect(result).toEqual({ valid: true });
+    });
+  });
+
+  describe("runConnectionTest", () => {
+    const connector = new TestableConnector();
+
+    test("returns success when probe resolves", async () => {
+      const result = await connector.testRunConnectionTest({
+        label: "Foo",
+        probe: async () => {},
+      });
+
+      expect(result).toEqual({ success: true });
+    });
+
+    test("returns failure with prefixed error when probe throws an Error", async () => {
+      const result = await connector.testRunConnectionTest({
+        label: "Foo",
+        probe: async () => {
+          throw new Error("401 Unauthorized");
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Connection failed: 401 Unauthorized");
+    });
+
+    test("extracts message from non-Error objects with .message", async () => {
+      const result = await connector.testRunConnectionTest({
+        label: "Foo",
+        probe: async () => {
+          // octokit/axios style: plain object thrown with message field
+          throw { message: "Bad credentials", status: 401 } as unknown as Error;
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Connection failed: Bad credentials");
+    });
+
+    test("invokes errorContext callback on failure", async () => {
+      const captured: unknown[] = [];
+      const result = await connector.testRunConnectionTest({
+        label: "Foo",
+        probe: async () => {
+          throw new Error("nope");
+        },
+        errorContext: (error) => {
+          captured.push(error);
+          return { extra: "field" };
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toBeInstanceOf(Error);
+    });
+
+    test("does not invoke errorContext on success", async () => {
+      let called = false;
+      await connector.testRunConnectionTest({
+        label: "Foo",
+        probe: async () => {},
+        errorContext: () => {
+          called = true;
+          return {};
+        },
+      });
+
+      expect(called).toBe(false);
     });
   });
 });

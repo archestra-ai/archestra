@@ -88,13 +88,10 @@ class GenericChatOpsProvider implements ChatOpsProvider {
     this.channelCache.clear();
     this.senderNameCache.clear();
     this.senderExternalIdCache.clear();
-    this.eventHandler = null;
     logger.info({ adapterId: this.adapterId }, "[GenericChatOps] Cleaned up");
   }
 
-  setEventHandler(handler: ChatOpsEventHandler): void {
-    this.eventHandler = handler;
-  }
+  setEventHandler(_handler: ChatOpsEventHandler): void {}
 
   async validateWebhookRequest(
     _payload: unknown,

@@ -82,6 +82,24 @@ const captureSlackRawBody = async (
  */
 const slackWebhookDedup = new EventDedupMap();
 
+function rewriteBundledAdapterConnectionPageHtml(params: {
+  adapterId: BundledChatOpsAdapterId;
+  body: string;
+  contentType: string | null;
+}): string {
+  if (!params.contentType?.includes("text/html")) {
+    return params.body;
+  }
+
+  const unlinkPath =
+    `/api/chatops/generic/builtin-adapters/${params.adapterId}/connection-page/unlink`;
+
+  return params.body.replace(
+    /action=(['"])(?:\.\/)?unlink\1/,
+    `action="${unlinkPath}"`,
+  );
+}
+
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * MS Teams webhook endpoint
@@ -1023,12 +1041,17 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const body = await upstream.text();
+      const contentType = upstream.headers.get("content-type");
+      const body = rewriteBundledAdapterConnectionPageHtml({
+        adapterId,
+        body: await upstream.text(),
+        contentType,
+      });
       return reply
         .status(upstream.status)
         .header(
           "content-type",
-          upstream.headers.get("content-type") ?? "text/html",
+          contentType ?? "text/html",
         )
         .send(body);
     },

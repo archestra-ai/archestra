@@ -20,7 +20,17 @@ function getFetchBody(calls: unknown[][], index: number): string {
 function parseFetchBody(
   calls: unknown[][],
   index: number,
-): Record<string, unknown> {
+): {
+  text?: string;
+  metadata?: {
+    approvalRequest?: {
+      taskId: string;
+      approvalId: string;
+      toolName: string;
+    };
+  };
+  [key: string]: unknown;
+} {
   return JSON.parse(getFetchBody(calls, index));
 }
 
@@ -277,7 +287,7 @@ describe("GenericChatOpsProvider", () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const body = parseFetchBody(fetchSpy.mock.calls, 0);
-      expect(body.metadata.approvalRequest).toEqual({
+      expect(body.metadata?.approvalRequest).toEqual({
         taskId: "task-1",
         approvalId: "approval-1",
         toolName: "delete_record",

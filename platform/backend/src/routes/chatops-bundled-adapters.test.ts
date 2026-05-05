@@ -177,4 +177,86 @@ describe("bundled ChatOps adapter routes", () => {
 
     await app.close();
   });
+
+  test("GET connection-page rewrites unlink form action to backend route", async () => {
+    const originalFetch = global.fetch;
+
+    getConnectionPageConfigMock.mockReturnValueOnce({ port: 3100 });
+    getSummaryMock.mockReturnValueOnce({
+      ...baseAdapterSummary,
+      status: "running",
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        '<html><body><form method="POST" action="./unlink"></form></body></html>',
+        {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        },
+      ),
+    );
+    global.fetch = fetchMock as typeof fetch;
+
+    const app = createFastifyInstance();
+    try {
+      await app.register(chatopsRoutes);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/chatops/generic/builtin-adapters/whatsapp/connection-page",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(
+        'action="/api/chatops/generic/builtin-adapters/whatsapp/connection-page/unlink"',
+      );
+    } finally {
+      global.fetch = originalFetch;
+      await app.close();
+    }
+  });
+
+  test("POST unlink connection-page proxies unlink request", async () => {
+    const originalFetch = global.fetch;
+
+    getConnectionPageConfigMock.mockReturnValueOnce({ port: 3100 });
+    getSummaryMock.mockReturnValueOnce({
+      ...baseAdapterSummary,
+      status: "running",
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { Location: "/" },
+      }),
+    );
+    global.fetch = fetchMock as typeof fetch;
+
+    const app = createFastifyInstance();
+    try {
+      await app.register(chatopsRoutes);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chatops/generic/builtin-adapters/whatsapp/connection-page/unlink",
+      });
+
+      expect(response.statusCode).toBe(302);
+      expect(response.headers.location).toBe(
+        "/api/chatops/generic/builtin-adapters/whatsapp/connection-page",
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:3100/unlink",
+        expect.objectContaining({
+          method: "POST",
+          redirect: "manual",
+        }),
+      );
+    } finally {
+      global.fetch = originalFetch;
+      await app.close();
+    }
+  });
 });

@@ -29,8 +29,6 @@ describe("buildAttachmentsMessageParts", () => {
     });
     const raw = parts[0]?.raw;
     expect(raw).toBeInstanceOf(Uint8Array);
-    expect(Buffer.from(raw as Uint8Array).toString("base64")).toBe(
-      imageBase64,
-    );
+    expect(Buffer.from(raw as Uint8Array).toString("base64")).toBe(imageBase64);
   });
 });

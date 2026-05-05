@@ -73,6 +73,15 @@ tests:
           path: spec.template.metadata.annotations["prometheus.io/path"]
           value: "/metrics"
 
+  - it: worker deployment inherits global pod labels
+    set:
+      archestra.podLabels:
+        azure.workload.identity/use: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
+
   - it: worker mounts diagnostics volume and env var when diagnostics are enabled
     set:
       archestra.diagnostics.enabled: true

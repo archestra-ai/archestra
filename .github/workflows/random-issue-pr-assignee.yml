@@ -30,8 +30,8 @@ concurrency:
 
 jobs:
   assign-issue:
-    name: Assign Issue
-    if: github.event_name == 'issues'
+    name: Assign Issues
+    if: github.event_name == 'issues' || github.event_name == 'workflow_dispatch'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       issues: write # Required to assign issues.
@@ -44,31 +44,66 @@ jobs:
           script: |
             const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
             const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
-            const actor = context.payload.issue.user.login;
-            const existingOwner = context.payload.issue.assignees.find((assignee) =>
-              owners.includes(assignee.login)
-            );
 
-            if (coreTeam.includes(actor)) {
-              console.log(`Skipping assignment because ${actor} is on the core team`);
+            if (context.eventName === 'issues') {
+              await assignIssue(context.payload.issue);
               return;
             }
 
-            if (existingOwner) {
-              console.log(`Skipping assignment because #${context.issue.number} is already assigned to ${existingOwner.login}`);
-              return;
-            }
+            let processedIssues = 0;
 
-            const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
-
-            await github.rest.issues.addAssignees({
+            for await (const response of github.paginate.iterator(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
-              assignees: [selectedOwner],
-            });
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100,
+            })) {
+              for (const issue of response.data) {
+                if (issue.pull_request) {
+                  continue;
+                }
 
-            console.log(`Assigned #${context.issue.number} to ${selectedOwner}`);
+                await assignIssue(issue);
+                processedIssues += 1;
+
+                if (processedIssues >= 100) {
+                  console.log('Processed 100 open issues during manual backfill');
+                  return;
+                }
+              }
+            }
+
+            console.log(`Processed ${processedIssues} open issues during manual backfill`);
+
+            async function assignIssue(issue) {
+              const actor = issue.user.login;
+              const existingOwner = issue.assignees.find((assignee) =>
+                owners.includes(assignee.login)
+              );
+
+              if (coreTeam.includes(actor)) {
+                console.log(`Skipping assignment because ${actor} is on the core team`);
+                return;
+              }
+
+              if (existingOwner) {
+                console.log(`Skipping assignment because #${issue.number} is already assigned to ${existingOwner.login}`);
+                return;
+              }
+
+              const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
+
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                assignees: [selectedOwner],
+              });
+
+              console.log(`Assigned #${issue.number} to ${selectedOwner}`);
+            }
 
   request-recent-pr-reviewers:
     name: Request Recent PR Reviewers
@@ -85,7 +120,11 @@ jobs:
           script: |
             const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
             const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
-            const updatedSince = new Date(Date.now() - 30 * 60 * 1000);
+            const isManualBackfill = context.eventName === 'workflow_dispatch';
+            const updatedSince = isManualBackfill
+              ? null
+              : new Date(Date.now() - 30 * 60 * 1000);
+            let processedPrs = 0;
 
             for await (const response of github.paginate.iterator(github.rest.pulls.list, {
               owner: context.repo.owner,
@@ -98,10 +137,12 @@ jobs:
               let reachedOlderPrs = false;
 
               for (const pr of response.data) {
-                if (new Date(pr.updated_at) < updatedSince) {
+                if (updatedSince && new Date(pr.updated_at) < updatedSince) {
                   reachedOlderPrs = true;
                   break;
                 }
+
+                processedPrs += 1;
 
                 try {
                   if (pr.draft) {
@@ -152,9 +193,18 @@ jobs:
                   const message = error instanceof Error ? error.message : String(error);
                   console.error(`Failed to request a reviewer for PR #${pr.number}: ${message}`);
                 }
+
+                if (isManualBackfill && processedPrs >= 100) {
+                  console.log('Processed 100 open PRs during manual backfill');
+                  return;
+                }
               }
 
               if (reachedOlderPrs) {
                 break;
               }
+            }
+
+            if (isManualBackfill) {
+              console.log(`Processed ${processedPrs} open PRs during manual backfill`);
             }

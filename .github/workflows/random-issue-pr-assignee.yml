@@ -7,11 +7,13 @@ on:
   # workflows receive a read-only token for forked PRs. `pull_request_target`
   # would assign immediately, but it runs in the base repository security context
   # for untrusted PR events and has been a common source of Actions incidents.
+  #
   # A two-stage `workflow_run` flow can also assign fork PRs, but it still creates
-  # a privileged workflow triggered by PR activity and is flagged by our workflow
-  # security audit. Scheduled polling is less immediate, but it runs only from
-  # the default branch, does not execute or consume PR-controlled code, and still
-  # assigns recent fork PRs within a few minutes.
+  # a privileged workflow triggered by PR activity and is flagged by zizmor.
+  #
+  # Scheduled polling is less immediate, but it runs only from the default branch,
+  # does not execute or consume PR-controlled code, and still assigns recent fork
+  # PRs within a few minutes.
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:

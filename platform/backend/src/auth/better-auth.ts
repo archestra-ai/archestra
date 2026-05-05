@@ -159,10 +159,15 @@ export const auth = betterAuth({
       },
       permissions: {
         /**
-         * NOTE: for now we will just grant all permissions to all API keys
+         * Better Auth applies these defaults to new API keys and uses them
+         * when `verifyApiKey` is called with a `permissions` body. Archestra
+         * route authorization does not rely on the stored key permissions;
+         * API-key requests are checked against the key owner's current RBAC
+         * permissions in hasPermission.
          *
-         * If we'd like to allow granting "scopes" to API keys, we will need to implement a more complex API-key
-         * permissions system/UI
+         * Docs:
+         * - https://better-auth.com/docs/plugins/api-key/reference#permissions
+         * - https://better-auth.com/docs/plugins/api-key/advanced#sessions-from-api-keys
          */
         defaultPermissions: allAvailableActions,
       },

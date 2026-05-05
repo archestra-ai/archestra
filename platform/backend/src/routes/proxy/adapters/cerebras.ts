@@ -1112,6 +1112,7 @@ export const cerebrasAdapterFactory: LLMProvider<
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,
+      defaultHeaders: options.defaultHeaders,
     });
   },
 

@@ -52,40 +52,30 @@ export class NotionConnector extends BaseConnector {
   async validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }> {
-    const parsed = parseNotionConfig(config);
-    if (!parsed) {
-      return { valid: false, error: "Invalid Notion configuration" };
-    }
-    return { valid: true };
+    return this.validateConfigWithSchema({
+      config,
+      parser: parseNotionConfig,
+      label: "Notion",
+    });
   }
 
   async testConnection(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
   }): Promise<{ success: boolean; error?: string }> {
-    this.log.debug("Testing Notion connection");
-
-    try {
-      const response = await this.fetchWithRetry(
-        `${NOTION_API_BASE}/users/me`,
-        { headers: buildHeaders(params.credentials) },
-      );
-
-      if (!response.ok) {
-        const body = await response.text();
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${body.slice(0, 200)}`,
-        };
-      }
-
-      this.log.debug("Notion connection test successful");
-      return { success: true };
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      this.log.error({ error: message }, "Notion connection test failed");
-      return { success: false, error: `Connection failed: ${message}` };
-    }
+    return this.runConnectionTest({
+      label: "Notion",
+      probe: async () => {
+        const response = await this.fetchWithRetry(
+          `${NOTION_API_BASE}/users/me`,
+          { headers: buildHeaders(params.credentials) },
+        );
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
+        }
+      },
+    });
   }
 
   async *sync(params: {

@@ -47,7 +47,7 @@ export function AppLogo({ centered = true }: AppLogoProps) {
 
   return (
     <div
-      className={`flex items-center gap-2 ${centered ? "justify-center" : "pl-8"}`}
+      className={`flex items-center gap-2 ${centered ? "justify-center" : ""}`}
     >
       <Image
         src={DEFAULT_APP_LOGO}

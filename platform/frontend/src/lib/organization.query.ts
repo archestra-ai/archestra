@@ -469,19 +469,19 @@ export function useUpdateConnectionSettings(
 }
 
 /**
- * Update MCP settings (OAuth access token lifetime)
+ * Update Auth settings (OAuth access token lifetime)
  */
-export function useUpdateMcpSettings(
+export function useUpdateAuthSettings(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdateMcpSettingsData["body"],
+      data: archestraApiTypes.UpdateAuthSettingsData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updateMcpSettings({ body: data });
+        await archestraApiSdk.updateAuthSettings({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);

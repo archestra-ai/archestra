@@ -12,6 +12,7 @@ import { hasPermission, userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import {
+  LlmOauthClientModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -41,9 +42,10 @@ async function testApiKeyOrThrow(
   provider: SupportedProvider,
   apiKey: string,
   baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<void> {
   try {
-    await testProviderApiKey(provider, apiKey, baseUrl);
+    await testProviderApiKey(provider, apiKey, baseUrl, extraHeaders);
   } catch (error) {
     throw new ApiError(
       400,
@@ -172,6 +174,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
+            extraHeaders: z
+              .record(z.string(), z.string())
+              .nullable()
+              .optional(),
             scope: ResourceVisibilityScopeSchema.default("personal"),
             teamId: z.string().optional(),
             isPrimary: z.boolean().optional(),
@@ -226,7 +232,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         // then test the API key
-        await testApiKeyOrThrow(body.provider, actualApiKeyValue, body.baseUrl);
+        await testApiKeyOrThrow(
+          body.provider,
+          actualApiKeyValue,
+          body.baseUrl,
+          body.extraHeaders,
+        );
         // then create the secret
         secret = await secretManager().createSecret(
           { apiKey: vaultReference },
@@ -240,7 +251,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // When readonly_vault is disabled
         actualApiKeyValue = body.apiKey;
         // Test the API key before saving
-        await testApiKeyOrThrow(body.provider, actualApiKeyValue, body.baseUrl);
+        await testApiKeyOrThrow(
+          body.provider,
+          actualApiKeyValue,
+          body.baseUrl,
+          body.extraHeaders,
+        );
 
         secret = await secretManager().createSecret(
           { apiKey: actualApiKeyValue },
@@ -266,6 +282,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: body.provider,
         secretId: secret?.id ?? null,
         baseUrl: body.baseUrl ?? null,
+        extraHeaders: body.extraHeaders ?? null,
         scope: body.scope,
         userId: body.scope === "personal" ? user.id : null,
         teamId: body.scope === "team" ? body.teamId : null,
@@ -284,6 +301,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             provider: body.provider,
             apiKeyValue: actualApiKeyValue ?? "",
             baseUrl: body.baseUrl,
+            extraHeaders: body.extraHeaders ?? null,
           });
         } catch (error) {
           // Model sync failure shouldn't block API key creation
@@ -366,6 +384,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string().min(1).optional(),
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
+            extraHeaders: z
+              .record(z.string(), z.string())
+              .nullable()
+              .optional(),
             scope: ResourceVisibilityScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
             isPrimary: z.boolean().optional(),
@@ -459,14 +481,19 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Test the API key before saving
-        // Use user-provided baseUrl if present, otherwise fall back to
-        // the existing baseUrl stored on the API key record.
+        // Use user-provided baseUrl/extraHeaders if present, otherwise fall
+        // back to what's stored on the API key record.
         const testBaseUrl =
           body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
+        const testExtraHeaders =
+          body.extraHeaders !== undefined
+            ? body.extraHeaders
+            : apiKeyFromDB.extraHeaders;
         await testApiKeyOrThrow(
           apiKeyFromDB.provider,
           apiKeyValue,
           testBaseUrl,
+          testExtraHeaders,
         );
 
         // Update or create the secret
@@ -487,8 +514,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           newSecretId = secret.id;
         }
-      } else if (body.baseUrl !== undefined) {
-        // If baseUrl is being updated without a new API key, we need to test it with the existing API key
+      } else if (
+        body.baseUrl !== undefined ||
+        body.extraHeaders !== undefined
+      ) {
+        // If baseUrl/extraHeaders are being updated without a new API key,
+        // we need to re-test using the existing API key.
         let apiKeyValue: string | undefined;
 
         if (apiKeyFromDB.secretId) {
@@ -496,18 +527,25 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeyFromDB.secretId,
           );
         }
+        const testBaseUrl =
+          body.baseUrl !== undefined ? body.baseUrl : apiKeyFromDB.baseUrl;
+        const testExtraHeaders =
+          body.extraHeaders !== undefined
+            ? body.extraHeaders
+            : apiKeyFromDB.extraHeaders;
         if (apiKeyValue) {
           await testApiKeyOrThrow(
             apiKeyFromDB.provider,
             apiKeyValue,
-            body.baseUrl,
+            testBaseUrl,
+            testExtraHeaders,
           );
         } else if (
           !PROVIDERS_WITH_OPTIONAL_API_KEY.has(apiKeyFromDB.provider)
         ) {
           throw new ApiError(
             400,
-            "Cannot update Base URL without existing API key",
+            "Cannot update Base URL or extra headers without existing API key",
           );
         }
       }
@@ -516,6 +554,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updateData: Partial<{
         name: string;
         baseUrl: string | null;
+        extraHeaders: Record<string, string> | null;
         scope: ResourceVisibilityScope;
         userId: string | null;
         teamId: string | null;
@@ -529,6 +568,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (body.baseUrl !== undefined) {
         updateData.baseUrl = body.baseUrl;
+      }
+
+      if (body.extraHeaders !== undefined) {
+        updateData.extraHeaders = body.extraHeaders;
       }
 
       if (body.isPrimary !== undefined) {
@@ -604,29 +647,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Delete virtual key secrets before deleting the parent API key.
-      // The DB cascades the virtual key rows, but their secrets in the
-      // secret manager would be orphaned without explicit cleanup.
-      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
-        chatApiKeyId: params.id,
+      const virtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId({
+        providerApiKeyId: params.id,
         organizationId,
         userId: user.id,
         userTeamIds: await TeamModel.getUserTeamIds(user.id),
         isAdmin: true,
       });
-      for (const vk of virtualKeys) {
-        try {
-          await secretManager().deleteSecret(vk.secretId);
-        } catch (error) {
-          logger.warn(
-            {
-              virtualKeyId: vk.id,
-              secretId: vk.secretId,
-              error: String(error),
-            },
-            "Failed to delete virtual key secret during parent key deletion",
-          );
-        }
+      if (virtualKeys.length > 0) {
+        throw new ApiError(
+          400,
+          "This API key is mapped to one or more virtual API keys. Remove those mappings before deleting it.",
+        );
+      }
+
+      const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
+        providerApiKeyId: params.id,
+        organizationId,
+      });
+      if (oauthClients.length > 0) {
+        throw new ApiError(
+          400,
+          "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
+        );
       }
 
       // Delete the parent key's associated secret

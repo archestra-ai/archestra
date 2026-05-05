@@ -89,6 +89,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.grant_types_supported).toEqual([
         "authorization_code",
         "refresh_token",
+        "client_credentials",
         JWT_BEARER_GRANT_TYPE,
       ]);
       expect(body.code_challenge_methods_supported).toEqual(["S256"]);

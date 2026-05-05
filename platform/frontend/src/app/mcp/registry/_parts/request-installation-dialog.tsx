@@ -48,7 +48,7 @@ export function RequestInstallationDialog({
           </Button>
           <Button type="submit" disabled={createRequest.isPending || !server}>
             {createRequest.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             )}
             Submit Request
           </Button>

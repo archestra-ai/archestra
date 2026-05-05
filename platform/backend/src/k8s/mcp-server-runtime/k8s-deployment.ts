@@ -29,6 +29,10 @@ const {
   orchestrator: { mcpServerBaseImage },
 } = config;
 
+// How long streamLogs will keep an open WS waiting for the pod to become
+// Ready before giving up. 5 minutes covers a slow image pull on first install.
+const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
+
 /**
  * Result of processing container environment configuration.
  * Contains both environment variables and mounted secrets information.
@@ -247,6 +251,7 @@ export default class K8sDeployment {
     this.environmentValues = options.environmentValues;
     this.deploymentName = K8sDeployment.constructDeploymentName(
       options.mcpServer,
+      options.catalogItem,
     );
   }
 
@@ -260,9 +265,21 @@ export default class K8sDeployment {
   /**
    * Constructs a valid Kubernetes deployment name for an MCP server.
    *
-   * Creates a deployment name in the format "mcp-<slugified-name>".
+   * Multi-tenant catalogs share one deployment per catalog (named after the
+   * catalog so all caller mcp_server rows alias the same pod). Single-tenant
+   * (default) gets one deployment per mcp_server row.
    */
-  static constructDeploymentName(mcpServer: McpServer): string {
+  static constructDeploymentName(
+    mcpServer: McpServer,
+    catalogItem?: InternalMcpCatalog | null,
+  ): string {
+    if (catalogItem?.multitenant && mcpServer.catalogId) {
+      const slugified = ensureStringIsRfc1123Compliant(catalogItem.name);
+      return `mcp-mt-${mcpServer.catalogId.slice(0, 8)}-${slugified}`.substring(
+        0,
+        253,
+      );
+    }
     const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
     return `mcp-${slugified}`.substring(0, 253);
   }
@@ -270,10 +287,31 @@ export default class K8sDeployment {
   /**
    * Constructs the Kubernetes Secret name for an MCP server.
    *
-   * Creates a secret name in the format "mcp-server-{id}-secrets".
+   * Multi-tenant catalogs share a catalog-stable secret so all callers' pods
+   * reference the same secret (env vars are catalog-level). Single-tenant
+   * gets a per-mcpServer secret.
    */
-  static constructK8sSecretName(mcpServerId: string): string {
+  static constructK8sSecretName(
+    mcpServerId: string,
+    catalogItem?: InternalMcpCatalog | null,
+    catalogId?: string | null,
+  ): string {
+    if (catalogItem?.multitenant && catalogId) {
+      return `mcp-server-mt-${catalogId.slice(0, 8)}-secrets`;
+    }
     return `mcp-server-${mcpServerId}-secrets`;
+  }
+
+  /**
+   * Returns the K8s Secret name for this MCP server, taking multi-tenancy
+   * into account using the cached catalogItem if available.
+   */
+  private getK8sSecretName(): string {
+    return K8sDeployment.constructK8sSecretName(
+      this.mcpServer.id,
+      this.catalogItem,
+      this.mcpServer.catalogId,
+    );
   }
 
   /**
@@ -299,9 +337,7 @@ export default class K8sDeployment {
    * Create or update a Kubernetes Secret for environment variables marked as "secret" type
    */
   async createK8sSecret(secretData: Record<string, string>): Promise<void> {
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     if (Object.keys(secretData).length === 0) {
       logger.debug(
@@ -400,9 +436,7 @@ export default class K8sDeployment {
    * Delete the Kubernetes Secret for this MCP server
    */
   async deleteK8sSecret(): Promise<void> {
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     try {
       await this.k8sApi.deleteNamespacedSecret({
@@ -738,9 +772,7 @@ export default class K8sDeployment {
 
     // Get environment variables and mounted secrets
     const { envVars, mountedSecrets } = this.createContainerEnvFromConfig();
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     // Build volume mounts for mounted secrets (read-only files at /secrets/<key>)
     const volumeMounts: k8s.V1VolumeMount[] = mountedSecrets.map(({ key }) => ({
@@ -907,9 +939,7 @@ export default class K8sDeployment {
     tolerations?: k8s.V1Toleration[] | null,
     resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): k8s.V1Deployment | null {
-    const k8sSecretName = K8sDeployment.constructK8sSecretName(
-      this.mcpServer.id,
-    );
+    const k8sSecretName = this.getK8sSecretName();
 
     // Build env values map for placeholder resolution
     // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
@@ -1341,9 +1371,7 @@ export default class K8sDeployment {
         if (!value || value.trim() === "") {
           return;
         }
-        const k8sSecretName = K8sDeployment.constructK8sSecretName(
-          this.mcpServer.id,
-        );
+        const k8sSecretName = this.getK8sSecretName();
         env.push({
           name: key,
           valueFrom: {
@@ -1633,9 +1661,22 @@ export default class K8sDeployment {
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
+      const running = pods.items.find((pod) => pod.status?.phase === "Running");
+      if (running) {
+        return running;
+      }
 
-      // Return the first running pod
-      return pods.items.find((pod) => pod.status?.phase === "Running");
+      // Multi-tenant fallback: the shared deployment's pod was labeled with
+      // the first caller's id, so other callers' label search returns no
+      // pods. Match by deployment name prefix instead.
+      const allPods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+      });
+      return allPods.items.find(
+        (pod) =>
+          pod.status?.phase === "Running" &&
+          (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+      );
     } catch (error) {
       logger.error(
         { err: error },
@@ -1663,9 +1704,20 @@ export default class K8sDeployment {
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
+      if (pods.items.length > 0) {
+        return pods.items[0];
+      }
 
-      // Return the first pod regardless of status
-      return pods.items[0];
+      // Multi-tenant catalogs share one deployment across many mcp_server
+      // rows; the deployment's pod label was baked in at create time using
+      // the first caller's mcp_server.id, so subsequent callers won't match
+      // by label. Fall back to matching pods by deployment name prefix.
+      const allPods = await this.k8sApi.listNamespacedPod({
+        namespace: this.namespace,
+      });
+      return allPods.items.find((pod) =>
+        (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+      );
     } catch (error) {
       logger.error(
         { err: error },
@@ -1929,53 +1981,6 @@ export default class K8sDeployment {
     }
 
     return lines.join("\n");
-  }
-
-  /**
-   * Write K8s events to the stream as a fallback when pod logs aren't available
-   */
-  private async streamEventsAsFallback(
-    responseStream: NodeJS.WritableStream,
-  ): Promise<void> {
-    try {
-      // Check if any pod exists (even non-running)
-      const anyPod = await this.findAnyPodForDeployment();
-
-      let output = "=== MCP Server Status ===\n\n";
-
-      if (anyPod) {
-        // Show pod status info
-        output += "--- Pod Status ---\n";
-        output += this.getPodStatusInfo(anyPod);
-        output += "\n\n";
-      } else {
-        output += "No pod found for this deployment.\n\n";
-      }
-
-      // Get and show events
-      output += "--- Kubernetes Events ---\n";
-      const events = await this.getDeploymentEvents();
-      output += events;
-      output += "\n";
-
-      // Write to stream
-      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
-        responseStream.write(output);
-        // End the stream since we're not following logs
-        responseStream.end();
-      }
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Failed to stream events fallback for ${this.deploymentName}`,
-      );
-      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
-        responseStream.write(
-          `Error fetching deployment status: ${error instanceof Error ? error.message : "Unknown error"}\n`,
-        );
-        responseStream.end();
-      }
-    }
   }
 
   /**
@@ -2290,7 +2295,11 @@ export default class K8sDeployment {
 
   /**
    * Stream logs from the pod with follow enabled.
-   * If no running pod is found, falls back to showing K8s events.
+   * If no running pod is found, write a K8s events snapshot and then keep
+   * the stream open, polling for the pod to become Ready and switching to
+   * real container logs once it does. This way clients that opened the logs
+   * view during the brief Pending/ContainerCreating window after install
+   * don't need to refresh — the stream upgrades itself.
    * @param responseStream - The stream to write logs to
    * @param lines - Number of initial lines to fetch
    * @param abortSignal - Optional abort signal to cancel the stream
@@ -2304,8 +2313,13 @@ export default class K8sDeployment {
       // Try to find any pod (including non-running) to check container status
       const anyPod = await this.findAnyPodForDeployment();
       if (!anyPod || !anyPod.metadata?.name) {
-        // No pod at all - show events
-        await this.streamEventsAsFallback(responseStream);
+        // No pod yet — show events, then wait for one to appear and become Ready
+        await this.writeEventsSnapshot(responseStream);
+        await this.pollAndStreamLogsWhenReady(
+          responseStream,
+          lines,
+          abortSignal,
+        );
         return;
       }
 
@@ -2372,12 +2386,14 @@ export default class K8sDeployment {
                   responseStream.write("(No logs from previous container)\n\n");
                 }
               }
-              if (
-                !("destroyed" in responseStream) ||
-                !responseStream.destroyed
-              ) {
-                responseStream.end();
-              }
+              // Keep the stream open and wait for the container to become
+              // Ready again (e.g. CrashLoopBackOff recovers), then upgrade
+              // to live log streaming.
+              await this.pollAndStreamLogsWhenReady(
+                responseStream,
+                lines,
+                abortSignal,
+              );
             });
 
             await this.k8sLog.log(
@@ -2402,116 +2418,32 @@ export default class K8sDeployment {
           }
         }
 
-        // Container never started or previous logs unavailable — show events
-        await this.streamEventsAsFallback(responseStream);
+        // Container never started or previous logs unavailable — show events,
+        // then wait for it to recover and upgrade to real logs.
+        await this.writeEventsSnapshot(responseStream);
+        await this.pollAndStreamLogsWhenReady(
+          responseStream,
+          lines,
+          abortSignal,
+        );
         return;
       }
 
       // For non-waiting containers, check if pod is actually running
       const pod = anyPod.status?.phase === "Running" ? anyPod : undefined;
       if (!pod || !pod.metadata?.name) {
-        await this.streamEventsAsFallback(responseStream);
+        // Pod is e.g. Pending right after install — show what we know now,
+        // then keep the stream open and switch to real logs once it's Ready.
+        await this.writeEventsSnapshot(responseStream);
+        await this.pollAndStreamLogsWhenReady(
+          responseStream,
+          lines,
+          abortSignal,
+        );
         return;
       }
 
-      // Create a PassThrough stream to handle the log data
-      const logStream = new PassThrough();
-
-      // Handle log data by piping to the response stream
-      logStream.on("data", (chunk) => {
-        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
-          responseStream.write(chunk);
-        }
-      });
-
-      // Handle stream errors
-      logStream.on("error", (error) => {
-        logger.error(
-          { err: error },
-          `Log stream error for pod ${pod.metadata?.name}:`,
-        );
-        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
-          if (
-            "destroy" in responseStream &&
-            typeof responseStream.destroy === "function"
-          ) {
-            responseStream.destroy(error);
-          }
-        }
-      });
-
-      // Handle stream end
-      logStream.on("end", () => {
-        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
-          responseStream.end();
-        }
-      });
-
-      // Handle response stream errors and cleanup
-      responseStream.on("error", (error) => {
-        logger.error(
-          { err: error },
-          `Response stream error for pod ${pod.metadata?.name}:`,
-        );
-        if (logStream.destroy) {
-          logStream.destroy();
-        }
-      });
-
-      // Use the Log client to stream logs with follow=true
-      const req = await this.k8sLog.log(
-        this.namespace,
-        pod.metadata.name,
-        "mcp-server", // container name
-        logStream,
-        {
-          follow: true,
-          tailLines: lines,
-          pretty: false,
-          timestamps: false,
-        },
-      );
-
-      // Track abort handler for cleanup
-      let abortHandler: (() => void) | null = null;
-
-      // Handle abort signal
-      if (abortSignal) {
-        abortHandler = () => {
-          if (req) {
-            req.abort();
-          }
-          logStream.destroy();
-          if (!("destroyed" in responseStream) || !responseStream.destroyed) {
-            responseStream.end();
-          }
-        };
-
-        if (abortSignal.aborted) {
-          abortHandler();
-          return;
-        }
-
-        abortSignal.addEventListener("abort", abortHandler, { once: true });
-      }
-
-      // Cleanup function to remove abort listener
-      const cleanupAbortListener = () => {
-        if (abortSignal && abortHandler) {
-          abortSignal.removeEventListener("abort", abortHandler);
-        }
-      };
-
-      // Handle cleanup when response stream closes
-      responseStream.on("close", () => {
-        if (req) {
-          req.abort();
-        }
-        if (logStream.destroy) {
-          logStream.destroy();
-        }
-        cleanupAbortListener();
-      });
+      await this.streamRunningPodLogs(pod, responseStream, lines, abortSignal);
     } catch (error: unknown) {
       logger.error(
         { err: error },
@@ -2528,6 +2460,225 @@ export default class K8sDeployment {
       }
 
       throw error;
+    }
+  }
+
+  /**
+   * Pipe live container logs from a Running pod into responseStream and wire
+   * up abort/cleanup. Does not end the stream on error paths it doesn't own.
+   */
+  private async streamRunningPodLogs(
+    pod: k8s.V1Pod,
+    responseStream: NodeJS.WritableStream,
+    lines: number,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    if (!pod.metadata?.name) return;
+    const podName = pod.metadata.name;
+
+    const logStream = new PassThrough();
+    let aborted = false;
+
+    logStream.on("data", (chunk) => {
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(chunk);
+      }
+    });
+
+    logStream.on("error", (error) => {
+      logger.error({ err: error }, `Log stream error for pod ${podName}:`);
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        if (
+          "destroy" in responseStream &&
+          typeof responseStream.destroy === "function"
+        ) {
+          responseStream.destroy(error);
+        }
+      }
+    });
+
+    // When the log stream ends and the client did NOT abort, the pod was
+    // deleted under us (reinstall, crash, eviction). Don't close the WS —
+    // wait for a new pod to come up and switch over, the same way we do
+    // when streamLogs is first opened against a Pending pod.
+    logStream.on("end", () => {
+      if (aborted) {
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          responseStream.end();
+        }
+        return;
+      }
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(
+          `\n--- Pod ${podName} log stream ended; waiting for replacement pod ---\n`,
+        );
+        void this.pollAndStreamLogsWhenReady(
+          responseStream,
+          lines,
+          abortSignal,
+        );
+      }
+    });
+
+    responseStream.on("error", (error) => {
+      logger.error({ err: error }, `Response stream error for pod ${podName}:`);
+      if (logStream.destroy) {
+        logStream.destroy();
+      }
+    });
+
+    const req = await this.k8sLog.log(
+      this.namespace,
+      podName,
+      "mcp-server",
+      logStream,
+      {
+        follow: true,
+        tailLines: lines,
+        pretty: false,
+        timestamps: false,
+      },
+    );
+
+    let abortHandler: (() => void) | null = null;
+    if (abortSignal) {
+      abortHandler = () => {
+        aborted = true;
+        if (req) req.abort();
+        logStream.destroy();
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          responseStream.end();
+        }
+      };
+
+      if (abortSignal.aborted) {
+        abortHandler();
+        return;
+      }
+
+      abortSignal.addEventListener("abort", abortHandler, { once: true });
+    }
+
+    responseStream.on("close", () => {
+      aborted = true;
+      if (req) req.abort();
+      if (logStream.destroy) logStream.destroy();
+      if (abortSignal && abortHandler) {
+        abortSignal.removeEventListener("abort", abortHandler);
+      }
+    });
+  }
+
+  /**
+   * Write a one-shot snapshot of pod status + K8s events to the stream
+   * WITHOUT ending it. Used by streamLogs to show useful info while we
+   * wait for the pod to become Ready.
+   */
+  private async writeEventsSnapshot(
+    responseStream: NodeJS.WritableStream,
+  ): Promise<void> {
+    try {
+      const anyPod = await this.findAnyPodForDeployment();
+
+      let output = "=== MCP Server Status ===\n\n";
+      if (anyPod) {
+        output += "--- Pod Status ---\n";
+        output += this.getPodStatusInfo(anyPod);
+        output += "\n\n";
+      } else {
+        output += "No pod found for this deployment.\n\n";
+      }
+
+      output += "--- Kubernetes Events ---\n";
+      output += await this.getDeploymentEvents();
+      output += "\n";
+
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(output);
+      }
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to write events snapshot for ${this.deploymentName}`,
+      );
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(
+          `Error fetching deployment status: ${error instanceof Error ? error.message : "Unknown error"}\n`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Poll for the mcp-server container to enter Ready+Running state, then
+   * upgrade the open stream to live container logs. Bounded so a stuck
+   * pod can't keep a WebSocket alive forever — the client can re-subscribe.
+   */
+  private async pollAndStreamLogsWhenReady(
+    responseStream: NodeJS.WritableStream,
+    lines: number,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const pollIntervalMs = 2000;
+    const maxAttempts = Math.ceil(POD_READY_WAIT_MS / pollIntervalMs);
+
+    const isStreamClosed = () =>
+      "destroyed" in responseStream && responseStream.destroyed;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (abortSignal?.aborted || isStreamClosed()) return;
+
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, pollIntervalMs);
+        if (abortSignal) {
+          abortSignal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(t);
+              resolve();
+            },
+            { once: true },
+          );
+        }
+      });
+
+      if (abortSignal?.aborted || isStreamClosed()) return;
+
+      let pod: k8s.V1Pod | undefined;
+      try {
+        pod = await this.findAnyPodForDeployment();
+      } catch (error) {
+        logger.warn(
+          { err: error, deployment: this.deploymentName },
+          "Failed to poll pod while waiting for Ready",
+        );
+        continue;
+      }
+
+      const containerStatus = pod?.status?.containerStatuses?.find(
+        (cs) => cs.name === "mcp-server",
+      );
+      const isReadyAndRunning =
+        pod?.status?.phase === "Running" &&
+        !!containerStatus?.ready &&
+        !!containerStatus.state?.running;
+
+      if (!isReadyAndRunning || !pod?.metadata?.name) continue;
+
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        responseStream.write(
+          `\n--- Pod ${pod.metadata.name} is now Running, switching to live logs ---\n\n`,
+        );
+      }
+      await this.streamRunningPodLogs(pod, responseStream, lines, abortSignal);
+      return;
+    }
+
+    if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+      responseStream.write(
+        `\n--- Pod did not become Ready within ${Math.round(POD_READY_WAIT_MS / 1000)}s; reopen logs to retry ---\n`,
+      );
+      responseStream.end();
     }
   }
 

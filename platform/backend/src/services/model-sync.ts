@@ -36,9 +36,17 @@ class ModelSyncService {
     provider: SupportedProvider;
     apiKeyValue: string;
     baseUrl?: string | null;
+    extraHeaders?: Record<string, string> | null;
     forceRefresh?: boolean;
   }): Promise<number> {
-    const { apiKeyId, provider, apiKeyValue, baseUrl, forceRefresh } = params;
+    const {
+      apiKeyId,
+      provider,
+      apiKeyValue,
+      baseUrl,
+      extraHeaders,
+      forceRefresh,
+    } = params;
     const fetcher = modelFetchers[provider];
 
     if (!fetcher) {
@@ -51,7 +59,7 @@ class ModelSyncService {
 
     try {
       // 1. Fetch models from provider API
-      const providerModels = await fetcher(apiKeyValue, baseUrl);
+      const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders);
 
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
@@ -131,6 +139,7 @@ class ModelSyncService {
       provider: SupportedProvider;
       apiKeyValue: string;
       baseUrl?: string | null;
+      extraHeaders?: Record<string, string> | null;
     }>,
     options?: { forceRefresh?: boolean },
   ): Promise<Map<string, number>> {
@@ -143,6 +152,7 @@ class ModelSyncService {
           provider: apiKey.provider,
           apiKeyValue: apiKey.apiKeyValue,
           baseUrl: apiKey.baseUrl,
+          extraHeaders: apiKey.extraHeaders,
           forceRefresh: options?.forceRefresh,
         });
         results.set(apiKey.id, count);

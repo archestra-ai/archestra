@@ -351,20 +351,55 @@ export class McpServerRuntimeManager {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
 
     if (k8sDeployment) {
-      // Delete deployment first
-      await k8sDeployment.stopDeployment();
+      // Multi-tenant catalogs share one K8s deployment across all callers.
+      // Only the last caller out should delete the deployment / service /
+      // secret. Earlier callers just drop their in-memory reference.
+      const sharedWithOthers =
+        await McpServerRuntimeManager.isSharedMultitenantDeployment(
+          mcpServerId,
+        );
 
-      // Delete K8s Service (if it exists, for HTTP-based servers)
-      await k8sDeployment.deleteK8sService();
+      if (!sharedWithOthers) {
+        // Delete deployment first
+        await k8sDeployment.stopDeployment();
 
-      // Delete K8s Secret (if it exists)
-      await k8sDeployment.deleteK8sSecret();
+        // Delete K8s Service (if it exists, for HTTP-based servers)
+        await k8sDeployment.deleteK8sService();
 
-      // Delete docker-registry secrets (if any were created for imagePullSecrets)
-      await k8sDeployment.deleteDockerRegistrySecrets();
+        // Delete K8s Secret (if it exists)
+        await k8sDeployment.deleteK8sSecret();
+
+        // Delete docker-registry secrets (if any were created for imagePullSecrets)
+        await k8sDeployment.deleteDockerRegistrySecrets();
+      } else {
+        logger.info(
+          { mcpServerId },
+          "Skipping K8s deployment teardown: multi-tenant catalog still has other callers",
+        );
+      }
 
       this.mcpServerIdToDeploymentMap.delete(mcpServerId);
     }
+  }
+
+  /**
+   * Returns true when the given mcp_server row points at a multi-tenant
+   * catalog that still has at least one other mcp_server row aliasing the
+   * same shared K8s deployment.
+   */
+  private static async isSharedMultitenantDeployment(
+    mcpServerId: string,
+  ): Promise<boolean> {
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (!mcpServer?.catalogId) return false;
+
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      mcpServer.catalogId,
+    );
+    if (!catalogItem?.multitenant) return false;
+
+    const siblings = await McpServerModel.findByCatalogId(mcpServer.catalogId);
+    return siblings.some((s) => s.id !== mcpServerId);
   }
 
   /**
@@ -464,8 +499,21 @@ export class McpServerRuntimeManager {
     }
 
     try {
-      await k8sDeployment.removeDeployment();
-      logger.info(`Successfully removed MCP server deployment ${mcpServerId}`);
+      const sharedWithOthers =
+        await McpServerRuntimeManager.isSharedMultitenantDeployment(
+          mcpServerId,
+        );
+      if (sharedWithOthers) {
+        logger.info(
+          { mcpServerId },
+          "Skipping K8s deployment removal: multi-tenant catalog still has other callers",
+        );
+      } else {
+        await k8sDeployment.removeDeployment();
+        logger.info(
+          `Successfully removed MCP server deployment ${mcpServerId}`,
+        );
+      }
     } catch (error) {
       logger.error(
         { err: error },
@@ -569,12 +617,13 @@ export class McpServerRuntimeManager {
     }
 
     const containerName = k8sDeployment.containerName;
-    const sanitizedId = sanitizeLabelValue(mcpServerId);
     return {
       logs: await k8sDeployment.getRecentLogs(lines),
       containerName,
-      // Construct the kubectl command for the user to manually get the logs if they'd like
-      command: `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines}`,
+      // Construct the kubectl command for the user to manually get the logs if they'd like.
+      // Use the catalog-stable deployment name as a label so multi-tenant aliasing works
+      // (per-row mcp-server-id label only matches the first caller's pod).
+      command: `kubectl logs -n ${this.namespace} deployment/${k8sDeployment.k8sDeploymentName} --tail=${lines}`,
       namespace: this.namespace,
     };
   }
@@ -595,7 +644,7 @@ export class McpServerRuntimeManager {
     // Try to get from memory first, or lazy-load from database
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
-      this.writeLogsUnavailableMessage(responseStream, mcpServerId);
+      await this.writeLogsUnavailableMessage(responseStream, mcpServerId);
       return;
     }
 
@@ -605,7 +654,15 @@ export class McpServerRuntimeManager {
   /**
    * Get the kubectl command for streaming logs from an MCP server
    */
-  getMcpServerLogsCommand(mcpServerId: string, lines: number = 100): string {
+  async getMcpServerLogsCommand(
+    mcpServerId: string,
+    lines: number = 100,
+  ): Promise<string> {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    const deploymentName = k8sDeployment?.k8sDeploymentName;
+    if (deploymentName) {
+      return `kubectl logs -n ${this.namespace} deployment/${deploymentName} --tail=${lines} -f`;
+    }
     const sanitizedId = sanitizeLabelValue(mcpServerId);
     return `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
   }
@@ -613,7 +670,12 @@ export class McpServerRuntimeManager {
   /**
    * Get the kubectl command for describing pods for an MCP server
    */
-  getMcpServerDescribeCommand(mcpServerId: string): string {
+  async getMcpServerDescribeCommand(mcpServerId: string): Promise<string> {
+    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+    const deploymentName = k8sDeployment?.k8sDeploymentName;
+    if (deploymentName) {
+      return `kubectl describe deployment -n ${this.namespace} ${deploymentName}`;
+    }
     const sanitizedId = sanitizeLabelValue(mcpServerId);
     return `kubectl describe pods -n ${this.namespace} -l mcp-server-id=${sanitizedId}`;
   }
@@ -850,10 +912,10 @@ export class McpServerRuntimeManager {
     }
   }
 
-  private writeLogsUnavailableMessage(
+  private async writeLogsUnavailableMessage(
     responseStream: NodeJS.WritableStream,
     mcpServerId: string,
-  ): void {
+  ): Promise<void> {
     if ("destroyed" in responseStream && responseStream.destroyed) {
       return;
     }
@@ -861,7 +923,7 @@ export class McpServerRuntimeManager {
     const reason = this.k8sApi
       ? "Deployment not loaded in runtime."
       : "Kubernetes runtime is not configured on this instance.";
-    const command = this.getMcpServerDescribeCommand(mcpServerId);
+    const command = await this.getMcpServerDescribeCommand(mcpServerId);
     const message = [
       "Unable to stream logs for this MCP server.",
       reason,

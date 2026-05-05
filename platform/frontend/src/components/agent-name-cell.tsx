@@ -44,7 +44,7 @@ export function AgentNameCell({
           )}
         </div>
         {description && (
-          <div className="text-[11px] text-muted-foreground line-clamp-2">
+          <div className="text-xs text-muted-foreground line-clamp-2">
             {description}
           </div>
         )}

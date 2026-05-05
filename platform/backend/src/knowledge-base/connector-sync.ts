@@ -95,10 +95,36 @@ class ConnectorSyncService {
       connectorImpl.setLogger(runLog);
     }
 
-    // Update connector lastSyncStatus to running
+    // Update connector lastSyncStatus to running.
+    // Also set lastSyncAt optimistically so the scheduler doesn't re-trigger
+    // this connector while batch_embedding tasks are still running (the task
+    // queue marks connector_sync as "completed" before embeddings finish, but
+    // lastSyncAt is only finalized by the last batch_embedding task).
     await KnowledgeBaseConnectorModel.update(connectorId, {
       lastSyncStatus: "running",
+      lastSyncAt: new Date(),
     });
+
+    let documentsProcessed = 0;
+    let documentsIngested = 0;
+    let itemErrors = 0;
+    let itemsSkipped = 0;
+    let batchCount = 0;
+    const startTime = Date.now();
+    let stoppedEarly = false;
+
+    // Resolve the embedding model's supported input modalities so connectors
+    // can conditionally ingest non-text content (e.g. images).
+    // Must happen before estimateTotalItems so the estimate matches sync behavior.
+    let embeddingInputModalities: ModelInputModality[] | undefined;
+    try {
+      const embeddingConfig = await resolveEmbeddingConfig(
+        connector.organizationId,
+      );
+      embeddingInputModalities = embeddingConfig?.inputModalities ?? undefined;
+    } catch {
+      // Non-fatal: proceed without modality info
+    }
 
     // Estimate total items for progress display
     try {
@@ -106,6 +132,7 @@ class ConnectorSyncService {
         config: connector.config as Record<string, unknown>,
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
+        embeddingInputModalities,
       });
 
       if (totalItems !== null && totalItems > 0) {
@@ -119,25 +146,6 @@ class ConnectorSyncService {
         },
         "Failed to estimate total items, continuing without",
       );
-    }
-
-    let documentsProcessed = 0;
-    let documentsIngested = 0;
-    let itemErrors = 0;
-    let batchCount = 0;
-    const startTime = Date.now();
-    let stoppedEarly = false;
-
-    // Resolve the embedding model's supported input modalities so connectors
-    // can conditionally ingest non-text content (e.g. images).
-    let embeddingInputModalities: ModelInputModality[] | undefined;
-    try {
-      const embeddingConfig = await resolveEmbeddingConfig(
-        connector.organizationId,
-      );
-      embeddingInputModalities = embeddingConfig?.inputModalities ?? undefined;
-    } catch {
-      // Non-fatal: proceed without modality info
     }
 
     try {
@@ -196,11 +204,24 @@ class ConnectorSyncService {
           itemErrors += batch.failures.length;
         }
 
+        // Track skipped items from this batch
+        if (batch.skipped?.length) {
+          itemsSkipped += batch.skipped.length;
+          documentsProcessed += batch.skipped.length;
+          for (const s of batch.skipped) {
+            runLog.debug(
+              { itemId: s.itemId, name: s.name, reason: s.reason },
+              "Item skipped",
+            );
+          }
+        }
+
         // Update run progress + flush logs after each batch
         await ConnectorRunModel.update(run.id, {
           documentsProcessed,
           documentsIngested,
           itemErrors,
+          itemsSkipped,
           logs: options?.getLogOutput?.() ?? null,
         });
 
@@ -239,11 +260,14 @@ class ConnectorSyncService {
           completedAt: new Date(),
           documentsProcessed,
           documentsIngested,
+          itemErrors,
+          itemsSkipped,
           logs: options?.getLogOutput?.() ?? null,
         });
 
         await KnowledgeBaseConnectorModel.update(connectorId, {
           lastSyncStatus: "partial",
+          lastSyncError: null,
         });
 
         const durationSeconds = (Date.now() - startTime) / 1000;
@@ -274,6 +298,7 @@ class ConnectorSyncService {
           documentsProcessed,
           documentsIngested,
           itemErrors,
+          itemsSkipped,
           logs: options?.getLogOutput?.() ?? null,
         });
 
@@ -334,6 +359,8 @@ class ConnectorSyncService {
         completedAt: new Date(),
         documentsProcessed,
         documentsIngested,
+        itemErrors,
+        itemsSkipped,
         error: errorMessage,
         logs: options?.getLogOutput?.() ?? null,
       });

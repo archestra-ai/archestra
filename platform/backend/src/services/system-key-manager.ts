@@ -1,13 +1,21 @@
 import type { SupportedProvider } from "@shared";
+import {
+  isAnthropicAzureFoundryEntraIdEnabled,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
+import { isAzureAiFoundryBaseUrl } from "@/clients/azure-url";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
+import config from "@/config";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
+import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
+import { fetchAzureModels } from "@/routes/chat/model-fetchers/azure";
 import { fetchBedrockModelsViaIam } from "@/routes/chat/model-fetchers/bedrock";
 import { fetchGeminiModelsViaVertexAi } from "@/routes/chat/model-fetchers/gemini";
 import { buildModelsToUpsert } from "@/services/model-sync";
@@ -27,8 +35,9 @@ interface KeylessProviderConfig {
 /**
  * Manages system API keys for truly keyless providers.
  *
- * Currently Vertex AI and Bedrock (with IAM auth) qualify as keyless because
- * they use cloud provider credentials (ADC / IRSA) instead of API keys.
+ * Currently Vertex AI, Azure OpenAI (with Entra ID), and Bedrock (with IAM auth)
+ * qualify as keyless because they use cloud provider credentials instead of API
+ * keys.
  *
  * System keys are auto-created when a keyless provider is enabled via environment config,
  * and auto-deleted when the provider is disabled.
@@ -44,6 +53,30 @@ class SystemKeyManager {
       isEnabled: () => isVertexAiEnabled(),
       customFetch: async () => {
         const models = await fetchGeminiModelsViaVertexAi();
+        return models.map((m) => ({ id: m.id, displayName: m.displayName }));
+      },
+    },
+    {
+      provider: "azure",
+      name: "Azure OpenAI Entra ID",
+      isEnabled: () =>
+        isAzureOpenAiEntraIdEnabled() && Boolean(config.llm.azure.baseUrl),
+      customFetch: async () => {
+        const models = await fetchAzureModels("", config.llm.azure.baseUrl);
+        return models.map((m) => ({ id: m.id, displayName: m.displayName }));
+      },
+    },
+    {
+      provider: "anthropic",
+      name: "Anthropic Azure Foundry Entra ID",
+      isEnabled: () =>
+        isAnthropicAzureFoundryEntraIdEnabled() &&
+        isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl),
+      customFetch: async () => {
+        const models = await fetchAnthropicModels(
+          "",
+          config.llm.anthropic.baseUrl,
+        );
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },
     },

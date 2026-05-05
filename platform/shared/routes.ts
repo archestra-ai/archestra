@@ -3,6 +3,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
   CreateAgent: "createAgent",
+  CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetDefaultLlmProxy: "getDefaultLlmProxy",
@@ -300,6 +301,13 @@ export const RouteId = {
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
 
+  // LLM OAuth Client Routes
+  GetLlmOauthClients: "getLlmOauthClients",
+  CreateLlmOauthClient: "createLlmOauthClient",
+  UpdateLlmOauthClient: "updateLlmOauthClient",
+  RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
+  DeleteLlmOauthClient: "deleteLlmOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
@@ -333,8 +341,8 @@ export const RouteId = {
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 
-  // MCP Settings Routes (organization-level)
-  UpdateMcpSettings: "updateMcpSettings",
+  // Auth Settings Routes (organization-level)
+  UpdateAuthSettings: "updateAuthSettings",
 
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",

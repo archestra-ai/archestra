@@ -20,6 +20,7 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
+import { parsePdfBuffer } from "../pdf-utils";
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
@@ -819,10 +820,7 @@ async function extractTextFromBinary(
       return result.value;
     }
     case ".pdf": {
-      // Lazy import: pdf-parse v1 tries to load a test file at import time
-      const pdfParse = (await import("pdf-parse")).default;
-      const result = await pdfParse(buffer);
-      return result.text;
+      return parsePdfBuffer(buffer);
     }
     case ".pptx": {
       return extractTextFromPptx(buffer);

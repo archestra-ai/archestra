@@ -238,6 +238,7 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 **Deployment Settings**:
 
 - `archestra.podAnnotations` - Annotations to add to pods (useful for Prometheus, Vault agent, service mesh sidecars, etc.)
+- `archestra.podLabels` - Labels to add to pods (useful for AKS Microsoft Entra Workload ID)
 - `archestra.nodeSelector` - Node selector for scheduling pods on specific nodes (e.g., specific node pools or instance types). These values are also inherited by MCP server pods as defaults.
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
@@ -750,6 +751,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.anthropic.com`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED`** - Enable Microsoft Entra ID authentication for Anthropic models deployed in Microsoft Foundry.
+  - Default: `false`
+  - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
+  - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
+  - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints
@@ -786,8 +793,10 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Use this to point to your own proxy or other custom endpoints
 
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
-  - Format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
+  - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
+  - Foundry v1 format: `https://<resource-name>.services.ai.azure.com/openai/v1`
   - Required to enable the Azure AI Foundry provider.
+  - Use Foundry v1 for Azure-sold OpenAI-compatible models such as Grok.
 
 - **`ARCHESTRA_AZURE_OPENAI_API_VERSION`** - Azure OpenAI REST API version.
   - Default: `2024-02-01`
@@ -796,9 +805,14 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `2025-04-01-preview`
   - Used only for Azure `/responses` requests. Keep `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Azure Chat Completions and deployment discovery.
 
+- **`ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED`** - Enable Microsoft Entra ID authentication for Azure OpenAI.
+  - Default: `false`
+  - Set to `true` to use Azure Identity `DefaultAzureCredential` instead of `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY`
+  - Requires `ARCHESTRA_AZURE_OPENAI_BASE_URL`
+  - Deployment URLs use token scope `https://cognitiveservices.azure.com/.default`; Foundry v1 URLs use `https://ai.azure.com/.default`
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
-  - Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` virtual keys remain valid.
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
 - **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
@@ -954,6 +968,10 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
   - Set to `true` to include infrastructure spans for debugging request flows
 
+- **`ARCHESTRA_METRICS_PORT`** - TCP port for the metrics server.
+  - Default: `9050`
+  - Must be an integer between `1` and `65535`; invalid values fall back to the default with a warning
+
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
@@ -1065,11 +1083,9 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 ### Knowledge Base Configuration
 
-> **Enterprise feature:** Requires `ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED=true`. See [Enterprise Licensing](#enterprise-licensing) below.
+These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
-These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature. Knowledge bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search. Connectors sync external data into knowledge bases on a schedule. See [Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for connector setup instructions.
-
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**. No environment variable is needed — select an existing LLM Provider Key (OpenAI only for embeddings, any provider for the reranker). Both must be configured before knowledge bases and connectors can be used.
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge-bases#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge-bases#reranking-configuration) for how to pick the key and model.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.
   - Default: `3300` (55 minutes)
@@ -1088,7 +1104,7 @@ To learn more about enterprise licensing, please reach out to [sales@archestra.a
   - Set to `true` to enable the enterprise license
   - Required as a prerequisite for all other enterprise feature flags
 
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, knowledge bases connectors are limited to org-wide visibility.
+- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, Knowledge Base connectors are limited to org-wide visibility.
   - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).

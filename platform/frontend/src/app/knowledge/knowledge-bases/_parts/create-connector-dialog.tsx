@@ -3,7 +3,7 @@
 import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
@@ -32,11 +32,11 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import {
   CONNECTOR_OPTIONS,
   ConnectorAdvancedConfigFields,
+  ConnectorInlineConfigFields,
   type ConnectorType,
   connectorNeedsEmail,
   getConnectorCredentialConfig,
@@ -306,8 +306,9 @@ export function CreateConnectorDialog({
                 {urlConfig && (
                   <FormField
                     control={form.control}
-                    // biome-ignore lint/suspicious/noExplicitAny: form field name requires dynamic typing
-                    name={urlConfig.fieldName as any}
+                    name={
+                      urlConfig.fieldName as Path<CreateConnectorFormValues>
+                    }
                     rules={{ required: `${urlConfig.label} is required` }}
                     render={({ field }) => (
                       <FormItem>
@@ -328,186 +329,12 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {(connectorType === "jira" ||
-                  connectorType === "confluence") && (
-                  <FormField
-                    control={form.control}
-                    name="config.isCloud"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="space-y-0.5">
-                          <FormLabel>Cloud Instance</FormLabel>
-                          <FormDescription>
-                            Enable if this is a cloud-hosted instance.
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={(field.value as boolean) ?? true}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {connectorType === "github" && (
-                  <FormField
-                    control={form.control}
-                    name="config.owner"
-                    rules={{ required: "Owner is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Owner</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="my-org"
-                            {...field}
-                            value={(field.value as string) ?? ""}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          GitHub organization or username.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {connectorType === "asana" && (
-                  <FormField
-                    control={form.control}
-                    name="config.workspaceGid"
-                    rules={{ required: "Workspace GID is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Workspace GID</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="1234567890"
-                            {...field}
-                            value={(field.value as string) ?? ""}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Your Asana workspace GID. Syncs top-level tasks only
-                          &mdash; subtasks aren&apos;t supported in the initial
-                          version.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {needsEmail && (
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    rules={{
-                      validate: (value) => {
-                        const currentIsCloud = form.getValues("config.isCloud");
-                        if (currentIsCloud !== false && !value)
-                          return "Email is required";
-                        return true;
-                      },
-                    }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Email{!emailRequired && " (optional)"}
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder={
-                              emailRequired
-                                ? "user@example.com"
-                                : "Required for basic auth, leave empty for PAT"
-                            }
-                            {...field}
-                          />
-                        </FormControl>
-                        {!emailRequired && (
-                          <FormDescription>
-                            Leave empty to authenticate with a personal access
-                            token instead.
-                          </FormDescription>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {connectorType === "servicenow" && (
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    rules={{ required: "Username is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Username</FormLabel>
-                        <FormControl>
-                          <Input placeholder="admin" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Your ServiceNow username for basic authentication.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {connectorType === "sharepoint" && (
-                  <FormField
-                    control={form.control}
-                    name="config.tenantId"
-                    rules={{ required: "Tenant ID is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tenant ID</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                            {...field}
-                            value={(field.value as string) ?? ""}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Your Azure AD (Entra ID) tenant ID or domain.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {connectorType === "sharepoint" && (
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    rules={{ required: "Client ID is required" }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Client ID</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Azure AD app registration Client ID.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+                <ConnectorInlineConfigFields
+                  connectorType={connectorType}
+                  form={form}
+                  mode="create"
+                  emailRequired={emailRequired}
+                />
 
                 <FormField
                   control={form.control}

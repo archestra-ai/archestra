@@ -267,6 +267,9 @@ const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
+const DEFAULT_METRICS_PORT = 9050;
+const MIN_TCP_PORT = 1;
+const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
 const OTEL_LOGS_PATH = "/v1/logs";
 
@@ -359,6 +362,24 @@ export const parseContentMaxLength = (
       `Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "${value}", using default ${DEFAULT_OTEL_CONTENT_MAX_LENGTH}`,
     );
     return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseMetricsPort = (envValue?: string | undefined): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_METRICS_PORT;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < MIN_TCP_PORT || parsed > MAX_TCP_PORT) {
+    logger.warn(
+      `Invalid ARCHESTRA_METRICS_PORT value "${value}", using default ${DEFAULT_METRICS_PORT}`,
+    );
+    return DEFAULT_METRICS_PORT;
   }
 
   return parsed;
@@ -500,6 +521,9 @@ const config = {
   a2aGateway: {
     endpoint: "/v1/a2a",
   },
+  a2aV2Gateway: {
+    endpoint: "/v2/a2a",
+  },
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
@@ -560,6 +584,9 @@ const config = {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      azureFoundryEntraIdEnabled:
+        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
+        "true",
     },
     gemini: {
       baseUrl:
@@ -647,6 +674,8 @@ const config = {
       responsesApiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
         "2025-04-01-preview",
+      entraIdEnabled:
+        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED === "true",
     },
   },
   chat: {
@@ -790,7 +819,7 @@ const config = {
     },
     metrics: {
       endpoint: "/metrics",
-      port: 9050,
+      port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
       secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
     sentry: {

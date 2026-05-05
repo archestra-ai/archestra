@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "@/test";
 import {
   buildAzureDeploymentsUrl,
+  buildAzureOpenAiV1ModelsUrl,
   buildAzureResponsesBaseUrl,
   createAzureFetchWithApiVersion,
   extractAzureDeploymentName,
@@ -59,6 +60,28 @@ describe("buildAzureDeploymentsUrl", () => {
     ).toBe(
       "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
     );
+  });
+});
+
+describe("buildAzureOpenAiV1ModelsUrl", () => {
+  it("builds a models URL from a Foundry v1 base URL", () => {
+    expect(
+      buildAzureOpenAiV1ModelsUrl(
+        "https://my-resource.services.ai.azure.com/openai/v1",
+      ),
+    ).toBe("https://my-resource.services.ai.azure.com/openai/v1/models");
+  });
+
+  it("returns null for deployment-scoped URLs", () => {
+    expect(
+      buildAzureOpenAiV1ModelsUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null for invalid URLs", () => {
+    expect(buildAzureOpenAiV1ModelsUrl("not-a-valid-url")).toBeNull();
   });
 });
 
@@ -195,6 +218,10 @@ describe("isAzureAiFoundryBaseUrl", () => {
     expect(
       isAzureAiFoundryBaseUrl("https://my-resource.services.ai.azure.com"),
     ).toBe(true);
+  });
+
+  it("returns true for the Azure AI Foundry root hostname", () => {
+    expect(isAzureAiFoundryBaseUrl("https://ai.azure.com")).toBe(true);
   });
 
   it("returns false for the public Anthropic API hostname", () => {

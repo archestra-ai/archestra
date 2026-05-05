@@ -5,6 +5,7 @@ export function buildAzureDeploymentsUrl(params: {
   try {
     const url = new URL(params.baseUrl);
     if (isAzureOpenAiV1Url(url)) {
+      // Foundry v1 endpoints use /openai/v1/models instead of deployment discovery.
       return null;
     }
 

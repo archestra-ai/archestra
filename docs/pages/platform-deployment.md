@@ -796,6 +796,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `2025-04-01-preview`
   - Used only for Azure `/responses` requests. Keep `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Azure Chat Completions and deployment discovery.
 
+- **`ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED`** - Enable Microsoft Entra ID authentication for Azure OpenAI.
+  - Default: `false`
+  - Set to `true` to use Azure Identity `DefaultAzureCredential` instead of `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY`
+  - Requires `ARCHESTRA_AZURE_OPENAI_BASE_URL`
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)

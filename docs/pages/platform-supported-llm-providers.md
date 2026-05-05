@@ -667,11 +667,25 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 | `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Full deployment URL: `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
 | `ARCHESTRA_AZURE_OPENAI_API_VERSION` | No | Azure OpenAI API version (default: `2024-02-01`) |
 | `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
+| `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED` | No | Set to `true` to use Microsoft Entra ID instead of an Azure API key |
 | `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
 
 ### Getting an Azure API Key
 
 You can generate an API key from the [Azure Portal](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI) under your Azure OpenAI resource.
+
+### Keyless Authentication with Microsoft Entra ID
+
+To use Azure OpenAI without storing an API key, set:
+
+```bash
+ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true
+ARCHESTRA_AZURE_OPENAI_BASE_URL=https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
+```
+
+Archestra uses Azure Identity `DefaultAzureCredential` with the Azure OpenAI token scope. Assign the workload identity, managed identity, service principal, or local Azure CLI user a role that can invoke the Azure OpenAI resource.
+
+See the [Azure OpenAI keyless example](https://github.com/archestra-ai/examples/tree/main/azure-openai-keyless) for a minimal local script that uses the same authentication flow.
 
 ### Base URL Format
 
@@ -688,6 +702,7 @@ The same format applies when configuring a Base URL in the API key settings UI.
 ### Notes
 
 - **API Version**: Chat Completions and model discovery use `ARCHESTRA_AZURE_OPENAI_API_VERSION`. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. You do not need to include either query parameter in the base URL.
+- **Microsoft Entra ID**: When `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true`, Archestra creates a system provider key at startup and sends `Authorization: Bearer <token>` to Azure OpenAI instead of `api-key`.
 - **Multiple Deployments**: To use multiple Azure deployments, create separate API key entries in Settings, each with its own deployment URL as the Base URL.
 - **Deployment URL configuration**: Keep using the deployment-specific base URL format shown above. Archestra derives the correct upstream endpoint automatically for both `/chat/completions` and `/responses` requests.
 - **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.

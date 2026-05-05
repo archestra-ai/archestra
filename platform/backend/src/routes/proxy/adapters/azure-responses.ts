@@ -12,6 +12,10 @@ import type {
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
 import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
+import {
   buildAzureResponsesBaseUrl,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
@@ -89,10 +93,6 @@ export const azureResponsesAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (!apiKey) {
-      throw new ApiError(401, "API key required for Azure AI Foundry");
-    }
-
     const resolvedBaseUrl = options.baseUrl
       ? buildAzureResponsesBaseUrl(options.baseUrl)
       : null;
@@ -112,6 +112,23 @@ export const azureResponsesAdapterFactory: LLMProvider<
           options.externalAgentId,
         )
       : undefined;
+
+    if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
+      return new OpenAIProvider({
+        apiKey: getAzureOpenAiBearerTokenProvider(),
+        baseURL: resolvedBaseUrl,
+        defaultQuery: {
+          "api-version": config.llm.azure.responsesApiVersion,
+        },
+        fetch: customFetch,
+        defaultHeaders: options.defaultHeaders,
+      });
+    }
+
+    if (!apiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
+
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({

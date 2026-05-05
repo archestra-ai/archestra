@@ -1,4 +1,8 @@
 import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
+import {
   buildAzureDeploymentsUrl,
   extractAzureDeploymentName,
   normalizeAzureApiKey,
@@ -30,11 +34,11 @@ export async function fetchAzureModels(
   try {
     // Azure lists deployments at GET /openai/deployments?api-version=...
     // and returns { data: [{ id, ... }] }, which we map into ModelInfo.
-    const normalizedApiKey = normalizeAzureApiKey(apiKey);
+    const authHeaders = await getAzureAuthHeaders(apiKey);
     const response = await fetch(url, {
       headers: {
         ...(extraHeaders ?? {}),
-        "api-key": normalizedApiKey ?? "",
+        ...authHeaders,
       },
     });
 
@@ -60,6 +64,21 @@ export async function fetchAzureModels(
     logger.error({ error }, "Error fetching Azure deployments");
     return fallbackToConfiguredDeployment(deploymentName);
   }
+}
+
+async function getAzureAuthHeaders(
+  apiKey: string | undefined,
+): Promise<Record<string, string>> {
+  if (apiKey) {
+    return { "api-key": normalizeAzureApiKey(apiKey) ?? "" };
+  }
+
+  if (!isAzureOpenAiEntraIdEnabled()) {
+    return { "api-key": "" };
+  }
+
+  const tokenProvider = getAzureOpenAiBearerTokenProvider();
+  return { Authorization: `Bearer ${await tokenProvider()}` };
 }
 
 function fallbackToConfiguredDeployment(

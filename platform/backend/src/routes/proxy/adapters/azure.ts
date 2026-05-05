@@ -16,6 +16,10 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
+import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
 import { normalizeAzureApiKey } from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
@@ -220,10 +224,6 @@ export const azureAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): OpenAIProvider {
-    if (!apiKey) {
-      throw new ApiError(401, "API key required for Azure AI Foundry");
-    }
-
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "azure",
@@ -232,6 +232,21 @@ export const azureAdapterFactory: LLMProvider<
           options.externalAgentId,
         )
       : undefined;
+
+    if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
+      return new OpenAIProvider({
+        apiKey: getAzureOpenAiBearerTokenProvider(),
+        baseURL: options.baseUrl,
+        defaultQuery: { "api-version": config.llm.azure.apiVersion },
+        fetch: customFetch,
+        defaultHeaders: options.defaultHeaders,
+      });
+    }
+
+    if (!apiKey) {
+      throw new ApiError(401, "API key required for Azure AI Foundry");
+    }
+
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({

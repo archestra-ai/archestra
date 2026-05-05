@@ -12,6 +12,7 @@ import { hasPermission, userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import logger from "@/logging";
 import {
+  LlmOauthClientModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -646,29 +647,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Delete virtual key secrets before deleting the parent API key.
-      // The DB cascades the virtual key rows, but their secrets in the
-      // secret manager would be orphaned without explicit cleanup.
-      const virtualKeys = await VirtualApiKeyModel.findByChatApiKeyId({
-        chatApiKeyId: params.id,
+      const virtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId({
+        providerApiKeyId: params.id,
         organizationId,
         userId: user.id,
         userTeamIds: await TeamModel.getUserTeamIds(user.id),
         isAdmin: true,
       });
-      for (const vk of virtualKeys) {
-        try {
-          await secretManager().deleteSecret(vk.secretId);
-        } catch (error) {
-          logger.warn(
-            {
-              virtualKeyId: vk.id,
-              secretId: vk.secretId,
-              error: String(error),
-            },
-            "Failed to delete virtual key secret during parent key deletion",
-          );
-        }
+      if (virtualKeys.length > 0) {
+        throw new ApiError(
+          400,
+          "This API key is mapped to one or more virtual API keys. Remove those mappings before deleting it.",
+        );
+      }
+
+      const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
+        providerApiKeyId: params.id,
+        organizationId,
+      });
+      if (oauthClients.length > 0) {
+        throw new ApiError(
+          400,
+          "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
+        );
       }
 
       // Delete the parent key's associated secret

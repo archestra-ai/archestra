@@ -217,7 +217,7 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
     await db
       .update(schema.organizationsTable)
       .set({
-        mcpOauthAccessTokenLifetimeSeconds: 604_800,
+        oauthAccessTokenLifetimeSeconds: 604_800,
       })
       .where(eq(schema.organizationsTable.id, org.id));
     await makeMember(user.id, org.id, { role: "admin" });

@@ -292,17 +292,6 @@ describe("organization routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("updates showTwoFactor toggle", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/appearance-settings",
-        payload: { showTwoFactor: true },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().showTwoFactor).toBe(true);
-    });
-
     test("updates slimChatErrorUi toggle", async () => {
       const response = await app.inject({
         method: "PATCH",
@@ -332,7 +321,6 @@ describe("organization routes", () => {
         payload: {
           appName: "Multi-update Test",
           footerText: "Test Footer",
-          showTwoFactor: true,
           chatPlaceholders: ["Hello", "World"],
         },
       });
@@ -341,7 +329,6 @@ describe("organization routes", () => {
       const body = response.json();
       expect(body.appName).toBe("Multi-update Test");
       expect(body.footerText).toBe("Test Footer");
-      expect(body.showTwoFactor).toBe(true);
       expect(body.chatPlaceholders).toEqual(["Hello", "World"]);
     });
 
@@ -676,26 +663,37 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/mcp-settings", () => {
-    test("updates the MCP OAuth access token lifetime", async () => {
+  describe("PATCH /api/organization/auth-settings", () => {
+    test("updates showTwoFactor toggle", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
+        payload: { showTwoFactor: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().showTwoFactor).toBe(true);
+    });
+
+    test("updates the OAuth access token lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 604_800,
+          oauthAccessTokenLifetimeSeconds: 604_800,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().mcpOauthAccessTokenLifetimeSeconds).toBe(604_800);
+      expect(response.json().oauthAccessTokenLifetimeSeconds).toBe(604_800);
     });
 
     test("rejects values below the minimum lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 299,
+          oauthAccessTokenLifetimeSeconds: 299,
         },
       });
 
@@ -705,9 +703,9 @@ describe("organization routes", () => {
     test("rejects values above the maximum lifetime", async () => {
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/mcp-settings",
+        url: "/api/organization/auth-settings",
         payload: {
-          mcpOauthAccessTokenLifetimeSeconds: 31_536_001,
+          oauthAccessTokenLifetimeSeconds: 31_536_001,
         },
       });
 

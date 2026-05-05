@@ -1,0 +1,42 @@
+name: Random Issue and PR Assignee
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: random-issue-pr-assignee-${{ github.event.issue.number || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assign:
+    name: Assign
+    if: github.event_name == 'issues' || github.event.pull_request.draft == false
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      issues: write # Required to assign issues and pull requests.
+
+    steps:
+      - name: Randomly assign owner
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owners = ['joeyorlando', 'iskhakov', 'Konstantinov-Innokentii'];
+            const actor = context.payload.issue?.user?.login ?? context.payload.pull_request?.user?.login;
+            const availableOwners = owners.filter((owner) => owner !== actor);
+            const candidates = availableOwners.length > 0 ? availableOwners : owners;
+            const selectedOwner = candidates[Math.floor(Math.random() * candidates.length)];
+
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: [selectedOwner],
+            });
+
+            console.log(`Assigned #${context.issue.number} to ${selectedOwner}`);

@@ -52910,8 +52910,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -53538,8 +53538,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -54133,8 +54133,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -54605,8 +54605,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {

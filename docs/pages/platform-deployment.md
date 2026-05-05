@@ -754,6 +754,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `false`
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
+  - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
 
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
@@ -794,6 +795,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
   - Foundry v1 format: `https://<resource-name>.services.ai.azure.com/openai/v1`
   - Required to enable the Azure AI Foundry provider.
+  - Use Foundry v1 for Azure-sold OpenAI-compatible models such as Grok.
 
 - **`ARCHESTRA_AZURE_OPENAI_API_VERSION`** - Azure OpenAI REST API version.
   - Default: `2024-02-01`

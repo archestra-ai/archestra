@@ -72,12 +72,15 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 
 - **Base URL**: `http://localhost:9000/v1/anthropic/{profile-id}`
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
+- **Messages path**: `POST /v1/anthropic/{profile-id}/v1/messages`
 
 ### Anthropic on Microsoft Foundry
 
 Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set `ARCHESTRA_ANTHROPIC_BASE_URL` to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set `ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`; Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.
 
-Claude Foundry deployments must exist in Azure before requests will work. Use the deployed Claude model name in the Anthropic `model` field.
+Claude Foundry deployments must exist in Azure before requests will work. Use the deployed Claude model name in the Anthropic `model` field. Microsoft lists extra Claude prerequisites: a paid eligible Azure subscription, a supported region such as East US2 or Sweden Central, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group.
+
+Azure requires Anthropic deployment metadata when creating Claude deployments: `industry`, `organizationName`, and `countryCode`. In Azure CLI this may require an ARM REST deployment call with `properties.modelProviderData`.
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
@@ -666,7 +669,8 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 ### Azure AI Foundry Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/azure/{profile-id}`
-- **Authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+- **API key authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+- **Keyless authentication**: Set `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true` and assign the workload identity, managed identity, service principal, or local Azure CLI user an Azure role that can invoke the deployed model.
 
 ### Azure AI Foundry Environment Variables
 
@@ -726,6 +730,7 @@ The same format applies when configuring a Base URL in the API key settings UI.
 - **API Version**: Deployment URLs use `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Chat Completions and model discovery. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. Foundry v1 URLs do not use either query parameter.
 - **Microsoft Entra ID**: When `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true`, Archestra creates a system provider key at startup and sends `Authorization: Bearer <token>` to Azure OpenAI instead of `api-key`.
 - **Grok on Azure**: Grok models sold directly by Azure use the Foundry v1 OpenAI-compatible Chat Completions API. The model must be deployed in the Azure resource before Archestra can route to it.
+- **Claude on Azure**: Claude models on Microsoft Foundry use Anthropic's Messages API shape, not the OpenAI-compatible Azure route. Configure the Anthropic provider section above.
 - **Multiple Deployments**: With deployment URLs, create separate API key entries in Settings, each with its own deployment URL as the Base URL. With Foundry v1, send the deployed model name in the request `model` field.
 - **Deployment URL configuration**: Keep using the deployment-specific base URL format shown above. Archestra derives the correct upstream endpoint automatically for both `/chat/completions` and `/responses` requests.
 - **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.

@@ -1,3 +1,7 @@
+export * from "./a2a-context";
+export * from "./a2a-message";
+export * from "./a2a-task";
+export * from "./a2a-task-approval-request";
 export * from "./account";
 export * from "./agent";
 export * from "./agent-connector-assignment";
@@ -28,6 +32,7 @@ export * from "./knowledge-base-connector";
 export * from "./knowledge-connector";
 export * from "./label";
 export * from "./limit";
+export * from "./llm-oauth-client";
 export * from "./llm-provider";
 export * from "./llm-provider-api-key";
 export * from "./llm-providers";

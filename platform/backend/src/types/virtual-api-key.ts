@@ -9,10 +9,10 @@ const VirtualApiKeyTeamSchema = z.object({
   name: z.string(),
 });
 
-export const VirtualApiKeyModelRouterMappingSchema = z.object({
+export const VirtualApiKeyProviderMappingSchema = z.object({
   provider: SupportedProvidersSchema,
-  chatApiKeyId: z.string().uuid(),
-  chatApiKeyName: z.string(),
+  providerApiKeyId: z.string().uuid(),
+  providerApiKeyName: z.string(),
 });
 
 export const SelectVirtualApiKeySchema = createSelectSchema(
@@ -38,18 +38,15 @@ export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
   value: z.string(),
   teams: z.array(VirtualApiKeyTeamSchema),
   authorName: z.string().nullable(),
-  modelRouterProviderApiKeys: z.array(VirtualApiKeyModelRouterMappingSchema),
+  providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
 });
 
-/** Schema for virtual key with parent API key info (for org-wide listing) */
+/** Schema for virtual key listing responses. */
 export const VirtualApiKeyWithParentInfoSchema =
   SelectVirtualApiKeySchema.extend({
-    parentKeyName: z.string().nullable(),
-    parentKeyProvider: z.string().nullable(),
-    parentKeyBaseUrl: z.string().nullable(),
     teams: z.array(VirtualApiKeyTeamSchema),
     authorName: z.string().nullable(),
-    modelRouterProviderApiKeys: z.array(VirtualApiKeyModelRouterMappingSchema),
+    providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
   });
 
 export type SelectVirtualApiKey = z.infer<typeof SelectVirtualApiKeySchema>;

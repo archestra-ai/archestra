@@ -181,17 +181,3 @@ async function getParentKeyOptionNameForProvider(
     { targetProvider: provider, route: LLM_PROVIDER_API_KEYS_ROUTE },
   );
 }
-
-/**
- * Returns true if an API key row with the given name is already on the
- * provider API keys page. Caller is responsible for navigating there first.
- */
-export async function hasLlmProviderApiKey(
-  page: Page,
-  name: string,
-): Promise<boolean> {
-  return page
-    .getByTestId(`${E2eTestId.ChatApiKeyRow}-${name}`)
-    .isVisible()
-    .catch(() => false);
-}

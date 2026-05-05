@@ -29,7 +29,7 @@ vi.mock("@/lib/organization.query", () => ({
   useAppearanceSettings: () => ({
     data: { appName: null },
   }),
-  useUpdateMcpSettings: () => ({
+  useUpdateAuthSettings: () => ({
     mutateAsync,
     isPending: false,
   }),
@@ -40,7 +40,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useMissingPermissions: () => [],
 }));
 
-import McpSettingsPage from "./page";
+import { OAuthTokenLifetimeSection } from "./oauth-token-lifetime-section";
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -49,24 +49,24 @@ function renderPage() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <McpSettingsPage />
+      <OAuthTokenLifetimeSection />
     </QueryClientProvider>,
   );
 }
 
-describe("McpSettingsPage", () => {
+describe("OAuthTokenLifetimeSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOrganization = {
-      mcpOauthAccessTokenLifetimeSeconds: 31_536_000,
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
     };
     mockOrganizationPending = false;
     mutateAsync.mockResolvedValue({
-      mcpOauthAccessTokenLifetimeSeconds: 604_800,
+      oauthAccessTokenLifetimeSeconds: 604_800,
     });
   });
 
-  it("submits a preset MCP token lifetime", async () => {
+  it("submits a preset OAuth token lifetime", async () => {
     const user = userEvent.setup();
 
     renderPage();
@@ -80,12 +80,12 @@ describe("McpSettingsPage", () => {
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
-        mcpOauthAccessTokenLifetimeSeconds: 604_800,
+        oauthAccessTokenLifetimeSeconds: 604_800,
       });
     });
   });
 
-  it("submits a custom MCP token lifetime", async () => {
+  it("submits a custom OAuth token lifetime", async () => {
     const user = userEvent.setup();
 
     renderPage();
@@ -100,7 +100,7 @@ describe("McpSettingsPage", () => {
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({
-        mcpOauthAccessTokenLifetimeSeconds: 123_456,
+        oauthAccessTokenLifetimeSeconds: 123_456,
       });
     });
   });

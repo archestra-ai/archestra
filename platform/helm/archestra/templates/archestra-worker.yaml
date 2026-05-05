@@ -23,6 +23,9 @@ spec:
     metadata:
       labels:
         {{- include "archestra-platform.workerLabels" . | nindent 8 }}
+        {{- with .Values.archestra.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- if $workerPodAnnotations }}
       annotations:
         {{- toYaml $workerPodAnnotations | nindent 8 }}

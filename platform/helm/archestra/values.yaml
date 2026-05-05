@@ -34,6 +34,14 @@ archestra:
   #     sidecar.istio.io/inject: "true"
   podAnnotations: {}
 
+  # Labels to add to pods created by the Deployment
+  # This is useful for integrations that require pod-level labels, such as:
+  # - Azure AKS Workload Identity
+  # Example:
+  #   podLabels:
+  #     azure.workload.identity/use: "true"
+  podLabels: {}
+
   # Node selector for scheduling pods on specific nodes
   # This is useful for targeting specific node pools or nodes with particular labels
   # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector

@@ -707,6 +707,53 @@ Archestra uses Azure Identity `DefaultAzureCredential`. Deployment URLs use the 
 See the [Azure OpenAI keyless example](https://github.com/archestra-ai/examples/tree/main/azure-openai-keyless) for a minimal local script that uses the same authentication flow.
 See Microsoft's [Foundry Models Entra ID guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/configure-entra-id) and [Foundry Models endpoint guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/endpoints) for the Azure endpoint formats and token scopes.
 
+#### AKS with Microsoft Entra Workload ID
+
+For AKS deployments, use [Microsoft Entra Workload ID](https://learn.microsoft.com/en-us/azure/aks/workload-identity-overview) with a user-assigned managed identity. Microsoft documents that Azure Identity `DefaultAzureCredential` uses the workload identity environment injected into the pod.
+
+Enable OIDC issuer and workload identity on the AKS cluster, create a federated identity credential for the Archestra Kubernetes service account, and grant the managed identity the inference role required by the resource: `Cognitive Services OpenAI User` for Azure OpenAI deployment URLs, or `Cognitive Services User` for Foundry Models. The service account subject must match the namespace and service account name used by the Helm release:
+
+```bash
+az aks update \
+  --resource-group "$AKS_RESOURCE_GROUP" \
+  --name "$AKS_CLUSTER_NAME" \
+  --enable-oidc-issuer \
+  --enable-workload-identity
+
+export AKS_OIDC_ISSUER="$(az aks show \
+  --resource-group "$AKS_RESOURCE_GROUP" \
+  --name "$AKS_CLUSTER_NAME" \
+  --query oidcIssuerProfile.issuerUrl \
+  --output tsv)"
+
+az identity federated-credential create \
+  --resource-group "$IDENTITY_RESOURCE_GROUP" \
+  --identity-name "$USER_ASSIGNED_IDENTITY_NAME" \
+  --name archestra-platform \
+  --issuer "$AKS_OIDC_ISSUER" \
+  --subject "system:serviceaccount:$NAMESPACE:$SERVICE_ACCOUNT_NAME" \
+  --audience api://AzureADTokenExchange
+```
+
+Then annotate the Helm service account and add the pod label required by the AKS workload identity webhook:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        name: archestra-platform
+        annotations:
+          azure.workload.identity/client-id: "<user-assigned-managed-identity-client-id>"
+  podLabels:
+    azure.workload.identity/use: "true"
+  env:
+    ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED: "true"
+    ARCHESTRA_AZURE_OPENAI_BASE_URL: "https://<resource-name>.services.ai.azure.com/openai/v1"
+```
+
+See Microsoft's [AKS Workload ID deployment guide](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster) for the full cluster, service account, and federated credential setup.
+
 ### Base URL Format
 
 For Azure OpenAI deployment URLs, include the deployment name:

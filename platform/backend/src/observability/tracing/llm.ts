@@ -6,14 +6,18 @@ import {
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
-import type { SupportedProvider } from "@shared";
+import type { InteractionSource, SupportedProvider } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import type { Agent, GenAiOperationName } from "@/types";
+import type { Agent, GenAiOperationName, InteractionAuthMethod } from "@/types";
 import {
+  ATTR_ARCHESTRA_APP_ID,
+  ATTR_ARCHESTRA_APP_NAME,
+  ATTR_ARCHESTRA_AUTH_METHOD,
   ATTR_ARCHESTRA_EXECUTION_ID,
   ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
+  ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_OPERATION_NAME,
   ATTR_GENAI_PROMPT,
   ATTR_GENAI_PROVIDER_NAME,
@@ -53,6 +57,7 @@ const { captureContent } = config.observability.otel;
  * @param params.sessionId - Conversation/session ID (optional)
  * @param params.executionId - Execution ID for tracking agent executions (optional)
  * @param params.externalAgentId - External agent ID from X-Archestra-Agent-Id header (optional)
+ * @param params.source - The interaction source for trace filtering (optional)
  * @param params.serverAddress - The server address (base URL) of the LLM provider (optional)
  * @param params.promptMessages - The prompt messages to capture as a span event (optional)
  * @param params.callback - The callback function to execute within the span context
@@ -67,6 +72,9 @@ export async function startActiveLlmSpan<T>(params: {
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
+  authMethod?: InteractionAuthMethod;
+  authenticatedApp?: { id: string; name: string; clientId: string };
+  source?: InteractionSource;
   serverAddress?: string;
   promptMessages?: unknown;
   parentContext?: Context;
@@ -120,6 +128,16 @@ export async function startActiveLlmSpan<T>(params: {
         ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
         params.externalAgentId,
       );
+    }
+    if (params.authMethod) {
+      span.setAttribute(ATTR_ARCHESTRA_AUTH_METHOD, params.authMethod);
+    }
+    if (params.authenticatedApp) {
+      span.setAttribute(ATTR_ARCHESTRA_APP_ID, params.authenticatedApp.id);
+      span.setAttribute(ATTR_ARCHESTRA_APP_NAME, params.authenticatedApp.name);
+    }
+    if (params.source) {
+      span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.source);
     }
     if (params.serverAddress) {
       span.setAttribute(ATTR_SERVER_ADDRESS, params.serverAddress);

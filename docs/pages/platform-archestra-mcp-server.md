@@ -1586,5 +1586,5 @@ Required RBAC permission: None (no additional RBAC permission required)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `tool_name` | `string` | Yes | Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent-<id>'. |
-| `tool_args` | `object` | No | Arguments object to pass to the target tool. Must match the target tool's input schema. |
+| `tool_args` | `object` | No | Arguments object to pass to the target tool. Put target tool input parameters inside this object. Must match the target tool's input schema. |
 

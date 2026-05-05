@@ -5,6 +5,11 @@
  * the openai ts sdk doesn't expose zod schemas for all of this..
  */
 import type OpenAIProvider from "openai";
+import type {
+  Response,
+  ResponseCreateParams,
+  ResponseStreamEvent,
+} from "openai/resources/responses/responses";
 import type { z } from "zod";
 import * as OpenAiAPI from "./api";
 import * as OpenAiMessages from "./messages";
@@ -27,6 +32,9 @@ namespace OpenAi {
       typeof OpenAiAPI.ChatCompletionResponseSchema
     >;
     export type Usage = z.infer<typeof OpenAiAPI.ChatCompletionUsageSchema>;
+    export type ResponsesRequest = ResponseCreateParams & { model: string };
+    export type ResponsesResponse = Response;
+    export type ResponsesUsage = z.infer<typeof OpenAiAPI.ResponsesUsageSchema>;
 
     export type EmbeddingRequest = z.infer<
       typeof OpenAiAPI.EmbeddingRequestSchema
@@ -42,6 +50,8 @@ namespace OpenAi {
 
     export type ChatCompletionChunk =
       OpenAIProvider.Chat.Completions.ChatCompletionChunk;
+    export type ResponseObject = Response;
+    export type ResponseChunk = ResponseStreamEvent;
     export type Model = z.infer<typeof OpenAiModels.ModelSchema>;
     export type OrlandoModel = z.infer<typeof OpenAiModels.OrlandoModelSchema>;
   }

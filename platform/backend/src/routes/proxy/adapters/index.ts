@@ -11,6 +11,7 @@ export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
 export { openaiAdapterFactory } from "./openai";
+export { openAiResponsesAdapterFactory } from "./openai-responses";
 export { openrouterAdapterFactory } from "./openrouter";
 export { perplexityAdapterFactory } from "./perplexity";
 export { vllmAdapterFactory } from "./vllm";

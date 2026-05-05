@@ -505,7 +505,11 @@ export type CreateScheduleTriggerFromConversationInput = {
 
 export const conversationScheduleTriggerKeys = {
   suggestion: (conversationId: string) =>
-    [...scheduleTriggerKeys.all, "conversation-suggestion", conversationId] as const,
+    [
+      ...scheduleTriggerKeys.all,
+      "conversation-suggestion",
+      conversationId,
+    ] as const,
 };
 
 export function useConversationScheduleTriggerSuggestion(
@@ -549,4 +553,3 @@ export function useCreateScheduleTriggerFromConversation() {
     },
   });
 }
-

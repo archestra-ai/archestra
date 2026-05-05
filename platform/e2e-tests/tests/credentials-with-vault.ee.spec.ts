@@ -184,7 +184,7 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     makeRandomString,
   }) => {
     test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
     const newCatalogItem = await addCustomSelfHostedCatalogItem({
@@ -244,7 +244,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       expectedResult: secretValue,
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
-      cookieHeaders,
       profileId: sharedGateway.id,
     });
 
@@ -397,7 +396,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       expectedResult: secretValue,
       tokenToUse: "org-token",
       toolName: `${newCatalogItem.name}__print_archestra_test`,
-      cookieHeaders,
       profileId: sharedGateway.id,
     });
 

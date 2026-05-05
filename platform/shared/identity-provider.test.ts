@@ -104,6 +104,15 @@ describe("IdentityProviderFormSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts empty allowed email domains", () => {
+    const result = IdentityProviderFormSchema.safeParse({
+      ...validBase,
+      domain: "",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("rejects invalid allowed email domains", () => {
     const result = IdentityProviderFormSchema.safeParse({
       ...validBase,

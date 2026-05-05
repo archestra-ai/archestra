@@ -48,7 +48,7 @@ async function createChatApiKey(
       provider,
       apiKey: opts?.apiKey ?? "sk-e2e-test-key-for-wiremock",
       scope: "org",
-      baseUrl: opts?.baseUrl ?? null,
+      baseUrl: opts?.baseUrl ?? `${WIREMOCK_INTERNAL_URL}/openai/v1`,
     },
   });
   return (await response.json()) as {
@@ -70,9 +70,10 @@ async function createVirtualKey(
   const response = await makeApiRequest({
     request,
     method: "post",
-    urlSuffix: `/api/llm-provider-api-keys/${chatApiKeyId}/virtual-keys`,
+    urlSuffix: "/api/llm-virtual-keys",
     data: {
       name: opts?.name ?? "test-vk",
+      chatApiKeyId,
       ...(opts?.expiresAt !== undefined && { expiresAt: opts.expiresAt }),
     },
   });
@@ -376,7 +377,7 @@ test.describe("Virtual API Keys - LLM Proxy", () => {
     await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: `/api/llm-provider-api-keys/${chatApiKey.id}/virtual-keys/${vk.id}`,
+      urlSuffix: `/api/llm-virtual-keys/${vk.id}`,
     });
 
     try {

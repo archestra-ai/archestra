@@ -1,7 +1,6 @@
 ---
 title: Incoming Email
 category: Agents
-subcategory: Agent Triggers
 order: 6
 description: Invoke agents by sending emails to auto-generated addresses
 lastUpdated: 2026-03-27

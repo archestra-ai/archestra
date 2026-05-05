@@ -1,6 +1,9 @@
+import type {
+  ServerWebSocketMessage,
+  ServerWebSocketMessageType,
+} from "@shared";
 import type { QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ServerWebSocketMessage, ServerWebSocketMessageType } from "@shared";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -8,7 +11,9 @@ import websocketService from "@/lib/websocket/websocket";
  * Subscribes to a WebSocket event type and invalidates the given query keys
  * whenever a matching message arrives.
  */
-export function useWebSocketQueryInvalidation<T extends ServerWebSocketMessageType>(
+export function useWebSocketQueryInvalidation<
+  T extends ServerWebSocketMessageType,
+>(
   eventType: T,
   queryKeys: QueryKey[],
   filter?: (msg: Extract<ServerWebSocketMessage, { type: T }>) => boolean,
@@ -32,7 +37,10 @@ export function useWebSocketQueryInvalidation<T extends ServerWebSocketMessageTy
 
     const unsubscribe = websocketService.subscribe(eventType, (msg) => {
       const currentFilter = filterRef.current;
-      if (currentFilter && !currentFilter(msg as Extract<ServerWebSocketMessage, { type: T }>)) {
+      if (
+        currentFilter &&
+        !currentFilter(msg as Extract<ServerWebSocketMessage, { type: T }>)
+      ) {
         return;
       }
       for (const key of queryKeys) {
@@ -47,6 +55,5 @@ export function useWebSocketQueryInvalidation<T extends ServerWebSocketMessageTy
     return unsubscribe;
 
     // filter is accessed via filterRef so it always reflects the latest value without re-subscribing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, eventType, queryClient]);
+  }, [enabled, eventType, queryClient, queryKeys]);
 }

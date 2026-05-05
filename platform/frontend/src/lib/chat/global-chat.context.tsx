@@ -7,7 +7,6 @@ import {
   getArchestraToolShortName,
   getChatMessagesSyncSignature,
   getServerMessagesToApplyToChat,
-  isChatErrorResponse,
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,

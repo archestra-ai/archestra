@@ -2340,9 +2340,9 @@ class McpClient {
   }): Promise<CommonMcpToolDefinition[]> {
     const { catalogItem, mcpServerId, secrets, secretId } = params;
 
-    // For local servers, retry connection a few times since the MCP server process
-    // may need time to initialize even after the pod is ready
-    const maxRetries = catalogItem.serverType === "local" ? 3 : 1;
+    // Local stdio servers can report a ready pod before the MCP process accepts
+    // JSON-RPC, especially while the runtime is still pulling or starting Node.
+    const maxRetries = catalogItem.serverType === "local" ? 6 : 1;
     const retryDelayMs = 5000; // 5 seconds between retries
 
     let lastError: Error | undefined;
@@ -3171,6 +3171,7 @@ function buildStaticCredentialHeaders(params: {
       fieldName,
       headerName: config.headerName,
       secretValue,
+      valuePrefix: config.valuePrefix,
     });
   }
 
@@ -3306,7 +3307,12 @@ function getStaticCredentialHeaderValue(params: {
   fieldName: string;
   headerName: string;
   secretValue: string;
+  valuePrefix?: string;
 }): string {
+  if (params.valuePrefix) {
+    return `${params.valuePrefix}${params.secretValue}`;
+  }
+
   if (
     params.fieldName === "access_token" &&
     params.headerName.toLowerCase() === "authorization"

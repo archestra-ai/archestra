@@ -99,6 +99,11 @@ describe("processIncomingEmail", () => {
       messageId: "msg-123",
       text: "Agent response",
       finishReason: "end_turn",
+      responseUiMessage: {
+        id: "msg-123",
+        role: "assistant",
+        parts: [{ type: "text", text: "Agent response" }],
+      },
     });
   });
 
@@ -600,6 +605,11 @@ describe("processIncomingEmail with sendReply option", () => {
       messageId: "msg-reply-test",
       text: "Agent response for reply",
       finishReason: "end_turn",
+      responseUiMessage: {
+        id: "msg-reply-test",
+        role: "assistant",
+        parts: [{ type: "text", text: "Agent response for reply" }],
+      },
     });
   });
 
@@ -734,6 +744,11 @@ describe("processIncomingEmail with sendReply option", () => {
       messageId: "msg-specific",
       text: "Specific agent response",
       finishReason: "end_turn",
+      responseUiMessage: {
+        id: "msg-specific",
+        role: "assistant",
+        parts: [{ type: "text", text: "Specific agent response" }],
+      },
     });
 
     const mockProvider = {
@@ -831,6 +846,11 @@ describe("processIncomingEmail with conversation history", () => {
       messageId: "conversation-response-123",
       text: "Agent response with context",
       finishReason: "end_turn",
+      responseUiMessage: {
+        id: "conversation-response-123",
+        role: "assistant",
+        parts: [{ type: "text", text: "Agent response with context" }],
+      },
     });
   });
 
@@ -1048,6 +1068,11 @@ describe("processIncomingEmail security modes", () => {
       messageId: "msg-security-test",
       text: "Agent security response",
       finishReason: "end_turn",
+      responseUiMessage: {
+        id: "msg-security-test",
+        role: "assistant",
+        parts: [{ type: "text", text: "Agent security response" }],
+      },
     });
     // Default: user is not an agent admin
     vi.mocked(userHasPermission).mockResolvedValue(false);

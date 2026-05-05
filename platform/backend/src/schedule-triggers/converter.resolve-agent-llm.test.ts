@@ -142,7 +142,9 @@ describe("scheduleTriggerConverterService resolveAgentLlm (modelId → provider)
       completionPricePerToken: "0.000015",
       lastSyncedAt: new Date(),
     });
-    const secret = await makeSecret({ secret: { apiKey: "sk-test-anthropic" } });
+    const secret = await makeSecret({
+      secret: { apiKey: "sk-test-anthropic" },
+    });
     const anthropicKey = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "anthropic",
       scope: "org",

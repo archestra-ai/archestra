@@ -97,9 +97,7 @@ export function ConvertToScheduledTaskDialog({
     if (!replyInSameConversation || linkedAllowedAgentIds.size === 0) return;
     if (agentId && linkedAllowedAgentIds.has(agentId)) return;
     const fallback =
-      suggestion?.suggestedAgentId ??
-      suggestion?.candidates[0]?.agent.id ??
-      "";
+      suggestion?.suggestedAgentId ?? suggestion?.candidates[0]?.agent.id ?? "";
     if (fallback) {
       setAgentId(fallback);
     }
@@ -153,10 +151,11 @@ export function ConvertToScheduledTaskDialog({
       });
     }
 
-    if (suggestion?.suggestedAgentId && !seen.has(suggestion.suggestedAgentId)) {
-      const fallback = agents.find(
-        (a) => a.id === suggestion.suggestedAgentId,
-      );
+    if (
+      suggestion?.suggestedAgentId &&
+      !seen.has(suggestion.suggestedAgentId)
+    ) {
+      const fallback = agents.find((a) => a.id === suggestion.suggestedAgentId);
       if (fallback) {
         options.unshift({
           value: fallback.id,

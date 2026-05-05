@@ -158,4 +158,24 @@ ${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`),
       reasonType: "sensitive_context",
     });
   });
+
+  it("extracts tool state errors from structured content", () => {
+    expect(
+      extractMcpToolError({
+        structuredContent: {
+          archestraError: {
+            type: "tool_state",
+            code: "already_using_agent",
+            message: "Already using agent.",
+            toolName: "archestra__swap_agent",
+          },
+        },
+      }),
+    ).toEqual({
+      type: "tool_state",
+      code: "already_using_agent",
+      message: "Already using agent.",
+      toolName: "archestra__swap_agent",
+    });
+  });
 });

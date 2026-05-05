@@ -20,7 +20,10 @@ describe("syncBuiltInAgents", () => {
 
     const [firstPolicyAgent, secondPolicyAgent, firstScheduleConversion] =
       await Promise.all([
-        AgentModel.getBuiltInAgent(BUILT_IN_AGENT_IDS.POLICY_CONFIG, firstOrg.id),
+        AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          firstOrg.id,
+        ),
         AgentModel.getBuiltInAgent(
           BUILT_IN_AGENT_IDS.POLICY_CONFIG,
           secondOrg.id,

@@ -148,13 +148,7 @@ describe("scheduleTriggerConverterService quota / limit integration", () => {
 
     expect(mockGenerateText).toHaveBeenCalled();
     expect(trigger.messageTemplate).toBe("LLM summarized standalone prompt");
-    expect(updateSpy).toHaveBeenCalledWith(
-      "agent",
-      builtInId,
-      "gpt-4o",
-      10,
-      5,
-    );
+    expect(updateSpy).toHaveBeenCalledWith("agent", builtInId, "gpt-4o", 10, 5);
   });
 
   test("still returns summarized prompt when updateTokenLimitUsage fails", async ({

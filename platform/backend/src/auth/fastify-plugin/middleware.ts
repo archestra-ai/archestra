@@ -6,6 +6,7 @@ import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import { UserModel } from "@/models";
+import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import {
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
@@ -102,11 +103,15 @@ export class Authnz {
     const isLlmProxyRoute = SupportedProviders.some((provider) =>
       url.startsWith(`/v1/${provider}`),
     );
+    // Prefer route consts here instead of hardcoding paths; these checks must
+    // stay in sync with route registration.
+    const isModelRouterRoute = url.startsWith(MODEL_ROUTER_PREFIX);
 
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
+      isModelRouterRoute ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||
@@ -115,6 +120,7 @@ export class Authnz {
       url.startsWith(config.mcpGateway.endpoint) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
+      url.startsWith(config.a2aV2Gateway.endpoint) ||
       // Skip OAuth well-known discovery endpoints (RFC 8414 / RFC 9728)
       url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)

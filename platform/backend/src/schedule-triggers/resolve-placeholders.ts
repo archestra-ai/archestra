@@ -1,10 +1,14 @@
 /**
  * Resolves date placeholders in scheduled task message templates
  */
-export function resolvePlaceholders(template: string, timezone: string): string {
+export function resolvePlaceholders(
+  template: string,
+  timezone: string,
+): string {
   const now = new Date();
   // sv-SE locale produces YYYY-MM-DD without any extra formatting.
-  const fmt = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: timezone });
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("sv-SE", { timeZone: timezone });
 
   const today = fmt(now);
 

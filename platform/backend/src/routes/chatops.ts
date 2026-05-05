@@ -777,7 +777,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Invalid payload JSON");
       }
 
-      await chatOpsManager.handleInteractiveSelection(provider, payload);
+      if (provider.handleInteractivePayload) {
+        await provider.handleInteractivePayload(payload);
+      } else {
+        await chatOpsManager.handleInteractiveSelection(provider, payload);
+      }
       return reply.send({ ok: true });
     },
   );

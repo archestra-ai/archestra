@@ -47,6 +47,7 @@ export const UserConfigFieldSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   headerName: z.string().optional(),
+  valuePrefix: z.string().optional(),
 });
 
 // Define a version of LocalConfigSchema for SELECT operations
@@ -171,6 +172,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
+    // Tenancy is locked after creation
+    multitenant: true,
   });
 
 export const UpdateInternalMcpCatalogSchema =

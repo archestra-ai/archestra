@@ -1,7 +1,7 @@
 ---
 title: Secure Agent with Vercel AI
 category: Examples
-order: 6
+order: 7
 ---
 
 <!-- 

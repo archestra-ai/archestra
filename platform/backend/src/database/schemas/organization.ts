@@ -3,7 +3,7 @@ import type {
   OrganizationTheme,
   SupportedProvider,
 } from "@shared";
-import { DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
 import {
   boolean,
   integer,
@@ -15,6 +15,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  ConnectionBaseUrl,
   GlobalToolPolicy,
   OnboardingWizard,
   OrganizationChatLink,
@@ -146,14 +147,14 @@ const organizationsTable = pgTable("organization", {
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
 
   /**
-   * OAuth access token lifetime for MCP-native auth flows.
+   * Organization OAuth access token lifetime for user authorization-code flows.
    * Returned to clients via `expires_in` and used to persist token expiration.
    */
-  mcpOauthAccessTokenLifetimeSeconds: integer(
-    "mcp_oauth_access_token_lifetime_seconds",
+  oauthAccessTokenLifetimeSeconds: integer(
+    "oauth_access_token_lifetime_seconds",
   )
     .notNull()
-    .default(DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
+    .default(DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS),
 
   /**
    * Admin-selected MCP gateway pre-filled on /connection.
@@ -185,6 +186,15 @@ const organizationsTable = pgTable("organization", {
   connectionShownProviders: text("connection_shown_providers")
     .$type<SupportedProvider[]>()
     .array(),
+
+  /**
+   * Per-URL metadata (description + default flag) for the externally configured
+   * proxy URLs (NEXT_PUBLIC_ARCHESTRA_API_BASE_URL). The URLs themselves are
+   * still env-driven — this table just augments them with admin context.
+   */
+  connectionBaseUrls: jsonb("connection_base_urls").$type<
+    ConnectionBaseUrl[]
+  >(),
 });
 
 export default organizationsTable;

@@ -31,7 +31,10 @@ describe("resolvePlaceholders", () => {
   });
 
   test("replacement is case-insensitive", () => {
-    const result = resolvePlaceholders("{{TODAY}} {{Yesterday}} {{LAST_WEEK}}", timezone);
+    const result = resolvePlaceholders(
+      "{{TODAY}} {{Yesterday}} {{LAST_WEEK}}",
+      timezone,
+    );
     const today = isoDate(new Date());
     expect(result).toContain(today);
     expect(result).not.toContain("{{TODAY}}");

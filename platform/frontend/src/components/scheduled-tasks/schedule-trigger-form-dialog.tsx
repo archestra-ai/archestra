@@ -1,9 +1,9 @@
 "use client";
 
 import { Cron } from "croner";
+import { Loader2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -24,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -113,7 +113,10 @@ export function ScheduleTriggerFormDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
+        <DialogForm
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={onSubmit}
+        >
           <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dialog-name">Name</Label>
@@ -149,13 +152,17 @@ export function ScheduleTriggerFormDialog({
                 {promptHeaderExtra}
               </div>
               {promptDescription ? (
-                <div className="text-xs text-muted-foreground">{promptDescription}</div>
+                <div className="text-xs text-muted-foreground">
+                  {promptDescription}
+                </div>
               ) : null}
               {promptBody ?? (
                 <Textarea
                   id="dialog-prompt"
                   value={values.messageTemplate}
-                  onChange={(event) => onMessageTemplateChange(event.target.value)}
+                  onChange={(event) =>
+                    onMessageTemplateChange(event.target.value)
+                  }
                   disabled={promptLoading}
                   placeholder={
                     promptLoading
@@ -190,7 +197,8 @@ export function ScheduleTriggerFormDialog({
                 <div>
                   <Label htmlFor="dialog-enabled">Enable immediately</Label>
                   <p className="text-xs text-muted-foreground">
-                    If disabled, you can enable the task later from Scheduled Tasks.
+                    If disabled, you can enable the task later from Scheduled
+                    Tasks.
                   </p>
                 </div>
                 <Switch
@@ -223,7 +231,9 @@ export function ScheduleTriggerFormDialog({
               type="submit"
               disabled={isSaving || !isFormValid}
             >
-              {isSaving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              {isSaving && (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              )}
               {submitLabel}
             </PermissionButton>
           </DialogStickyFooter>
@@ -314,7 +324,8 @@ function buildCronFromSchedule(
       return `${minute} * * * *`;
     case "daily": {
       const sorted = [...days].sort((a, b) => a - b);
-      const dowPart = sorted.length === 7 || sorted.length === 0 ? "*" : sorted.join(",");
+      const dowPart =
+        sorted.length === 7 || sorted.length === 0 ? "*" : sorted.join(",");
       return `${minute} ${hour} * * ${dowPart}`;
     }
   }
@@ -327,7 +338,10 @@ function ScheduleSection({
   cronExpression: string;
   onCronExpressionChange: (value: string) => void;
 }) {
-  const parsed = useMemo(() => parseCronToMode(cronExpression), [cronExpression]);
+  const parsed = useMemo(
+    () => parseCronToMode(cronExpression),
+    [cronExpression],
+  );
   const [mode, setMode] = useState<ScheduleMode>(parsed.mode);
   const [hour, setHour] = useState(parsed.hour);
   const [minute] = useState(parsed.minute);
@@ -346,7 +360,12 @@ function ScheduleSection({
   }, [parsed, cronExpression, onCronExpressionChange]);
 
   const updateCron = useCallback(
-    (newMode: ScheduleMode, newHour: string, newMinute: string, newDays: number[]) => {
+    (
+      newMode: ScheduleMode,
+      newHour: string,
+      newMinute: string,
+      newDays: number[],
+    ) => {
       onCronExpressionChange(
         buildCronFromSchedule(newMode, newHour, newMinute, newDays),
       );
@@ -365,7 +384,9 @@ function ScheduleSection({
   };
 
   const handleDayToggle = (day: number) => {
-    const newDays = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
+    const newDays = days.includes(day)
+      ? days.filter((d) => d !== day)
+      : [...days, day];
     if (newDays.length === 0) return;
     setDays(newDays);
     updateCron(mode, hour, minute, newDays);
@@ -455,9 +476,13 @@ function CronPreview({
   const isInvalid = hint === "Invalid schedule";
 
   return (
-    <p className={cn("text-xs", isInvalid ? "text-destructive" : "text-muted-foreground")}>
+    <p
+      className={cn(
+        "text-xs",
+        isInvalid ? "text-destructive" : "text-muted-foreground",
+      )}
+    >
       {hint}
     </p>
   );
 }
-

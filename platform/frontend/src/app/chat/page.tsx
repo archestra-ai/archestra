@@ -59,7 +59,6 @@ import MessageThread, {
 } from "@/components/message-thread";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { useWebSocketQueryInvalidation } from "@/lib/hooks/use-websocket-query-invalidation";
 import {
   Card,
   CardContent,
@@ -126,6 +125,7 @@ import {
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useWebSocketQueryInvalidation } from "@/lib/hooks/use-websocket-query-invalidation";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -137,6 +137,7 @@ import { cn } from "@/lib/utils";
 import {
   buildCreateConversationInput,
   resolveChatModelState,
+  resolveInitialAgentSelection,
   resolveInitialAgentState,
   resolvePreferredModelForProvider,
   shouldResetInitialChatState,
@@ -223,6 +224,10 @@ export function ChatPageContent({
   const { data: canUpdateAgent } = useHasPermissions({
     agent: ["team-admin"],
   });
+  const { data: canSeeAgentPicker, isLoading: isAgentPickerPermissionLoading } =
+    useHasPermissions({
+      chatAgentPicker: ["enable"],
+    });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
@@ -321,42 +326,26 @@ export function ChatPageContent({
       }
     }
 
-    // Priority: org default > localStorage > member default > first available
+    // Priority: org default > localStorage > member default > first available.
     // Org default always wins when set (admin-configured for the whole org).
-    // localStorage only overrides when no org default is configured.
+    // localStorage only overrides when no org default is configured and the
+    // user can change agents; otherwise a stale hidden picker value can trap
+    // restricted users on a previously swapped agent.
     // Also skip if a URL param was consumed but state hasn't flushed yet.
     if (!initialAgentId && !urlParamsConsumedRef.current) {
-      // Try org's default agent first (admin-configured, takes precedence)
-      if (organization?.defaultAgentId) {
-        const orgDefaultAgent = internalAgents.find(
-          (a) => a.id === organization.defaultAgentId,
-        );
-        if (orgDefaultAgent) {
-          applyInitialAgentSelection(orgDefaultAgent);
-          saveAgent(organization.defaultAgentId);
-          return;
-        }
-      }
-      // Try localStorage (user's previous selection, only when no org default)
-      const savedAgentId = getSavedAgent();
-      const savedAgent = internalAgents.find((a) => a.id === savedAgentId);
-      if (savedAgent) {
-        applyInitialAgentSelection(savedAgent);
-        return;
-      }
-      // Try member's default agent
-      if (defaultAgentId) {
-        const defaultAgent = internalAgents.find(
-          (a) => a.id === defaultAgentId,
-        );
-        if (defaultAgent) {
-          applyInitialAgentSelection(defaultAgent);
-          saveAgent(defaultAgentId);
-          return;
-        }
-      }
-      applyInitialAgentSelection(internalAgents[0]);
-      saveAgent(internalAgents[0].id);
+      if (isAgentPickerPermissionLoading) return;
+
+      const selectedAgent = resolveInitialAgentSelection({
+        agents: internalAgents,
+        organizationDefaultAgentId: organization?.defaultAgentId,
+        savedAgentId: getSavedAgent(),
+        memberDefaultAgentId: defaultAgentId,
+        canUseSavedAgent: canSeeAgentPicker === true,
+      });
+      if (!selectedAgent) return;
+
+      applyInitialAgentSelection(selectedAgent);
+      saveAgent(selectedAgent.id);
     }
   }, [
     applyInitialAgentSelection,
@@ -366,6 +355,8 @@ export function ChatPageContent({
     defaultAgentId,
     organization?.defaultAgentId,
     isOrgLoading,
+    canSeeAgentPicker,
+    isAgentPickerPermissionLoading,
   ]);
 
   // Initialize model and API key once agent is resolved.
@@ -1500,13 +1491,13 @@ export function ChatPageContent({
                   : "You don't have permission to create agents"
               }
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Create Agent
             </ButtonWithTooltip>
           ) : (
             <Button asChild>
               <Link href="/agents?create=true">
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 Create Agent
               </Link>
             </Button>
@@ -1869,7 +1860,7 @@ export function ChatPageContent({
                             void handleForkSharedConversation();
                           }}
                         >
-                          <Plus className="h-4 w-4 mr-2" />
+                          <Plus className="h-4 w-4" />
                           Start New Chat from here
                         </Button>
                       </div>
@@ -1891,7 +1882,7 @@ export function ChatPageContent({
                         </span>
                       </div>
                       <Button onClick={() => router.push("/chat")}>
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4" />
                         New Conversation
                       </Button>
                     </div>
@@ -2234,15 +2225,7 @@ function getObjectMetadata(message: UIMessage): Record<string, unknown> {
 // No API Key Setup — shown when user has no API keys configured
 // =========================================================================
 
-const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
-  name: "",
-  provider: "anthropic",
-  apiKey: null,
-  baseUrl: null,
-  scope: "personal",
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
   isPrimary: true,
 };
 
@@ -2263,7 +2246,7 @@ function NoApiKeySetup() {
           data-testid={E2eTestId.QuickstartAddApiKeyButton}
           onClick={() => setIsDialogOpen(true)}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add API Key
         </Button>
       </div>

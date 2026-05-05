@@ -1,41 +1,47 @@
 "use client";
 
-import { Settings } from "lucide-react";
+import { DocsPage, getDocsUrl } from "@shared";
+import { ArrowUpRight, Database, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useKnowledgeBaseConfigStatus } from "@/lib/knowledge/knowledge-base.query";
 
 export function EmbeddingRequiredPlaceholder() {
   const router = useRouter();
-  const status = useKnowledgeBaseConfigStatus();
   const { data: canAccessSettings } = useHasPermissions({
     knowledgeSettings: ["read"],
   });
 
-  const missing: string[] = [];
-  if (!status.embedding) missing.push("embedding");
-  if (!status.reranker) missing.push("reranking");
-
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center text-muted-foreground max-w-md">
-        <Settings className="h-10 w-10 mx-auto mb-3 opacity-50" />
-        <p className="font-medium mb-1">Knowledge base setup required</p>
-        <p className="text-sm mb-4">
-          {canAccessSettings
-            ? `Configure ${missing.join(" and ")} API key${missing.length > 1 ? "s" : ""} and model${missing.length > 1 ? "s" : ""} in Knowledge Settings to start using knowledge bases and connectors.`
-            : `The ${missing.join(" and ")} API key${missing.length > 1 ? "s" : ""} and model${missing.length > 1 ? "s" : ""} need to be configured by an administrator before you can use knowledge bases and connectors.`}
+      <div className="text-center max-w-md">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-background shadow-sm border">
+          <Database className="h-7 w-7 text-primary" />
+        </div>
+        <h2 className="text-xl font-semibold mb-2">
+          Connect your docs, drives, and repos so your agents answer from your
+          knowledge
+        </h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          Configuration is needed to create your first knowledge base.
         </p>
-        {canAccessSettings && (
-          <Button
-            variant="outline"
-            onClick={() => router.push("/settings/knowledge")}
+        <div className="flex items-center justify-center gap-4">
+          {canAccessSettings && (
+            <Button onClick={() => router.push("/settings/knowledge")}>
+              <Settings className="mr-2 h-4 w-4" />
+              Configure now
+            </Button>
+          )}
+          <a
+            href={getDocsUrl(DocsPage.PlatformKnowledgeBases)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
           >
-            <Settings className="mr-2 h-4 w-4" />
-            Go to Knowledge Settings
-          </Button>
-        )}
+            Learn more
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
     </div>
   );

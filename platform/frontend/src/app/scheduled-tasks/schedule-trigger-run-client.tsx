@@ -33,6 +33,7 @@ import {
   useUpdateConversation,
 } from "@/lib/chat/chat.query";
 import { useChatSession } from "@/lib/chat/global-chat.context";
+import { useWebSocketQueryInvalidation } from "@/lib/hooks/use-websocket-query-invalidation";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
@@ -41,7 +42,6 @@ import {
   useScheduleTrigger,
   useScheduleTriggerRun,
 } from "@/lib/schedule-trigger.query";
-import { useWebSocketQueryInvalidation } from "@/lib/hooks/use-websocket-query-invalidation";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
@@ -109,7 +109,10 @@ export function ScheduleTriggerRunPage({
 
   useWebSocketQueryInvalidation(
     "schedule_trigger_run_updated",
-    [scheduleTriggerKeys.detail(triggerId), scheduleTriggerKeys.run(triggerId, runId)],
+    [
+      scheduleTriggerKeys.detail(triggerId),
+      scheduleTriggerKeys.run(triggerId, runId),
+    ],
     (msg) => msg.payload.triggerId === triggerId && msg.payload.runId === runId,
     { enabled: !!triggerId && !!runId },
   );
@@ -407,7 +410,7 @@ export function ScheduleTriggerRunPage({
   if (isLoadingPage) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Loader2 className="h-4 w-4 animate-spin" />
         Loading scheduled run...
       </div>
     );

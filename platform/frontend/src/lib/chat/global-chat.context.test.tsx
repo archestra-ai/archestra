@@ -32,6 +32,9 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@/lib/chat/chat.query", () => ({
+  useConversation: () => ({
+    data: undefined,
+  }),
   useGenerateConversationTitle: () => ({
     isPending: false,
     mutate: mocks.mutate,

@@ -1,9 +1,9 @@
 import { ApiError } from "@shared";
-import { describe, expect, test } from "@/test";
 import AgentModel from "@/models/agent";
 import ConversationModel from "@/models/conversation";
 import InteractionModel from "@/models/interaction";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
+import { describe, expect, test } from "@/test";
 import { scheduleTriggerConverterService } from "./converter";
 
 describe("scheduleTriggerConverterService linked conversation", () => {

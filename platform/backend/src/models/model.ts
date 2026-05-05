@@ -1,8 +1,5 @@
-import {
-  SupportedProvidersSchema,
-  type SupportedProvider,
-} from "@shared";
-import { and, eq, ilike, notInArray, or, sql } from "drizzle-orm";
+import { type SupportedProvider, SupportedProvidersSchema } from "@shared";
+import { and, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -65,6 +62,7 @@ class ModelModel {
   static async findAll(params?: {
     search?: string;
     provider?: SupportedProvider;
+    providers?: SupportedProvider[];
   }): Promise<Model[]> {
     const conditions = [];
 
@@ -73,6 +71,12 @@ class ModelModel {
     }
     if (params?.provider) {
       conditions.push(eq(schema.modelsTable.provider, params.provider));
+    }
+    if (params?.providers) {
+      if (params.providers.length === 0) {
+        return [];
+      }
+      conditions.push(inArray(schema.modelsTable.provider, params.providers));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -142,6 +146,29 @@ class ModelModel {
     }
 
     return map;
+  }
+
+  /**
+   * Find text chat models by exact model ID across providers.
+   * Used by the OpenAI-compatible model router to resolve a client-supplied
+   * model name to the provider that owns it.
+   */
+  static async findTextChatModelsByModelId(params: {
+    modelId: string;
+    provider?: SupportedProvider;
+  }): Promise<Model[]> {
+    const conditions = [eq(schema.modelsTable.modelId, params.modelId)];
+
+    if (params.provider) {
+      conditions.push(eq(schema.modelsTable.provider, params.provider));
+    }
+
+    const results = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(and(...conditions));
+
+    return results.filter((model) => ModelModel.supportsTextChat(model));
   }
 
   /**

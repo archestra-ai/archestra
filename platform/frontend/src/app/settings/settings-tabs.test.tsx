@@ -103,7 +103,6 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("API Keys");
       expect(labels).toContain("Agents");
-      expect(labels).toContain("MCP");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -265,9 +264,8 @@ describe("useSettingsTabs", () => {
         "Your Account",
         "API Keys",
         "Agents",
-        "MCP",
         "LLM",
-        "Connection",
+        "Connect page",
         "Users",
         "Teams",
         "Roles",

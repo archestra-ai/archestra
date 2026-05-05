@@ -108,4 +108,3 @@ describe("ScheduleTriggerFormDialog", () => {
     expect(screen.getByText("Summary")).toBeInTheDocument();
   });
 });
-

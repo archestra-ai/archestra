@@ -365,7 +365,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid={E2eTestId.CreateAgentButton}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Create LLM Proxy
           </PermissionButton>
         }
@@ -432,9 +432,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
               defaultIconType="llm_proxy"
-              onCreated={(proxy) => {
+              onCreated={() => {
                 setIsCreateDialogOpen(false);
-                navigateToConnection(proxy.id);
               }}
             />
 

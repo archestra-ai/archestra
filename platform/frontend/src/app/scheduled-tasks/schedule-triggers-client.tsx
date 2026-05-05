@@ -21,21 +21,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
-import {
-  ScheduleTriggerFormDialog,
-  type ScheduleTriggerAgentOption,
-} from "@/components/scheduled-tasks/schedule-trigger-form-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ScheduleTriggerFormDialog } from "@/components/scheduled-tasks/schedule-trigger-form-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -44,7 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -68,7 +62,6 @@ import {
   useScheduleTriggers,
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 import {
@@ -922,8 +915,8 @@ export function ScheduleTriggerDetailPage({
         </p>
       ) : trigger.keepResultsInSameChat ? (
         <p className="text-sm text-muted-foreground">
-          Successful runs will be appended to a single chat, which will be created
-          on the first successful run.
+          Successful runs will be appended to a single chat, which will be
+          created on the first successful run.
         </p>
       ) : null}
 
@@ -1150,7 +1143,7 @@ function ScheduleTriggerCreateButton({
           : "You need access to at least one internal agent to create a schedule."
       }
     >
-      <Plus className="mr-2 h-4 w-4" />
+      <Plus className="h-4 w-4" />
       {children}
     </PermissionButton>
   );

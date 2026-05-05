@@ -23,12 +23,12 @@ export function getServerMessagesToApplyToChat<
     allowHardResyncOnReadyPrefixMismatch = false,
   } = params;
 
-  if (
-    status !== "ready" ||
-    serverMessages.length === 0 ||
-    clientMessages.length === 0
-  ) {
+  if (status !== "ready" || serverMessages.length === 0) {
     return null;
+  }
+
+  if (clientMessages.length === 0) {
+    return serverMessages;
   }
 
   if (serverMessages.length <= clientMessages.length) {

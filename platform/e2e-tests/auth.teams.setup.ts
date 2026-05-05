@@ -7,6 +7,7 @@ import {
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  adminAuthFile,
   DEFAULT_TEAM_NAME,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
@@ -347,4 +348,6 @@ setup("setup teams and assignments", async ({ page }) => {
     "member",
     marketingMembers,
   );
+
+  await page.request.storageState({ path: adminAuthFile });
 });

@@ -231,9 +231,8 @@ describe("ConvertToScheduledTaskDialog — reply-in-same-conversation", () => {
       "no agent history",
     );
     expect(
-      Array.from(
-        screen.getByTestId("agent-options").querySelectorAll("li"),
-      ).length,
+      Array.from(screen.getByTestId("agent-options").querySelectorAll("li"))
+        .length,
     ).toBe(0);
   });
 });

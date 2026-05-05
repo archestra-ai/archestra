@@ -75,7 +75,23 @@ graph TB
 
 ## Authentication
 
-The LLM Proxy supports direct provider API keys, virtual API keys, and JWKS via an external identity provider. See [Authentication](/docs/platform-llm-proxy-authentication) for details.
+The LLM Proxy supports direct provider API keys, virtual API keys, LLM OAuth client access tokens, and JWKS via an external identity provider. See [Authentication](/docs/platform-llm-proxy-authentication) for details.
+
+## OpenAI-Compatible Model Router
+
+Use the model router when an application supports OpenAI-style APIs but you want to reach models from multiple configured providers through one endpoint.
+
+```bash
+curl -X POST "https://your-archestra-instance/v1/model-router/{llm-proxy-id}/responses" \
+  -H "Authorization: Bearer $MODEL_ROUTER_KEY_OR_APP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai:gpt-5.4",
+    "input": "Hello!"
+  }'
+```
+
+The router accepts OpenAI Responses and Chat Completions requests, resolves provider-qualified model IDs like `openai:gpt-5.4` to the backing provider, runs the normal LLM Proxy security pipeline, and returns the matching OpenAI-format response. Generic OpenAI-compatible clients should use a virtual key mapped to the providers they need. Backend services and bots should use an LLM OAuth client access token. See [Authentication](/docs/platform-llm-proxy-authentication) for setup and [Supported LLM Providers](/docs/platform-supported-llm-providers#openai-compatible-model-router) for model ID details.
 
 ## Custom Headers
 

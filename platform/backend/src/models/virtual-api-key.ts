@@ -1,5 +1,9 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { ARCHESTRA_TOKEN_PREFIX, type PaginationQuery } from "@shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  type PaginationQuery,
+  type SupportedProvider,
+} from "@shared";
 import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
@@ -7,7 +11,6 @@ import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
-  LlmProviderApiKey,
   ResourceVisibilityScope,
   SelectVirtualApiKey,
   VirtualApiKeyWithParentInfo,
@@ -23,10 +26,20 @@ const TOKEN_START_LENGTH = 14;
 const FORCE_DB = true;
 
 type TeamInfo = { id: string; name: string };
+type ProviderApiKeyInput = {
+  provider: SupportedProvider;
+  providerApiKeyId: string;
+};
+type ProviderApiKeyInfo = ProviderApiKeyInput & {
+  providerApiKeyName: string;
+};
+type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
+  secretId: string | null;
+  baseUrl: string | null;
+};
 
 type VirtualApiKeyAccessContext = {
   id: string;
-  chatApiKeyId: string;
   organizationId: string;
   scope: ResourceVisibilityScope;
   authorId: string | null;
@@ -35,35 +48,46 @@ type VirtualApiKeyAccessContext = {
 
 class VirtualApiKeyModel {
   /**
-   * Create a new virtual API key for a chat API key.
+   * Create a new virtual API key.
    * Returns the full token value once at creation (never returned again).
    */
   static async create(params: {
-    chatApiKeyId: string;
+    organizationId?: string;
     name: string;
     expiresAt?: Date | null;
     scope?: ResourceVisibilityScope;
     authorId?: string | null;
     teamIds?: string[];
+    providerApiKeys?: ProviderApiKeyInput[];
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
     teams: TeamInfo[];
     authorName: string | null;
+    providerApiKeys: ProviderApiKeyInfo[];
   }> {
     const {
-      chatApiKeyId,
+      organizationId: providedOrganizationId,
       name,
       expiresAt,
       scope = "org",
       authorId = null,
       teamIds = [],
+      providerApiKeys = [],
     } = params;
 
     const tokenValue = generateToken();
     const tokenStart = getTokenStart(tokenValue);
+    const resolvedOrganizationId =
+      providedOrganizationId ??
+      (await getOrganizationIdForProviderKeys(providerApiKeys));
+    if (!resolvedOrganizationId) {
+      throw new Error(
+        "VirtualApiKeyModel.create requires organizationId or at least one provider API key",
+      );
+    }
 
-    const secretName = `virtual-api-key-${chatApiKeyId}-${Date.now()}`;
+    const secretName = `virtual-api-key-${resolvedOrganizationId}-${Date.now()}`;
     const secret = await secretManager().createSecret(
       { token: tokenValue },
       secretName,
@@ -74,7 +98,7 @@ class VirtualApiKeyModel {
       const [createdVirtualKey] = await tx
         .insert(schema.virtualApiKeysTable)
         .values({
-          chatApiKeyId,
+          organizationId: resolvedOrganizationId,
           name,
           secretId: secret.id,
           tokenStart,
@@ -90,23 +114,34 @@ class VirtualApiKeyModel {
         scope,
         teamIds,
       });
+      await syncProviderApiKeys({
+        tx,
+        virtualApiKeyId: createdVirtualKey.id,
+        mappings: providerApiKeys,
+      });
 
       return createdVirtualKey;
     });
 
     logger.info(
-      { chatApiKeyId, virtualKeyId: virtualKey.id, scope },
+      {
+        organizationId: resolvedOrganizationId,
+        virtualKeyId: virtualKey.id,
+        scope,
+      },
       "VirtualApiKeyModel.create: virtual key created",
     );
 
     const { teams, authorName } =
       await VirtualApiKeyModel.getVisibilityMetadata([virtualKey.id]);
+    const mappings = await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id);
 
     return {
       virtualKey,
       value: tokenValue,
       teams: teams.get(virtualKey.id) ?? [],
       authorName: authorName.get(virtualKey.id) ?? null,
+      providerApiKeys: mappings,
     };
   }
 
@@ -120,8 +155,10 @@ class VirtualApiKeyModel {
     scope: ResourceVisibilityScope;
     authorId: string;
     teamIds: string[];
+    providerApiKeys: ProviderApiKeyInput[];
   }): Promise<SelectVirtualApiKey | null> {
-    const { id, name, expiresAt, scope, authorId, teamIds } = params;
+    const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
+      params;
 
     const updatedVirtualKey = await db.transaction(async (tx) => {
       const [updated] = await tx
@@ -145,6 +182,11 @@ class VirtualApiKeyModel {
         scope,
         teamIds,
       });
+      await syncProviderApiKeys({
+        tx,
+        virtualApiKeyId: id,
+        mappings: providerApiKeys,
+      });
 
       return updated;
     });
@@ -160,12 +202,12 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * List visible virtual keys for a chat API key.
+   * List visible virtual keys for a provider API key.
    */
-  static async findByChatApiKeyId(
+  static async findByProviderApiKeyId(
     params:
       | {
-          chatApiKeyId: string;
+          providerApiKeyId: string;
           organizationId: string;
           userId: string;
           userTeamIds: string[];
@@ -175,9 +217,29 @@ class VirtualApiKeyModel {
   ): Promise<SelectVirtualApiKey[]> {
     if (typeof params === "string") {
       return db
-        .select()
+        .select({
+          id: schema.virtualApiKeysTable.id,
+          organizationId: schema.virtualApiKeysTable.organizationId,
+          name: schema.virtualApiKeysTable.name,
+          secretId: schema.virtualApiKeysTable.secretId,
+          tokenStart: schema.virtualApiKeysTable.tokenStart,
+          scope: schema.virtualApiKeysTable.scope,
+          authorId: schema.virtualApiKeysTable.authorId,
+          expiresAt: schema.virtualApiKeysTable.expiresAt,
+          createdAt: schema.virtualApiKeysTable.createdAt,
+          lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
+        })
         .from(schema.virtualApiKeysTable)
-        .where(eq(schema.virtualApiKeysTable.chatApiKeyId, params))
+        .innerJoin(
+          schema.virtualApiKeyProviderApiKeysTable,
+          eq(
+            schema.virtualApiKeysTable.id,
+            schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+          ),
+        )
+        .where(
+          eq(schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId, params),
+        )
         .orderBy(schema.virtualApiKeysTable.createdAt);
     }
 
@@ -186,7 +248,7 @@ class VirtualApiKeyModel {
       userId: params.userId,
       userTeamIds: params.userTeamIds,
       isAdmin: params.isAdmin,
-      chatApiKeyId: params.chatApiKeyId,
+      providerApiKeyId: params.providerApiKeyId,
     });
 
     if (accessibleIds.length === 0) {
@@ -222,19 +284,11 @@ class VirtualApiKeyModel {
     const [virtualKey] = await db
       .select({
         id: schema.virtualApiKeysTable.id,
-        chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
-        organizationId: schema.llmProviderApiKeysTable.organizationId,
+        organizationId: schema.virtualApiKeysTable.organizationId,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
       })
       .from(schema.virtualApiKeysTable)
-      .innerJoin(
-        schema.llmProviderApiKeysTable,
-        eq(
-          schema.virtualApiKeysTable.chatApiKeyId,
-          schema.llmProviderApiKeysTable.id,
-        ),
-      )
       .where(eq(schema.virtualApiKeysTable.id, id))
       .limit(1);
 
@@ -283,19 +337,33 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * Count virtual keys for a chat API key (for enforcing max limit).
+   * Count virtual keys for a provider API key (for enforcing max limit).
    */
-  static async countByChatApiKeyId(chatApiKeyId: string): Promise<number> {
+  static async countByProviderApiKeyId(
+    providerApiKeyId: string,
+  ): Promise<number> {
     const [result] = await db
       .select({ total: count() })
       .from(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId));
+      .innerJoin(
+        schema.virtualApiKeyProviderApiKeysTable,
+        eq(
+          schema.virtualApiKeysTable.id,
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+        ),
+      )
+      .where(
+        eq(
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+          providerApiKeyId,
+        ),
+      );
 
     return Number(result?.total ?? 0);
   }
 
   /**
-   * Find visible virtual keys for an organization, joined with parent API key info.
+   * Find visible virtual keys for an organization.
    * Supports pagination.
    */
   static async findAllByOrganization(params: {
@@ -305,7 +373,7 @@ class VirtualApiKeyModel {
     userTeamIds?: string[];
     isAdmin?: boolean;
     search?: string;
-    chatApiKeyId?: string;
+    providerApiKeyId?: string;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -314,7 +382,7 @@ class VirtualApiKeyModel {
       userTeamIds = [],
       isAdmin = true,
       search,
-      chatApiKeyId,
+      providerApiKeyId,
     } = params;
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
@@ -322,7 +390,7 @@ class VirtualApiKeyModel {
       userId,
       userTeamIds,
       isAdmin,
-      chatApiKeyId,
+      providerApiKeyId,
     });
 
     if (!isAdmin && accessibleIds.length === 0) {
@@ -330,7 +398,7 @@ class VirtualApiKeyModel {
     }
 
     const whereConditions = [
-      eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+      eq(schema.virtualApiKeysTable.organizationId, organizationId),
     ];
 
     if (!isAdmin) {
@@ -348,19 +416,13 @@ class VirtualApiKeyModel {
       );
     }
 
-    if (chatApiKeyId) {
-      whereConditions.push(
-        eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId),
-      );
-    }
-
     const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
       db
         .select({
           id: schema.virtualApiKeysTable.id,
-          chatApiKeyId: schema.virtualApiKeysTable.chatApiKeyId,
+          organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
@@ -369,18 +431,8 @@ class VirtualApiKeyModel {
           expiresAt: schema.virtualApiKeysTable.expiresAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
-          parentKeyName: schema.llmProviderApiKeysTable.name,
-          parentKeyProvider: schema.llmProviderApiKeysTable.provider,
-          parentKeyBaseUrl: schema.llmProviderApiKeysTable.baseUrl,
         })
         .from(schema.virtualApiKeysTable)
-        .innerJoin(
-          schema.llmProviderApiKeysTable,
-          eq(
-            schema.virtualApiKeysTable.chatApiKeyId,
-            schema.llmProviderApiKeysTable.id,
-          ),
-        )
         .where(whereClause)
         .orderBy(schema.virtualApiKeysTable.createdAt)
         .limit(pagination.limit)
@@ -388,24 +440,20 @@ class VirtualApiKeyModel {
       db
         .select({ total: count() })
         .from(schema.virtualApiKeysTable)
-        .innerJoin(
-          schema.llmProviderApiKeysTable,
-          eq(
-            schema.virtualApiKeysTable.chatApiKeyId,
-            schema.llmProviderApiKeysTable.id,
-          ),
-        )
         .where(whereClause),
     ]);
 
-    const metadata = await VirtualApiKeyModel.getVisibilityMetadata(
-      rows.map((row) => row.id),
-    );
+    const rowIds = rows.map((row) => row.id);
+    const [metadata, mappings] = await Promise.all([
+      VirtualApiKeyModel.getVisibilityMetadata(rowIds),
+      VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(rowIds),
+    ]);
 
     const data = rows.map((row) => ({
       ...row,
       teams: metadata.teams.get(row.id) ?? [],
       authorName: metadata.authorName.get(row.id) ?? null,
+      providerApiKeys: mappings.get(row.id) ?? [],
     }));
 
     return createPaginatedResult(data, Number(total), pagination);
@@ -423,11 +471,10 @@ class VirtualApiKeyModel {
 
   /**
    * Validate a virtual API key token value.
-   * Returns the virtual key and associated chat API key if valid.
+   * Returns the virtual key if valid.
    */
   static async validateToken(tokenValue: string): Promise<{
     virtualKey: SelectVirtualApiKey;
-    chatApiKey: LlmProviderApiKey;
   } | null> {
     const tokenStart = getTokenStart(tokenValue);
     const candidates = await db
@@ -450,23 +497,6 @@ class VirtualApiKeyModel {
 
       const storedToken = (secret.secret as { token?: string })?.token;
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
-        const [chatApiKey] = await db
-          .select()
-          .from(schema.llmProviderApiKeysTable)
-          .where(eq(schema.llmProviderApiKeysTable.id, virtualKey.chatApiKeyId))
-          .limit(1);
-
-        if (!chatApiKey) {
-          logger.warn(
-            {
-              virtualKeyId: virtualKey.id,
-              chatApiKeyId: virtualKey.chatApiKeyId,
-            },
-            "Virtual key references non-existent chat API key",
-          );
-          return null;
-        }
-
         VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
           logger.warn(
             { virtualKeyId: virtualKey.id, error: String(error) },
@@ -474,11 +504,97 @@ class VirtualApiKeyModel {
           );
         });
 
-        return { virtualKey, chatApiKey };
+        return { virtualKey };
       }
     }
 
     return null;
+  }
+
+  static async getProviderApiKeysForRouting(
+    virtualApiKeyId: string,
+  ): Promise<ProviderApiKeyRoutingInfo[]> {
+    const rows = await db
+      .select({
+        provider: schema.virtualApiKeyProviderApiKeysTable.provider,
+        providerApiKeyId:
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+        providerApiKeyName: schema.llmProviderApiKeysTable.name,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+      })
+      .from(schema.virtualApiKeyProviderApiKeysTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        eq(
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+          virtualApiKeyId,
+        ),
+      )
+      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+
+    return rows;
+  }
+
+  static async getProviderApiKeys(
+    virtualApiKeyId: string,
+  ): Promise<ProviderApiKeyInfo[]> {
+    const result = await VirtualApiKeyModel.getProviderApiKeysForVirtualKeys([
+      virtualApiKeyId,
+    ]);
+    return result.get(virtualApiKeyId) ?? [];
+  }
+
+  static async getProviderApiKeysForVirtualKeys(
+    virtualApiKeyIds: string[],
+  ): Promise<Map<string, ProviderApiKeyInfo[]>> {
+    const result = new Map<string, ProviderApiKeyInfo[]>();
+    if (virtualApiKeyIds.length === 0) {
+      return result;
+    }
+
+    const rows = await db
+      .select({
+        virtualApiKeyId:
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+        provider: schema.virtualApiKeyProviderApiKeysTable.provider,
+        providerApiKeyId:
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+        providerApiKeyName: schema.llmProviderApiKeysTable.name,
+      })
+      .from(schema.virtualApiKeyProviderApiKeysTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        inArray(
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+          virtualApiKeyIds,
+        ),
+      )
+      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+
+    for (const row of rows) {
+      const existing = result.get(row.virtualApiKeyId) ?? [];
+      existing.push({
+        provider: row.provider,
+        providerApiKeyId: row.providerApiKeyId,
+        providerApiKeyName: row.providerApiKeyName,
+      });
+      result.set(row.virtualApiKeyId, existing);
+    }
+
+    return result;
   }
 
   static async getTeamIdsForVirtualApiKey(
@@ -508,35 +624,43 @@ class VirtualApiKeyModel {
     userId: string;
     userTeamIds: string[];
     isAdmin: boolean;
-    chatApiKeyId?: string;
+    providerApiKeyId?: string;
   }): Promise<string[]> {
-    const { organizationId, userId, userTeamIds, isAdmin, chatApiKeyId } =
+    const { organizationId, userId, userTeamIds, isAdmin, providerApiKeyId } =
       params;
 
     if (isAdmin) {
       const conditions = [];
       if (organizationId) {
         conditions.push(
-          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.virtualApiKeysTable.organizationId, organizationId),
         );
       }
-      if (chatApiKeyId) {
-        conditions.push(
-          eq(schema.virtualApiKeysTable.chatApiKeyId, chatApiKeyId),
-        );
-      }
-
-      const rows = await db
+      const baseQuery = db
         .select({ id: schema.virtualApiKeysTable.id })
-        .from(schema.virtualApiKeysTable)
-        .innerJoin(
-          schema.llmProviderApiKeysTable,
-          eq(
-            schema.virtualApiKeysTable.chatApiKeyId,
-            schema.llmProviderApiKeysTable.id,
-          ),
-        )
-        .where(conditions.length > 0 ? and(...conditions) : undefined);
+        .from(schema.virtualApiKeysTable);
+
+      const rows = await (providerApiKeyId
+        ? baseQuery
+            .innerJoin(
+              schema.virtualApiKeyProviderApiKeysTable,
+              eq(
+                schema.virtualApiKeysTable.id,
+                schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+              ),
+            )
+            .where(
+              and(
+                ...conditions,
+                eq(
+                  schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+                  providerApiKeyId,
+                ),
+              ),
+            )
+        : baseQuery.where(
+            conditions.length > 0 ? and(...conditions) : undefined,
+          ));
 
       return rows.map((row) => row.id);
     }
@@ -547,32 +671,29 @@ class VirtualApiKeyModel {
             SELECT DISTINCT vat.virtual_api_key_id AS id
             FROM virtual_api_key_team vat
             INNER JOIN virtual_api_keys vak ON vat.virtual_api_key_id = vak.id
-            INNER JOIN chat_api_keys cak ON vak.chat_api_key_id = cak.id
             WHERE vak.scope = 'team'
               AND vat.team_id IN (${sql.join(
                 userTeamIds.map((id) => sql`${id}`),
                 sql`, `,
               )})
-              ${organizationId ? sql`AND cak.organization_id = ${organizationId}` : sql``}
-              ${chatApiKeyId ? sql`AND vak.chat_api_key_id = ${chatApiKeyId}` : sql``}
+              ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
+              ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
           `
         : null;
 
     const result = await db.execute<{ id: string }>(sql`
       SELECT vak.id
       FROM virtual_api_keys vak
-      INNER JOIN chat_api_keys cak ON vak.chat_api_key_id = cak.id
       WHERE vak.scope = 'org'
-        ${organizationId ? sql`AND cak.organization_id = ${organizationId}` : sql``}
-        ${chatApiKeyId ? sql`AND vak.chat_api_key_id = ${chatApiKeyId}` : sql``}
+        ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
+        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
       UNION
       SELECT vak.id
       FROM virtual_api_keys vak
-      INNER JOIN chat_api_keys cak ON vak.chat_api_key_id = cak.id
       WHERE vak.scope = 'personal'
         AND vak.author_id = ${userId}
-        ${organizationId ? sql`AND cak.organization_id = ${organizationId}` : sql``}
-        ${chatApiKeyId ? sql`AND vak.chat_api_key_id = ${chatApiKeyId}` : sql``}
+        ${organizationId ? sql`AND vak.organization_id = ${organizationId}` : sql``}
+        ${providerApiKeyId ? sql`AND EXISTS (SELECT 1 FROM virtual_api_key_provider_api_key vakpak WHERE vakpak.virtual_api_key_id = vak.id AND vakpak.provider_api_key_id = ${providerApiKeyId})` : sql``}
       ${teamAccessCondition ? sql`UNION ${teamAccessCondition}` : sql``}
     `);
 
@@ -671,6 +792,25 @@ function constantTimeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
+async function getOrganizationIdForProviderKeys(
+  providerApiKeys: ProviderApiKeyInput[],
+): Promise<string | null> {
+  const firstProviderKey = providerApiKeys[0];
+  if (!firstProviderKey) {
+    return null;
+  }
+
+  const [providerKey] = await db
+    .select({ organizationId: schema.llmProviderApiKeysTable.organizationId })
+    .from(schema.llmProviderApiKeysTable)
+    .where(
+      eq(schema.llmProviderApiKeysTable.id, firstProviderKey.providerApiKeyId),
+    )
+    .limit(1);
+
+  return providerKey?.organizationId ?? null;
+}
+
 async function syncVirtualApiKeyTeams(params: {
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0];
   virtualApiKeyId: string;
@@ -691,6 +831,35 @@ async function syncVirtualApiKeyTeams(params: {
     teamIds.map((teamId) => ({
       virtualApiKeyId,
       teamId,
+    })),
+  );
+}
+
+async function syncProviderApiKeys(params: {
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0];
+  virtualApiKeyId: string;
+  mappings: ProviderApiKeyInput[];
+}): Promise<void> {
+  const { tx, virtualApiKeyId, mappings } = params;
+
+  await tx
+    .delete(schema.virtualApiKeyProviderApiKeysTable)
+    .where(
+      eq(
+        schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+        virtualApiKeyId,
+      ),
+    );
+
+  if (mappings.length === 0) {
+    return;
+  }
+
+  await tx.insert(schema.virtualApiKeyProviderApiKeysTable).values(
+    mappings.map((mapping) => ({
+      virtualApiKeyId,
+      provider: mapping.provider,
+      providerApiKeyId: mapping.providerApiKeyId,
     })),
   );
 }

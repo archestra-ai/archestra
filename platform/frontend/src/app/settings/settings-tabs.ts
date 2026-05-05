@@ -15,14 +15,11 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents" }]
       : []),
-    ...(permissionMap?.["/settings/mcp"]
-      ? [{ label: "MCP", href: "/settings/mcp" }]
-      : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
     ...(permissionMap?.["/settings/connection"]
-      ? [{ label: "Connection", href: "/settings/connection" }]
+      ? [{ label: "Connect page", href: "/settings/connection" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]

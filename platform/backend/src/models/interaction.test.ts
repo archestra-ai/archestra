@@ -1148,6 +1148,73 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions auth attribution", () => {
+    test("aggregates auth methods and authenticated app names", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "auth-attribution-session",
+        authMethod: "oauth_client_credentials",
+        authenticatedAppId: "app-1",
+        authenticatedAppName: "Backend Service",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "First request" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "auth-attribution-session",
+        authMethod: "oauth_user",
+        authenticatedAppId: "app-2",
+        authenticatedAppName: "User OAuth App, Inc.",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Second request" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "auth-attribution-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].authMethods).toEqual(
+        expect.arrayContaining(["oauth_client_credentials", "oauth_user"]),
+      );
+      expect(sessions.data[0].authenticatedAppNames).toEqual(
+        expect.arrayContaining(["Backend Service", "User OAuth App, Inc."]),
+      );
+    });
+  });
+
   describe("getSessions search filtering", () => {
     test("searches by request message content (case insensitive)", async ({
       makeAdmin,

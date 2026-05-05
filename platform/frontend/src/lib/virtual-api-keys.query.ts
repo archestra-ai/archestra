@@ -8,28 +8,31 @@ type AllVirtualApiKeysQuery = NonNullable<
 >;
 
 const {
-  getVirtualApiKeys,
   getAllVirtualApiKeys,
   createVirtualApiKey,
   updateVirtualApiKey,
   deleteVirtualApiKey,
 } = archestraApiSdk;
 
-export function useVirtualApiKeys(chatApiKeyId: string | null) {
+export function useVirtualApiKeys(providerApiKeyId: string | null) {
   return useQuery({
-    queryKey: ["virtual-api-keys", chatApiKeyId],
+    queryKey: ["virtual-api-keys", providerApiKeyId],
     queryFn: async () => {
-      if (!chatApiKeyId) return [];
-      const { data, error } = await getVirtualApiKeys({
-        path: { chatApiKeyId },
+      if (!providerApiKeyId) return [];
+      const { data, error } = await getAllVirtualApiKeys({
+        query: {
+          providerApiKeyId,
+          limit: 100,
+          offset: 0,
+        },
       });
       if (error) {
         handleApiError(error);
         return [];
       }
-      return data ?? [];
+      return data?.data ?? [];
     },
-    enabled: !!chatApiKeyId,
+    enabled: !!providerApiKeyId,
   });
 }
 
@@ -37,14 +40,11 @@ export function useCreateVirtualApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      chatApiKeyId,
       data,
     }: {
-      chatApiKeyId: string;
       data: archestraApiTypes.CreateVirtualApiKeyData["body"];
     }) => {
       const { data: responseData, error } = await createVirtualApiKey({
-        path: { chatApiKeyId },
         body: data,
       });
       if (error) {
@@ -53,13 +53,13 @@ export function useCreateVirtualApiKey() {
       }
       return responseData;
     },
-    onSuccess: (_data, { chatApiKeyId }) => {
+    onSuccess: () => {
       toast.success("Virtual API key created");
       queryClient.invalidateQueries({
-        queryKey: ["virtual-api-keys", chatApiKeyId],
+        queryKey: ["all-virtual-api-keys"],
       });
       queryClient.invalidateQueries({
-        queryKey: ["all-virtual-api-keys"],
+        queryKey: ["virtual-api-keys"],
       });
     },
   });
@@ -68,15 +68,9 @@ export function useCreateVirtualApiKey() {
 export function useDeleteVirtualApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      chatApiKeyId,
-      id,
-    }: {
-      chatApiKeyId: string;
-      id: string;
-    }) => {
+    mutationFn: async ({ id }: { id: string }) => {
       const { data: responseData, error } = await deleteVirtualApiKey({
-        path: { chatApiKeyId, id },
+        path: { id },
       });
       if (error) {
         handleApiError(error);
@@ -84,13 +78,13 @@ export function useDeleteVirtualApiKey() {
       }
       return responseData;
     },
-    onSuccess: (_data, { chatApiKeyId }) => {
+    onSuccess: () => {
       toast.success("Virtual API key deleted");
       queryClient.invalidateQueries({
-        queryKey: ["virtual-api-keys", chatApiKeyId],
+        queryKey: ["all-virtual-api-keys"],
       });
       queryClient.invalidateQueries({
-        queryKey: ["all-virtual-api-keys"],
+        queryKey: ["virtual-api-keys"],
       });
     },
   });
@@ -100,16 +94,14 @@ export function useUpdateVirtualApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      chatApiKeyId,
       id,
       data,
     }: {
-      chatApiKeyId: string;
       id: string;
       data: archestraApiTypes.UpdateVirtualApiKeyData["body"];
     }) => {
       const { data: responseData, error } = await updateVirtualApiKey({
-        path: { chatApiKeyId, id },
+        path: { id },
         body: data,
       });
       if (error) {
@@ -118,13 +110,13 @@ export function useUpdateVirtualApiKey() {
       }
       return responseData;
     },
-    onSuccess: (_data, { chatApiKeyId }) => {
+    onSuccess: () => {
       toast.success("Virtual API key updated");
       queryClient.invalidateQueries({
-        queryKey: ["virtual-api-keys", chatApiKeyId],
+        queryKey: ["all-virtual-api-keys"],
       });
       queryClient.invalidateQueries({
-        queryKey: ["all-virtual-api-keys"],
+        queryKey: ["virtual-api-keys"],
       });
     },
   });
@@ -134,16 +126,16 @@ export function useAllVirtualApiKeys(params?: Partial<AllVirtualApiKeysQuery>) {
   const limit = params?.limit ?? 20;
   const offset = params?.offset ?? 0;
   const search = params?.search;
-  const chatApiKeyId = params?.chatApiKeyId;
+  const providerApiKeyId = params?.providerApiKeyId;
   return useQuery({
-    queryKey: ["all-virtual-api-keys", limit, offset, search, chatApiKeyId],
+    queryKey: ["all-virtual-api-keys", limit, offset, search, providerApiKeyId],
     queryFn: async () => {
       const { data, error } = await getAllVirtualApiKeys({
         query: {
           limit,
           offset,
           search: search || undefined,
-          chatApiKeyId: chatApiKeyId || undefined,
+          providerApiKeyId: providerApiKeyId || undefined,
         },
       });
       if (error) {

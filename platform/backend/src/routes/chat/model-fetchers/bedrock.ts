@@ -10,6 +10,7 @@ import type { ModelInfo } from "./types";
 export async function fetchBedrockModels(
   apiKey: string,
   baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.bedrock.baseUrl;
   if (!baseUrl) {
@@ -19,6 +20,7 @@ export async function fetchBedrockModels(
 
   const controlPlaneUrl = baseUrl.replace("-runtime", "");
   const profiles = await fetchAllBedrockInferenceProfiles(controlPlaneUrl, {
+    ...(extraHeaders ?? {}),
     Authorization: `Bearer ${apiKey}`,
   });
 

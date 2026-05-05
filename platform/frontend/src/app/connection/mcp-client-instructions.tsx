@@ -2,6 +2,9 @@
 
 import {
   AlertTriangle,
+  Check,
+  ChevronDown,
+  Copy,
   ExternalLink,
   Eye,
   EyeOff,
@@ -10,26 +13,24 @@ import {
 import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { ConnectionBaseUrlSelect } from "@/components/connection-base-url-select";
+import { toast } from "sonner";
 import { CopyableCode } from "@/components/copyable-code";
-import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useFetchTeamTokenValue,
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { ClientIcon } from "./client-grid";
+import { cn } from "@/lib/utils";
+import { ClientIcon } from "./client-icon";
 import type {
   ConnectClient,
   McpBuildParams,
@@ -38,12 +39,13 @@ import type {
 import { toMcpServerSlug } from "./connection-flow.utils";
 import { TerminalBlock } from "./terminal-block";
 
-const { externalProxyUrls, internalProxyUrl } = config.api;
-
 interface McpClientInstructionsProps {
   client: ConnectClient;
   gatewayId: string;
   gatewaySlug: string;
+  gatewayName: string;
+  /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
+  baseUrl: string;
 }
 
 type AuthMethod = "oauth" | "token";
@@ -58,13 +60,17 @@ export function McpClientInstructions({
   client,
   gatewayId,
   gatewaySlug,
+  gatewayName,
+  baseUrl,
 }: McpClientInstructionsProps) {
-  const [baseUrl, setBaseUrl] = useState<string>(
-    externalProxyUrls.length >= 1 ? externalProxyUrls[0] : internalProxyUrl,
-  );
   const supportedAuth =
     client.mcp.kind === "unsupported" ? "both" : client.mcp.supportedAuth;
+  const preferredAuth =
+    client.mcp.kind === "custom"
+      ? (client.mcp.preferredAuth ?? "oauth")
+      : "oauth";
   const tabs = authTabs(supportedAuth);
+  if (preferredAuth === "token" && tabs.length > 1) tabs.reverse();
   const [authMethod, setAuthMethod] = useState<AuthMethod>(tabs[0]);
   const appName = useAppName();
 
@@ -78,17 +84,13 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = toMcpServerSlug(appName);
+  const serverName = gatewayName.trim()
+    ? gatewayName.trim().toLowerCase().replace(/\s+/g, "_")
+    : toMcpServerSlug(appName);
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   return (
     <div id="mcp-instructions" className="space-y-4">
-      <ConnectionBaseUrlSelect
-        value={baseUrl}
-        onChange={setBaseUrl}
-        idPrefix="mcp"
-      />
-
       {client.mcp.kind === "generic" && <Eyebrow>Authentication</Eyebrow>}
       {tabs.length > 1 ? (
         <Tabs
@@ -97,17 +99,23 @@ export function McpClientInstructions({
           className="-mt-2"
         >
           <TabsList className="w-full">
-            <TabsTrigger value="oauth" className="flex-1">
-              OAuth 2.1
-              {client.mcp.kind !== "generic" && (
-                <span className="ml-1.5 text-[10px] opacity-70">
-                  Recommended
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="token" className="flex-1">
-              Static token
-            </TabsTrigger>
+            {tabs.map((t) =>
+              t === "oauth" ? (
+                <TabsTrigger key="oauth" value="oauth" className="flex-1">
+                  OAuth 2.1
+                  {client.mcp.kind !== "generic" &&
+                    preferredAuth === "oauth" && (
+                      <span className="ml-1.5 text-[10px] opacity-70">
+                        Recommended
+                      </span>
+                    )}
+                </TabsTrigger>
+              ) : (
+                <TabsTrigger key="token" value="token" className="flex-1">
+                  Static token
+                </TabsTrigger>
+              ),
+            )}
           </TabsList>
 
           <TabsContent value="oauth" className="mt-4">
@@ -192,7 +200,10 @@ function McpBody({
     return <DeeplinkHero client={client} href={ctaHref} label={cta.label} />;
   }
 
-  const hasStepCommands = mcp.steps.some((s) => !!s.buildCommand);
+  const steps =
+    typeof mcp.steps === "function" ? mcp.steps(ctaParams) : mcp.steps;
+  const hasStepCommands = steps.some((s) => !!s.buildCommand);
+  const stepsHaveAuthHeader = steps.some((s) => s.showAuthHeader);
 
   if (hasStepCommands) {
     return (
@@ -201,7 +212,7 @@ function McpBody({
           <DeeplinkHero client={client} href={ctaHref} label={cta.label} />
         )}
         <ol className="grid gap-5">
-          {mcp.steps.map((s, i) => (
+          {steps.map((s, i) => (
             <li
               key={s.title}
               className="grid grid-cols-[22px_1fr] items-start gap-3"
@@ -214,21 +225,29 @@ function McpBody({
                   <div className="text-[13.5px] font-medium text-foreground">
                     {s.title}
                   </div>
-                  <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                    {s.body}
-                  </div>
+                  {s.body && (
+                    <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                      {s.body}
+                    </div>
+                  )}
                 </div>
                 {s.buildCommand && (
-                  <TerminalBlock
-                    title={s.terminalTitle ?? mcp.configFile}
-                    language={s.language ?? mcp.language}
-                    code={s.buildCommand(ctaParams)}
+                  <TerminalBlock code={s.buildCommand(ctaParams)} />
+                )}
+                {s.showAuthHeader && token && (
+                  <GenericAuthRow
+                    gatewayId={gatewayId}
+                    placeholder={token}
+                    bare={s.authHeaderBare}
                   />
                 )}
               </div>
             </li>
           ))}
         </ol>
+        {token && !stepsHaveAuthHeader && (
+          <GenericAuthRow gatewayId={gatewayId} placeholder={token} />
+        )}
       </div>
     );
   }
@@ -243,7 +262,7 @@ function McpBody({
       )}
       <div className="grid items-start gap-4 lg:grid-cols-[320px_1fr]">
         <ol className="grid gap-3.5">
-          {mcp.steps.map((s, i) => (
+          {steps.map((s, i) => (
             <li key={s.title} className="flex gap-3">
               <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
                 {i + 1}
@@ -252,19 +271,17 @@ function McpBody({
                 <div className="text-[13.5px] font-medium text-foreground">
                   {s.title}
                 </div>
-                <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
-                  {s.body}
-                </div>
+                {s.body && (
+                  <div className="mt-0.5 text-[12.5px] leading-snug text-muted-foreground">
+                    {s.body}
+                  </div>
+                )}
               </div>
             </li>
           ))}
         </ol>
 
-        <TerminalBlock
-          title={mcp.configFile}
-          language={mcp.language}
-          code={configCode}
-        />
+        <TerminalBlock code={configCode} />
       </div>
     </div>
   );
@@ -329,9 +346,13 @@ const PERSONAL_TOKEN_ID = "__personal__";
 function GenericAuthRow({
   gatewayId,
   placeholder,
+  bare = false,
 }: {
   gatewayId: string;
   placeholder: string;
+  /** When true, render just the raw token (no `Bearer ` prefix). Used by clients
+   *  whose credential UI prepends the scheme automatically (e.g. n8n Bearer Auth). */
+  bare?: boolean;
 }) {
   const { data: userToken } = useUserToken();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -371,7 +392,7 @@ function GenericAuthRow({
           ? `Team Token (${selectedTeamToken.team.name})`
           : selectedTeamToken.name
       : "Select token";
-  const selectedDescription = isPersonal
+  const _selectedDescription = isPersonal
     ? "The most secure option."
     : selectedTeamToken?.isOrganizationToken
       ? "To share org-wide"
@@ -402,115 +423,139 @@ function GenericAuthRow({
   };
 
   const hasAnyToken = !!userToken || tokens.length > 0;
+  const headerValue = bare ? previewValue : `Bearer ${previewValue}`;
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(headerValue);
+    setCopied(true);
+    toast.success("Copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
+  const orgTokens = tokens.filter((t) => t.isOrganizationToken);
+
+  if (!hasAnyToken) {
+    return (
+      <div className="text-xs text-muted-foreground">
+        No tokens available — provision one from{" "}
+        <Link
+          href="/settings/account?tab=tokens"
+          className="underline hover:text-foreground"
+        >
+          your account
+        </Link>
+        .
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-2 rounded-lg border bg-card px-4 py-3">
-      <div className="grid grid-cols-[140px_1fr] items-center gap-3">
-        <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Token
-        </div>
-        {hasAnyToken ? (
-          <Select
-            value={selectedId ?? ""}
-            onValueChange={(v) => {
-              setSelectedId(v);
-              setExposedValue(null);
-            }}
-          >
-            <SelectTrigger className="min-h-[56px] w-full py-2 text-xs">
-              <SelectValue placeholder="Select token">
-                {selectedId && (
-                  <div className="flex flex-col items-start gap-0.5 text-left">
-                    <div>{selectedLabel}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {selectedDescription}
-                    </div>
-                  </div>
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {userToken && (
-                <SelectItem value={PERSONAL_TOKEN_ID}>
-                  <div className="flex flex-col items-start gap-0.5">
-                    <div>Personal Token</div>
-                    <div className="text-xs text-muted-foreground">
-                      The most secure option.
-                    </div>
-                  </div>
-                </SelectItem>
-              )}
-              {tokens
-                .filter((t) => !t.isOrganizationToken)
-                .map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    <div className="flex flex-col items-start gap-0.5">
-                      <div>
-                        {t.team?.name ? `Team Token (${t.team.name})` : t.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        To share with your teammates
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              {tokens
-                .filter((t) => t.isOrganizationToken)
-                .map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    <div className="flex flex-col items-start gap-0.5">
-                      <div>Organization Token</div>
-                      <div className="text-xs text-muted-foreground">
-                        To share org-wide
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="text-xs text-muted-foreground">
-            No tokens available — provision one from{" "}
-            <Link
-              href="/settings/account?tab=tokens"
-              className="underline hover:text-foreground"
-            >
-              your account
-            </Link>
-            .
-          </div>
-        )}
-      </div>
-      <div className="grid grid-cols-[140px_1fr_auto] items-center gap-3">
-        <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Authorization header
-        </div>
-        <CopyableCode
-          value={`Bearer ${previewValue}`}
-          variant="primary"
-          className="min-w-0 overflow-hidden"
-        />
-        {hasAnyToken && (
-          <Button
+    <DropdownMenu>
+      <div className="relative overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+        <div className="absolute right-2 top-2 flex items-center gap-1">
+          <button
             type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7"
             onClick={handleToggleExpose}
             disabled={isLoading}
-            title={exposedValue ? "Hide token" : "Reveal token"}
+            aria-label={exposedValue ? "Hide token" : "Reveal token"}
+            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
           >
             {isLoading ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
             ) : exposedValue ? (
-              <EyeOff className="size-3.5" />
+              <EyeOff className="size-3.5" strokeWidth={2} />
             ) : (
-              <Eye className="size-3.5" />
+              <Eye className="size-3.5" strokeWidth={2} />
             )}
-          </Button>
-        )}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopy}
+            aria-label="Copy to clipboard"
+            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
+          >
+            {copied ? (
+              <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
+            ) : (
+              <Copy className="size-3.5" strokeWidth={2} />
+            )}
+          </button>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Switch token"
+              className="flex h-7 items-center gap-1 rounded border border-[#1f2937] bg-[#0d1117] px-2 text-[11px] text-[#9ca3af] transition-colors hover:text-white"
+            >
+              {selectedLabel}
+              <ChevronDown className="size-3" strokeWidth={2} />
+            </button>
+          </DropdownMenuTrigger>
+        </div>
+        <pre className="m-0 overflow-auto px-5 py-4 pr-36 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
+          {headerValue}
+        </pre>
       </div>
-    </div>
+      <DropdownMenuContent align="end" className="w-[280px]">
+        {userToken && (
+          <TokenOption
+            active={selectedId === PERSONAL_TOKEN_ID}
+            label="Personal Token"
+            description="The most secure option."
+            onSelect={() => {
+              setSelectedId(PERSONAL_TOKEN_ID);
+              setExposedValue(null);
+            }}
+          />
+        )}
+        {teamTokens.map((t) => (
+          <TokenOption
+            key={t.id}
+            active={selectedId === t.id}
+            label={t.team?.name ? `Team Token (${t.team.name})` : t.name}
+            description="To share with your teammates"
+            onSelect={() => {
+              setSelectedId(t.id);
+              setExposedValue(null);
+            }}
+          />
+        ))}
+        {orgTokens.map((t) => (
+          <TokenOption
+            key={t.id}
+            active={selectedId === t.id}
+            label="Organization Token"
+            description="To share org-wide"
+            onSelect={() => {
+              setSelectedId(t.id);
+              setExposedValue(null);
+            }}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TokenOption({
+  active,
+  label,
+  description,
+  onSelect,
+}: {
+  active: boolean;
+  label: string;
+  description: string;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      className={cn("flex flex-col items-start gap-0.5", active && "bg-accent")}
+    >
+      <span>{label}</span>
+      <span className="text-xs text-muted-foreground">{description}</span>
+    </DropdownMenuItem>
   );
 }
 

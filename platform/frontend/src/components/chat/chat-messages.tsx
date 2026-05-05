@@ -16,6 +16,7 @@ import {
 } from "@shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
+import Link from "next/link";
 import {
   Fragment,
   memo,
@@ -72,7 +73,10 @@ import {
   resolveToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
-import { getSwapToolShortName } from "@/lib/chat/swap-agent.utils";
+import {
+  getSwapToolShortName,
+  type SwapToolPart,
+} from "@/lib/chat/swap-agent.utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -104,7 +108,10 @@ import {
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
-import { SwapAgentBoundaryDivider } from "./swap-agent-boundary";
+import {
+  getSwapAgentBoundaryLabel,
+  SwapAgentBoundaryDivider,
+} from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -468,6 +475,15 @@ export function ChatMessages({
 
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
+            const previousSwapBoundaryLabel =
+              message.role === "assistant"
+                ? getPreviousAssistantSwapBoundaryLabel({
+                    messages,
+                    beforeIndex: idx,
+                    getToolShortName,
+                    hasToolError: hasSwapToolError,
+                  })
+                : null;
 
             return (
               <div
@@ -892,7 +908,13 @@ export function ChatMessages({
                                 </video>
                               )}
                               {isPdf && (
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                <Link
+                                  href={filePart.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={filePart.filename}
+                                  className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                                >
                                   <svg
                                     className="h-6 w-6 text-red-500"
                                     fill="currentColor"
@@ -904,10 +926,16 @@ export function ChatMessages({
                                   <span className="font-medium truncate">
                                     {filePart.filename || "PDF Document"}
                                   </span>
-                                </div>
+                                </Link>
                               )}
                               {!isImage && !isVideo && !isPdf && (
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
+                                <a
+                                  href={filePart.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={filePart.filename}
+                                  className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
+                                >
                                   <svg
                                     className="h-5 w-5 text-muted-foreground"
                                     fill="none"
@@ -925,7 +953,7 @@ export function ChatMessages({
                                   <span className="truncate">
                                     {filePart.filename || "Attached file"}
                                   </span>
-                                </div>
+                                </a>
                               )}
                             </div>
                           </div>
@@ -1161,6 +1189,7 @@ export function ChatMessages({
                     parts={message.parts ?? []}
                     getToolShortName={getToolShortName}
                     hasToolError={hasSwapToolError}
+                    suppressLabel={previousSwapBoundaryLabel}
                   />
                 )}
               </div>
@@ -1460,18 +1489,33 @@ const MessageTool = memo(
       onReauthMcp,
     });
 
-    // swap_agent / swap_to_default_agent are rendered as dividers after all message parts (see SwapAgentDivider below)
-    // Show the raw tool call when the user's name ends with "(debugging)"
+    // Successful swap_agent / swap_to_default_agent calls are rendered as dividers after all message parts.
+    // Failed/no-op swap calls use the compact tool status indicator so they do not render a false divider.
+    // Show the raw tool call when the user's name ends with "(debugging)".
     const swapToolShortName = getSwapToolShortName({
       toolName,
       getToolShortName,
     });
-    if (
-      !isDebugging &&
-      (swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
-        swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME)
-    ) {
-      return null;
+    const isSwapTool =
+      swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
+      swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME;
+    if (!isDebugging && isSwapTool) {
+      return errorText ? (
+        <CompactToolGroup
+          tools={[
+            {
+              key: part.toolCallId ?? toolName,
+              toolName,
+              part,
+              toolResultPart,
+              errorText,
+            },
+          ]}
+          toolIconMap={toolIconMap}
+          canExpandToolCalls={canExpandToolCalls}
+          onToolApprovalResponse={onToolApprovalResponse}
+        />
+      ) : null;
     }
 
     if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
@@ -1780,6 +1824,39 @@ function isSwapAgentPokeMessage(message: UIMessage): boolean {
     text === SWAP_TO_DEFAULT_AGENT_POKE_TEXT ||
     text.startsWith(SWAP_AGENT_POKE_PREFIX)
   );
+}
+
+function getPreviousAssistantSwapBoundaryLabel({
+  messages,
+  beforeIndex,
+  getToolShortName,
+  hasToolError,
+}: {
+  messages: UIMessage[];
+  beforeIndex: number;
+  getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
+  hasToolError: (part: SwapToolPart, allParts: SwapToolPart[]) => boolean;
+}) {
+  for (let i = beforeIndex - 1; i >= 0; i--) {
+    const previousMessage = messages[i];
+    if (previousMessage.role === "user") {
+      return null;
+    }
+    if (previousMessage.role !== "assistant") {
+      continue;
+    }
+
+    const label = getSwapAgentBoundaryLabel({
+      parts: previousMessage.parts ?? [],
+      getToolShortName,
+      hasToolError,
+    });
+    if (label) {
+      return label;
+    }
+  }
+
+  return null;
 }
 
 function renderPartWithUnsafeContextDivider({

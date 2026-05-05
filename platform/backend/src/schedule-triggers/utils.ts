@@ -37,7 +37,7 @@ export function isFormShapeCron(cron: string): boolean {
   if (parts.length !== 5) return false;
 
   const [min, hr, dom, mon, dow] = parts;
-  
+
   if (dom !== "*" || mon !== "*") return false;
   if (!MINUTE_REGEX.test(min)) return false;
 
@@ -58,7 +58,7 @@ export function isFormShapeCron(cron: string): boolean {
     if (seen.has(n)) return false;
     seen.add(n);
   }
-  
+
   return true;
 }
 

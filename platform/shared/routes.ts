@@ -175,6 +175,15 @@ export const RouteId = {
   ModelRouterResponsesWithDefaultAgent: "modelRouterResponsesWithDefaultAgent",
   ModelRouterResponsesWithAgent: "modelRouterResponsesWithAgent",
 
+  // Proxy Routes - Unified LLM Proxy (OpenAI-compatible, multi-provider)
+  UnifiedChatCompletionsWithDefaultAgent:
+    "unifiedChatCompletionsWithDefaultAgent",
+  UnifiedChatCompletionsWithAgent: "unifiedChatCompletionsWithAgent",
+  GetUnifiedLlmModelsWithDefaultAgent: "getUnifiedLlmModelsWithDefaultAgent",
+  GetUnifiedLlmModelsWithAgent: "getUnifiedLlmModelsWithAgent",
+  UnifiedResponsesWithDefaultAgent: "unifiedResponsesWithDefaultAgent",
+  UnifiedResponsesWithAgent: "unifiedResponsesWithAgent",
+
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",

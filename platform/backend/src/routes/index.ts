@@ -42,6 +42,7 @@ export { default as groqProxyRoutes } from "./proxy/routes/groq";
 export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";
 export { default as mistralProxyRoutes } from "./proxy/routes/mistral";
 export { default as modelRouterProxyRoutes } from "./proxy/routes/model-router";
+export { default as unifiedProxyRoutes } from "./proxy/routes/unified";
 export { default as ollamaProxyRoutes } from "./proxy/routes/ollama";
 export { default as openAiProxyRoutes } from "./proxy/routes/openai";
 export { default as openrouterProxyRoutes } from "./proxy/routes/openrouter";

@@ -275,6 +275,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.groqProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
   fastify.register(routes.modelRouterProxyRoutes);
+  fastify.register(routes.unifiedProxyRoutes);
   fastify.register(routes.mistralProxyRoutes);
   fastify.register(routes.ollamaProxyRoutes);
   fastify.register(routes.openrouterProxyRoutes);

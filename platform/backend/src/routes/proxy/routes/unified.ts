@@ -1,9 +1,23 @@
-import {
-  hasArchestraTokenPrefix,
-  LLM_PROXY_OAUTH_SCOPE,
-  RouteId,
-  type SupportedProvider,
-} from "@shared";
+/**
+ * Unified LLM Proxy Routes
+ *
+ * Provides a single OpenAI-compatible endpoint that aggregates models from all providers
+ * and auto-routes requests to the correct upstream provider based on the model name.
+ *
+ * Endpoints:
+ * - GET    /v1/unified/models                        - List all available models
+ * - GET    /v1/unified/:agentId/models               - List models for specific agent
+ * - POST   /v1/unified/chat/completions              - Chat completions (default agent)
+ * - POST   /v1/unified/:agentId/chat/completions     - Chat completions (specific agent)
+ * - POST   /v1/unified/responses                     - Responses API (default agent)
+ * - POST   /v1/unified/:agentId/responses            - Responses API (specific agent)
+ *
+ * Architecture:
+ * Reuses the exact same auth flow, agent resolution, model routing, and provider
+ * translation logic as model-router.ts — ensuring consistency with the upstream.
+ */
+
+import { RouteId, type SupportedProvider } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -56,28 +70,19 @@ import {
   type OpenaiResponsesContext,
   responsesToOpenaiChat,
 } from "../adapters/openai-responses-translator";
-import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
   validateVirtualApiKeyToken,
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
-import {
-  handleLLMProxy,
-  type LLMProxyAuthOverride,
-} from "../llm-proxy-handler";
+import { handleLLMProxy, type LLMProxyAuthOverride } from "../llm-proxy-handler";
 import {
   buildRoutableModelId,
   resolveModelRoute,
   sortRoutableModels,
 } from "../model-router-resolver";
 
-type OpenAiWireProvider = LLMProvider<
-  OpenAi.Types.ChatCompletionsRequest,
-  unknown,
-  unknown,
-  unknown,
-  OpenAi.Types.ChatCompletionsHeaders
->;
+// ─── Re-exported types from model-router pattern ───
 
 type ModelRouterMappedProviderKey = {
   provider: SupportedProvider;
@@ -94,47 +99,37 @@ type ModelRouterUserProviderKey = Awaited<
 type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
   organizationId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
-  oauthClient?: never;
+  providerApiKeysByProvider: Map<SupportedProvider, ModelRouterMappedProviderKey>;
 };
 
 type ModelRouterOAuthClientAuth = {
   authMethod: "oauth_client_credentials";
   organizationId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
+  providerApiKeysByProvider: Map<SupportedProvider, ModelRouterMappedProviderKey>;
   allowedLlmProxyIds: Set<string>;
-  oauthClient: {
-    id: string;
-    name: string;
-    clientId: string;
-  };
+  oauthClient: { id: string; name: string; clientId: string };
 };
 
 type ModelRouterUserOAuthAuth = {
   authMethod: "oauth_user";
   organizationId: string;
   userId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
-  oauthClient: {
-    id: string;
-    name: string;
-    clientId: string;
-  } | null;
+  providerApiKeysByProvider: Map<SupportedProvider, ModelRouterMappedProviderKey>;
+  oauthClient: { id: string; name: string; clientId: string } | null;
 };
 
 type ModelRouterAuth =
   | ModelRouterVirtualKeyAuth
   | ModelRouterOAuthClientAuth
   | ModelRouterUserOAuthAuth;
+
+type OpenAiWireProvider = LLMProvider<
+  OpenAi.Types.ChatCompletionsRequest,
+  unknown,
+  unknown,
+  unknown,
+  OpenAi.Types.ChatCompletionsHeaders
+>;
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -173,14 +168,9 @@ type ModelRouterProvider =
   | CohereModelRouterProvider
   | GeminiModelRouterProvider;
 
-type TranslatedModelRouterProvider =
-  | "anthropic"
-  | "bedrock"
-  | "cohere"
-  | "gemini";
+type TranslatedModelRouterProvider = "anthropic" | "bedrock" | "cohere" | "gemini";
 
-const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
-const RESPONSES_SUFFIX = "/responses";
+// ─── Provider definitions (identical to model-router.ts) ───
 
 const openAiWireProviders = {
   openai: openaiAdapterFactory,
@@ -212,6 +202,10 @@ const modelRouterSupportedProviders = new Set<SupportedProvider>([
   ...translatedModelRouterProviders,
 ]);
 
+const LLM_PROXY_OAUTH_SCOPE = "llm_proxy";
+
+// ─── Model list response schema ───
+
 const ModelListResponseSchema = z.object({
   object: z.literal("list"),
   data: z.array(
@@ -224,16 +218,25 @@ const ModelListResponseSchema = z.object({
   ),
 });
 
-const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  logger.info("[ModelRouterProxy] Registering model router routes");
+// ─── Route plugin ───
 
+const unifiedProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const API_PREFIX = `${PROXY_API_PREFIX}/unified`;
+  const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
+  const RESPONSES_SUFFIX = "/responses";
+
+  logger.info("[UnifiedProxy] Registering unified LLM proxy routes");
+
+  // ==========================================================================
+  // GET /v1/unified/models
+  // ==========================================================================
   fastify.get(
-    `${MODEL_ROUTER_PREFIX}/models`,
+    `${API_PREFIX}/models`,
     {
       schema: {
-        operationId: RouteId.ModelRouterListModelsWithDefaultAgent,
+        operationId: RouteId.GetUnifiedLlmModelsWithDefaultAgent,
         description:
-          "List OpenAI-compatible model ids available through the model router (default LLM proxy)",
+          "Get all available LLM models from all configured providers in OpenAI format",
         tags: ["LLM Proxy"],
         response: constructResponseSchema(ModelListResponseSchema),
       },
@@ -250,13 +253,16 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // ==========================================================================
+  // GET /v1/unified/:agentId/models
+  // ==========================================================================
   fastify.get(
-    `${MODEL_ROUTER_PREFIX}/:agentId/models`,
+    `${API_PREFIX}/:agentId/models`,
     {
       schema: {
-        operationId: RouteId.ModelRouterListModelsWithAgent,
+        operationId: RouteId.GetUnifiedLlmModelsWithAgent,
         description:
-          "List OpenAI-compatible model ids available through the model router (specific LLM proxy)",
+          "List OpenAI-compatible model ids available through the unified proxy (specific agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -276,14 +282,17 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // ==========================================================================
+  // POST /v1/unified/responses (OpenAI Responses API)
+  // ==========================================================================
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}${RESPONSES_SUFFIX}`,
+    `${API_PREFIX}${RESPONSES_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.ModelRouterResponsesWithDefaultAgent,
+        operationId: RouteId.UnifiedResponsesWithDefaultAgent,
         description:
-          "Create a response through the OpenAI-compatible model router (default LLM proxy)",
+          "Create a response through the OpenAI-compatible unified proxy (default agent)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.ResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -291,18 +300,21 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeResponse(request, reply);
+      return routeUnifiedResponse(request, reply);
     },
   );
 
+  // ==========================================================================
+  // POST /v1/unified/:agentId/responses
+  // ==========================================================================
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}/:agentId${RESPONSES_SUFFIX}`,
+    `${API_PREFIX}/:agentId${RESPONSES_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.ModelRouterResponsesWithAgent,
+        operationId: RouteId.UnifiedResponsesWithAgent,
         description:
-          "Create a response through the OpenAI-compatible model router (specific LLM proxy)",
+          "Create a response through the OpenAI-compatible unified proxy (specific agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -313,18 +325,21 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeResponse(request, reply);
+      return routeUnifiedResponse(request, reply);
     },
   );
 
+  // ==========================================================================
+  // POST /v1/unified/chat/completions (default agent)
+  // ==========================================================================
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
+    `${API_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.ModelRouterChatCompletionsWithDefaultAgent,
+        operationId: RouteId.UnifiedChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)",
+          "Create a chat completion through the OpenAI-compatible unified proxy (default agent)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -334,18 +349,21 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeChatCompletion(request, reply);
+      return routeUnifiedChatCompletion(request, reply);
     },
   );
 
+  // ==========================================================================
+  // POST /v1/unified/:agentId/chat/completions (specific agent)
+  // ==========================================================================
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
+    `${API_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.ModelRouterChatCompletionsWithAgent,
+        operationId: RouteId.UnifiedChatCompletionsWithAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible model router (specific LLM proxy)",
+          "Create a chat completion through the OpenAI-compatible unified proxy (specific agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -358,14 +376,18 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeChatCompletion(request, reply);
+      return routeUnifiedChatCompletion(request, reply);
     },
   );
+
+  logger.info("[UnifiedProxy] Unified LLM proxy routes registered successfully");
 };
 
-export default modelRouterProxyRoutes;
+export default unifiedProxyRoutes;
 
-export async function routeChatCompletion(
+// ─── Route handler implementations (identical pattern to model-router.ts) ───
+
+async function routeUnifiedChatCompletion(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
@@ -376,6 +398,7 @@ export async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
@@ -391,7 +414,7 @@ export async function routeChatCompletion(
       routedModel: resolution.modelId,
       provider: resolution.provider,
     },
-    "[ModelRouterProxy] Resolved model route",
+    "[UnifiedProxy] Resolved model route",
   );
 
   const provider = getOpenAiChatProviderForResolution({
@@ -407,7 +430,10 @@ export async function routeChatCompletion(
   return handleModelRouterProvider(provider, request, reply);
 }
 
-export async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
+async function routeUnifiedResponse(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
   const body = request.body as OpenAi.Types.ResponsesRequest;
   const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
@@ -416,6 +442,7 @@ export async function routeResponse(request: FastifyRequest, reply: FastifyReply
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+
   const resolution = await resolveModelRoute({
     requestedModel: chatBody.model,
     allowedProviders: getMappedProviders(auth),
@@ -443,6 +470,8 @@ export async function routeResponse(request: FastifyRequest, reply: FastifyReply
   );
 }
 
+// ─── Core logic functions (identical to model-router.ts) ───
+
 function getOpenAiChatProviderForResolution(params: {
   provider: SupportedProvider;
   body: OpenAi.Types.ChatCompletionsRequest;
@@ -461,7 +490,15 @@ function getOpenAiChatProviderForResolution(params: {
 
   throw new ApiError(
     501,
-    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
+    `Provider "${params.provider}" is not yet available through the OpenAI-compatible unified proxy.`,
+  );
+}
+
+function isTranslatedModelRouterProvider(
+  provider: SupportedProvider,
+): provider is TranslatedModelRouterProvider {
+  return (translatedModelRouterProviders as readonly string[]).includes(
+    provider as TranslatedModelRouterProvider,
   );
 }
 
@@ -507,7 +544,7 @@ function getTranslatedModelRouterProvider(params: {
   }
 }
 
-export function handleModelRouterProvider(
+function handleModelRouterProvider(
   provider: ModelRouterProvider,
   request: FastifyRequest,
   reply: FastifyReply,
@@ -571,7 +608,7 @@ function handleModelRouterResponsesProvider(
   }
 }
 
-export async function listModels(params: { providers: Set<SupportedProvider> }) {
+async function listModels(params: { providers: Set<SupportedProvider> }) {
   const providers = [...params.providers].filter((provider) =>
     modelRouterSupportedProviders.has(provider),
   );
@@ -599,53 +636,13 @@ export async function listModels(params: { providers: Set<SupportedProvider> }) 
   };
 }
 
-export async function getModelRouterAgent(agentId: string) {
-  const agent = await AgentModel.findById(agentId, undefined, true);
-  if (!agent) {
-    throw new ApiError(404, `Agent with ID ${agentId} not found`);
-  }
-  if (agent.agentType !== "llm_proxy") {
-    throw new ApiError(400, "Model router requires an LLM Proxy ID.");
-  }
-  return agent;
+function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
+  return new Set(auth.providerApiKeysByProvider.keys());
 }
 
-async function getDefaultModelRouterAgent() {
-  return AgentModel.getDefaultProfile();
-}
+// ─── Auth functions (identical to model-router.ts) ───
 
-export async function ensureModelRouterAgentAccess(params: {
-  agent: Agent | null;
-  auth: ModelRouterAuth;
-}) {
-  if (!params.agent) {
-    return;
-  }
-  if (params.agent.organizationId !== params.auth.organizationId) {
-    throw new ApiError(
-      403,
-      "Model Router virtual key cannot access this LLM Proxy.",
-    );
-  }
-  if (
-    params.auth.authMethod === "oauth_client_credentials" &&
-    !params.auth.allowedLlmProxyIds.has(params.agent.id)
-  ) {
-    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
-  }
-  if (params.auth.authMethod === "oauth_user") {
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      params.auth.userId,
-      params.agent.id,
-      false,
-    );
-    if (!hasAccess) {
-      throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
-    }
-  }
-}
-
-export async function getModelRouterAuth(
+async function getModelRouterAuth(
   request: FastifyRequest,
 ): Promise<ModelRouterAuth> {
   const rawAuthHeader = request.raw.headers.authorization;
@@ -654,7 +651,7 @@ export async function getModelRouterAuth(
   if (!bearerToken) {
     throw new ApiError(
       401,
-      "Model router requests require a mapped virtual API key or LLM OAuth client access token.",
+      "Unified proxy requires a Bearer token (virtual API key or OAuth access token).",
     );
   }
 
@@ -694,7 +691,7 @@ export async function getModelRouterAuth(
                 ? rateLimitError.message
                 : String(rateLimitError),
           },
-          "[ModelRouterProxy] Failed to record virtual key auth failure",
+          "[UnifiedProxy] Failed to record virtual key auth failure",
         );
       }
     }
@@ -702,58 +699,8 @@ export async function getModelRouterAuth(
   }
 }
 
-function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
-  return new Set(auth.providerApiKeysByProvider.keys());
-}
-
-function isTranslatedModelRouterProvider(
-  provider: SupportedProvider,
-): provider is TranslatedModelRouterProvider {
-  return translatedModelRouterProviders.includes(
-    provider as TranslatedModelRouterProvider,
-  );
-}
-
-function assertNever(value: never): never {
-  throw new ApiError(500, `Unhandled model router provider "${value}".`);
-}
-
-async function applyModelRouterAuthOverride(params: {
-  request: FastifyRequest;
-  auth: ModelRouterAuth;
-  provider: SupportedProvider;
-}): Promise<void> {
-  const mappedApiKey = params.auth.providerApiKeysByProvider.get(
-    params.provider,
-  );
-  if (!mappedApiKey) {
-    throw new ApiError(
-      400,
-      `Model Router credential is not mapped to provider "${params.provider}".`,
-    );
-  }
-
-  const apiKey = mappedApiKey.secretId
-    ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
-    : undefined;
-  (
-    params.request as FastifyRequest & {
-      llmProxyAuthOverride?: LLMProxyAuthOverride;
-    }
-  ).llmProxyAuthOverride = {
-    apiKey,
-    baseUrl: mappedApiKey.baseUrl ?? undefined,
-    chatApiKeyId: mappedApiKey.providerApiKeyId,
-    authenticated: true,
-    source: "model_router",
-    authMethod: params.auth.authMethod,
-    authenticatedApp:
-      params.auth.authMethod === "oauth_user"
-        ? (params.auth.oauthClient ?? undefined)
-        : params.auth.oauthClient,
-    userId:
-      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
-  };
+function hasArchestraTokenPrefix(token: string): boolean {
+  return token.startsWith("archestra_");
 }
 
 async function getModelRouterOAuthClientAuth(
@@ -770,7 +717,7 @@ async function getModelRouterOAuthClientAuth(
     throw new ApiError(401, "Invalid LLM OAuth client access token.");
   }
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
-    throw new ApiError(403, "Access token is missing Model Router scope.");
+    throw new ApiError(403, "Access token is missing unified proxy scope.");
   }
   if (accessToken.userId) {
     return getModelRouterUserOAuthAuth({ accessToken });
@@ -851,7 +798,7 @@ async function getModelRouterUserOAuthAuth(params: {
   if (providerApiKeys.length === 0) {
     throw new ApiError(
       401,
-      "OAuth user has no provider API keys available for Model Router usage.",
+      "OAuth user has no provider API keys available for unified proxy usage.",
     );
   }
 
@@ -899,17 +846,14 @@ function compareModelRouterUserProviderKeys(
   if (left.provider !== right.provider) {
     return left.provider.localeCompare(right.provider);
   }
-
   const leftScopePriority = getModelRouterUserProviderKeyScopePriority(left);
   const rightScopePriority = getModelRouterUserProviderKeyScopePriority(right);
   if (leftScopePriority !== rightScopePriority) {
     return leftScopePriority - rightScopePriority;
   }
-
   if (left.isPrimary !== right.isPrimary) {
     return left.isPrimary ? -1 : 1;
   }
-
   return left.createdAt.getTime() - right.createdAt.getTime();
 }
 
@@ -926,4 +870,95 @@ function getModelRouterUserProviderKeyScopePriority(
     default:
       return 3;
   }
+}
+
+async function applyModelRouterAuthOverride(params: {
+  request: FastifyRequest;
+  auth: ModelRouterAuth;
+  provider: SupportedProvider;
+}): Promise<void> {
+  const mappedApiKey = params.auth.providerApiKeysByProvider.get(
+    params.provider,
+  );
+  if (!mappedApiKey) {
+    throw new ApiError(
+      400,
+      `Unified proxy credential is not mapped to provider "${params.provider}".`,
+    );
+  }
+
+  const apiKey = mappedApiKey.secretId
+    ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
+    : undefined;
+  (
+    params.request as FastifyRequest & {
+      llmProxyAuthOverride?: LLMProxyAuthOverride;
+    }
+  ).llmProxyAuthOverride = {
+    apiKey,
+    baseUrl: mappedApiKey.baseUrl ?? undefined,
+    chatApiKeyId: mappedApiKey.providerApiKeyId,
+    authenticated: true,
+    source: "unified_proxy",
+    authMethod: params.auth.authMethod,
+    authenticatedApp:
+      params.auth.authMethod === "oauth_user"
+        ? (params.auth.oauthClient ?? undefined)
+        : params.auth.oauthClient,
+    userId:
+      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
+  };
+}
+
+async function getModelRouterAgent(agentId: string) {
+  const agent = await AgentModel.findById(agentId, undefined, true);
+  if (!agent) {
+    throw new ApiError(404, `Agent with ID "${agentId}" not found`);
+  }
+  if (agent.agentType !== "llm_proxy") {
+    throw new ApiError(400, "Unified proxy requires an LLM Proxy ID.");
+  }
+  return agent;
+}
+
+async function getDefaultModelRouterAgent() {
+  return AgentModel.getDefaultProfile();
+}
+
+async function ensureModelRouterAgentAccess(params: {
+  agent: Agent | null;
+  auth: ModelRouterAuth;
+}) {
+  if (!params.agent) {
+    return;
+  }
+  if (params.agent.organizationId !== params.auth.organizationId) {
+    throw new ApiError(
+      403,
+      "Unified proxy virtual key cannot access this LLM Proxy.",
+    );
+  }
+  if (
+    params.auth.authMethod === "oauth_client_credentials" &&
+    !params.auth.allowedLlmProxyIds.has(params.agent.id)
+  ) {
+    throw new ApiError(
+      403,
+      "LLM OAuth client cannot access this LLM Proxy.",
+    );
+  }
+  if (params.auth.authMethod === "oauth_user") {
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      params.auth.userId,
+      params.agent.id,
+      false,
+    );
+    if (!hasAccess) {
+      throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
+    }
+  }
+}
+
+function assertNever(value: never): never {
+  throw new ApiError(500, `Unhandled provider "${value}".`);
 }

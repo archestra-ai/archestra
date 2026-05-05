@@ -3,8 +3,9 @@ name: Random Issue and PR Assignee
 on:
   issues:
     types: [opened]
-  pull_request_target: # zizmor: ignore[dangerous-triggers] needed to assign PRs from forks; this workflow does not check out or execute PR code.
-    types: [opened, ready_for_review]
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 permissions: {}
 
@@ -13,15 +14,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  assign:
-    name: Assign
-    if: github.event_name == 'issues' || github.event.pull_request.draft == false
+  assign-issue:
+    name: Assign Issue
+    if: github.event_name == 'issues'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      issues: write # Required to assign issues and pull requests.
+      issues: write # Required to assign issues.
 
     steps:
-      - name: Randomly assign owner
+      - name: Randomly assign issue owner
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ github.token }}
@@ -45,3 +46,62 @@ jobs:
             });
 
             console.log(`Assigned #${context.issue.number} to ${selectedOwner}`);
+
+  assign-recent-prs:
+    name: Assign Recent PRs
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      issues: write # Required to assign pull requests.
+      pull-requests: read # Required to read PR metadata.
+
+    steps:
+      - name: Randomly assign recent PR owners
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owners = ['joeyorlando', 'iskhakov', 'Konstantinov-Innokentii'];
+            const coreTeam = [...owners, 'Matvey-Kuk'];
+            const updatedSince = new Date(Date.now() - 30 * 60 * 1000);
+
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 50,
+            });
+
+            for (const pr of pullRequests) {
+              if (new Date(pr.updated_at) < updatedSince) {
+                break;
+              }
+
+              if (pr.draft) {
+                console.log(`Skipping assignment because PR #${pr.number} is still a draft`);
+                continue;
+              }
+
+              if (pr.assignees.length > 0) {
+                console.log(`Skipping assignment because PR #${pr.number} already has an assignee`);
+                continue;
+              }
+
+              if (coreTeam.includes(pr.user.login)) {
+                console.log(`Skipping assignment because ${pr.user.login} is on the core team`);
+                continue;
+              }
+
+              const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
+
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                assignees: [selectedOwner],
+              });
+
+              console.log(`Assigned PR #${pr.number} to ${selectedOwner}`);
+            }

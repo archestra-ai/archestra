@@ -20,6 +20,10 @@ on:
 
 permissions: {}
 
+env:
+  ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii"]'
+  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk"]'
+
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -38,9 +42,9 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const owners = ['joeyorlando', 'iskhakov', 'Konstantinov-Innokentii'];
-            const coreTeam = [...owners, 'Matvey-Kuk'];
-            const actor = context.payload.issue?.user?.login ?? context.payload.pull_request?.user?.login;
+            const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
+            const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
+            const actor = context.payload.issue.user.login;
 
             if (coreTeam.includes(actor)) {
               console.log(`Skipping assignment because ${actor} is on the core team`);
@@ -72,47 +76,59 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const owners = ['joeyorlando', 'iskhakov', 'Konstantinov-Innokentii'];
-            const coreTeam = [...owners, 'Matvey-Kuk'];
+            const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
+            const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
             const updatedSince = new Date(Date.now() - 30 * 60 * 1000);
 
-            const { data: pullRequests } = await github.rest.pulls.list({
+            for await (const response of github.paginate.iterator(github.rest.pulls.list, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
               sort: 'updated',
               direction: 'desc',
-              per_page: 50,
-            });
+              per_page: 100,
+            })) {
+              let reachedOlderPrs = false;
 
-            for (const pr of pullRequests) {
-              if (new Date(pr.updated_at) < updatedSince) {
+              for (const pr of response.data) {
+                if (new Date(pr.updated_at) < updatedSince) {
+                  reachedOlderPrs = true;
+                  break;
+                }
+
+                try {
+                  if (pr.draft) {
+                    console.log(`Skipping assignment because PR #${pr.number} is still a draft`);
+                    continue;
+                  }
+
+                  if (pr.assignees.length > 0) {
+                    console.log(`Skipping assignment because PR #${pr.number} already has an assignee`);
+                    continue;
+                  }
+
+                  if (coreTeam.includes(pr.user.login)) {
+                    console.log(`Skipping assignment because ${pr.user.login} is on the core team`);
+                    continue;
+                  }
+
+                  const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
+
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    assignees: [selectedOwner],
+                  });
+
+                  console.log(`Assigned PR #${pr.number} to ${selectedOwner}`);
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  console.error(`Failed to assign PR #${pr.number}: ${message}`);
+                }
+              }
+
+              if (reachedOlderPrs) {
                 break;
               }
-
-              if (pr.draft) {
-                console.log(`Skipping assignment because PR #${pr.number} is still a draft`);
-                continue;
-              }
-
-              if (pr.assignees.length > 0) {
-                console.log(`Skipping assignment because PR #${pr.number} already has an assignee`);
-                continue;
-              }
-
-              if (coreTeam.includes(pr.user.login)) {
-                console.log(`Skipping assignment because ${pr.user.login} is on the core team`);
-                continue;
-              }
-
-              const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
-
-              await github.rest.issues.addAssignees({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                assignees: [selectedOwner],
-              });
-
-              console.log(`Assigned PR #${pr.number} to ${selectedOwner}`);
             }

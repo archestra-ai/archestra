@@ -18,6 +18,7 @@ import {
 import {
   buildAzureResponsesBaseUrl,
   normalizeAzureApiKey,
+  shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
 import config from "@/config";
 import { metrics } from "@/observability";
@@ -115,11 +116,9 @@ export const azureResponsesAdapterFactory: LLMProvider<
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       return new OpenAIProvider({
-        apiKey: getAzureOpenAiBearerTokenProvider(),
+        apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
         baseURL: resolvedBaseUrl,
-        defaultQuery: {
-          "api-version": config.llm.azure.responsesApiVersion,
-        },
+        defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
         fetch: customFetch,
         defaultHeaders: options.defaultHeaders,
       });
@@ -134,9 +133,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     return new OpenAIProvider({
       apiKey: normalizedApiKey,
       baseURL: resolvedBaseUrl,
-      defaultQuery: {
-        "api-version": config.llm.azure.responsesApiVersion,
-      },
+      defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
       fetch: customFetch,
       defaultHeaders: {
         ...options.defaultHeaders,
@@ -183,6 +180,14 @@ export const azureResponsesAdapterFactory: LLMProvider<
     );
   },
 };
+
+function getAzureResponsesDefaultQuery(
+  baseUrl: string | undefined,
+): Record<string, string> | undefined {
+  return shouldUseAzureOpenAiApiVersion(baseUrl)
+    ? { "api-version": config.llm.azure.responsesApiVersion }
+    : undefined;
+}
 
 class AzureResponsesRequestAdapter
   implements LLMRequestAdapter<AzureResponsesRequest, AzureResponseInput>

@@ -750,6 +750,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.anthropic.com`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED`** - Enable Microsoft Entra ID authentication for Anthropic models deployed in Microsoft Foundry.
+  - Default: `false`
+  - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
+  - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
+
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
   - Use this to point to your own proxy or other custom endpoints
@@ -786,7 +791,8 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Use this to point to your own proxy or other custom endpoints
 
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
-  - Format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
+  - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
+  - Foundry v1 format: `https://<resource-name>.services.ai.azure.com/openai/v1`
   - Required to enable the Azure AI Foundry provider.
 
 - **`ARCHESTRA_AZURE_OPENAI_API_VERSION`** - Azure OpenAI REST API version.
@@ -800,6 +806,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `false`
   - Set to `true` to use Azure Identity `DefaultAzureCredential` instead of `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY`
   - Requires `ARCHESTRA_AZURE_OPENAI_BASE_URL`
+  - Deployment URLs use token scope `https://cognitiveservices.azure.com/.default`; Foundry v1 URLs use `https://ai.azure.com/.default`
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`

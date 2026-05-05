@@ -1,5 +1,8 @@
 import type { SupportedProvider } from "@shared";
-import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import {
+  isAnthropicAzureFoundryEntraIdEnabled,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
@@ -10,6 +13,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
+import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
 import { fetchAzureModels } from "@/routes/chat/model-fetchers/azure";
 import { fetchBedrockModelsViaIam } from "@/routes/chat/model-fetchers/bedrock";
 import { fetchGeminiModelsViaVertexAi } from "@/routes/chat/model-fetchers/gemini";
@@ -58,6 +62,20 @@ class SystemKeyManager {
         isAzureOpenAiEntraIdEnabled() && Boolean(config.llm.azure.baseUrl),
       customFetch: async () => {
         const models = await fetchAzureModels("", config.llm.azure.baseUrl);
+        return models.map((m) => ({ id: m.id, displayName: m.displayName }));
+      },
+    },
+    {
+      provider: "anthropic",
+      name: "Anthropic Azure Foundry Entra ID",
+      isEnabled: () =>
+        isAnthropicAzureFoundryEntraIdEnabled() &&
+        Boolean(config.llm.anthropic.baseUrl),
+      customFetch: async () => {
+        const models = await fetchAnthropicModels(
+          "",
+          config.llm.anthropic.baseUrl,
+        );
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },
     },

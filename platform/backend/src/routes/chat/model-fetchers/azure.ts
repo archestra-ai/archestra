@@ -4,6 +4,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentsUrl,
+  buildAzureOpenAiV1ModelsUrl,
   extractAzureDeploymentName,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
@@ -26,6 +27,16 @@ export async function fetchAzureModels(
     baseUrl,
   });
   const deploymentName = extractAzureDeploymentName(baseUrl);
+  const v1ModelsUrl = buildAzureOpenAiV1ModelsUrl(baseUrl);
+  if (v1ModelsUrl) {
+    return fetchAzureOpenAiV1Models({
+      apiKey,
+      extraHeaders,
+      url: v1ModelsUrl,
+      baseUrl,
+    });
+  }
+
   if (!url) {
     logger.warn({ baseUrl }, "Could not extract Azure endpoint from baseUrl");
     return [];
@@ -34,7 +45,7 @@ export async function fetchAzureModels(
   try {
     // Azure lists deployments at GET /openai/deployments?api-version=...
     // and returns { data: [{ id, ... }] }, which we map into ModelInfo.
-    const authHeaders = await getAzureAuthHeaders(apiKey);
+    const authHeaders = await getAzureAuthHeaders(apiKey, baseUrl);
     const response = await fetch(url, {
       headers: {
         ...(extraHeaders ?? {}),
@@ -66,8 +77,56 @@ export async function fetchAzureModels(
   }
 }
 
+async function fetchAzureOpenAiV1Models(params: {
+  apiKey: string;
+  baseUrl: string;
+  extraHeaders?: Record<string, string> | null;
+  url: string;
+}): Promise<ModelInfo[]> {
+  try {
+    const authHeaders = await getAzureAuthHeaders(
+      params.apiKey,
+      params.baseUrl,
+    );
+    const response = await fetch(params.url, {
+      headers: {
+        ...(params.extraHeaders ?? {}),
+        ...authHeaders,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(
+        { status: response.status, error: errorText },
+        "Failed to fetch Azure OpenAI v1 models",
+      );
+      return [];
+    }
+
+    const data = (await response.json()) as {
+      data?: {
+        id: string;
+        capabilities?: { chat_completion?: boolean };
+      }[];
+    };
+
+    return (data.data ?? [])
+      .filter((model) => model.capabilities?.chat_completion !== false)
+      .map((model) => ({
+        id: model.id,
+        displayName: model.id,
+        provider: "azure" as const,
+      }));
+  } catch (error) {
+    logger.error({ error }, "Error fetching Azure OpenAI v1 models");
+    return [];
+  }
+}
+
 async function getAzureAuthHeaders(
   apiKey: string | undefined,
+  baseUrl?: string,
 ): Promise<Record<string, string>> {
   if (apiKey) {
     return { "api-key": normalizeAzureApiKey(apiKey) ?? "" };
@@ -77,7 +136,7 @@ async function getAzureAuthHeaders(
     return { "api-key": "" };
   }
 
-  const tokenProvider = getAzureOpenAiBearerTokenProvider();
+  const tokenProvider = getAzureOpenAiBearerTokenProvider(baseUrl);
   return { Authorization: `Bearer ${await tokenProvider()}` };
 }
 

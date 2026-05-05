@@ -4,6 +4,10 @@ export function buildAzureDeploymentsUrl(params: {
 }): string | null {
   try {
     const url = new URL(params.baseUrl);
+    if (isAzureOpenAiV1Url(url)) {
+      return null;
+    }
+
     // Expected input is the Azure deployment base URL:
     // https://<resource>.openai.azure.com/openai/deployments/<deployment>
     const pathname = url.pathname.replace(/\/[^/]+\/?$/, "");
@@ -13,9 +17,26 @@ export function buildAzureDeploymentsUrl(params: {
   }
 }
 
+export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
+  try {
+    const url = new URL(baseUrl);
+    if (!isAzureOpenAiV1Url(url)) {
+      return null;
+    }
+
+    return `${url.origin}${url.pathname.replace(/\/+$/, "")}/models`;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
+    if (isAzureOpenAiV1Url(url)) {
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    }
+
     if (!/\/deployments\/[^/]+\/?$/.test(url.pathname)) {
       return null;
     }
@@ -34,6 +55,18 @@ export function extractAzureDeploymentName(baseUrl: string): string | null {
     return segments.at(-1) ?? null;
   } catch {
     return null;
+  }
+}
+
+export function shouldUseAzureOpenAiApiVersion(baseUrl: string | undefined) {
+  if (!baseUrl) {
+    return true;
+  }
+
+  try {
+    return !isAzureOpenAiV1Url(new URL(baseUrl));
+  } catch {
+    return true;
   }
 }
 
@@ -70,4 +103,8 @@ function getRequestUrl(input: URL | RequestInfo): string {
   }
 
   return input.url;
+}
+
+function isAzureOpenAiV1Url(url: URL): boolean {
+  return /\/openai\/v1\/?$/.test(url.pathname);
 }

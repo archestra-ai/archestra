@@ -1,4 +1,8 @@
 import {
+  type ScheduleTriggerReplyChannel,
+  ScheduleTriggerReplyChannelSchema,
+} from "@shared";
+import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
@@ -13,6 +17,8 @@ import {
   normalizeCronExpression,
   normalizeTimezone,
 } from "@/schedule-triggers/utils";
+
+export { ScheduleTriggerReplyChannelSchema, type ScheduleTriggerReplyChannel };
 
 export const ScheduleTriggerRunKindSchema = z.enum(["due", "manual"]);
 export type ScheduleTriggerRunKind = z.infer<
@@ -92,6 +98,9 @@ export const SelectScheduleTriggerSchema = createSelectSchema(
 
 export const InsertScheduleTriggerSchema = createInsertSchema(
   schema.scheduleTriggersTable,
+  {
+    replyChannel: ScheduleTriggerReplyChannelSchema.optional(),
+  },
 )
   .omit({
     id: true,
@@ -101,6 +110,9 @@ export const InsertScheduleTriggerSchema = createInsertSchema(
 
 export const UpdateScheduleTriggerSchema = createUpdateSchema(
   schema.scheduleTriggersTable,
+  {
+    replyChannel: ScheduleTriggerReplyChannelSchema.optional(),
+  },
 )
   .omit({
     id: true,

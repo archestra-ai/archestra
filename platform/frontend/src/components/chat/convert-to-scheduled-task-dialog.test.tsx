@@ -45,6 +45,9 @@ const mockUseConversationScheduleTriggerSuggestion = vi.fn();
 vi.mock("@/lib/schedule-trigger.query", () => ({
   useConversationScheduleTriggerSuggestion: () =>
     mockUseConversationScheduleTriggerSuggestion(),
+  useScheduleTriggerAvailableReplyChannels: () => ({
+    data: { channels: ["chat"] },
+  }),
   useCreateScheduleTriggerFromConversation: () => ({
     mutateAsync: vi.fn(),
     reset: vi.fn(),

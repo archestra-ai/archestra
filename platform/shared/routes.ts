@@ -14,6 +14,8 @@ export const RouteId = {
 
   // Schedule Trigger Routes
   GetScheduleTriggers: "getScheduleTriggers",
+  GetScheduleTriggerAvailableReplyChannels:
+    "getScheduleTriggerAvailableReplyChannels",
   CreateScheduleTrigger: "createScheduleTrigger",
   GetScheduleTrigger: "getScheduleTrigger",
   UpdateScheduleTrigger: "updateScheduleTrigger",

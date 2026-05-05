@@ -21,6 +21,7 @@ describe("ScheduleTriggerFormDialog", () => {
           cronExpression: "0 9 * * 1,2,3,4,5",
           timezone: "UTC",
           messageTemplate: "",
+          replyChannel: "chat",
         }}
         agentOptions={[]}
         agentsLoading={false}
@@ -55,6 +56,7 @@ describe("ScheduleTriggerFormDialog", () => {
           cronExpression: "0 9 * * 1,2,3,4,5",
           timezone: "UTC",
           messageTemplate: "Do it",
+          replyChannel: "chat",
         }}
         agentOptions={[{ value: "agent-1", label: "Agent" }]}
         agentsLoading={false}
@@ -88,6 +90,7 @@ describe("ScheduleTriggerFormDialog", () => {
           cronExpression: "0 9 * * 1,2,3,4,5",
           timezone: "UTC",
           messageTemplate: "Hi",
+          replyChannel: "chat",
         }}
         agentOptions={[{ value: "agent-1", label: "Agent" }]}
         agentsLoading={false}
@@ -106,5 +109,71 @@ describe("ScheduleTriggerFormDialog", () => {
     );
 
     expect(screen.getByText("Summary")).toBeInTheDocument();
+  });
+
+  it("only renders reply channel dropdown when multiple channels are available", () => {
+    const { rerender } = render(
+      <ScheduleTriggerFormDialog
+        open
+        onOpenChange={vi.fn()}
+        title="New task"
+        values={{
+          name: "Test",
+          agentId: "agent-1",
+          cronExpression: "0 9 * * 1,2,3,4,5",
+          timezone: "UTC",
+          messageTemplate: "Hi",
+          replyChannel: "chat",
+        }}
+        agentOptions={[{ value: "agent-1", label: "Agent" }]}
+        agentsLoading={false}
+        hasAgents
+        isSaving={false}
+        isFormValid
+        permissions={{ scheduledTask: ["create"] }}
+        submitLabel="Create"
+        onSubmit={vi.fn()}
+        onNameChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onCronExpressionChange={vi.fn()}
+        onMessageTemplateChange={vi.fn()}
+        availableReplyChannels={["chat"]}
+        onReplyChannelChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Reply in")).not.toBeInTheDocument();
+
+    rerender(
+      <ScheduleTriggerFormDialog
+        open
+        onOpenChange={vi.fn()}
+        title="New task"
+        values={{
+          name: "Test",
+          agentId: "agent-1",
+          cronExpression: "0 9 * * 1,2,3,4,5",
+          timezone: "UTC",
+          messageTemplate: "Hi",
+          replyChannel: "chat",
+        }}
+        agentOptions={[{ value: "agent-1", label: "Agent" }]}
+        agentsLoading={false}
+        hasAgents
+        isSaving={false}
+        isFormValid
+        permissions={{ scheduledTask: ["create"] }}
+        submitLabel="Create"
+        onSubmit={vi.fn()}
+        onNameChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onCronExpressionChange={vi.fn()}
+        onMessageTemplateChange={vi.fn()}
+        availableReplyChannels={["chat", "slack_dm"]}
+        onReplyChannelChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Reply in")).toBeInTheDocument();
   });
 });

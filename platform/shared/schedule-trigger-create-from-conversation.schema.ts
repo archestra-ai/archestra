@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ScheduleTriggerReplyChannelSchema } from "./schedule-trigger-reply-channel.schema";
 
 const Uuid = z.uuidv4();
 
@@ -10,6 +11,7 @@ export const CreateScheduleTriggerFromConversationBodySchema = z.object({
   messageTemplate: z.string().min(1).optional(),
   agentId: Uuid.optional(),
   enabled: z.boolean().optional(),
+  replyChannel: ScheduleTriggerReplyChannelSchema.optional(),
   replyInSameConversation: z.boolean().optional(),
 });
 

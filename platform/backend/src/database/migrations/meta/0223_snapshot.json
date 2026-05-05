@@ -6808,6 +6808,7 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        }
       },
       "indexes": {
         "schedule_triggers_agent_id_idx": {

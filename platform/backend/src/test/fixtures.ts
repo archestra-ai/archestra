@@ -7,6 +7,7 @@ import {
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -251,37 +252,53 @@ async function makeScheduleTrigger(
     actorUserId?: string;
     agentId?: string;
     organizationId?: string;
+    createdAt?: Date;
   } = {},
 ): Promise<ScheduleTrigger> {
-  let organizationId = overrides.organizationId;
+  const { createdAt, ...dataOverrides } = overrides;
+  let organizationId = dataOverrides.organizationId;
   if (!organizationId) {
     const org = await makeOrganization();
     organizationId = org.id;
   }
 
-  let actorUserId = overrides.actorUserId;
+  let actorUserId = dataOverrides.actorUserId;
   if (!actorUserId) {
     const user = await makeUser();
     actorUserId = user.id;
   }
 
-  let agentId = overrides.agentId;
+  let agentId = dataOverrides.agentId;
   if (!agentId) {
     const agent = await makeInternalAgent({ organizationId });
     agentId = agent.id;
   }
 
-  return await ScheduleTriggerModel.create({
+  const trigger = await ScheduleTriggerModel.create({
     organizationId,
     name: `Test Trigger ${crypto.randomUUID().substring(0, 8)}`,
     agentId,
     messageTemplate: "Run the scheduled task",
-    cronExpression: "* * * * *",
+    cronExpression: "0 * * * *",
     timezone: "UTC",
     enabled: true,
     actorUserId,
-    ...overrides,
+    ...dataOverrides,
   });
+
+  if (createdAt) {
+    await db
+      .update(schema.scheduleTriggersTable)
+      .set({ createdAt })
+      .where(eq(schema.scheduleTriggersTable.id, trigger.id));
+    const refreshed = await ScheduleTriggerModel.findById(trigger.id);
+    if (!refreshed) {
+      throw new Error("Schedule trigger not found after createdAt update");
+    }
+    return refreshed;
+  }
+
+  return trigger;
 }
 
 /**

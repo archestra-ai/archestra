@@ -91,6 +91,24 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: mockExecuteA2AMessage,
 }));
 
+const mockGetReplyChannelDeliveryContext = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    availableChannels: ["chat"],
+    slackDmBinding: null,
+  }),
+);
+vi.mock("@/schedule-triggers/reply-channels", () => ({
+  getReplyChannelDeliveryContext: mockGetReplyChannelDeliveryContext,
+}));
+
+const mockSendReply = vi.hoisted(() => vi.fn().mockResolvedValue("ts-1"));
+const mockGetSlackProvider = vi.hoisted(() => vi.fn().mockReturnValue(null));
+vi.mock("@/agents/chatops/chatops-manager", () => ({
+  chatOpsManager: {
+    getSlackProvider: mockGetSlackProvider,
+  },
+}));
+
 vi.mock("@/logging", () => ({
   default: {
     info: vi.fn(),
@@ -191,6 +209,12 @@ describe("handleScheduleTriggerRunExecution", () => {
       selectedProvider: "openai",
       chatApiKeyId: null,
     });
+    mockGetReplyChannelDeliveryContext.mockResolvedValue({
+      availableChannels: ["chat"],
+      slackDmBinding: null,
+    });
+    mockGetSlackProvider.mockReturnValue(null);
+    mockSendReply.mockClear();
     mockDbTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
       fn({
         execute: mockTxExecute,
@@ -271,6 +295,68 @@ describe("handleScheduleTriggerRunExecution", () => {
     expect(mockNotifyConversationMessagesUpdated).toHaveBeenCalledWith({
       conversationId: linkedId,
     });
+    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
+      runId: "run-1",
+      status: "success",
+      error: null,
+    });
+  });
+
+  test("falls back to chat when selected reply channel is unavailable", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(
+      makeTrigger({ replyChannel: "slack_dm" }),
+    );
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+
+    await handleScheduleTriggerRunExecution({
+      runId: "run-1",
+      triggerId: "trigger-1",
+    });
+
+    expect(mockGetReplyChannelDeliveryContext).toHaveBeenCalledWith({
+      actorEmail: "test@test.com",
+    });
+    expect(mockSendReply).not.toHaveBeenCalled();
+    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
+      runId: "run-1",
+      status: "success",
+      error: null,
+    });
+  });
+
+  test("delivers to Slack DM when reply channel is slack_dm and binding exists", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(
+      makeTrigger({ replyChannel: "slack_dm" }),
+    );
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+    mockGetReplyChannelDeliveryContext.mockResolvedValue({
+      availableChannels: ["chat", "slack_dm"],
+      slackDmBinding: { channelId: "D123", workspaceId: "T1" },
+    });
+    mockGetSlackProvider.mockReturnValue({ sendReply: mockSendReply });
+
+    await handleScheduleTriggerRunExecution({
+      runId: "run-1",
+      triggerId: "trigger-1",
+    });
+
+    expect(mockSendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "done",
+        originalMessage: expect.objectContaining({
+          messageId: "schedule-trigger-run:run-1",
+          channelId: "D123",
+          workspaceId: "T1",
+        }),
+      }),
+    );
+    expect(
+      mockAppendLinkedScheduleRunMessagesToConversation,
+    ).not.toHaveBeenCalled();
     expect(mockRunMarkCompleted).toHaveBeenCalledWith({
       runId: "run-1",
       status: "success",

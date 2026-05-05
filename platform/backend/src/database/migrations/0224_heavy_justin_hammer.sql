@@ -1,1 +1,0 @@
-ALTER TABLE "schedule_triggers" ADD COLUMN "keep_results_in_same_chat" boolean DEFAULT false NOT NULL;

@@ -12198,6 +12198,8 @@ export type CloneAgentResponses = {
             maxRounds: number;
         } | {
             name: 'dual-llm-quarantine-agent';
+        } | {
+            name: 'schedule-conversion-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
@@ -41145,6 +41147,91 @@ export type PerplexityChatCompletionsWithAgentResponses = {
 
 export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletionsWithAgentResponses[keyof PerplexityChatCompletionsWithAgentResponses];
 
+export type GetScheduleTriggerAvailableReplyChannelsData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentId: string;
+    };
+    url: '/api/schedule-triggers/available-reply-channels';
+};
+
+export type GetScheduleTriggerAvailableReplyChannelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetScheduleTriggerAvailableReplyChannelsError = GetScheduleTriggerAvailableReplyChannelsErrors[keyof GetScheduleTriggerAvailableReplyChannelsErrors];
+
+export type GetScheduleTriggerAvailableReplyChannelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        channels: Array<'chat' | 'slack_dm'>;
+    };
+};
+
+export type GetScheduleTriggerAvailableReplyChannelsResponse = GetScheduleTriggerAvailableReplyChannelsResponses[keyof GetScheduleTriggerAvailableReplyChannelsResponses];
+
 export type GetScheduleTriggersData = {
     body?: never;
     path?: never;
@@ -41240,6 +41327,7 @@ export type GetScheduleTriggersResponses = {
             timezone: string;
             enabled: boolean;
             keepResultsInSameChat: boolean;
+            replyChannel: string;
             actorUserId: string;
             lastExecutedAt: string | null;
             createdAt: string;
@@ -41274,6 +41362,7 @@ export type CreateScheduleTriggerData = {
         agentId: string;
         enabled?: boolean;
         keepResultsInSameChat?: boolean;
+        replyChannel?: 'chat' | 'slack_dm';
         cronExpression: string;
         timezone: string;
         messageTemplate: string;
@@ -41362,6 +41451,7 @@ export type CreateScheduleTriggerResponses = {
         timezone: string;
         enabled: boolean;
         keepResultsInSameChat: boolean;
+        replyChannel: string;
         actorUserId: string;
         lastExecutedAt: string | null;
         createdAt: string;
@@ -41390,6 +41480,7 @@ export type CreateScheduleTriggerFromConversationData = {
         messageTemplate?: string;
         agentId?: string;
         enabled?: boolean;
+        replyChannel?: 'chat' | 'slack_dm';
         replyInSameConversation?: boolean;
     };
     path?: never;
@@ -41476,6 +41567,7 @@ export type CreateScheduleTriggerFromConversationResponses = {
         timezone: string;
         enabled: boolean;
         keepResultsInSameChat: boolean;
+        replyChannel: string;
         actorUserId: string;
         lastExecutedAt: string | null;
         createdAt: string;
@@ -41766,6 +41858,7 @@ export type GetScheduleTriggerResponses = {
         timezone: string;
         enabled: boolean;
         keepResultsInSameChat: boolean;
+        replyChannel: string;
         actorUserId: string;
         lastExecutedAt: string | null;
         createdAt: string;
@@ -41791,6 +41884,7 @@ export type UpdateScheduleTriggerData = {
         agentId?: string;
         enabled?: boolean;
         keepResultsInSameChat?: boolean;
+        replyChannel?: 'chat' | 'slack_dm';
         cronExpression?: string;
         timezone?: string;
         messageTemplate?: string;
@@ -41882,6 +41976,7 @@ export type UpdateScheduleTriggerResponses = {
         timezone: string;
         enabled: boolean;
         keepResultsInSameChat: boolean;
+        replyChannel: string;
         actorUserId: string;
         lastExecutedAt: string | null;
         createdAt: string;
@@ -41989,6 +42084,7 @@ export type EnableScheduleTriggerResponses = {
         timezone: string;
         enabled: boolean;
         keepResultsInSameChat: boolean;
+        replyChannel: string;
         actorUserId: string;
         lastExecutedAt: string | null;
         createdAt: string;
@@ -42096,6 +42192,7 @@ export type DisableScheduleTriggerResponses = {
         timezone: string;
         enabled: boolean;
         keepResultsInSameChat: boolean;
+        replyChannel: string;
         actorUserId: string;
         lastExecutedAt: string | null;
         createdAt: string;

@@ -32,6 +32,7 @@ export * from "./policy-conditions";
 export * from "./roles";
 export * from "./routes";
 export * from "./schedule-trigger-create-from-conversation.schema";
+export * from "./schedule-trigger-reply-channel.schema";
 export * from "./slack";
 export * from "./statistics";
 export * from "./system-prompt-template";

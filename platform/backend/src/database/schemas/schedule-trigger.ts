@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ScheduleTriggerReplyChannel } from "@/types/schedule-trigger";
 import agentsTable from "./agent";
 import conversationsTable from "./conversation";
 import usersTable from "./user";
@@ -26,6 +27,10 @@ const scheduleTriggersTable = pgTable(
     keepResultsInSameChat: boolean("keep_results_in_same_chat")
       .notNull()
       .default(false),
+    replyChannel: text("reply_channel")
+      .$type<ScheduleTriggerReplyChannel>()
+      .notNull()
+      .default("chat"),
     actorUserId: text("actor_user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),

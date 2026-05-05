@@ -1,5 +1,8 @@
 import type { UseMutationResult } from "@tanstack/react-query";
-import type { ScheduleTriggerRunStatus } from "@/lib/schedule-trigger.query";
+import type {
+  ScheduleTriggerReplyChannel,
+  ScheduleTriggerRunStatus,
+} from "@/lib/schedule-trigger.query";
 
 export type AgentOption = {
   value: string;
@@ -16,6 +19,7 @@ export type ScheduleTriggerFormState = {
   timezone: string;
   messageTemplate: string;
   keepResultsInSameChat: boolean;
+  replyChannel: ScheduleTriggerReplyChannel;
 };
 
 export const DEFAULT_FORM_STATE = (): ScheduleTriggerFormState => ({
@@ -25,6 +29,7 @@ export const DEFAULT_FORM_STATE = (): ScheduleTriggerFormState => ({
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   messageTemplate: "",
   keepResultsInSameChat: false,
+  replyChannel: "chat",
 });
 
 export function buildScheduleTriggerPayload(
@@ -37,6 +42,7 @@ export function buildScheduleTriggerPayload(
     timezone: formState.timezone.trim(),
     messageTemplate: formState.messageTemplate.trim(),
     keepResultsInSameChat: formState.keepResultsInSameChat,
+    replyChannel: formState.replyChannel,
   };
 
   if (

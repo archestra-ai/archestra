@@ -22,6 +22,7 @@ import {
   ScheduleTriggerRunModel,
 } from "@/models";
 import { scheduleTriggerConverterService } from "@/schedule-triggers/converter";
+import { getAvailableReplyChannels } from "@/schedule-triggers/reply-channels";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -29,6 +30,7 @@ import {
   DeleteObjectResponseSchema,
   ScheduleTriggerConfigurationSchema,
   ScheduleTriggerConfigurationSchemaBase,
+  ScheduleTriggerReplyChannelSchema,
   ScheduleTriggerRunStatusSchema,
   ScheduleTriggerSuggestionSchema,
   SelectConversationSchema,
@@ -43,6 +45,7 @@ const ScheduleTriggerBodyFieldsSchema = z.object({
   agentId: UuidIdSchema,
   enabled: z.boolean().optional().default(true),
   keepResultsInSameChat: z.boolean().optional().default(false),
+  replyChannel: ScheduleTriggerReplyChannelSchema.optional().default("chat"),
   ...ScheduleTriggerConfigurationSchemaBase.shape,
 });
 
@@ -92,6 +95,49 @@ const UpdateScheduleTriggerBodySchema =
     });
 
 const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/schedule-triggers/available-reply-channels",
+    {
+      schema: {
+        operationId: RouteId.GetScheduleTriggerAvailableReplyChannels,
+        description:
+          "List available scheduled task reply channels for the current user and selected agent",
+        tags: ["Schedule Triggers"],
+        querystring: z.object({
+          agentId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            channels: z.array(ScheduleTriggerReplyChannelSchema),
+          }),
+        ),
+      },
+    },
+    async ({ query: { agentId }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      if (!agent) {
+        throw new ApiError(403, "You do not have access to the selected agent");
+      }
+      if (
+        agent.organizationId !== organizationId ||
+        agent.agentType !== "agent"
+      ) {
+        throw new ApiError(400, "Scheduled triggers require an internal agent");
+      }
+
+      const channels = await getAvailableReplyChannels({
+        actorEmail: user.email,
+      });
+
+      return reply.send({ channels });
+    },
+  );
+
   fastify.get(
     "/api/schedule-triggers",
     {
@@ -242,6 +288,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         timezone: body.timezone,
         enabled: body.enabled ?? true,
         keepResultsInSameChat: body.keepResultsInSameChat ?? false,
+        replyChannel: body.replyChannel ?? "chat",
         actorUserId: user.id,
       });
 
@@ -273,6 +320,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           messageTemplate: body.messageTemplate,
           agentId: body.agentId,
           enabled: body.enabled,
+          replyChannel: body.replyChannel,
           replyInSameConversation: body.replyInSameConversation,
         });
 

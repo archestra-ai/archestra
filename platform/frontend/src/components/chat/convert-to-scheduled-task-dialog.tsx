@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_SCHEDULE_TRIGGER_CRON_EXPRESSION } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import {
   type ScheduleTriggerAgentOption,
@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/lib/agent.query";
 import {
+  type ScheduleTriggerReplyChannel,
   useConversationScheduleTriggerSuggestion,
   useCreateScheduleTriggerFromConversation,
+  useScheduleTriggerAvailableReplyChannels,
 } from "@/lib/schedule-trigger.query";
 
 const REPLY_IN_SAME_HELP_TEXT =
@@ -48,6 +50,8 @@ export function ConvertToScheduledTaskDialog({
   );
   const [messageTemplate, setMessageTemplate] = useState("");
   const [replyInSameConversation, setReplyInSameConversation] = useState(false);
+  const [replyChannel, setReplyChannel] =
+    useState<ScheduleTriggerReplyChannel>("chat");
   const [hydrated, setHydrated] = useState(false);
 
   const createMutationResetRef = useRef(createMutation.reset);
@@ -121,8 +125,15 @@ export function ConvertToScheduledTaskDialog({
     setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
     setMessageTemplate("");
     setReplyInSameConversation(false);
+    setReplyChannel("chat");
     createMutationResetRef.current();
   }, [open]);
+
+  const { data: availableReplyChannels } =
+    useScheduleTriggerAvailableReplyChannels({
+      agentId: agentId || null,
+      enabled: open,
+    });
 
   const trimmedName = name.trim();
   const trimmedTimezone = timezone.trim();
@@ -192,8 +203,16 @@ export function ConvertToScheduledTaskDialog({
       cronExpression,
       timezone,
       messageTemplate,
+      replyChannel,
     }),
-    [name, agentId, cronExpression, timezone, messageTemplate],
+    [name, agentId, cronExpression, timezone, messageTemplate, replyChannel],
+  );
+
+  const handleReplyChannelChange = useCallback(
+    (channel: ScheduleTriggerReplyChannel) => {
+      setReplyChannel(channel);
+    },
+    [],
   );
 
   const handleSubmit = async () => {
@@ -206,6 +225,7 @@ export function ConvertToScheduledTaskDialog({
       cronExpression: cronExpression.trim(),
       timezone: trimmedTimezone,
       messageTemplate: trimmedTemplate,
+      replyChannel,
       ...(replyInSameConversation ? { replyInSameConversation: true } : {}),
     });
 
@@ -233,8 +253,10 @@ export function ConvertToScheduledTaskDialog({
       }}
       onNameChange={setName}
       onAgentChange={setAgentId}
+      onReplyChannelChange={handleReplyChannelChange}
       onCronExpressionChange={setCronExpression}
       onMessageTemplateChange={setMessageTemplate}
+      availableReplyChannels={availableReplyChannels?.channels}
       showTimezone={false}
       showEnabled={false}
       agentSelectDisabled={linkedSelectorDisabled}

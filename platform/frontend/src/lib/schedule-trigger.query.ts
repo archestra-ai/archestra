@@ -1,4 +1,8 @@
-import { archestraApiSdk, type PaginationMeta } from "@shared";
+import {
+  archestraApiSdk,
+  type PaginationMeta,
+  type ScheduleTriggerReplyChannel,
+} from "@shared";
 import type { GetConversationScheduleTriggerSuggestionResponse } from "@shared/hey-api/clients/api/types.gen";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +11,7 @@ import { handleApiError } from "./utils";
 const {
   getScheduleTriggers,
   getScheduleTrigger,
+  getScheduleTriggerAvailableReplyChannels,
   createScheduleTrigger,
   updateScheduleTrigger,
   deleteScheduleTrigger,
@@ -43,6 +48,7 @@ export type ScheduleTrigger = {
   timezone: string;
   enabled: boolean;
   keepResultsInSameChat: boolean;
+  replyChannel: ScheduleTriggerReplyChannel;
   actorUserId: string;
   lastExecutedAt: string | null;
   createdAt: string;
@@ -74,6 +80,8 @@ export type ScheduleTriggerRun = {
   createdAt: string;
 };
 
+export type { ScheduleTriggerReplyChannel };
+
 type PaginatedResponse<T> = {
   data: T[];
   pagination: PaginationMeta;
@@ -87,12 +95,15 @@ type ScheduleTriggerRequestBody = {
   messageTemplate: string;
   enabled?: boolean;
   keepResultsInSameChat?: boolean;
+  replyChannel?: ScheduleTriggerReplyChannel;
 };
 
 export const scheduleTriggerKeys = {
   all: ["schedule-triggers"] as const,
   detail: (triggerId: string) =>
     [...scheduleTriggerKeys.all, "detail", triggerId] as const,
+  availableReplyChannels: (agentId: string) =>
+    [...scheduleTriggerKeys.all, "available-reply-channels", agentId] as const,
   list: (params: {
     enabled?: boolean;
     limit?: number;
@@ -113,6 +124,34 @@ export const scheduleTriggerKeys = {
     [...scheduleTriggerKeys.runsPrefix(triggerId), "detail", runId] as const,
   status: () => [...scheduleTriggerKeys.all, "status"] as const,
 };
+
+export function useScheduleTriggerAvailableReplyChannels(params: {
+  agentId: string | null;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: scheduleTriggerKeys.availableReplyChannels(params.agentId ?? ""),
+    enabled: !!params.agentId && (params.enabled ?? true),
+    queryFn: async () => {
+      const agentId = params.agentId;
+      if (!agentId) {
+        return { channels: ["chat"] as ScheduleTriggerReplyChannel[] };
+      }
+      const response = await getScheduleTriggerAvailableReplyChannels({
+        query: { agentId },
+      });
+      if (response.error) {
+        handleApiError(response.error);
+        return { channels: ["chat"] as ScheduleTriggerReplyChannel[] };
+      }
+      return (
+        (response.data as { channels: ScheduleTriggerReplyChannel[] }) ?? {
+          channels: ["chat"],
+        }
+      );
+    },
+  });
+}
 
 export function getScheduleTriggerListQueryParams(params?: {
   enabled?: boolean;
@@ -500,6 +539,7 @@ export type CreateScheduleTriggerFromConversationInput = {
   messageTemplate?: string;
   agentId?: string;
   enabled?: boolean;
+  replyChannel?: ScheduleTriggerReplyChannel;
   replyInSameConversation?: boolean;
 };
 

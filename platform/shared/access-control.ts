@@ -966,6 +966,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetScheduleTriggers]: {
     scheduledTask: ["read"],
   },
+  [RouteId.GetScheduleTriggerAvailableReplyChannels]: {
+    scheduledTask: ["read"],
+  },
   [RouteId.CreateScheduleTrigger]: {
     scheduledTask: ["create"],
   },

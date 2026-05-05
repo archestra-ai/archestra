@@ -49,6 +49,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import {
   type ScheduleTrigger,
+  type ScheduleTriggerReplyChannel,
   type ScheduleTriggerRun,
   type ScheduleTriggerRunStatus,
   useCreateScheduleTrigger,
@@ -58,6 +59,7 @@ import {
   useEnableScheduleTrigger,
   useRunScheduleTriggerNow,
   useScheduleTrigger,
+  useScheduleTriggerAvailableReplyChannels,
   useScheduleTriggerRuns,
   useScheduleTriggers,
   useUpdateScheduleTrigger,
@@ -180,9 +182,22 @@ export function ScheduleTriggersIndexPage() {
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const isComposerOpen = editingTrigger !== null || createFormOpen;
 
+  const { data: availableReplyChannels } =
+    useScheduleTriggerAvailableReplyChannels({
+      agentId: formState.agentId || null,
+      enabled: isComposerOpen,
+    });
+
   const getDefaultName = useCallback(
     (agentId: string) => getDefaultTriggerName(agentId, agentOptions),
     [agentOptions],
+  );
+
+  const handleReplyChannelChange = useCallback(
+    (replyChannel: ScheduleTriggerReplyChannel) => {
+      setFormState((current) => ({ ...current, replyChannel }));
+    },
+    [],
   );
 
   useEffect(() => {
@@ -254,6 +269,7 @@ export function ScheduleTriggersIndexPage() {
       timezone: trigger.timezone,
       messageTemplate: trigger.messageTemplate,
       keepResultsInSameChat: trigger.keepResultsInSameChat,
+      replyChannel: trigger.replyChannel ?? "chat",
     });
   }, []);
 
@@ -523,12 +539,14 @@ export function ScheduleTriggersIndexPage() {
               : getDefaultName(agentId),
           }));
         }}
+        onReplyChannelChange={handleReplyChannelChange}
         onCronExpressionChange={(cronExpression) =>
           setFormState((current) => ({ ...current, cronExpression }))
         }
         onMessageTemplateChange={(messageTemplate) =>
           setFormState((current) => ({ ...current, messageTemplate }))
         }
+        availableReplyChannels={availableReplyChannels?.channels}
       />
 
       <DataTable
@@ -633,6 +651,7 @@ export function ScheduleTriggerDetailPage({
       timezone: trigger.timezone,
       messageTemplate: trigger.messageTemplate,
       keepResultsInSameChat: trigger.keepResultsInSameChat,
+      replyChannel: trigger.replyChannel ?? "chat",
     });
   }, [trigger]);
 
@@ -665,6 +684,20 @@ export function ScheduleTriggerDetailPage({
   );
   const formPayload = buildScheduleTriggerPayload(formState);
   const isSaving = updateMutation.isPending;
+
+  const { data: availableReplyChannelsDetail } =
+    useScheduleTriggerAvailableReplyChannels({
+      agentId: formState.agentId || null,
+      enabled: editDialogOpen,
+    });
+
+  const handleDetailReplyChannelChange = useCallback(
+    (replyChannel: ScheduleTriggerReplyChannel) => {
+      setFormState((current) => ({ ...current, replyChannel }));
+    },
+    [],
+  );
+
   const runNowState = getRunNowTrackingState({
     activeMutationTriggerId: getActiveMutationVariable(runNowMutation),
     currentTriggerId: triggerId,
@@ -716,6 +749,7 @@ export function ScheduleTriggerDetailPage({
       timezone: trigger.timezone,
       messageTemplate: trigger.messageTemplate,
       keepResultsInSameChat: trigger.keepResultsInSameChat,
+      replyChannel: trigger.replyChannel ?? "chat",
     });
     setEditDialogOpen(true);
   };
@@ -994,6 +1028,8 @@ export function ScheduleTriggerDetailPage({
         onMessageTemplateChange={(messageTemplate) =>
           setFormState((current) => ({ ...current, messageTemplate }))
         }
+        onReplyChannelChange={handleDetailReplyChannelChange}
+        availableReplyChannels={availableReplyChannelsDetail?.channels}
       />
 
       <DeleteConfirmDialog

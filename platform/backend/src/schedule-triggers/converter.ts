@@ -1,6 +1,7 @@
 import {
   BUILT_IN_AGENT_IDS,
   SCHEDULE_CONVERSION_SYSTEM_PROMPT,
+  type ScheduleTriggerReplyChannel,
   type SupportedProvider,
   stripLlmReasoningTags,
 } from "@shared";
@@ -295,6 +296,7 @@ class ScheduleTriggerConverterService {
     messageTemplate?: string;
     agentId?: string;
     enabled?: boolean;
+    replyChannel?: ScheduleTriggerReplyChannel;
     replyInSameConversation?: boolean;
   }): Promise<ScheduleTrigger> {
     const {
@@ -307,6 +309,7 @@ class ScheduleTriggerConverterService {
       messageTemplate,
       agentId,
       enabled,
+      replyChannel,
       replyInSameConversation,
     } = params;
 
@@ -397,6 +400,7 @@ class ScheduleTriggerConverterService {
       enabled: effectiveEnabled,
       actorUserId: userId,
       linkedConversationId,
+      replyChannel: replyChannel ?? "chat",
     });
   }
 

@@ -1,7 +1,8 @@
 "use client";
 
+import type { ScheduleTriggerReplyChannel } from "@shared";
 import { Cron } from "croner";
-import { Loader2 } from "lucide-react";
+import { Loader2, MessageCircle, Slack } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+const FALLBACK_REPLY_CHANNELS: ScheduleTriggerReplyChannel[] = ["chat"];
+
 export type ScheduleTriggerAgentOption = {
   value: string;
   label: string;
@@ -39,6 +42,7 @@ export type ScheduleTriggerAgentOption = {
 export type ScheduleTriggerFormValues = {
   name: string;
   agentId: string;
+  replyChannel: ScheduleTriggerReplyChannel;
   cronExpression: string;
   timezone: string;
   messageTemplate: string;
@@ -60,10 +64,12 @@ export function ScheduleTriggerFormDialog({
   onSubmit,
   onNameChange,
   onAgentChange,
+  onReplyChannelChange,
   onCronExpressionChange,
   onTimezoneChange,
   onEnabledChange,
   onMessageTemplateChange,
+  availableReplyChannels,
   showTimezone,
   showEnabled,
   promptLabel = "Task Prompt",
@@ -90,10 +96,12 @@ export function ScheduleTriggerFormDialog({
   onSubmit: () => void;
   onNameChange: (value: string) => void;
   onAgentChange: (value: string) => void;
+  onReplyChannelChange?: (value: ScheduleTriggerReplyChannel) => void;
   onCronExpressionChange: (value: string) => void;
   onTimezoneChange?: (value: string) => void;
   onEnabledChange?: (value: boolean) => void;
   onMessageTemplateChange: (value: string) => void;
+  availableReplyChannels?: ScheduleTriggerReplyChannel[];
   showTimezone?: boolean;
   showEnabled?: boolean;
   promptLabel?: string;
@@ -106,6 +114,30 @@ export function ScheduleTriggerFormDialog({
   agentSelectHelpText?: string;
   postEnabledSection?: React.ReactNode;
 }) {
+  const channels = useMemo(
+    () => availableReplyChannels ?? FALLBACK_REPLY_CHANNELS,
+    [availableReplyChannels],
+  );
+  const shouldShowReplyChannel = channels.length > 1 && !!onReplyChannelChange;
+
+  useEffect(() => {
+    if (!shouldShowReplyChannel) {
+      if (values.replyChannel !== "chat" && onReplyChannelChange) {
+        onReplyChannelChange("chat");
+      }
+      return;
+    }
+
+    if (!channels.includes(values.replyChannel)) {
+      onReplyChannelChange?.("chat");
+    }
+  }, [
+    channels,
+    onReplyChannelChange,
+    shouldShowReplyChannel,
+    values.replyChannel,
+  ]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden">
@@ -145,6 +177,40 @@ export function ScheduleTriggerFormDialog({
                 </p>
               )}
             </div>
+
+            {shouldShowReplyChannel && (
+              <div className="space-y-2">
+                <Label htmlFor="dialog-reply-channel">Reply in</Label>
+                <Select
+                  value={values.replyChannel}
+                  onValueChange={(value) =>
+                    onReplyChannelChange?.(value as ScheduleTriggerReplyChannel)
+                  }
+                >
+                  <SelectTrigger id="dialog-reply-channel">
+                    <SelectValue placeholder="Select channel">
+                      <ReplyChannelLabel channel={values.replyChannel} />
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {channels.map((channel) => {
+                      const { label, Icon } = getReplyChannelMeta(channel);
+                      return (
+                        <SelectItem
+                          key={channel}
+                          value={channel}
+                          icon={
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                          }
+                        >
+                          {label}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
@@ -259,6 +325,36 @@ const HOURS = Array.from({ length: 24 }, (_, i) => ({
   value: String(i),
   label: `${String(i).padStart(2, "0")}:00`,
 }));
+
+function ReplyChannelLabel({
+  channel,
+}: {
+  channel: ScheduleTriggerReplyChannel;
+}) {
+  const { label, Icon } = getReplyChannelMeta(channel);
+  return (
+    <>
+      <Icon className="h-4 w-4 text-muted-foreground" />
+      {label}
+    </>
+  );
+}
+
+function getReplyChannelMeta(channel: ScheduleTriggerReplyChannel): {
+  label: string;
+  Icon: typeof MessageCircle;
+} {
+  switch (channel) {
+    case "chat":
+      return { label: "Chat", Icon: MessageCircle };
+    case "slack_dm":
+      return { label: "Slack DM", Icon: Slack };
+    default: {
+      const _exhaustive: never = channel;
+      throw new Error(`Unexpected reply channel: ${String(_exhaustive)}`);
+    }
+  }
+}
 
 function parseCronToMode(cron: string): {
   mode: ScheduleMode;

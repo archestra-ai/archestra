@@ -1,5 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  type ScheduleTriggerReplyChannel,
+  ScheduleTriggerReplyChannelSchema,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CONVERT_CONVERSATION_TO_SCHEDULED_TASK_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
@@ -315,6 +317,9 @@ const registry = defineArchestraTools([
           .describe(
             "Whether the scheduled task should start enabled. Defaults to true.",
           ),
+        reply_channel: ScheduleTriggerReplyChannelSchema.optional().describe(
+          "Where the scheduled task result should be delivered. Defaults to 'chat'. 'slack_dm' delivers to your connected DM when available; otherwise the task falls back to chat.",
+        ),
         reply_in_same_conversation: z
           .boolean()
           .optional()
@@ -729,6 +734,7 @@ async function handleConvertConversationToScheduledTask(params: {
     message_template?: string;
     agent_name?: string;
     enabled?: boolean;
+    reply_channel?: ScheduleTriggerReplyChannel;
     reply_in_same_conversation?: boolean;
   };
   context: ArchestraContext;
@@ -792,6 +798,7 @@ async function handleConvertConversationToScheduledTask(params: {
         messageTemplate: args.message_template,
         agentId: resolvedAgentId,
         enabled: args.enabled,
+        replyChannel: args.reply_channel,
         replyInSameConversation: args.reply_in_same_conversation,
       });
 

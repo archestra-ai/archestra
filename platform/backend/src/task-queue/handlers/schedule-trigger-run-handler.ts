@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -14,7 +15,9 @@ import {
 import { metrics } from "@/observability";
 import { appendLinkedScheduleRunMessagesToConversation } from "@/schedule-triggers/append-linked-run-messages";
 import { scheduleTriggerConverterService } from "@/schedule-triggers/converter";
+import { getReplyChannelDeliveryContext } from "@/schedule-triggers/reply-channels";
 import { resolvePlaceholders } from "@/schedule-triggers/resolve-placeholders";
+import type { ScheduleTriggerReplyChannel } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import websocketService from "@/websocket";
 
@@ -113,26 +116,44 @@ export async function handleScheduleTriggerRunExecution(
       scheduleTriggerRunId: run.id,
     });
 
-    linkedConversationId =
-      await ensureLinkedConversationForKeepResultsInSameChat({
-        runStatus: status,
-        trigger,
-        triggerAgent,
-        actor,
-        linkedConversationId,
-      });
+    const deliveredTo = await deliverScheduleTriggerResult({
+      runId: run.id,
+      trigger: {
+        id: trigger.id,
+        agentId: trigger.agentId,
+        name: trigger.name,
+        replyChannel: trigger.replyChannel as
+          | ScheduleTriggerReplyChannel
+          | undefined,
+      },
+      actor: { id: actor.id, email: actor.email },
+      resolvedMessage,
+      result,
+    });
 
-    if (linkedConversationId) {
-      const { healWarning } = await syncScheduleTriggerRunToLinkedConversation({
-        run,
-        trigger,
-        actorUserId: actor.id,
-        linkedConversationId,
-        resolvedMessage,
-        result,
-      });
-      if (healWarning) {
-        errorMessage = healWarning;
+    if (deliveredTo === "chat") {
+      linkedConversationId =
+        await ensureLinkedConversationForKeepResultsInSameChat({
+          runStatus: status,
+          trigger,
+          triggerAgent,
+          actor,
+          linkedConversationId,
+        });
+
+      if (linkedConversationId) {
+        const { healWarning } =
+          await syncScheduleTriggerRunToLinkedConversation({
+            run,
+            trigger,
+            actorUserId: actor.id,
+            linkedConversationId,
+            resolvedMessage,
+            result,
+          });
+        if (healWarning) {
+          errorMessage = healWarning;
+        }
       }
     }
   } catch (error) {
@@ -178,6 +199,98 @@ function formatScheduleTriggerExecutionError(errorMessage: string): string {
 interface ITriggerAgentLlmFields {
   llmApiKeyId: string | null;
   llmModel: string | null;
+}
+
+async function deliverScheduleTriggerResult(params: {
+  runId: string;
+  trigger: {
+    id: string;
+    agentId: string;
+    name: string | null;
+    replyChannel?: ScheduleTriggerReplyChannel;
+  };
+  actor: { id: string; email: string | null };
+  resolvedMessage: string;
+  result: A2AExecuteResult;
+}): Promise<ScheduleTriggerReplyChannel> {
+  const desiredChannel = params.trigger.replyChannel ?? "chat";
+
+  const { availableChannels, slackDmBinding } =
+    await getReplyChannelDeliveryContext({
+      actorEmail: params.actor.email,
+    });
+
+  const effectiveChannel = availableChannels.includes(desiredChannel)
+    ? desiredChannel
+    : "chat";
+
+  if (effectiveChannel !== desiredChannel) {
+    logger.warn(
+      {
+        triggerId: params.trigger.id,
+        runId: params.runId,
+        agentId: params.trigger.agentId,
+        desiredChannel,
+        effectiveChannel,
+        availableChannels,
+      },
+      "Schedule trigger reply channel unavailable; falling back to chat",
+    );
+  }
+
+  if (effectiveChannel === "slack_dm" && slackDmBinding) {
+    const provider = chatOpsManager.getSlackProvider();
+    if (!provider) {
+      logger.warn(
+        {
+          triggerId: params.trigger.id,
+          runId: params.runId,
+          desiredChannel: effectiveChannel,
+        },
+        "Slack provider unavailable; schedule trigger result not sent to Slack",
+      );
+      logger.info(
+        { triggerId: params.trigger.id, runId: params.runId, channel: "chat" },
+        "Schedule trigger delivered to chat",
+      );
+      return "chat";
+    }
+
+    await provider.sendReply({
+      text: params.result.text,
+      footer: `Scheduled task: ${params.trigger.name ?? params.trigger.id}`,
+      originalMessage: {
+        messageId: `schedule-trigger-run:${params.runId}`,
+        channelId: slackDmBinding.channelId,
+        workspaceId: slackDmBinding.workspaceId ?? null,
+        threadId: undefined,
+        senderId: params.actor.id,
+        senderName: params.actor.email ?? params.actor.id,
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: {},
+      },
+    });
+
+    logger.info(
+      {
+        triggerId: params.trigger.id,
+        runId: params.runId,
+        channel: "slack_dm",
+        channelId: slackDmBinding.channelId,
+      },
+      "Schedule trigger delivered",
+    );
+    return "slack_dm";
+  }
+
+  logger.info(
+    { triggerId: params.trigger.id, runId: params.runId, channel: "chat" },
+    "Schedule trigger delivered",
+  );
+  return "chat";
 }
 
 /** Narrow trigger shape used by linked-conversation helpers (avoids importing `@/types` in this module). */

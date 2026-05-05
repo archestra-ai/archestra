@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.2.33](https://github.com/archestra-ai/archestra/compare/platform-v1.2.32...platform-v1.2.33) (2026-05-05)
+
+
+### Features
+
+* A2AManager, A2A JSON-RPC v2, ChatOps approval flow ([#3981](https://github.com/archestra-ai/archestra/issues/3981)) ([9c4de1d](https://github.com/archestra-ai/archestra/commit/9c4de1d44d834f8cfd264243439a8a7eceb7533d))
+* add azure foundry keyless auth and model support ([#4363](https://github.com/archestra-ai/archestra/issues/4363)) ([ace891b](https://github.com/archestra-ai/archestra/commit/ace891bccbd30f67c997fba79a292a2a91db27c8))
+* add LLM proxy OAuth and simplify virtual keys ([#4327](https://github.com/archestra-ai/archestra/issues/4327)) ([7ac0f3c](https://github.com/archestra-ai/archestra/commit/7ac0f3c6a93d7f815c9c38d9d232bdcd09659a51))
+
+
+### Bug Fixes
+
+* adjust custom logo alignment ([#4339](https://github.com/archestra-ai/archestra/issues/4339)) ([70584b3](https://github.com/archestra-ai/archestra/commit/70584b3b1a9371dd18c9cff5883d7cebb863eaac))
+* clarify run_tool arguments in search results ([#4271](https://github.com/archestra-ai/archestra/issues/4271)) ([3e344f7](https://github.com/archestra-ai/archestra/commit/3e344f733886c5c3696bd1b35ec67c4ebe7377f3))
+* enforce api key owner permissions ([#4375](https://github.com/archestra-ai/archestra/issues/4375)) ([74ce439](https://github.com/archestra-ai/archestra/commit/74ce43998ca184380b6b7ff57ae729a42f5df69a))
+
+
+### Code Refactoring
+
+* **connectors:** extract validateConfigWithSchema and runConnectionTest helpers ([#4374](https://github.com/archestra-ai/archestra/issues/4374)) ([38d2bb0](https://github.com/archestra-ai/archestra/commit/38d2bb03141e2088bf7b39e4b066c9e28aadda6b))
+
 ## [1.2.32](https://github.com/archestra-ai/archestra/compare/platform-v1.2.31...platform-v1.2.32) (2026-05-04)
 
 

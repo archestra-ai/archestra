@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.32"
+    "version": "1.2.33"
   },
   "components": {
     "schemas": {
@@ -54569,8 +54569,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -55197,8 +55197,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -55792,8 +55792,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -56264,8 +56264,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {

@@ -16030,15 +16030,15 @@ export type BulkUpsertDefaultResultPolicyResponse = BulkUpsertDefaultResultPolic
 
 export type AzureChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * Bearer token for OpenAI
+         * Bearer token for Azure AI Foundry
          */
-        authorization: string;
+        authorization?: string;
     };
     path?: never;
     query?: never;
@@ -16223,15 +16223,15 @@ export type AzureResponsesWithDefaultAgentData = {
         user?: string;
         [key: string]: unknown;
     };
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * Bearer token for OpenAI
+         * Bearer token for Azure AI Foundry
          */
-        authorization: string;
+        authorization?: string;
     };
     path?: never;
     query?: never;
@@ -16392,15 +16392,15 @@ export type AzureResponsesWithAgentData = {
         user?: string;
         [key: string]: unknown;
     };
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * Bearer token for OpenAI
+         * Bearer token for Azure AI Foundry
          */
-        authorization: string;
+        authorization?: string;
     };
     path: {
         agentId: string;
@@ -16528,15 +16528,15 @@ export type AzureResponsesWithAgentResponse = AzureResponsesWithAgentResponses[k
 
 export type AzureChatCompletionsWithAgentData = {
     body: XaiChatCompletionRequestInput;
-    headers: {
+    headers?: {
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * Bearer token for OpenAI
+         * Bearer token for Azure AI Foundry
          */
-        authorization: string;
+        authorization?: string;
     };
     path: {
         agentId: string;

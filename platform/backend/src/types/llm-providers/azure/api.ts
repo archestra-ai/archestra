@@ -7,9 +7,9 @@
  * @see https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-reference
  */
 
+import { z } from "zod";
 import {
   ChatCompletionRequestSchema,
-  ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
   FinishReasonSchema,
   ChatCompletionResponseSchema as OpenAIChatCompletionResponseSchema,
@@ -20,13 +20,23 @@ import {
 
 export {
   ChatCompletionRequestSchema,
-  ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
   FinishReasonSchema,
   ResponsesRequestSchema,
   ResponsesResponseSchema,
   ResponsesUsageSchema,
 };
+
+export const ChatCompletionsHeadersSchema = z.object({
+  "user-agent": z.string().optional().describe("The user agent of the client"),
+  authorization: z
+    .string()
+    .optional()
+    .describe("Bearer token for Azure AI Foundry")
+    .transform((authorization) =>
+      authorization ? authorization.replace("Bearer ", "") : undefined,
+    ),
+});
 
 export const ChatCompletionResponseSchema =
   OpenAIChatCompletionResponseSchema.passthrough();

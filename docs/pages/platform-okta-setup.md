@@ -27,8 +27,6 @@ This guide configures Okta with Archestra end-to-end. After you finish, your use
 
 <!-- video-placeholder: full-walkthrough screencast. Replace with <video> tag or YouTube/Loom embed once recorded. Suggested filename: /docs/assets/videos/platform-okta-setup_full-walkthrough.mp4 -->
 
-> 📹 **Video walkthrough coming soon.** A full screencast of the configuration below — Okta Admin Console through to a working tool call with token exchange — will be embedded here.
-
 ## What is Okta-managed token exchange and why does it matter?
 
 When someone like Alice asks an agent to call a downstream API, Archestra needs to make that call on Alice's behalf. The naive way is to give the MCP server a single shared secret. Every user's request hits the API as the same robot. Audit logs show "the Archestra service account" did the work, not Alice. If Alice doesn't have access to a particular resource, the tool reads it anyway.
@@ -68,7 +66,6 @@ The first three sections get sign-in working. If that is all you need today, you
 
 ## 1. Register Okta App for SSO
 
-[screenshot: platform-okta-setup_oin-tile.webp — Archestra app tile in the Okta Integration Network]
 
 ### Prerequisites
 
@@ -117,7 +114,6 @@ If your tenant does not have access to the OIN tile, create the app manually:
 
 ## 2. Configure SSO in Archestra
 
-[screenshot: platform-okta-setup_sso-card.webp — Okta provider card on Settings > Identity Providers]
 
 Go to **Settings > Identity Providers** and click **Enable** on the **Okta** card.
 
@@ -154,7 +150,6 @@ If your Okta tenant ships roles as a JSON-string claim instead of a native array
 
 ## 4. Additional Okta App Settings for Token Exchange
 
-[screenshot: platform-okta-setup_token-exchange-settings.webp — Okta authorization server token exchange configuration]
 
 Token exchange uses the same Okta application as SSO, but adds two pieces:
 
@@ -171,7 +166,6 @@ Follow Okta's official guide for the up-to-date Admin Console steps: [AI agent t
 
 ## 5. Configure Token Exchange in Archestra
 
-[screenshot: platform-okta-setup_enterprise-managed-credentials.webp — Enterprise-Managed Credentials section of the Okta provider form]
 
 Reopen the Okta provider in **Settings > Identity Providers** and expand **Enterprise-Managed Credentials**.
 
@@ -189,7 +183,6 @@ Save the provider. Archestra will use the matching private key (configured via d
 
 ## 6. Connect MCP Server
 
-[screenshot: platform-okta-setup_multitenant-auth.webp — MCP catalog item Multitenant Authorization with Identity Provider Token Exchange selected]
 
 Open the catalog entry for the MCP server that should call your downstream API and scroll to **Multitenant Authorization**. Select **Identity Provider Token Exchange**, pick the Okta provider you just configured, then fill in:
 

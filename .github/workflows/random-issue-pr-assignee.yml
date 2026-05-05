@@ -3,7 +3,7 @@ name: Random Issue and PR Assignee
 on:
   issues:
     types: [opened]
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] needed to assign PRs from forks; this workflow does not check out or execute PR code.
     types: [opened, ready_for_review]
 
 permissions: {}
@@ -27,10 +27,15 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const owners = ['joeyorlando', 'iskhakov', 'Konstantinov-Innokentii'];
+            const coreTeam = [...owners, 'Matvey-Kuk'];
             const actor = context.payload.issue?.user?.login ?? context.payload.pull_request?.user?.login;
-            const availableOwners = owners.filter((owner) => owner !== actor);
-            const candidates = availableOwners.length > 0 ? availableOwners : owners;
-            const selectedOwner = candidates[Math.floor(Math.random() * candidates.length)];
+
+            if (coreTeam.includes(actor)) {
+              console.log(`Skipping assignment because ${actor} is on the core team`);
+              return;
+            }
+
+            const selectedOwner = owners[Math.floor(Math.random() * owners.length)];
 
             await github.rest.issues.addAssignees({
               owner: context.repo.owner,

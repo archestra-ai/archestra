@@ -1,3 +1,4 @@
+import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { describe, expect, test } from "@/test";
 import OAuthAccessTokenModel from "./oauth-access-token";
 
@@ -47,6 +48,54 @@ describe("OAuthAccessTokenModel", () => {
         scopes: ["mcp"],
       });
 
+      expect(created.referenceId).toBeNull();
+    });
+  });
+
+  describe("createClientCredentialsToken", () => {
+    test("should create a client credentials token without a user", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "client-credentials-client",
+      });
+      const expiresAt = new Date(Date.now() + 3600000);
+
+      const created = await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: "client-credentials-token-hash",
+        clientId: client.clientId,
+        expiresAt,
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: "llm-proxy:test-client-id",
+      });
+
+      expect(created.token).toBe("client-credentials-token-hash");
+      expect(created.clientId).toBe(client.clientId);
+      expect(created.userId).toBeNull();
+      expect(created.expiresAt).toEqual(expiresAt);
+      expect(created.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
+      expect(created.referenceId).toBe("llm-proxy:test-client-id");
+
+      const found = await OAuthAccessTokenModel.getByTokenHash(
+        "client-credentials-token-hash",
+      );
+      expect(found?.id).toBe(created.id);
+      expect(found?.refreshTokenRevoked).toBeNull();
+    });
+
+    test("should persist a null referenceId when omitted", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient();
+
+      const created = await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: "client-credentials-token-without-reference",
+        clientId: client.clientId,
+        expiresAt: new Date(Date.now() + 3600000),
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+      });
+
+      expect(created.userId).toBeNull();
       expect(created.referenceId).toBeNull();
     });
   });

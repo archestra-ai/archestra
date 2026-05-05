@@ -3,6 +3,7 @@ import { archestraApiSdk, E2eTestId } from "@shared";
 import { type Page, test } from "../fixtures";
 import {
   clickButton,
+  closeOpenDialogs,
   fillRemoteServerForm,
   goToMcpRegistry,
   installMcpServer,
@@ -196,11 +197,45 @@ test.describe("MCP Install", () => {
     test.setTimeout(240_000);
     const CATALOG_ITEM_NAME = "e2e__bogus_image_test";
     const BOGUS_IMAGE = "image-that-doesnt-exist:123";
-    const PYTHON_MCP_SCRIPT =
-      "from mcp.server.fastmcp import FastMCP; import anyio; app=FastMCP('e2e-test', log_level='CRITICAL'); " +
-      "print_archestra_test=lambda: 'ok'; " +
-      "app.add_tool(print_archestra_test, name='print_archestra_test', description='E2E test tool'); " +
-      "anyio.run(app.run_stdio_async)";
+    // Flatten the script for `node -e`; literal newlines can be interpreted
+    // differently when the command is passed through the container shell.
+    const FIXED_MCP_SCRIPT = `
+const readline = require("node:readline");
+const rl = readline.createInterface({ input: process.stdin });
+setInterval(() => {}, 2147483647);
+const tool = {
+  name: "print_archestra_test",
+  description: "E2E test tool",
+  inputSchema: { type: "object", properties: {} },
+};
+function send(id, result) {
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+}
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.id === undefined) return;
+  if (message.method === "initialize") {
+    send(message.id, {
+      protocolVersion: "2024-11-05",
+      capabilities: { tools: {} },
+      serverInfo: { name: "e2e-fixed-server", version: "1.0.0" },
+    });
+    return;
+  }
+  if (message.method === "tools/list") {
+    send(message.id, { tools: [tool] });
+    return;
+  }
+  if (message.method === "tools/call") {
+    send(message.id, {
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+    return;
+  }
+  send(message.id, {});
+});
+`.replace(/\n/g, " ");
 
     // Cleanup any existing catalog item
     await deleteCatalogItem(adminPage, extractCookieHeaders, CATALOG_ITEM_NAME);
@@ -252,10 +287,35 @@ test.describe("MCP Install", () => {
     // ========================================
     // STEP 2: Wait for failure status (error banner)
     // ========================================
+    const cookieHeaders = await extractCookieHeaders(adminPage);
+    await expect
+      .poll(
+        async () => {
+          const response = await archestraApiSdk.getMcpServers({
+            headers: { Cookie: cookieHeaders },
+          });
+          if (response.error) {
+            return null;
+          }
+          return (
+            response.data?.find(
+              (server) =>
+                server.catalogName === CATALOG_ITEM_NAME ||
+                server.name.startsWith(`${CATALOG_ITEM_NAME}-`),
+            )?.localInstallationStatus ?? null
+          );
+        },
+        { timeout: 120_000, intervals: [1000, 2000, 5000] },
+      )
+      .toBe("error");
+
+    await adminPage.reload();
+    await adminPage.waitForLoadState("domcontentloaded");
+
     const errorBanner = adminPage.getByTestId(
       `${E2eTestId.McpServerError}-${CATALOG_ITEM_NAME}`,
     );
-    await errorBanner.waitFor({ state: "visible", timeout: 120_000 });
+    await errorBanner.waitFor({ state: "visible", timeout: 30_000 });
 
     // ========================================
     // STEP 3: Check logs show deployment events
@@ -299,7 +359,9 @@ test.describe("MCP Install", () => {
     await editConfigButton.click();
 
     // Wait for the settings dialog Configuration page to load
-    const settingsDialog = adminPage.getByRole("dialog");
+    const settingsDialog = adminPage.getByRole("dialog", {
+      name: `${CATALOG_ITEM_NAME} Settings`,
+    });
     await settingsDialog.waitFor({ state: "visible", timeout: 10000 });
 
     // Update the config to a valid MCP server that should start successfully
@@ -313,13 +375,15 @@ test.describe("MCP Install", () => {
       name: "Command",
     });
     await commandInput.clear();
-    await commandInput.fill("python");
+    await commandInput.fill("node");
+
+    await settingsDialog.getByLabel("stdio").click();
 
     const argumentsInput = settingsDialog.getByRole("textbox", {
       name: "Arguments (one per line)",
     });
     await argumentsInput.clear();
-    await argumentsInput.fill(`-c\n${PYTHON_MCP_SCRIPT}`);
+    await argumentsInput.fill(`-e\n${FIXED_MCP_SCRIPT}`);
 
     // Force manual reinstall by adding a prompted env var
     await settingsDialog.getByRole("button", { name: "Add Variable" }).click();
@@ -331,31 +395,45 @@ test.describe("MCP Install", () => {
 
     // Save changes (dialog stays open with keepOpenOnSave)
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
+    const reinstallRequiredDialog = adminPage.getByRole("dialog", {
+      name: "Existing installations will need to reinstall",
+    });
+    if (await reinstallRequiredDialog.isVisible().catch(() => false)) {
+      await reinstallRequiredDialog
+        .getByRole("button", { name: "Save and flag for reinstall" })
+        .click();
+      await reinstallRequiredDialog.waitFor({
+        state: "hidden",
+        timeout: 15_000,
+      });
+    }
     await adminPage.waitForLoadState("domcontentloaded");
 
     // ========================================
-    // STEP 5: Click reinstall and wait for tools discovery
+    // STEP 5: Click install/reinstall and wait for tools discovery
     // ========================================
-    // Close the settings dialog and wait for the card to show "Reinstall" button
-    await adminPage.keyboard.press("Escape");
-    await settingsDialog.waitFor({ state: "hidden", timeout: 10_000 });
-
-    const reinstallButton = serverCard.getByRole("button", {
+    // Reinstall from the settings dialog. Failed local installations do not
+    // expose a card-level install action while the personal connection exists.
+    const reinstallActionButton = settingsDialog.getByRole("button", {
       name: "Reinstall",
     });
-    await reinstallButton.waitFor({ state: "visible", timeout: 120_000 });
-    await reinstallButton.click();
+    await reinstallActionButton.waitFor({ state: "visible", timeout: 120_000 });
+    await reinstallActionButton.click();
 
-    // The reinstall install dialog opens with prompted env vars
+    // The install dialog opens with prompted env vars
     const reinstallDialog = adminPage
       .getByRole("dialog")
-      .filter({ hasText: /Reinstall -/ });
+      .filter({ hasText: /(Install|Reinstall) -/ });
     await reinstallDialog.waitFor({ state: "visible", timeout: 30_000 });
     await reinstallDialog
       .getByRole("textbox", { name: "E2E_PROMPT" })
       .fill("ready");
-    await clickButton({ page: adminPage, options: { name: "Reinstall" } });
+    await reinstallDialog
+      .getByRole("button", { name: /^(Install|Reinstall)$/ })
+      .click();
     await reinstallDialog.waitFor({ state: "hidden", timeout: 30_000 });
+    await closeOpenDialogs(adminPage, { timeoutMs: 10_000 });
+    await expect(settingsDialog).not.toBeVisible({ timeout: 10_000 });
 
     await expect(async () => {
       await goToMcpRegistry(adminPage);

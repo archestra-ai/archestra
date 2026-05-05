@@ -798,7 +798,6 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual API keys per LLM API key.
   - Default: `10`
-  - Newly generated virtual keys use the neutral `arch_` prefix. Legacy `archestra_` virtual keys remain valid.
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
 - **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.

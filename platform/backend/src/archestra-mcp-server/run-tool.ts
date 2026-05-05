@@ -29,7 +29,7 @@ const RunToolArgsSchema = z
       .optional()
       .default({})
       .describe(
-        "Arguments object to pass to the target tool. Must match the target tool's input schema.",
+        "Arguments object to pass to the target tool. Put target tool input parameters inside this object. Must match the target tool's input schema.",
       ),
   })
   .strict();

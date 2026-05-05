@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
-  DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
   OAUTH_SCOPES,
 } from "@shared";
 import { decodeProtectedHeader } from "jose";
@@ -158,8 +158,8 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
     .digest("base64url");
   const organization = await OrganizationModel.getById(agent.organizationId);
   const expiresInSeconds =
-    organization?.mcpOauthAccessTokenLifetimeSeconds ??
-    DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
+    organization?.oauthAccessTokenLifetimeSeconds ??
+    DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
 
   await OAuthAccessTokenModel.create({
     tokenHash: accessTokenHash,

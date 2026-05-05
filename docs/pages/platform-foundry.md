@@ -1,7 +1,7 @@
 ---
 title: Secure Agent with Microsoft Foundry
 category: Examples
-order: 7
+order: 8
 ---
 
 <!-- 

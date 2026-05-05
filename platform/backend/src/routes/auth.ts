@@ -1,6 +1,12 @@
-import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
-import { DEFAULT_ADMIN_EMAIL, IDENTITY_PROVIDER_ID, RouteId } from "@shared";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  IDENTITY_PROVIDER_ID,
+  LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
+  LLM_PROXY_OAUTH_SCOPE,
+  RouteId,
+} from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -11,6 +17,7 @@ import logger from "@/logging";
 import {
   AccountModel,
   AgentModel,
+  LlmOauthClientModel,
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -399,6 +406,23 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .send(result.body);
       }
 
+      if (body?.grant_type === "client_credentials") {
+        const { clientId: authenticatedClientId, clientSecret } =
+          extractOAuthClientCredentials({
+            authorizationHeader: request.headers.authorization,
+            body,
+          });
+        const result = await issueLlmOauthClientAccessToken({
+          clientId: authenticatedClientId,
+          clientSecret,
+          scope: body.scope as string | undefined,
+        });
+
+        return reply
+          .status(result.ok ? 200 : result.statusCode)
+          .send(result.body);
+      }
+
       if (body?.resource) {
         logger.debug(
           { resource: body.resource },
@@ -431,7 +455,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
-      const responseBody = await applyMcpOauthTokenLifetimeToResponse({
+      const responseBody = await applyOrganizationOAuthTokenLifetimeToResponse({
         response,
         resource,
         tokenEndpointOrigin,
@@ -863,6 +887,71 @@ function extractOAuthClientCredentials(params: {
   };
 }
 
+async function issueLlmOauthClientAccessToken(params: {
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  scope: string | undefined;
+}): Promise<{
+  ok: boolean;
+  statusCode: number;
+  body: Record<string, unknown>;
+}> {
+  if (!params.clientId || !params.clientSecret) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
+    LLM_PROXY_OAUTH_SCOPE,
+  ];
+  if (!requestedScopes.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      body: {
+        error: "invalid_scope",
+        error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+      },
+    };
+  }
+
+  const oauthClient = await LlmOauthClientModel.findClientForCredentials({
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+  });
+  if (!oauthClient) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  const accessToken = `llm_at_${randomBytes(32).toString("base64url")}`;
+  const expiresIn = LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
+  await OAuthAccessTokenModel.createClientCredentialsToken({
+    tokenHash: hashOAuthAccessTokenForLookup(accessToken),
+    clientId: oauthClient.clientId,
+    expiresAt: new Date(Date.now() + expiresIn * 1000),
+    scopes: [LLM_PROXY_OAUTH_SCOPE],
+    referenceId: `llm-proxy:${oauthClient.id}`,
+  });
+
+  return {
+    ok: true,
+    statusCode: 200,
+    body: {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      scope: LLM_PROXY_OAUTH_SCOPE,
+    },
+  };
+}
+
 function shouldSkipForwardedAuthHeader(headerName: string): boolean {
   const normalizedHeaderName = headerName.toLowerCase();
   return (
@@ -873,7 +962,7 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
   );
 }
 
-async function applyMcpOauthTokenLifetimeToResponse(params: {
+async function applyOrganizationOAuthTokenLifetimeToResponse(params: {
   response: Response;
   resource: unknown;
   tokenEndpointOrigin: string;
@@ -894,21 +983,23 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
 
   const accessToken =
     typeof tokenBody.access_token === "string" ? tokenBody.access_token : null;
-  if (
-    !accessToken ||
-    !isMcpTokenResponse({ tokenBody, resource: params.resource })
-  ) {
+  if (!accessToken) {
     return responseText;
   }
 
   const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
   const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
-  const lifetimeSeconds = await getMcpOauthAccessTokenLifetimeSeconds({
+  if (!storedToken?.userId) {
+    return responseText;
+  }
+
+  const lifetimeSeconds = await getOAuthAccessTokenLifetimeSeconds({
     resource: params.resource,
     referenceId: storedToken?.referenceId,
     tokenEndpointOrigin: params.tokenEndpointOrigin,
+    userId: storedToken.userId,
   });
-  if (!storedToken || !lifetimeSeconds) {
+  if (!lifetimeSeconds) {
     return responseText;
   }
 
@@ -929,27 +1020,34 @@ async function applyMcpOauthTokenLifetimeToResponse(params: {
   });
 }
 
-async function getMcpOauthAccessTokenLifetimeSeconds(params: {
+async function getOAuthAccessTokenLifetimeSeconds(params: {
   resource: unknown;
   referenceId: string | null | undefined;
   tokenEndpointOrigin: string;
+  userId: string;
 }): Promise<number | null> {
   const profileId =
     (await getProfileIdFromResource({
       resource: params.resource,
       tokenEndpointOrigin: params.tokenEndpointOrigin,
     })) ?? getProfileIdFromReferenceId(params.referenceId);
-  if (!profileId) {
+  if (profileId) {
+    const agent = await AgentModel.findById(profileId);
+    if (agent) {
+      const organization = await OrganizationModel.getById(
+        agent.organizationId,
+      );
+      return organization?.oauthAccessTokenLifetimeSeconds ?? null;
+    }
+  }
+
+  const member = await MemberModel.getFirstMembershipForUser(params.userId);
+  if (!member) {
     return null;
   }
 
-  const agent = await AgentModel.findById(profileId);
-  if (!agent) {
-    return null;
-  }
-
-  const organization = await OrganizationModel.getById(agent.organizationId);
-  return organization?.mcpOauthAccessTokenLifetimeSeconds ?? null;
+  const organization = await OrganizationModel.getById(member.organizationId);
+  return organization?.oauthAccessTokenLifetimeSeconds ?? null;
 }
 
 function parseOAuthTokenResponseBody(
@@ -964,19 +1062,6 @@ function parseOAuthTokenResponseBody(
   } catch {
     return null;
   }
-}
-
-function isMcpTokenResponse(params: {
-  tokenBody: Record<string, unknown>;
-  resource: unknown;
-}): boolean {
-  if (typeof params.resource === "string") {
-    return true;
-  }
-
-  const scope =
-    typeof params.tokenBody.scope === "string" ? params.tokenBody.scope : "";
-  return scope.split(/\s+/).includes("mcp");
 }
 
 function getIssuedAtSeconds(tokenBody: Record<string, unknown>): number {
@@ -1050,6 +1135,5 @@ function getFirstHeaderValue(
 }
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
-  // codeql[js/insufficient-password-hash] This hashes a high-entropy OAuth bearer token for lookup, not a user password.
-  return createHash("sha256").update(oauthAccessToken).digest("base64url");
+  return OAuthAccessTokenModel.hashTokenForLookup(oauthAccessToken);
 }

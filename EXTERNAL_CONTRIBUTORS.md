@@ -203,3 +203,10 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @sayidilxs-web
 - @sumithkumar07
 - @NurdauletDeath
+- @brgmaruks
+- @abdulrhman512
+- @imtoori
+- @krishnaxgarg
+- @kensay98
+- @jcamposobando
+- @KIssShot-Shinobu

@@ -1611,6 +1611,13 @@
       "when": 1777809378992,
       "tag": "0229_awesome_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1777924366437,
+      "tag": "0230_bored_pride",
+      "breakpoints": true
     }
   ]
 }

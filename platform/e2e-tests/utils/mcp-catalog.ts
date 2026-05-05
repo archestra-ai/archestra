@@ -42,6 +42,7 @@ export async function addCustomSelfHostedCatalogItem({
   await createDialog
     .getByRole("textbox", { name: "Name *" })
     .fill(catalogItemName);
+  await createDialog.getByLabel("stdio").click();
   await createDialog.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
   await createDialog

@@ -48,9 +48,17 @@ Archestra integrates with your identity provider (IdP) for two related purposes:
 
 The token-exchange strategy is auto-inferred from the OIDC issuer URL: Okta hostnames → Okta-managed, Microsoft hostnames → Entra OBO, anything else → RFC 8693. See [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth#strategies-at-a-glance).
 
-## Providers without a dedicated page
+## Provider setup
 
-The providers below are configured directly from the **Settings > Identity Providers** card. For SSO concepts, callback URL formats, and troubleshooting, see [SSO](/docs/platform-sso).
+All providers are configured from the **Settings > Identity Providers** card. For SSO concepts, callback URL formats, and troubleshooting, see [SSO](/docs/platform-sso).
+
+### Microsoft Entra ID
+
+OIDC sign-in with downstream **Entra OBO** token exchange for MCP tool calls. See [Entra ID SSO + OBO](/docs/platform-entra-obo-setup) for the end-to-end walkthrough (app registration, client secret, group claims, OBO scopes).
+
+### Okta
+
+OIDC sign-in with **Okta-managed** downstream token exchange (private key JWT, ID token). See [Okta SSO + Token Exchange](/docs/platform-okta-setup) for the end-to-end walkthrough (app integration, signing keys, token exchange policy).
 
 ### Google
 

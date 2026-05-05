@@ -27,6 +27,9 @@ import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
 import type {
+  AddApprovalRequestFormOptions,
+  ChatOpsApprovalDecision,
+  ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -36,6 +39,7 @@ import type {
   IncomingChatMessage,
   MsTeamsDbConfig,
   ThreadHistoryParams,
+  UpdateApprovalRequestOptions,
 } from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
@@ -59,10 +63,15 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   private adapter: CloudAdapter | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
 
   constructor(msTeamsConfig: MsTeamsDbConfig) {
     this.config = msTeamsConfig;
+  }
+
+  setEventHandler(handler: ChatOpsEventHandler): void {
+    this.eventHandler = handler;
   }
 
   isConfigured(): boolean {
@@ -132,6 +141,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   async cleanup(): Promise<void> {
     this.adapter = null;
     this.graphClient = null;
+    this.eventHandler = null;
     logger.info("[MSTeamsProvider] Cleaned up");
   }
 
@@ -423,6 +433,88 @@ class MSTeamsProvider implements ChatOpsProvider {
       );
       return [];
     }
+  }
+
+  async addApprovalRequestForm(
+    options: AddApprovalRequestFormOptions,
+  ): Promise<void> {
+    if (!this.adapter) {
+      throw new Error("MSTeamsProvider not initialized");
+    }
+
+    const buildAction = (approved: boolean) => ({
+      type: "Action.Submit",
+      title: approved ? "Approve" : "Decline",
+      data: {
+        action: "approvalDecision",
+        approvalId: options.approvalId,
+        approved,
+        taskId: options.taskId,
+        toolName: options.toolName,
+        channelId: options.channelId,
+        workspaceId: options.originalMessage.workspaceId,
+        threadId: options.threadId,
+        originalSenderEmail: options.originalMessage.senderEmail,
+        messageId: options.originalMessage.messageId,
+      },
+    });
+
+    const approvalCard = {
+      type: "AdaptiveCard",
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.4",
+      body: [
+        {
+          type: "TextBlock",
+          text: `\`${options.toolName}\``,
+          wrap: true,
+        },
+        {
+          type: "ActionSet",
+          spacing: "Small",
+          actions: [buildAction(true), buildAction(false)],
+        },
+      ],
+    };
+
+    const approvalMessage = {
+      type: ActivityTypes.Message,
+      text: "",
+      attachments: [
+        {
+          contentType: "application/vnd.microsoft.card.adaptive",
+          content: approvalCard,
+        },
+      ],
+    };
+
+    const turnContext = options.originalMessage.metadata?.turnContext;
+    if (turnContext instanceof TurnContext) {
+      await turnContext.sendActivity(approvalMessage);
+      return;
+    }
+
+    const conversationReference = options.originalMessage.metadata
+      ?.conversationReference as ConversationReference | undefined;
+    if (!conversationReference) {
+      throw new Error(
+        "No conversation reference available for Teams approval request",
+      );
+    }
+
+    await this.adapter.continueConversationAsync(
+      this.config.appId,
+      conversationReference,
+      async (context) => {
+        await context.sendActivity(approvalMessage);
+      },
+    );
+  }
+
+  async updateApprovalRequest(
+    _options: UpdateApprovalRequestOptions,
+  ): Promise<void> {
+    // In ms-teams we use a callback for status update instead of this function.
   }
 
   getAdapter(): CloudAdapter | null {
@@ -725,7 +817,20 @@ class MSTeamsProvider implements ChatOpsProvider {
           send: res.send,
           status: res.status,
         },
-        handler,
+        async (context) => {
+          const approvalPayload = this.parseApprovalDecisionPayload(
+            context.activity.value,
+          );
+          if (approvalPayload) {
+            await this.handleApprovalDecisionSubmission(
+              context,
+              approvalPayload,
+            );
+            return;
+          }
+
+          await handler(context);
+        },
       );
     } finally {
       console.error = origConsoleError;
@@ -744,6 +849,182 @@ class MSTeamsProvider implements ChatOpsProvider {
     // MS Teams handles interactive selections inline via Adaptive Card submissions
     // in the route handler (TurnContext.activity.value), not through this method.
     return null;
+  }
+
+  private parseApprovalDecisionPayload(payload: unknown): {
+    approvalId: string;
+    approved: boolean;
+    toolName?: string;
+    taskId: string;
+    channelId?: string;
+    workspaceId?: string | null;
+    threadId?: string;
+    originalSenderEmail?: string;
+    messageId?: string;
+  } | null {
+    const p = payload as { action?: string };
+    if (p?.action !== "approvalDecision") {
+      return null;
+    }
+    const value = payload as {
+      action?: string;
+      approvalId?: unknown;
+      approved?: unknown;
+      toolName?: unknown;
+      taskId?: unknown;
+      channelId?: unknown;
+      workspaceId?: unknown;
+      threadId?: unknown;
+      originalSenderEmail?: unknown;
+      messageId?: unknown;
+    };
+    return {
+      approvalId: value.approvalId as string,
+      approved: value.approved as boolean,
+      toolName: value.toolName as string | undefined,
+      taskId: value.taskId as string,
+      channelId: value.channelId as string | undefined,
+      workspaceId: value.workspaceId as string | null | undefined,
+      threadId: value.threadId as string | undefined,
+      originalSenderEmail: value.originalSenderEmail as string | undefined,
+      messageId: value.messageId as string | undefined,
+    };
+  }
+
+  private async handleApprovalDecisionSubmission(
+    context: TurnContext,
+    payload: {
+      approvalId: string;
+      approved: boolean;
+      toolName?: string;
+      taskId: string;
+      channelId?: string;
+      workspaceId?: string | null;
+      threadId?: string;
+      messageId?: string;
+      originalSenderEmail?: string;
+    },
+  ): Promise<void> {
+    const senderId =
+      context.activity.from?.aadObjectId ||
+      context.activity.from?.id ||
+      "unknown";
+    let senderEmail: string | null = null;
+    try {
+      const member = await TeamsInfo.getMember(
+        context,
+        context.activity.from?.id || senderId,
+      );
+      if (member?.email || member?.userPrincipalName) {
+        senderEmail = member.email ?? member.userPrincipalName ?? null;
+      }
+    } catch (error) {
+      logger.debug(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[MSTeamsProvider] TeamsInfo.getMember failed for approval decision, will fall back to Graph API if configured",
+      );
+    }
+
+    if (!senderEmail) {
+      senderEmail = await this.getUserEmail(senderId);
+    }
+    if (!senderEmail) {
+      logger.warn(
+        { senderId },
+        "[MSTeamsProvider] Could not resolve user email for approval decision",
+      );
+      return;
+    }
+
+    const teamData = context.activity.channelData?.team as
+      | { id?: string; aadGroupId?: string }
+      | undefined;
+    const channelId =
+      payload.channelId ||
+      context.activity.channelData?.channel?.id ||
+      context.activity.conversation?.id ||
+      "";
+    const workspaceId =
+      payload.workspaceId !== undefined
+        ? payload.workspaceId
+        : teamData?.aadGroupId || teamData?.id || null;
+    const threadId =
+      payload.threadId || extractThreadId(context.activity) || undefined;
+    const messageId =
+      payload.messageId ||
+      context.activity.replyToId ||
+      context.activity.id ||
+      `teams-${Date.now()}`;
+
+    const originalMessage: IncomingChatMessage = {
+      messageId,
+      channelId,
+      workspaceId,
+      threadId,
+      senderId,
+      senderEmail: payload.originalSenderEmail,
+      senderName: context.activity.from?.name || "Unknown User",
+      text: "",
+      rawText: "",
+      timestamp: context.activity.timestamp
+        ? new Date(context.activity.timestamp)
+        : new Date(),
+      isThreadReply: Boolean(threadId),
+      metadata: {
+        turnContext: context,
+        conversationReference: TurnContext.getConversationReference(
+          context.activity as Parameters<
+            typeof TurnContext.getConversationReference
+          >[0],
+        ),
+      },
+    };
+
+    const decision: ChatOpsApprovalDecision = {
+      taskId: payload.taskId,
+      approvalId: payload.approvalId,
+      approved: payload.approved,
+      toolName: payload.toolName || "",
+      messageTs: messageId,
+      channelId,
+      workspaceId,
+      originalMessage,
+      threadTs: threadId,
+      userId: senderId,
+      userName: originalMessage.senderName,
+      responseUrl: "",
+      approverEmail: senderEmail,
+    };
+
+    const updateApprovalRequestCallback = async (): Promise<void> => {
+      const approvalMessageId =
+        context.activity.replyToId || context.activity.id;
+      if (!approvalMessageId) {
+        return;
+      }
+
+      await context.updateActivity({
+        id: approvalMessageId,
+        type: ActivityTypes.Message,
+        text: `${payload.toolName || "Approval"}: ${
+          payload.approved ? "Approved" : "Declined"
+        }`,
+        attachments: [],
+      });
+    };
+
+    if (!this.eventHandler) {
+      logger.warn(
+        "[MSTeamsProvider] No event handler registered for approval decision",
+      );
+      return;
+    }
+
+    await this.eventHandler.handleInteractiveApprovalDecision(
+      this,
+      decision,
+      updateApprovalRequestCallback,
+    );
   }
 
   async sendAgentSelectionCard(params: {

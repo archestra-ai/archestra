@@ -521,6 +521,9 @@ const config = {
   a2aGateway: {
     endpoint: "/v1/a2a",
   },
+  a2aV2Gateway: {
+    endpoint: "/v2/a2a",
+  },
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",

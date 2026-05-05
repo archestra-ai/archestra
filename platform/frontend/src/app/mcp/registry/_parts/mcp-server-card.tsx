@@ -289,6 +289,10 @@ export function McpServerCard({
     ? deploymentStatuses[installedServer.id]
     : null;
   const isDeploymentFailed = installedDeploymentStatus?.state === "failed";
+  const installationError =
+    installationStatus === "error"
+      ? (installedServer?.localInstallationError ?? "Installation failed")
+      : null;
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
@@ -867,6 +871,49 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
+        {variant === "local" && installationError && installedServer && (
+          <div
+            className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            data-testid={`${E2eTestId.McpServerError}-${item.name}`}
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Installation failed</p>
+                <p className="truncate text-xs" title={installationError}>
+                  {installationError}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-destructive"
+                  data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}`}
+                  onClick={() => {
+                    setSettingsInitialPage("debug-logs");
+                    setLogsInitialServerId(installedServer.id);
+                    setSettingsDialogOpen(true);
+                  }}
+                >
+                  View logs
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-destructive"
+                  data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}`}
+                  onClick={() => {
+                    setSettingsInitialPage("configuration");
+                    setSettingsDialogOpen(true);
+                  }}
+                >
+                  Edit config
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         {variant === "local" && isInstalling && (
           <div className="bg-muted/50 rounded-md overflow-hidden">
             <div className="px-3 py-2">

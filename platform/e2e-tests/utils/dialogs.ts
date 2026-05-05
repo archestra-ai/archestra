@@ -29,7 +29,7 @@ export async function closeOpenDialogs(
       .getByRole("button", { name: /close|done|cancel/i })
       .first();
     if (await closeButton.isVisible().catch(() => false)) {
-      await closeButton.click();
+      await closeButton.click({ force: true, timeout: 1000 }).catch(() => {});
       await page.waitForTimeout(250);
     }
   }

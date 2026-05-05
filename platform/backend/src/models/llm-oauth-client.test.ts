@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";
 import LlmOauthClientModel from "./llm-oauth-client";
+import OAuthAccessTokenModel from "./oauth-access-token";
 
 describe("LlmOauthClientModel", () => {
   test("creates and hydrates an LLM OAuth client with a one-time secret", async ({
@@ -154,6 +155,38 @@ describe("LlmOauthClientModel", () => {
         organizationId: organization.id,
       }),
     ).toBeNull();
+  });
+
+  test("deleting an LLM OAuth client cascades issued access tokens", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Service With Tokens",
+      allowedLlmProxyIds: [crypto.randomUUID()],
+      providerApiKeys: [],
+    });
+    const accessToken = "llm-client-delete-cascade-token";
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(accessToken);
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash,
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 60_000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+      referenceId: `llm-proxy:${oauthClient.id}`,
+    });
+
+    expect(await OAuthAccessTokenModel.getByTokenHash(tokenHash)).toBeTruthy();
+
+    expect(
+      await LlmOauthClientModel.delete({
+        id: oauthClient.id,
+        organizationId: organization.id,
+      }),
+    ).toBe(true);
+
+    expect(await OAuthAccessTokenModel.getByTokenHash(tokenHash)).toBeFalsy();
   });
 
   test("ignores non-LLM OAuth clients and malformed LLM metadata", async ({

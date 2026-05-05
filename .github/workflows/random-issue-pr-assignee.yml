@@ -45,9 +45,17 @@ jobs:
             const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
             const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
             const actor = context.payload.issue.user.login;
+            const existingOwner = context.payload.issue.assignees.find((assignee) =>
+              owners.includes(assignee.login)
+            );
 
             if (coreTeam.includes(actor)) {
               console.log(`Skipping assignment because ${actor} is on the core team`);
+              return;
+            }
+
+            if (existingOwner) {
+              console.log(`Skipping assignment because #${context.issue.number} is already assigned to ${existingOwner.login}`);
               return;
             }
 
@@ -102,8 +110,12 @@ jobs:
                     continue;
                   }
 
-                  if (pr.assignees.length > 0) {
-                    console.log(`Skipping assignment because PR #${pr.number} already has an assignee`);
+                  const existingOwner = pr.assignees.find((assignee) =>
+                    owners.includes(assignee.login)
+                  );
+
+                  if (existingOwner) {
+                    console.log(`Skipping assignment because PR #${pr.number} is already assigned to ${existingOwner.login}`);
                     continue;
                   }
 

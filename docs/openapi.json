@@ -41152,6 +41152,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "schedule-conversion-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -154150,6 +154165,289 @@
         }
       }
     },
+    "/api/schedule-triggers/available-reply-channels": {
+      "get": {
+        "operationId": "getScheduleTriggerAvailableReplyChannels",
+        "tags": [
+          "Schedule Triggers"
+        ],
+        "description": "List available scheduled task reply channels for the current user and selected agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "agentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "channels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "chat",
+                          "slack_dm"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "channels"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "scheduledTask:read"
+          ]
+        }
+      }
+    },
     "/api/schedule-triggers": {
       "get": {
         "operationId": "getScheduleTriggers",
@@ -154265,6 +154563,9 @@
                           "keepResultsInSameChat": {
                             "type": "boolean"
                           },
+                          "replyChannel": {
+                            "type": "string"
+                          },
                           "actorUserId": {
                             "type": "string"
                           },
@@ -154340,6 +154641,7 @@
                           "timezone",
                           "enabled",
                           "keepResultsInSameChat",
+                          "replyChannel",
                           "actorUserId",
                           "lastExecutedAt",
                           "createdAt",
@@ -154664,6 +154966,14 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "replyChannel": {
+                    "default": "chat",
+                    "type": "string",
+                    "enum": [
+                      "chat",
+                      "slack_dm"
+                    ]
+                  },
                   "cronExpression": {
                     "type": "string",
                     "minLength": 1
@@ -154726,6 +155036,9 @@
                     },
                     "keepResultsInSameChat": {
                       "type": "boolean"
+                    },
+                    "replyChannel": {
+                      "type": "string"
                     },
                     "actorUserId": {
                       "type": "string"
@@ -154802,6 +155115,7 @@
                     "timezone",
                     "enabled",
                     "keepResultsInSameChat",
+                    "replyChannel",
                     "actorUserId",
                     "lastExecutedAt",
                     "createdAt",
@@ -155092,6 +155406,13 @@
                   "enabled": {
                     "type": "boolean"
                   },
+                  "replyChannel": {
+                    "type": "string",
+                    "enum": [
+                      "chat",
+                      "slack_dm"
+                    ]
+                  },
                   "replyInSameConversation": {
                     "type": "boolean"
                   }
@@ -155143,6 +155464,9 @@
                     },
                     "keepResultsInSameChat": {
                       "type": "boolean"
+                    },
+                    "replyChannel": {
+                      "type": "string"
                     },
                     "actorUserId": {
                       "type": "string"
@@ -155219,6 +155543,7 @@
                     "timezone",
                     "enabled",
                     "keepResultsInSameChat",
+                    "replyChannel",
                     "actorUserId",
                     "lastExecutedAt",
                     "createdAt",
@@ -155870,6 +156195,9 @@
                     "keepResultsInSameChat": {
                       "type": "boolean"
                     },
+                    "replyChannel": {
+                      "type": "string"
+                    },
                     "actorUserId": {
                       "type": "string"
                     },
@@ -155945,6 +156273,7 @@
                     "timezone",
                     "enabled",
                     "keepResultsInSameChat",
+                    "replyChannel",
                     "actorUserId",
                     "lastExecutedAt",
                     "createdAt",
@@ -156221,6 +156550,14 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "replyChannel": {
+                    "default": "chat",
+                    "type": "string",
+                    "enum": [
+                      "chat",
+                      "slack_dm"
+                    ]
+                  },
                   "cronExpression": {
                     "type": "string",
                     "minLength": 1
@@ -156305,6 +156642,9 @@
                     "keepResultsInSameChat": {
                       "type": "boolean"
                     },
+                    "replyChannel": {
+                      "type": "string"
+                    },
                     "actorUserId": {
                       "type": "string"
                     },
@@ -156380,6 +156720,7 @@
                     "timezone",
                     "enabled",
                     "keepResultsInSameChat",
+                    "replyChannel",
                     "actorUserId",
                     "lastExecutedAt",
                     "createdAt",
@@ -156959,6 +157300,9 @@
                     "keepResultsInSameChat": {
                       "type": "boolean"
                     },
+                    "replyChannel": {
+                      "type": "string"
+                    },
                     "actorUserId": {
                       "type": "string"
                     },
@@ -157034,6 +157378,7 @@
                     "timezone",
                     "enabled",
                     "keepResultsInSameChat",
+                    "replyChannel",
                     "actorUserId",
                     "lastExecutedAt",
                     "createdAt",
@@ -157339,6 +157684,9 @@
                     "keepResultsInSameChat": {
                       "type": "boolean"
                     },
+                    "replyChannel": {
+                      "type": "string"
+                    },
                     "actorUserId": {
                       "type": "string"
                     },
@@ -157414,6 +157762,7 @@
                     "timezone",
                     "enabled",
                     "keepResultsInSameChat",
+                    "replyChannel",
                     "actorUserId",
                     "lastExecutedAt",
                     "createdAt",

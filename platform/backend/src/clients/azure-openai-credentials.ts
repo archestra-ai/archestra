@@ -2,6 +2,7 @@ import {
   DefaultAzureCredential,
   getBearerTokenProvider,
 } from "@azure/identity";
+import { isAzureOpenAiV1BaseUrl } from "@/clients/azure-url";
 import config from "@/config";
 
 const AZURE_OPENAI_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default";
@@ -25,19 +26,6 @@ export function getAzureOpenAiBearerTokenProvider(
 
 export function getAzureAiFoundryBearerTokenProvider(): () => Promise<string> {
   return getAzureBearerTokenProvider(AZURE_AI_FOUNDRY_TOKEN_SCOPE);
-}
-
-function isAzureOpenAiV1BaseUrl(baseUrl?: string): boolean {
-  if (!baseUrl) {
-    return false;
-  }
-
-  try {
-    const url = new URL(baseUrl);
-    return /\/openai\/v1\/?$/.test(url.pathname);
-  } catch {
-    return false;
-  }
 }
 
 function resolveAzureOpenAiTokenScope(baseUrl?: string): string {

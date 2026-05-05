@@ -70,6 +70,33 @@ export function shouldUseAzureOpenAiApiVersion(baseUrl: string | undefined) {
   }
 }
 
+export function isAzureOpenAiV1BaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) {
+    return false;
+  }
+
+  try {
+    return isAzureOpenAiV1Url(new URL(baseUrl));
+  } catch {
+    return false;
+  }
+}
+
+export function isAzureAiFoundryBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    return (
+      url.hostname === "ai.azure.com" || url.hostname.endsWith(".ai.azure.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function createAzureFetchWithApiVersion(params: {
   apiVersion: string;
   fetch?: typeof globalThis.fetch;

@@ -1166,7 +1166,8 @@ export const anthropicAdapterFactory: LLMProvider<
         fetch: createAnthropicAzureFoundryFetch(customFetch),
         defaultHeaders: {
           ...options.defaultHeaders,
-          Authorization: "Bearer azure-entra-token",
+          // The fetch wrapper replaces this sentinel with a fresh Entra ID token on every request.
+          Authorization: "Bearer <entra-id-managed>",
         },
       });
     }

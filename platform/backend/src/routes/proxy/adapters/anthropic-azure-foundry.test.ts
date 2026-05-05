@@ -28,7 +28,7 @@ describe("anthropicAdapterFactory Azure Foundry", () => {
     };
 
     expect(client._options?.defaultHeaders?.Authorization).toBe(
-      "Bearer azure-entra-token",
+      "Bearer <entra-id-managed>",
     );
 
     const fetch = client._options?.fetch;

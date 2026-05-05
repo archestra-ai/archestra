@@ -214,3 +214,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ranjithchinnanan
 - @jordelmir
 - @fymak99-web
+- @BossChaos

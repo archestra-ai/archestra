@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Permissions } from "@shared";
 import { vi } from "vitest";
+import { UserModel } from "@/models";
 import {
   beforeEach,
   describe,
@@ -9,6 +10,13 @@ import {
   test,
 } from "@/test";
 import { hasPermission } from "./utils";
+
+vi.mock("@/models", () => ({
+  UserModel: {
+    getById: vi.fn(),
+    getUserPermissions: vi.fn(),
+  },
+}));
 
 // Mock the better-auth module
 vi.mock("./better-auth", () => ({
@@ -23,6 +31,11 @@ vi.mock("./better-auth", () => ({
 import { auth as betterAuth } from "./better-auth";
 
 // Type the mocked functions
+const mockUserModel = UserModel as unknown as {
+  getById: MockedFunction<typeof UserModel.getById>;
+  getUserPermissions: MockedFunction<typeof UserModel.getUserPermissions>;
+};
+
 const mockBetterAuth = betterAuth as unknown as {
   api: {
     hasPermission: MockedFunction<typeof betterAuth.api.hasPermission>;
@@ -35,6 +48,12 @@ type ApiKey = Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>["key"];
 describe("hasPermission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUserModel.getById.mockResolvedValue(makeUserWithOrganization());
+    mockUserModel.getUserPermissions.mockResolvedValue({
+      agent: ["read", "create", "update", "delete", "admin"],
+      mcpServerInstallation: ["admin"],
+      team: ["read"],
+    });
   });
 
   describe("session-based authentication", () => {
@@ -98,14 +117,57 @@ describe("hasPermission", () => {
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: makeApiKey({ referenceId: "user1" }),
+        key: makeApiKey({
+          referenceId: "user1",
+          metadata: null,
+        }),
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
+      expect(mockUserModel.getById).toHaveBeenCalledWith("user1");
+      expect(mockUserModel.getUserPermissions).toHaveBeenCalledWith(
+        "user1",
+        "org-1",
+      );
       expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
         body: { key: "Bearer api-key-123" },
+      });
+    });
+
+    test("should reject when API key owner lacks required permissions", async () => {
+      const permissions: Permissions = { agent: ["admin"] };
+      const headers: IncomingHttpHeaders = {
+        authorization: "Bearer limited-user-key",
+      };
+
+      mockBetterAuth.api.hasPermission.mockRejectedValue(
+        new Error("No session"),
+      );
+      mockBetterAuth.api.verifyApiKey.mockResolvedValue({
+        valid: true,
+        error: null,
+        key: makeApiKey({
+          referenceId: "user-limited",
+          metadata: null,
+        }),
+      });
+      mockUserModel.getById.mockResolvedValue(
+        makeUserWithOrganization({
+          id: "user-limited",
+          email: "user-limited@test.com",
+        }),
+      );
+      mockUserModel.getUserPermissions.mockResolvedValue({
+        agent: ["read"],
+      });
+
+      const result = await hasPermission(permissions, headers);
+
+      expect(result).toEqual({
+        success: false,
+        error: expect.objectContaining({ message: "Forbidden" }),
       });
     });
 
@@ -135,6 +197,35 @@ describe("hasPermission", () => {
           message: "No API key provided",
         }),
       });
+    });
+
+    test("should reject API key without an owner reference", async () => {
+      const permissions: Permissions = { agent: ["read"] };
+      const headers: IncomingHttpHeaders = {
+        authorization: "Bearer ownerless-key",
+      };
+
+      mockBetterAuth.api.hasPermission.mockRejectedValue(
+        new Error("No active organization"),
+      );
+      mockBetterAuth.api.verifyApiKey.mockResolvedValue({
+        valid: true,
+        error: null,
+        key: makeApiKey({
+          referenceId: undefined as unknown as string,
+        }),
+      });
+
+      const result = await hasPermission(permissions, headers);
+
+      expect(result).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          message: "No API key provided",
+        }),
+      });
+      expect(mockUserModel.getById).not.toHaveBeenCalled();
+      expect(mockUserModel.getUserPermissions).not.toHaveBeenCalled();
     });
 
     test("should handle API key verification errors", async () => {
@@ -223,12 +314,16 @@ describe("hasPermission", () => {
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: makeApiKey({ referenceId: "user1" }),
+        key: makeApiKey({
+          referenceId: "user1",
+          metadata: null,
+        }),
       });
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
+      expect(mockUserModel.getUserPermissions).toHaveBeenCalledTimes(1);
       expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
         body: { key: "Bearer api-key-complex" },
       });
@@ -256,7 +351,10 @@ describe("hasPermission", () => {
         mockBetterAuth.api.verifyApiKey.mockResolvedValue({
           valid: true,
           error: null,
-          key: makeApiKey({ referenceId: "user1" }),
+          key: makeApiKey({
+            referenceId: "user1",
+            metadata: null,
+          }),
         });
 
         const result = await hasPermission(permissions, headers);
@@ -297,6 +395,27 @@ function makeApiKey(
     updatedAt: new Date(),
     metadata: null,
     permissions: null,
+    ...overrides,
+  };
+}
+
+function makeUserWithOrganization(
+  overrides: Partial<Awaited<ReturnType<typeof UserModel.getById>>> = {},
+): Awaited<ReturnType<typeof UserModel.getById>> {
+  return {
+    id: "user1",
+    name: "Test User",
+    email: "user1@test.com",
+    emailVerified: true,
+    image: null,
+    role: null,
+    banned: null,
+    banReason: null,
+    banExpires: null,
+    twoFactorEnabled: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    organizationId: "org-1",
     ...overrides,
   };
 }

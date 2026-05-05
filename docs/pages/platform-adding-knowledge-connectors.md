@@ -3,7 +3,7 @@ title: Adding Knowledge Connectors
 category: Development
 order: 3
 description: Developer guide for implementing new Knowledge Base connectors in Archestra Platform
-lastUpdated: 2026-04-15
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -112,7 +112,7 @@ import type {
   GithubConfig,
 } from "@/types/knowledge-connector";
 import { GithubConfigSchema } from "@/types/knowledge-connector";
-import { BaseConnector } from "../base-connector";
+import { BaseConnector, buildCheckpoint } from "../base-connector";
 
 const BATCH_SIZE = 50;
 
@@ -206,16 +206,19 @@ export class GithubConnector extends BaseConnector {
       hasMore = issues.length >= BATCH_SIZE;
       page++;
 
+      const lastIssue = issues.at(-1);
+
       yield {
         documents,
-        checkpoint: {
+        failures: this.flushFailures(),
+        checkpoint: buildCheckpoint({
           type: "github",
-          lastSyncedAt: new Date().toISOString(),
-          lastIssueNumber:
-            issues.length > 0
-              ? issues[issues.length - 1].number
-              : checkpoint.lastIssueNumber,
-        },
+          itemUpdatedAt: lastIssue?.updated_at,
+          previousLastSyncedAt: checkpoint.lastSyncedAt,
+          extra: {
+            lastIssueNumber: lastIssue?.number ?? checkpoint.lastIssueNumber,
+          },
+        }),
         hasMore,
       };
     }
@@ -233,6 +236,11 @@ export class GithubConnector extends BaseConnector {
 | `rateLimit()`                               | Sleep for the configured delay (default 100ms) between API calls to avoid rate limits           |
 | `joinUrl(base, path)`                       | Normalize and join URL parts                                                                    |
 | `buildBasicAuthHeader(email, token)`        | Build a `Basic` auth header                                                                     |
+| `safeItemFetch({ fetch, fallback, itemId, resource })` | Fetch optional per-item sub-resources without failing the whole batch |
+| `flushFailures()`                           | Return and clear item-level failures collected by `safeItemFetch`                               |
+| `trackSkipped(item)` / `flushSkipped()`     | Track intentionally skipped source items and include them in the next yielded batch              |
+
+Use the exported `buildCheckpoint(...)` helper to construct checkpoints. It derives `lastSyncedAt` from the most recent source item timestamp and falls back to the previous checkpoint for empty batches. Do not use wall-clock time for `lastSyncedAt`; doing so can skip source updates when APIs return delayed or out-of-order results.
 
 ### SDK selection note
 
@@ -247,6 +255,9 @@ Key points:
 - Call `await this.rateLimit()` before each API call
 - Set `hasMore: true` on intermediate batches, `false` on the final one
 - Always include the `type` field in the checkpoint object
+- Use `buildCheckpoint(...)` so `lastSyncedAt` comes from source item timestamps, not the current time
+- Include `failures: this.flushFailures()` when using `safeItemFetch(...)`
+- Include `skipped: this.flushSkipped()` when the connector intentionally skips source items
 - The checkpoint is opaque to the runtime; only your connector reads it
 
 ## Connector Registry

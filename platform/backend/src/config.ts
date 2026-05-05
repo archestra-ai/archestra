@@ -584,6 +584,9 @@ const config = {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      azureFoundryEntraIdEnabled:
+        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
+        "true",
     },
     gemini: {
       baseUrl:
@@ -671,6 +674,8 @@ const config = {
       responsesApiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
         "2025-04-01-preview",
+      entraIdEnabled:
+        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED === "true",
     },
   },
   chat: {

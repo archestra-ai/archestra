@@ -210,3 +210,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @kensay98
 - @jcamposobando
 - @KIssShot-Shinobu
+- @SpeedyG0
+- @ranjithchinnanan
+- @jordelmir
+- @fymak99-web
+- @BossChaos

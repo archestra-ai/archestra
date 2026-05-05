@@ -1,3 +1,7 @@
+import {
+  getAzureAiFoundryBearerTokenProvider,
+  isAnthropicAzureFoundryEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
@@ -14,7 +18,7 @@ export async function fetchAnthropicModels(
   const response = await fetch(url, {
     headers: {
       ...(extraHeaders ?? {}),
-      "x-api-key": apiKey,
+      ...(await getAnthropicAuthHeaders(apiKey)),
       "anthropic-version": "2023-06-01",
     },
   });
@@ -38,4 +42,19 @@ export async function fetchAnthropicModels(
     provider: "anthropic",
     createdAt: model.created_at,
   }));
+}
+
+async function getAnthropicAuthHeaders(
+  apiKey: string | undefined,
+): Promise<Record<string, string>> {
+  if (apiKey) {
+    return { "x-api-key": apiKey };
+  }
+
+  if (!isAnthropicAzureFoundryEntraIdEnabled()) {
+    return { "x-api-key": "" };
+  }
+
+  const tokenProvider = getAzureAiFoundryBearerTokenProvider();
+  return { Authorization: `Bearer ${await tokenProvider()}` };
 }

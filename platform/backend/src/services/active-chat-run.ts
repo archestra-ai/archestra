@@ -1,16 +1,25 @@
 import type { UIMessageChunk } from "ai";
+import config from "@/config";
 import logger from "@/logging";
 import ActiveChatRunModel from "@/models/chat-active-run";
+import {
+  type ActiveChatRunNotifier,
+  createActiveChatRunNotifier,
+} from "@/services/active-chat-run-notifier";
 
 const EVENT_FLUSH_INTERVAL_MS = 100;
 const EVENT_BATCH_SIZE = 16;
-const REPLAY_POLL_INTERVAL_MS = 250;
-const STOP_POLL_INTERVAL_MS = 500;
 const STALE_RUNNING_MS = 10 * 60 * 1000;
 export const ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS = 60 * 60 * 1000;
 export const ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS = 2 * 60 * 1000;
 
-class ActiveChatRunService {
+export class ActiveChatRunService {
+  constructor(
+    private readonly notifier: ActiveChatRunNotifier,
+    private readonly replayPollIntervalMs: number,
+    private readonly stopPollIntervalMs: number,
+  ) {}
+
   async createRun(params: {
     conversationId: string;
     userId: string;
@@ -37,6 +46,18 @@ class ActiveChatRunService {
     return ActiveChatRunModel.create(params);
   }
 
+  async requestStop(params: {
+    conversationId: string;
+    organizationId: string;
+  }) {
+    const run = await ActiveChatRunModel.requestStop(params);
+    if (run) {
+      await this.notifyStop(run.id);
+    }
+
+    return run;
+  }
+
   drainStreamToEvents(params: {
     runId: string;
     conversationId: string;
@@ -47,7 +68,9 @@ class ActiveChatRunService {
     }>;
   }): void {
     void (async () => {
-      const writer = new ActiveChatRunEventBatcher(params.runId);
+      const writer = new ActiveChatRunEventBatcher(params.runId, () =>
+        this.notifyEvent(params.runId),
+      );
       const reader = params.stream.getReader();
 
       try {
@@ -64,6 +87,7 @@ class ActiveChatRunService {
           status: terminal.status,
           error: terminal.error,
         });
+        await this.notifyEvent(params.runId);
       } catch (error) {
         await writer.flush().catch((flushError) => {
           logger.error(
@@ -76,6 +100,7 @@ class ActiveChatRunService {
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
         });
+        await this.notifyEvent(params.runId);
       }
     })().catch((error) => {
       logger.error(
@@ -87,6 +112,8 @@ class ActiveChatRunService {
 
   createReplayStream(runId: string): ReadableStream<UIMessageChunk> {
     let isCancelled = false;
+    const notifier = this.notifier;
+    const replayPollIntervalMs = this.replayPollIntervalMs;
 
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
@@ -122,7 +149,10 @@ class ActiveChatRunService {
               return;
             }
 
-            await sleep(REPLAY_POLL_INTERVAL_MS);
+            await notifier.waitForEvent({
+              runId,
+              timeoutMs: replayPollIntervalMs,
+            });
           }
         } catch (error) {
           controller.error(error);
@@ -139,28 +169,64 @@ class ActiveChatRunService {
     conversationId: string;
     abortController: AbortController;
   }): () => void {
-    const interval = setInterval(() => {
-      ActiveChatRunModel.findById(params.runId)
-        .then((run) => {
+    let stopped = false;
+    const waitController = new AbortController();
+
+    void (async () => {
+      while (!stopped && !params.abortController.signal.aborted) {
+        await this.notifier.waitForStop({
+          runId: params.runId,
+          timeoutMs: this.stopPollIntervalMs,
+          abortSignal: waitController.signal,
+        });
+
+        if (stopped || params.abortController.signal.aborted) {
+          return;
+        }
+
+        try {
+          const run = await ActiveChatRunModel.findById(params.runId);
           if (run?.stopRequestedAt && !params.abortController.signal.aborted) {
             logger.info(
               { conversationId: params.conversationId, runId: params.runId },
               "Active chat run stop requested, aborting stream",
             );
             params.abortController.abort();
+            return;
           }
-        })
-        .catch((error) => {
+        } catch (error) {
           logger.warn(
             { error, conversationId: params.conversationId },
             "Failed to poll active chat run stop flag",
           );
-        });
-    }, STOP_POLL_INTERVAL_MS);
+        }
+      }
+    })();
 
-    return () => clearInterval(interval);
+    return () => {
+      stopped = true;
+      waitController.abort();
+    };
+  }
+
+  private async notifyEvent(runId: string): Promise<void> {
+    await this.notifier.notifyEvent(runId).catch((error) => {
+      logger.warn({ error, runId }, "Failed to notify active chat run event");
+    });
+  }
+
+  private async notifyStop(runId: string): Promise<void> {
+    await this.notifier.notifyStop(runId).catch((error) => {
+      logger.warn({ error, runId }, "Failed to notify active chat run stop");
+    });
   }
 }
+
+export const activeChatRunService = new ActiveChatRunService(
+  createActiveChatRunNotifier(),
+  config.chat.activeRun.replayPollIntervalMs,
+  config.chat.activeRun.stopPollIntervalMs,
+);
 
 class ActiveChatRunEventBatcher {
   private nextSeq = 1;
@@ -168,7 +234,10 @@ class ActiveChatRunEventBatcher {
   private flushTimer: NodeJS.Timeout | null = null;
   private flushPromise: Promise<void> = Promise.resolve();
 
-  constructor(private readonly runId: string) {}
+  constructor(
+    private readonly runId: string,
+    private readonly onFlush: () => Promise<void>,
+  ) {}
 
   async write(payload: UIMessageChunk): Promise<void> {
     this.pending.push(payload);
@@ -206,14 +275,12 @@ class ActiveChatRunEventBatcher {
         runId: this.runId,
         seq,
         payloads,
-      }),
+      }).then(() => this.onFlush()),
     );
 
     await this.flushPromise;
   }
 }
-
-export const activeChatRunService = new ActiveChatRunService();
 
 function compactReplayPayloads(payloads: UIMessageChunk[]): UIMessageChunk[] {
   const compacted: UIMessageChunk[] = [];
@@ -258,7 +325,3 @@ type MergeableDeltaChunk = Extract<
   UIMessageChunk,
   { type: "text-delta" | "reasoning-delta" }
 >;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

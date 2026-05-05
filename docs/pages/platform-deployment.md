@@ -1021,6 +1021,22 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
 
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Polling compatibility interval for replaying active chat runs after reconnect.
+  - Default: `500`
+  - Only applies when `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED=true`
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Polling compatibility interval for detecting explicit Stop requests on active chat runs.
+  - Default: `500`
+  - Only applies when `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED=true`
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+  - Default: `false`
+  - Enable this only when the database endpoint cannot support session-stable listeners, such as PgBouncer transaction pooling. Polling can increase database query load.
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
+  - Default: Uses `ARCHESTRA_DATABASE_URL`
+  - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+
 ### MCP Apps Sandbox
 
 MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.

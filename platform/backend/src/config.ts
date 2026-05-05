@@ -471,6 +471,28 @@ export const parseSampleRate = (
   return parsed;
 };
 
+/** @public — exported for testability */
+export function parseActiveChatRunPollIntervalMs(params: {
+  value: string | undefined;
+  defaultValue: number;
+  envName: string;
+}): number {
+  const trimmed = params.value?.trim();
+  if (!trimmed) {
+    return params.defaultValue;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ${params.envName} value "${trimmed}", using default ${params.defaultValue}`,
+    );
+    return params.defaultValue;
+  }
+
+  return parsed;
+}
+
 /**
  * Hostnames that `getPublicRequestOrigin` is willing to return when forwarded
  * headers are trusted. Always contains the frontend origin (`frontendBaseUrl`,
@@ -808,6 +830,23 @@ const config = {
       }
       return "anthropic";
     })(),
+    activeRun: {
+      replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
+        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+      stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
+        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
+      }),
+      pollingCompatibilityEnabled:
+        process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED ===
+        "true",
+      notifyDatabaseUrl:
+        process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
+    },
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",

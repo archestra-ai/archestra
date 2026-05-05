@@ -998,7 +998,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      const activeRun = await ActiveChatRunModel.requestStop({
+      const activeRun = await activeChatRunService.requestStop({
         conversationId: id,
         organizationId,
       });

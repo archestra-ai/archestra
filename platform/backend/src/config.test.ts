@@ -16,6 +16,7 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  parseActiveChatRunPollIntervalMs,
   parseBodyLimit,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -897,6 +898,135 @@ describe("parseMetricsPort", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_METRICS_PORT value "-1", using default 9050',
     );
+  });
+});
+
+describe("parseActiveChatRunPollIntervalMs", () => {
+  test("returns default when value is missing", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: undefined,
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+  });
+
+  test("returns default when value is empty", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "   ",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+  });
+
+  test("parses a positive integer", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "1000",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(1000);
+  });
+
+  test("returns default and warns for zero", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "0",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS value "0", using default 500',
+    );
+  });
+
+  test("returns default and warns for negative values", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "-1",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS value "-1", using default 500',
+    );
+  });
+
+  test("returns default and warns for non-numeric values", () => {
+    expect(
+      parseActiveChatRunPollIntervalMs({
+        value: "abc",
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+    ).toBe(500);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS value "abc", using default 500',
+    );
+  });
+});
+
+describe("chat active run config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("uses listen/notify by default", async () => {
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS;
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED;
+    delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun).toMatchObject({
+      replayPollIntervalMs: 500,
+      stopPollIntervalMs: 500,
+      pollingCompatibilityEnabled: false,
+      notifyDatabaseUrl: "",
+    });
+  });
+
+  test("reads active run polling compatibility env vars", async () => {
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS = "750";
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS = "1250";
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
+      "true";
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL =
+      " postgresql://notify:pass@localhost:5432/archestra ";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun).toMatchObject({
+      replayPollIntervalMs: 750,
+      stopPollIntervalMs: 1250,
+      pollingCompatibilityEnabled: true,
+      notifyDatabaseUrl: "postgresql://notify:pass@localhost:5432/archestra",
+    });
+  });
+
+  test("keeps polling compatibility disabled for non-true values", async () => {
+    process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
+      "false";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chat.activeRun.pollingCompatibilityEnabled).toBe(false);
   });
 });
 

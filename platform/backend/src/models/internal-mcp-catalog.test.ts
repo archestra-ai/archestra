@@ -104,9 +104,9 @@ describe("InternalMcpCatalogModel", () => {
       const catalogItems = await InternalMcpCatalogModel.findAll();
       const foundCatalog = catalogItems.find((item) => item.id === catalog.id);
 
-      expect(
-        foundCatalog?.enterpriseManagedConfig?.clientSecretOverride,
-      ).toBe("resource-client-secret");
+      expect(foundCatalog?.enterpriseManagedConfig?.clientSecretOverride).toBe(
+        "resource-client-secret",
+      );
     });
 
     test("does not expand secrets when expandSecrets: false", async ({

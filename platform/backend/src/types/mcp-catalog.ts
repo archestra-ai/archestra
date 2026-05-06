@@ -69,25 +69,6 @@ export const UserConfigFieldSchema = z
     }
   });
 
-export const MappingTemplateSchema = z.object({
-  template: z.string().min(1),
-  target: z.discriminatedUnion("kind", [
-    z.object({
-      kind: z.literal("header"),
-      name: z.string().min(1),
-      valuePrefix: z.string().optional(),
-    }),
-    z.object({
-      kind: z.literal("env-var"),
-      name: z.string().min(1),
-    }),
-    z.object({
-      kind: z.literal("secret-file"),
-      path: z.string().min(1),
-    }),
-  ]),
-});
-
 // Define a version of LocalConfigSchema for SELECT operations
 // where required and description fields are optional (database may not have them)
 // Note: We can't use .extend() on LocalConfigSchema because it has .refine()
@@ -151,7 +132,6 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   oauthConfig: OAuthConfigSchema.nullable(),
   enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
-  mappingTemplates: z.array(MappingTemplateSchema).default([]),
   parentCatalogItemId: z.string().uuid().nullable(),
   presetFieldValues: PresetFieldValuesSchema.default({}),
   // Labels are loaded from the junction table, not from the DB row
@@ -183,7 +163,6 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
-    mappingTemplates: z.array(MappingTemplateSchema).optional(),
     presetFieldValues: PresetFieldValuesSchema.optional(),
     parentCatalogItemId: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
@@ -216,7 +195,6 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
-    mappingTemplates: z.array(MappingTemplateSchema).optional(),
     presetFieldValues: PresetFieldValuesSchema.optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -272,7 +250,6 @@ export type UserConfigFieldDefault = z.infer<
   typeof UserConfigFieldDefaultSchema
 >;
 export type UserConfig = Record<string, UserConfigField>;
-export type MappingTemplate = z.infer<typeof MappingTemplateSchema>;
 export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 
 // Export LocalConfig type for reuse in database schema
@@ -325,106 +302,11 @@ function validateInternalMcpCatalog(
       environment?: Array<{ key: string }>;
     } | null;
     userConfig?: Record<string, UserConfigField> | null;
-    mappingTemplates?: Array<MappingTemplate>;
   },
   ctx: z.RefinementCtx,
 ): void {
   validateEnterpriseManagedTransportConfig(value, ctx);
   validateHeaderMappedUserConfig(value.userConfig, ctx);
-  validateMappingTemplates(
-    value.mappingTemplates,
-    value.userConfig,
-    value.localConfig?.environment,
-    ctx,
-  );
-}
-
-const TEMPLATE_PLACEHOLDER_PATTERN = /\{([^{}]+)\}/g;
-
-function validateMappingTemplates(
-  templates: Array<MappingTemplate> | undefined,
-  userConfig: Record<string, UserConfigField> | null | undefined,
-  envFields: Array<{ key: string }> | undefined,
-  ctx: z.RefinementCtx,
-): void {
-  if (!templates || templates.length === 0) {
-    return;
-  }
-
-  const knownKeys = new Set<string>([
-    ...Object.keys(userConfig ?? {}),
-    ...(envFields?.map((e) => e.key) ?? []),
-  ]);
-
-  // Targets across single-field and template mappings must be unique. Build the
-  // set of existing single-field targets first so collisions are caught here.
-  const headerTargets = new Map<string, string>(); // normalized header → owner label
-  const envVarTargets = new Map<string, string>();
-  const secretFileTargets = new Map<string, string>();
-
-  for (const [fieldName, field] of Object.entries(userConfig ?? {})) {
-    if (field.headerName) {
-      headerTargets.set(field.headerName.toLowerCase(), `field "${fieldName}"`);
-    }
-  }
-  for (const env of envFields ?? []) {
-    envVarTargets.set(env.key, `env "${env.key}"`);
-  }
-
-  templates.forEach((template, index) => {
-    // Validate placeholders.
-    const placeholders = Array.from(
-      template.template.matchAll(TEMPLATE_PLACEHOLDER_PATTERN),
-      (m) => m[1],
-    );
-    for (const key of placeholders) {
-      if (!knownKeys.has(key)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["mappingTemplates", index, "template"],
-          message: `Placeholder "{${key}}" does not match any field`,
-        });
-      }
-    }
-
-    // Validate target collisions.
-    const ownerLabel = `template #${index}`;
-    if (template.target.kind === "header") {
-      const key = template.target.name.toLowerCase();
-      const existing = headerTargets.get(key);
-      if (existing) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["mappingTemplates", index, "target", "name"],
-          message: `Header "${template.target.name}" already mapped by ${existing}`,
-        });
-      } else {
-        headerTargets.set(key, ownerLabel);
-      }
-    } else if (template.target.kind === "env-var") {
-      const existing = envVarTargets.get(template.target.name);
-      if (existing) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["mappingTemplates", index, "target", "name"],
-          message: `Env var "${template.target.name}" already mapped by ${existing}`,
-        });
-      } else {
-        envVarTargets.set(template.target.name, ownerLabel);
-      }
-    } else {
-      const existing = secretFileTargets.get(template.target.path);
-      if (existing) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["mappingTemplates", index, "target", "path"],
-          message: `Secret file "${template.target.path}" already mapped by ${existing}`,
-        });
-      } else {
-        secretFileTargets.set(template.target.path, ownerLabel);
-      }
-    }
-  });
 }
 
 function validateHeaderMappedUserConfig(

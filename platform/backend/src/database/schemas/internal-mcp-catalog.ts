@@ -15,7 +15,6 @@ import type {
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalogServerType,
   LocalConfig,
-  MappingTemplate,
   OAuthConfig,
   UserConfig,
   UserConfigFieldDefault,
@@ -68,14 +67,6 @@ const internalMcpCatalogTable = pgTable(
     // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
     deploymentSpecYaml: text("deployment_spec_yaml"),
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),
-    /**
-     * Multi-field templated mappings (e.g. composing a DSN from `host`,
-     * `port`, `database`, `username`, `password` into one header).
-     */
-    mappingTemplates: jsonb("mapping_templates")
-      .$type<Array<MappingTemplate>>()
-      .notNull()
-      .default([]),
     // OAuth configuration for remote servers
     oauthConfig: jsonb("oauth_config").$type<OAuthConfig>(),
     enterpriseManagedConfig: jsonb(

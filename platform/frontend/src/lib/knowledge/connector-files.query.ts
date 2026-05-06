@@ -208,7 +208,8 @@ export function formatFileSize(bytes: number): string {
 }
 
 
-const MAX_BATCH_BYTES = 10 * 1024 * 1024;
+/** ~(10mb + overhead) */
+const MAX_BATCH_BYTES = 14 * 1024 * 1024;
 
 type EncodedFile = { name: string; mimeType: string; content: string };
 

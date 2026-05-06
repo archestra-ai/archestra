@@ -1849,16 +1849,18 @@ class ToolModel {
       );
     }
 
-    // Hide knowledge base tool in global tool listings (no agent context).
-    // The tool is only visible when queried per-agent and the agent has a knowledge base assigned.
-    toolWhereConditions.push(
-      ne(
-        schema.toolsTable.name,
-        archestraMcpBranding.getToolName(
-          TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    // Hide knowledge base tool in global tool listings (no agent context) by default.
+    // Can be explicitly included for guardrails configuration.
+    if (!filters?.includeKnowledgeSourcesTool) {
+      toolWhereConditions.push(
+        ne(
+          schema.toolsTable.name,
+          archestraMcpBranding.getToolName(
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     // Apply access control filtering for users that are not agent admins
     // Get accessible agent IDs for filtering assignments

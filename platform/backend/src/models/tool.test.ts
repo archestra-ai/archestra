@@ -2966,5 +2966,42 @@ describe("ToolModel", () => {
         ),
       ).toBe(false);
     });
+
+    test("includes the white-labeled knowledge tool when explicitly requested", async ({
+      makeOrganization,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        {
+          appName: "Acme Copilot",
+          fullWhiteLabeling: true,
+        },
+      );
+
+      const [kbTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, brandedKbToolName));
+
+      expect(kbTool).toBeDefined();
+      await makeAgentTool(agent.id, kbTool?.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        filters: { includeKnowledgeSourcesTool: true },
+      });
+
+      expect(result.data.some((tool) => tool.name === brandedKbToolName)).toBe(
+        true,
+      );
+    });
   });
 });

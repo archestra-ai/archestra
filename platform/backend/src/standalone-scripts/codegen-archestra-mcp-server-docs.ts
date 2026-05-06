@@ -280,11 +280,15 @@ Most tools require explicit assignment to Agents or MCP Gateways before they can
 
 Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
 
-All Archestra tools are prefixed with \`archestra__\` and are always trusted — they bypass tool invocation and trusted data policies.
+All Archestra tools are prefixed with \`archestra__\`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
+
+${formatToolLink("query_knowledge_sources")} is an exception: its output is treated as untrusted by default and is evaluated by trusted data policies (and may cause later tool calls to be blocked in sensitive contexts). You can configure its guardrails from the Tool Guardrails page at /mcp/tool-guardrails.
 
 ## Auth
 
-Archestra tools are **trusted**, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+Archestra tools are **trusted** by default, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+
+${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and is treated as untrusted by default.
 
 However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeSource:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
 

@@ -58,4 +58,6 @@ Connectors pull data from external tools (Jira, Confluence, GitHub, etc.) and fe
 
 Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
 
+The output of `query_knowledge_sources` is treated as untrusted by default (it may contain prompt-injectable content). You can configure guardrails for it from `/mcp/tool-guardrails`.
+
 ![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)

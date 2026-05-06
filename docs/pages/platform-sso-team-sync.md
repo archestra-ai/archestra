@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Automatically add and remove users from Archestra teams based on IdP group membership"
 order: 6
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -40,6 +40,8 @@ If no custom Handlebars template is configured, Archestra automatically checks t
 `groups`, `group`, `memberOf`, `member_of`, `roles`, `role`, `teams`, `team`
 
 The first claim that contains non-empty group data is used.
+
+For OIDC providers, make sure the ID token actually includes group data before configuring extraction. Many IdPs do not include groups with the default `openid`, `email`, and `profile` scopes. If you sync from `groups`, add the provider's groups scope (often `groups`) and configure the IdP to emit that claim in the ID token.
 
 ### Custom Handlebars templates
 
@@ -152,7 +154,7 @@ If your IdP sends roles as objects (for example `roles: [{name: "admin"}, {name:
 2. Verify your Handlebars template extracts the expected groups from the ID token
 3. Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect your ID token claims
 4. Check that the group identifier in Archestra exactly matches the extracted group name
-5. Ensure your IdP is configured to include group claims in the ID token (not just userinfo)
+5. Ensure your IdP is configured to include group claims in the ID token, and that Archestra requests the groups scope required by your IdP
 6. Check backend logs for sync errors
 
 You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input.

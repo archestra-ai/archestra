@@ -11,6 +11,7 @@ const SERVICENOW = z.literal("servicenow");
 const NOTION = z.literal("notion");
 const SHAREPOINT = z.literal("sharepoint");
 const GDRIVE = z.literal("gdrive");
+const FILE_UPLOAD = z.literal("file_upload");
 const DROPBOX = z.literal("dropbox");
 const ONEDRIVE = z.literal("onedrive");
 const ASANA = z.literal("asana");
@@ -27,6 +28,7 @@ export const ConnectorTypeSchema = z.union([
   NOTION,
   SHAREPOINT,
   GDRIVE,
+  FILE_UPLOAD,
   DROPBOX,
   ONEDRIVE,
   ASANA,
@@ -230,6 +232,18 @@ export const GoogleDriveCheckpointSchema = z.object({
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 
+// ===== File Upload Config & Checkpoint =====
+
+export const FileUploadConfigSchema = z.object({
+  type: FILE_UPLOAD,
+});
+export type FileUploadConfig = z.infer<typeof FileUploadConfigSchema>;
+
+export const FileUploadCheckpointSchema = z.object({
+  type: FILE_UPLOAD,
+  lastSyncedAt: z.string().optional(),
+});
+export type FileUploadCheckpoint = z.infer<typeof FileUploadCheckpointSchema>;
 // ===== Asana Config & Checkpoint =====
 
 export const AsanaConfigSchema = z.object({
@@ -392,6 +406,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   NotionConfigSchema,
   SharePointConfigSchema,
   GoogleDriveConfigSchema,
+  FileUploadConfigSchema,
   DropboxConfigSchema,
   OneDriveConfigSchema,
   AsanaConfigSchema,
@@ -410,6 +425,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   NotionCheckpointSchema,
   SharePointCheckpointSchema,
   GoogleDriveCheckpointSchema,
+  FileUploadCheckpointSchema,
   DropboxCheckpointSchema,
   OneDriveCheckpointSchema,
   AsanaCheckpointSchema,

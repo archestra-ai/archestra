@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Map SSO claims to Archestra roles using Handlebars templates"
 order: 5
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -64,6 +64,10 @@ Templates should render to any non-empty string (like `"true"`) when the rule ma
 
 > **Tip:** templates should output any non-empty string when matching. The text `"true"` is commonly used but any output works.
 
+### OIDC group claims
+
+For OIDC providers, group-based rules only work if the ID token contains the group claim. Many IdPs do not include groups with the default `openid`, `email`, and `profile` scopes. If your template reads `groups`, add the provider's group scope (commonly named `groups`) and configure the IdP to emit that claim in the ID token.
+
 ### Handling JSON string claims
 
 Some identity providers (like Okta) may send complex claims as JSON strings rather than native arrays. For example:
@@ -100,7 +104,7 @@ This template:
 
 **Missing groups claim:**
 
-- For OIDC: verify your IdP is configured to include groups in the token/userinfo
+- For OIDC: verify your IdP is configured to include groups in the ID token, and that the SSO provider requests the groups scope required by your IdP
 - For SAML: check that group attributes are included in the assertion and properly mapped
 
 **Template always returns empty:**

@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { E2eTestId } from "@shared";
+import { E2eTestId, type PartialUIMessage } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -52,9 +52,7 @@ import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
-import MessageThread, {
-  type PartialUIMessage,
-} from "@/components/message-thread";
+import MessageThread from "@/components/message-thread";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -2103,70 +2101,186 @@ export default function ChatPage() {
   return <ChatPageContent key="new-chat" />;
 }
 
+/**
+ * Merges live streaming messages from the active chat session with persisted messages from the database.
+ *
+ * This implementation ensures:
+ * 1. Initial State Recovery: Returns persisted messages if the live session is empty.
+ * 2. Sequential Integrity: Matches messages in order, preserving any intermediate persisted messages
+ *    that might be missing from the live buffer.
+ * 3. Tail Recovery: Appends finished turns from the database that occurred while the client was offline.
+ * 4. Metadata Reconciliation: Deeply merges metadata, ensuring timestamps and IDs are preserved.
+ */
 function mergePersistedMessageMetadata(params: {
   liveMessages: UIMessage[];
   persistedMessages: UIMessage[];
 }): UIMessage[] {
-  const remainingPersistedMessages = [...params.persistedMessages];
+  if (params.liveMessages.length === 0) {
+    return params.persistedMessages;
+  }
 
-  return params.liveMessages.map((liveMessage) => {
-    if (hasCreatedAtMetadata(liveMessage)) {
-      return liveMessage;
-    }
+  const result: UIMessage[] = [];
+  const remainingPersisted = [...params.persistedMessages];
 
-    const persistedIndex = remainingPersistedMessages.findIndex(
-      (persistedMessage) =>
-        messagesHaveSameRenderableContent({
-          liveMessage,
-          persistedMessage,
-        }),
+  for (const liveMessage of params.liveMessages) {
+    // Stage 1: Attempt Exact Match (ID or identical renderable content)
+    let matchIndex = remainingPersisted.findIndex((p) =>
+      messagesHaveSameRenderableContent({ liveMessage, persistedMessage: p }),
     );
 
-    if (persistedIndex === -1) {
-      return liveMessage;
+    // Stage 2: Fallback to "Same Turn" match (e.g., streaming partial vs. saved full)
+    if (matchIndex === -1) {
+      matchIndex = remainingPersisted.findIndex((p) => {
+        if (p.role !== liveMessage.role) return false;
+        const liveText = getMessageText(liveMessage);
+        const persistedText = getMessageText(p);
+
+        // Only match turns if they have non-trivial content to avoid empty-message collisions
+        if (!liveText && !persistedText) return false;
+
+        return (
+          (persistedText.length > 0 && persistedText.startsWith(liveText)) ||
+          (liveText.length > 0 && liveText.startsWith(persistedText))
+        );
+      });
     }
 
-    const [persistedMessage] = remainingPersistedMessages.splice(
-      persistedIndex,
-      1,
-    );
+    if (matchIndex !== -1) {
+      // Ordered Consumption: Any persisted messages before the matchIndex are inserted first.
+      // This handles cases where the live buffer might have "jumped ahead" or missed turns.
+      if (matchIndex > 0) {
+        const skipped = remainingPersisted.splice(0, matchIndex);
+        result.push(...skipped);
+      }
 
-    return {
-      ...liveMessage,
-      metadata: {
-        ...getObjectMetadata(persistedMessage),
-        ...getObjectMetadata(liveMessage),
-      },
-    };
-  });
+      const [persisted] = remainingPersisted.splice(0, 1);
+
+      result.push({
+        ...liveMessage,
+        metadata: {
+          ...getObjectMetadata(persisted),
+          ...getObjectMetadata(liveMessage),
+        },
+        id: liveMessage.id || persisted.id,
+      });
+      continue;
+    }
+
+    // New Message: likely being generated or sent right now
+    result.push(liveMessage);
+  }
+
+  // Tail Recovery: Append any messages that exist in the DB but haven't been matched.
+  if (remainingPersisted.length > 0) {
+    result.push(...remainingPersisted);
+  }
+
+  return result;
 }
 
+/**
+ * Determines if two message objects refer to the same logical interaction.
+ * Uses a multi-factor approach: ID, Role, Text Content, and Tool Call signatures.
+ */
+/**
+ * A permissive type for message merging that accounts for different AI SDK versions
+ * and Archestra-specific rich content parts.
+ */
+type MergableUIMessage = PartialUIMessage & {
+  toolInvocations?: Array<{ toolName?: string }>;
+  content?: string;
+  experimental_attachments?: unknown[];
+};
+
+/**
+ * Determines if two message objects refer to the same logical interaction.
+ * Uses a multi-factor approach: ID, Role, Text Content, and Tool Call signatures.
+ */
 function messagesHaveSameRenderableContent(params: {
   liveMessage: UIMessage;
   persistedMessage: UIMessage;
 }) {
-  return (
-    params.liveMessage.role === params.persistedMessage.role &&
-    getMessageText(params.liveMessage) ===
-      getMessageText(params.persistedMessage)
-  );
+  const lm = params.liveMessage as MergableUIMessage;
+  const pm = params.persistedMessage as MergableUIMessage;
+
+  // 1. Strict ID Match
+  if (lm.id && pm.id && lm.id === pm.id) {
+    return true;
+  }
+
+  // 2. Identity Check
+  if (lm.role !== pm.role) {
+    return false;
+  }
+
+  // 3. Text Content Match
+  const liveText = getMessageText(lm);
+  const persistedText = getMessageText(pm);
+  if (liveText !== persistedText) {
+    return false;
+  }
+
+  // 4. Attachment Check
+  const getAttachmentCount = (msg: MergableUIMessage) => {
+    let count = (msg.experimental_attachments?.length as number) || 0;
+    if (msg.parts) {
+      count += msg.parts.filter(
+        (p: any) => p.type === "image" || p.type === "file",
+      ).length;
+    }
+    return count;
+  };
+  if (getAttachmentCount(lm) !== getAttachmentCount(pm)) {
+    return false;
+  }
+
+  // 5. Tool Call Signature Verification
+  const getToolNames = (msg: MergableUIMessage) => {
+    const names: string[] = [];
+    if (msg.parts) {
+      for (const part of msg.parts) {
+        const p = part as any;
+        if (p.type === "tool-call" || p.type === "tool-invocation") {
+          const toolName = p.toolName || p.toolInvocation?.toolName;
+          if (toolName) names.push(toolName);
+        }
+      }
+    }
+    if (msg.toolInvocations) {
+      for (const invocation of msg.toolInvocations) {
+        if (invocation.toolName) {
+          names.push(invocation.toolName);
+        }
+      }
+    }
+    return names;
+  };
+
+  const liveTools = getToolNames(lm);
+  const persistedTools = getToolNames(pm);
+
+  if (liveTools.length !== persistedTools.length) {
+    return false;
+  }
+
+  return liveTools.every((name, i) => name === persistedTools[i]);
 }
 
-function getMessageText(message: UIMessage) {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("\n");
+function getMessageText(message: any) {
+  const msg = message as MergableUIMessage;
+  if (msg.parts) {
+    return msg.parts
+      .map((part: any) => (part.type === "text" ? part.text || "" : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+  return typeof msg.content === "string" ? msg.content : "";
 }
 
-function hasCreatedAtMetadata(message: UIMessage) {
-  const metadata = getObjectMetadata(message);
-  return typeof metadata.createdAt === "string";
-}
-
-function getObjectMetadata(message: UIMessage): Record<string, unknown> {
-  return typeof message.metadata === "object" && message.metadata !== null
-    ? { ...message.metadata }
+function getObjectMetadata(message: any): Record<string, unknown> {
+  const msg = message as MergableUIMessage;
+  return typeof msg.metadata === "object" && msg.metadata !== null
+    ? { ...(msg.metadata as Record<string, unknown>) }
     : {};
 }
 

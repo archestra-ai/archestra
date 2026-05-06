@@ -17,6 +17,21 @@ vi.mock("@/logging", () => ({
   default: { warn: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock("@/clients/azure-openai-credentials", () => ({
+  getAzureOpenAiBearerTokenProvider: vi.fn(() => async () => "entra-token"),
+  isAzureOpenAiEntraIdEnabled: vi.fn(() => false),
+}));
+
+import {
+  getAzureOpenAiBearerTokenProvider,
+  isAzureOpenAiEntraIdEnabled,
+} from "@/clients/azure-openai-credentials";
+
+const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
+const mockGetAzureOpenAiBearerTokenProvider = vi.mocked(
+  getAzureOpenAiBearerTokenProvider,
+);
+
 describe("fetchAzureModels", () => {
   test("returns empty array when baseUrl is empty and no override", async () => {
     const result = await fetchAzureModels("test-key", null);
@@ -78,6 +93,65 @@ describe("fetchAzureModels", () => {
       { headers: { "api-key": "test-key" } },
     );
 
+    vi.unstubAllGlobals();
+  });
+
+  test("uses Entra ID bearer token auth when enabled and no API key is provided", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4o" }] }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAzureModels(
+      "",
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      { headers: { Authorization: "Bearer entra-token" } },
+    );
+    expect(mockGetAzureOpenAiBearerTokenProvider).toHaveBeenCalledWith(
+      "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+    );
+
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    vi.unstubAllGlobals();
+  });
+
+  test("lists chat models from Azure OpenAI v1 model endpoint", async () => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: "gpt-4.1", capabilities: { chat_completion: true } },
+          { id: "grok-3", capabilities: { chat_completion: true } },
+          { id: "text-embedding", capabilities: { chat_completion: false } },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "",
+      "https://my-resource.services.ai.azure.com/openai/v1",
+    );
+
+    expect(result).toEqual([
+      { id: "gpt-4.1", displayName: "gpt-4.1", provider: "azure" },
+      { id: "grok-3", displayName: "grok-3", provider: "azure" },
+    ]);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://my-resource.services.ai.azure.com/openai/v1/models",
+      { headers: { Authorization: "Bearer entra-token" } },
+    );
+
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
     vi.unstubAllGlobals();
   });
 

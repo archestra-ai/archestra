@@ -72,6 +72,17 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 
 - **Base URL**: `http://localhost:9000/v1/anthropic/{profile-id}`
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
+- **Messages path**: `POST /v1/anthropic/{profile-id}/v1/messages`
+
+### Anthropic on Microsoft Foundry
+
+Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set `ARCHESTRA_ANTHROPIC_BASE_URL` to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set `ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`; Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.
+
+Claude Foundry deployments must exist in Azure before requests will work. Use the deployed Claude model name in the Anthropic `model` field. Microsoft lists extra Claude prerequisites: a paid eligible Azure subscription, a supported region such as East US2 or Sweden Central, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group.
+
+Azure requires Anthropic deployment metadata when creating Claude deployments: `industry`, `organizationName`, and `countryCode`. In Azure CLI this may require an ARM REST deployment call with `properties.modelProviderData`.
+
+See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
 ## Google Gemini
 
@@ -658,24 +669,94 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 ### Azure AI Foundry Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/azure/{profile-id}`
-- **Authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+- **API key authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
+- **Keyless authentication**: Set `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true` and assign the workload identity, managed identity, service principal, or local Azure CLI user an Azure role that can invoke the deployed model.
 
 ### Azure AI Foundry Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Full deployment URL: `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
+| `ARCHESTRA_AZURE_OPENAI_BASE_URL` | Yes | Azure OpenAI deployment URL or Foundry v1 URL |
 | `ARCHESTRA_AZURE_OPENAI_API_VERSION` | No | Azure OpenAI API version (default: `2024-02-01`) |
 | `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
+| `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED` | No | Set to `true` to use Microsoft Entra ID instead of an Azure API key |
 | `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
 
 ### Getting an Azure API Key
 
 You can generate an API key from the [Azure Portal](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI) under your Azure OpenAI resource.
 
+### Keyless Authentication with Microsoft Entra ID
+
+To use Azure OpenAI without storing an API key, set:
+
+```bash
+ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true
+ARCHESTRA_AZURE_OPENAI_BASE_URL=https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
+```
+
+For Foundry v1, use:
+
+```bash
+ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true
+ARCHESTRA_AZURE_OPENAI_BASE_URL=https://<resource-name>.services.ai.azure.com/openai/v1
+```
+
+Archestra uses Azure Identity `DefaultAzureCredential`. Deployment URLs use the `https://cognitiveservices.azure.com/.default` token scope. Foundry v1 URLs use `https://ai.azure.com/.default`. Assign the workload identity, managed identity, service principal, or local Azure CLI user a role that can invoke the Azure resource.
+
+See the [Azure OpenAI keyless example](https://github.com/archestra-ai/examples/tree/main/azure-openai-keyless) for a minimal local script that uses the same authentication flow.
+See Microsoft's [Foundry Models Entra ID guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/configure-entra-id) and [Foundry Models endpoint guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/endpoints) for the Azure endpoint formats and token scopes.
+
+#### AKS with Microsoft Entra Workload ID
+
+For AKS deployments, use [Microsoft Entra Workload ID](https://learn.microsoft.com/en-us/azure/aks/workload-identity-overview) with a user-assigned managed identity. Microsoft documents that Azure Identity `DefaultAzureCredential` uses the workload identity environment injected into the pod.
+
+Enable OIDC issuer and workload identity on the AKS cluster, create a federated identity credential for the Archestra Kubernetes service account, and grant the managed identity the inference role required by the resource: `Cognitive Services OpenAI User` for Azure OpenAI deployment URLs, or `Cognitive Services User` for Foundry Models. The service account subject must match the namespace and service account name used by the Helm release:
+
+```bash
+az aks update \
+  --resource-group "$AKS_RESOURCE_GROUP" \
+  --name "$AKS_CLUSTER_NAME" \
+  --enable-oidc-issuer \
+  --enable-workload-identity
+
+export AKS_OIDC_ISSUER="$(az aks show \
+  --resource-group "$AKS_RESOURCE_GROUP" \
+  --name "$AKS_CLUSTER_NAME" \
+  --query oidcIssuerProfile.issuerUrl \
+  --output tsv)"
+
+az identity federated-credential create \
+  --resource-group "$IDENTITY_RESOURCE_GROUP" \
+  --identity-name "$USER_ASSIGNED_IDENTITY_NAME" \
+  --name archestra-platform \
+  --issuer "$AKS_OIDC_ISSUER" \
+  --subject "system:serviceaccount:$NAMESPACE:$SERVICE_ACCOUNT_NAME" \
+  --audience api://AzureADTokenExchange
+```
+
+Then annotate the Helm service account and add the pod label required by the AKS workload identity webhook:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        name: archestra-platform
+        annotations:
+          azure.workload.identity/client-id: "<user-assigned-managed-identity-client-id>"
+  podLabels:
+    azure.workload.identity/use: "true"
+  env:
+    ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED: "true"
+    ARCHESTRA_AZURE_OPENAI_BASE_URL: "https://<resource-name>.services.ai.azure.com/openai/v1"
+```
+
+See Microsoft's [AKS Workload ID deployment guide](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster) for the full cluster, service account, and federated credential setup.
+
 ### Base URL Format
 
-The `ARCHESTRA_AZURE_OPENAI_BASE_URL` must be the full deployment URL including the deployment name:
+For Azure OpenAI deployment URLs, include the deployment name:
 
 ```
 https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
@@ -683,12 +764,21 @@ https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>
 
 For example: `https://my-company.openai.azure.com/openai/deployments/gpt-4o`
 
+For Microsoft Foundry v1, use the OpenAI-compatible API root:
+
+```
+https://<resource-name>.services.ai.azure.com/openai/v1
+```
+
 The same format applies when configuring a Base URL in the API key settings UI.
 
 ### Notes
 
-- **API Version**: Chat Completions and model discovery use `ARCHESTRA_AZURE_OPENAI_API_VERSION`. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. You do not need to include either query parameter in the base URL.
-- **Multiple Deployments**: To use multiple Azure deployments, create separate API key entries in Settings, each with its own deployment URL as the Base URL.
+- **API Version**: Deployment URLs use `ARCHESTRA_AZURE_OPENAI_API_VERSION` for Chat Completions and model discovery. Azure `/responses` requests use `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`. Foundry v1 URLs do not use either query parameter.
+- **Microsoft Entra ID**: When `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true`, Archestra creates a system provider key at startup and sends `Authorization: Bearer <token>` to Azure OpenAI instead of `api-key`.
+- **Grok on Azure**: Grok models sold directly by Azure use the Foundry v1 OpenAI-compatible Chat Completions API. The model must be deployed in the Azure resource before Archestra can route to it.
+- **Claude on Azure**: Claude models on Microsoft Foundry use Anthropic's Messages API shape, not the OpenAI-compatible Azure route. Configure the Anthropic provider section above.
+- **Multiple Deployments**: With deployment URLs, create separate API key entries in Settings, each with its own deployment URL as the Base URL. With Foundry v1, send the deployed model name in the request `model` field.
 - **Deployment URL configuration**: Keep using the deployment-specific base URL format shown above. Archestra derives the correct upstream endpoint automatically for both `/chat/completions` and `/responses` requests.
 - **Responses API model field**: For Azure `/responses` requests, send the deployment name in the `model` field. Archestra will route the request to Azure's `/openai/responses` endpoint while preserving the configured deployment URL for discovery and management.
 - **OpenAI-compatible API**: Azure AI Foundry supports both Chat Completions and Responses-style request flows through Archestra.

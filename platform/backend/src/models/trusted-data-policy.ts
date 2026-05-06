@@ -1,4 +1,8 @@
-import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+} from "@shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -421,23 +425,36 @@ class TrustedDataPolicyModel {
       return results;
     }
 
-    // Handle built-in MCP server tools
+    // Handle built-in MCP server tools.
+    // NOTE: `query_knowledge_sources` is intentionally excluded from auto-trust.
+    // It returns content that can contain prompt injection, so it must be treated
+    // like an external tool output for trusted-data evaluation.
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName } = toolCalls[i];
-      if (archestraMcpBranding.isToolName(toolName)) {
-        results.set(i.toString(), {
-          isTrusted: true,
-          isBlocked: false,
-          shouldSanitizeWithDualLlm: false,
-          reason: "Built-in MCP server tool",
-        });
+      const shortName = archestraMcpBranding.getToolShortName(toolName);
+      if (!shortName) {
+        continue;
       }
+      if (shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME) {
+        continue;
+      }
+      results.set(i.toString(), {
+        isTrusted: true,
+        isBlocked: false,
+        shouldSanitizeWithDualLlm: false,
+        reason: "Built-in MCP server tool",
+      });
     }
 
-    // Get all non-built-in tool names
-    const nonArchestraToolCalls = toolCalls.filter(
-      ({ toolName }) => !archestraMcpBranding.isToolName(toolName),
-    );
+    // Get all non-built-in tool names.
+    // Include `query_knowledge_sources` so it is evaluated by policies.
+    const nonArchestraToolCalls = toolCalls.filter(({ toolName }) => {
+      const shortName = archestraMcpBranding.getToolShortName(toolName);
+      if (shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME) {
+        return true;
+      }
+      return shortName === null;
+    });
 
     if (nonArchestraToolCalls.length === 0) {
       return results;
@@ -495,8 +512,13 @@ class TrustedDataPolicyModel {
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName, toolOutput } = toolCalls[i];
 
-      // Skip Archestra tools (already handled)
-      if (archestraMcpBranding.isToolName(toolName)) {
+      // Skip Archestra tools (already handled), except `query_knowledge_sources`.
+      const archestraShortName =
+        archestraMcpBranding.getToolShortName(toolName);
+      if (
+        archestraShortName &&
+        archestraShortName !== TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
+      ) {
         continue;
       }
 

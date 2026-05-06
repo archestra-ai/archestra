@@ -2,7 +2,7 @@
 title: "API Reference"
 category: Archestra Platform
 description: "Interactive API documentation for Archestra"
-order: 9
+order: 6
 lastUpdated: 2025-01-10
 ---
 

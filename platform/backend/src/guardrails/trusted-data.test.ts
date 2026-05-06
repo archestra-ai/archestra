@@ -99,6 +99,90 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("keeps context trusted when query_knowledge_sources output is explicitly trusted by policy", async () => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const kbTool = await ToolModel.findByName(
+        "archestra__query_knowledge_sources",
+      );
+      expect(kbTool).toBeTruthy();
+      if (!kbTool) {
+        throw new Error("Expected query_knowledge_sources tool to exist");
+      }
+
+      await TrustedDataPolicyModel.deleteByToolId(kbTool.id);
+      await TrustedDataPolicyModel.create({
+        toolId: kbTool.id,
+        conditions: [],
+        action: "mark_as_trusted",
+        description: "Trust KB output",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Search internal docs" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_kb_1",
+              name: "archestra__query_knowledge_sources",
+              content: { chunks: [{ content: "untrusted" }] },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(true);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("does not throw when query_knowledge_sources returns malformed output", async () => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Search internal docs" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_kb_1",
+              name: "archestra__query_knowledge_sources",
+              content: null,
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call_kb_1",
+        toolName: "archestra__query_knowledge_sources",
+      });
+    });
+
     test("marks context as untrusted and blocks tool result when matching block policy", async () => {
       // Create a block policy
       await TrustedDataPolicyModel.create({
@@ -889,6 +973,70 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // In restrictive mode with no policies, data should be untrusted
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("tool with single underscore name is not treated as a built-in", async () => {
+      // archestra_query_knowledge_sources (single underscore) is NOT archestra__query_knowledge_sources
+      // It should be treated as an unknown external tool and make context untrusted
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Search docs" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_fake",
+              name: "archestra_query_knowledge_sources",
+              content: { chunks: [{ content: "spoofed" }] },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.unsafeContextBoundary?.kind).toBe("tool_result");
+    });
+
+    test("KB tool error result still makes context untrusted", async () => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Search docs" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_kb_err",
+              name: "archestra__query_knowledge_sources",
+              content: "Error: connection timeout",
+              isError: true,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      // Even an error result from KB should not elevate trust
+      expect(result.contextIsTrusted).toBe(false);
     });
   });
 

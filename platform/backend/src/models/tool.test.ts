@@ -3006,5 +3006,60 @@ describe("ToolModel", () => {
         true,
       );
     });
+
+    test("includeKnowledgeSourcesTool does not leak other built-in tools", async ({
+      makeOrganization,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      await ToolModel.syncArchestraBuiltInCatalog({
+        organization: { appName: "Acme Copilot", iconLogo: null },
+      });
+
+      const agent = await makeAgent({ organizationId: org.id });
+
+      // Assign a few built-in tools to the agent
+      const brandedKbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+      const brandedArtifactToolName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+
+      const [kbTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, brandedKbToolName));
+      const [artifactTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, brandedArtifactToolName));
+
+      expect(kbTool).toBeDefined();
+      expect(artifactTool).toBeDefined();
+      await makeAgentTool(agent.id, kbTool?.id);
+      await makeAgentTool(agent.id, artifactTool?.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        filters: {
+          excludeArchestraTools: true,
+          includeKnowledgeSourcesTool: true,
+        },
+      });
+
+      // KB tool should be present
+      expect(result.data.some((tool) => tool.name === brandedKbToolName)).toBe(
+        true,
+      );
+
+      // Other built-in tools must NOT be present
+      expect(
+        result.data.some((tool) => tool.name === brandedArtifactToolName),
+      ).toBe(false);
+    });
   });
 });

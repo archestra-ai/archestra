@@ -1176,6 +1176,8 @@ export async function validateExternalIdpToken(
 }
 
 function getEmailFromSubject(subject: string | undefined): string | null {
+  // This fallback is intentionally loose: after token validation succeeds,
+  // it only decides whether an email-shaped subject can be used for lookup.
   if (!subject || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
     return null;
   }

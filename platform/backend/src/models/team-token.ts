@@ -278,9 +278,18 @@ class TeamTokenModel {
       .where(eq(schema.teamTokensTable.tokenStart, tokenStart));
     if (candidates.length === 0) return null;
 
+    const secretsById = new Map(
+      await Promise.all(
+        candidates.map(async (token) => [
+          token.secretId,
+          await secretManager().getSecret(token.secretId),
+        ] as const),
+      ),
+    );
+
     // Match the provided token value against stored secrets
     for (const token of candidates) {
-      const secret = await secretManager().getSecret(token.secretId);
+      const secret = secretsById.get(token.secretId);
       if (
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue

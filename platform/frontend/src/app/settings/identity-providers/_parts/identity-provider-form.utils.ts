@@ -7,7 +7,7 @@ import {
   OAUTH_TOKEN_TYPE,
 } from "@shared";
 
-type EnterpriseSubjectTokenType = NonNullable<
+export type EnterpriseSubjectTokenType = NonNullable<
   NonNullable<
     NonNullable<
       archestraApiTypes.CreateIdentityProviderData["body"]["oidcConfig"]

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type archestraApiTypes,
   DocsPage,
   type IdentityProviderFormValues,
   OAUTH_TOKEN_TYPE,
@@ -46,20 +45,13 @@ import {
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  type EnterpriseSubjectTokenType,
   getDefaultSubjectTokenType,
   getDefaultTokenEndpointAuthentication,
   inferEnterpriseExchangeType,
 } from "./identity-provider-form.utils";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
-
-type EnterpriseSubjectTokenType = NonNullable<
-  NonNullable<
-    NonNullable<
-      archestraApiTypes.CreateIdentityProviderData["body"]["oidcConfig"]
-    >["enterpriseManagedCredentials"]
-  >["subjectTokenType"]
->;
 
 const SUBJECT_TOKEN_LABEL_BY_TYPE = {
   [OAUTH_TOKEN_TYPE.AccessToken]: "Access token",

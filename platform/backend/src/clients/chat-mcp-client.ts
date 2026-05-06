@@ -468,7 +468,7 @@ export async function getChatMcpClient(
       await pingClientWithTimeout(cachedClient);
       logger.info(
         { agentId, userId },
-        "✅ Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
+        "Returning cached MCP client for agent/user (ping succeeded, session will be reused)",
       );
       clientCache.set(cacheKey, cachedClient);
       return cachedClient;
@@ -502,7 +502,7 @@ export async function getChatMcpClient(
       userId,
       totalCachedClients: clientCache.size,
     },
-    "🔄 No cached client found - creating new MCP client for agent/user via gateway",
+    "No cached client found - creating new MCP client for agent/user via gateway",
   );
 
   const externalIdpToken = await resolveSessionExternalIdpToken({
@@ -597,7 +597,7 @@ export async function getChatMcpClient(
         userId,
         totalCachedClients: clientCache.size,
       },
-      "✅ MCP client cached - subsequent requests will reuse this session",
+      "MCP client cached - subsequent requests will reuse this session",
     );
 
     return client;
@@ -629,7 +629,7 @@ export async function getChatMcpClient(
             userId,
             totalCachedClients: clientCache.size,
           },
-          "✅ MCP client cached - subsequent requests will reuse this session",
+          "MCP client cached - subsequent requests will reuse this session",
         );
 
         return client;

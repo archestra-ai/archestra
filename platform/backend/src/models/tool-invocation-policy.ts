@@ -5,6 +5,7 @@ import {
   TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
   TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
@@ -232,7 +233,11 @@ class ToolInvocationPolicyModel {
     }
 
     // Archestra tools always bypass policies (consistent with evaluateBatch)
-    if (archestraMcpBranding.isToolName(toolName)) {
+    // NOTE: query_knowledge_sources is an exception - it is subject to call policies
+    const shortName = archestraMcpBranding.getToolShortName(toolName);
+    const isKnowledgeTool =
+      shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME;
+    if (archestraMcpBranding.isToolName(toolName) && !isKnowledgeTool) {
       return false;
     }
 
@@ -427,11 +432,17 @@ class ToolInvocationPolicyModel {
     }
 
     // Filter out Archestra tools and agent delegation tools (always allowed)
-    const externalToolCalls = toolCalls.filter(
-      (tc) =>
-        !archestraMcpBranding.isToolName(tc.toolCallName) &&
-        !isAgentTool(tc.toolCallName),
-    );
+    // NOTE: query_knowledge_sources is an exception - it is subject to call policies
+    const externalToolCalls = toolCalls.filter((tc) => {
+      const shortName = archestraMcpBranding.getToolShortName(tc.toolCallName);
+      const isKnowledgeTool =
+        shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME;
+      return (
+        (!archestraMcpBranding.isToolName(tc.toolCallName) ||
+          isKnowledgeTool) &&
+        !isAgentTool(tc.toolCallName)
+      );
+    });
 
     if (externalToolCalls.length === 0) {
       return { isAllowed: true, reason: "" };

@@ -1,6 +1,7 @@
 import {
   getArchestraToolFullName,
   TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@shared";
 import { describe, expect, test } from "@/test";
@@ -115,6 +116,44 @@ describe("ToolInvocationPolicyModel", () => {
 
       expect(result.isAllowed).toBe(true);
       expect(result.reason).toBe("");
+    });
+
+    test("evaluates policies for query_knowledge_sources unlike other Archestra tools", async ({
+      makeAgent,
+      makeToolPolicy,
+      seedAndAssignArchestraTools,
+    }) => {
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+
+      const brandedKbTool = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+
+      // Find the tool to apply policy to
+      const { ToolModel } = await import("@/models");
+      const tool = await ToolModel.findByName(brandedKbTool);
+      expect(tool).toBeTruthy();
+
+      // Apply a block_always policy to the KB tool
+      await makeToolPolicy(tool!.id, {
+        conditions: [],
+        action: "block_always",
+        reason: "KB access forbidden",
+      });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: brandedKbTool, toolInput: { query: "test" } }],
+        mockContext,
+        true,
+        "restrictive",
+      );
+
+      // It should be blocked, unlike whoami or other built-ins
+      expect(result.isAllowed).toBe(false);
+      expect(result.reason).toContain("KB access forbidden");
     });
 
     test("skips Archestra tools and evaluates non-Archestra tools", async ({

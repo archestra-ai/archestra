@@ -1589,6 +1589,7 @@ class McpClient {
           catalogItem,
           secrets,
         });
+        applyPresetHeaderMappings(localHeaders, catalogItem);
         if (enterpriseTransportCredential) {
           localHeaders[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
@@ -1619,6 +1620,7 @@ class McpClient {
           catalogItem,
           secrets,
         });
+        applyPresetHeaderMappings(headers, catalogItem);
         if (enterpriseTransportCredential) {
           headers[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
@@ -3313,6 +3315,40 @@ function formatActionableAuthError(params: {
     "",
     params.postAction,
   ].join("\n");
+}
+
+/**
+ * Apply preset-scoped userConfig field values to outgoing headers.
+ * For each userConfig field flagged `promptOnPreset` with a `headerName`,
+ * resolve `catalogItem.presetFieldValues[key] ?? field.default` and write
+ * to the header. Preset values overwrite anything previously written
+ * (presets are the authoritative source for these fields). Caller-supplied
+ * (`promptOnInstallation`) and static fields are not handled here — they
+ * flow through `buildStaticCredentialHeaders` and `mergePassthroughHeaders`.
+ *
+ * `presetFieldValues` lives on the catalog row itself: parent catalog rows
+ * carry the default-preset values, child catalog rows ("presets" in UI)
+ * carry their own overlay.
+ */
+function applyPresetHeaderMappings(
+  headers: Record<string, string>,
+  catalogItem: InternalMcpCatalog,
+): void {
+  if (!catalogItem.userConfig) return;
+
+  const presetFieldValues = catalogItem.presetFieldValues ?? {};
+
+  for (const [fieldName, field] of Object.entries(catalogItem.userConfig)) {
+    if (!field.promptOnPreset || !field.headerName) continue;
+
+    const raw = presetFieldValues[fieldName] ?? field.default;
+    if (raw === undefined || raw === null) continue;
+
+    const value = Array.isArray(raw) ? raw.join(",") : String(raw);
+    if (value.length === 0) continue;
+
+    headers[field.headerName] = `${field.valuePrefix ?? ""}${value}`;
+  }
 }
 
 /** Merge passthrough headers into target, skipping keys already present (case-insensitive). */

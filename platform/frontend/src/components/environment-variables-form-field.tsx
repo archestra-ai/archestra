@@ -22,6 +22,10 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
+import {
+  FieldScopeSelect,
+  type FieldScopeValue,
+} from "@/components/field-scope-select";
 import { InstallConfigFieldsTable } from "@/components/install-config-fields-table";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -44,11 +48,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
@@ -177,6 +176,7 @@ export function EnvironmentVariablesFormField<
               type: "plain_text",
               value: "",
               promptOnInstallation: false,
+              promptOnPreset: false,
               required: false,
               description: "",
             })
@@ -343,6 +343,7 @@ export function EnvironmentVariablesFormField<
                 type: "secret",
                 value: "",
                 promptOnInstallation: true,
+                promptOnPreset: false,
                 required: false,
                 description: "",
                 mounted: true,
@@ -377,9 +378,9 @@ export function EnvironmentVariablesFormField<
                 Secrets mounted as files at /secrets/&lt;key&gt;.
               </FormDescription>
               <div className="border rounded-lg">
-                <div className="grid grid-cols-[1.5fr_0.7fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 bg-muted/50 border-b">
+                <div className="grid grid-cols-[1.5fr_1.1fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 bg-muted/50 border-b">
                   <div className="text-xs font-medium">Key</div>
-                  <div className="text-xs font-medium">Prompt user</div>
+                  <div className="text-xs font-medium">Scope</div>
                   <div className="text-xs font-medium">Required</div>
                   <div className="text-xs font-medium">Value</div>
                   <div className="text-xs font-medium">Description</div>
@@ -390,10 +391,46 @@ export function EnvironmentVariablesFormField<
                   const promptOnInstallation = form.watch(
                     `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
                   );
+                  const promptOnPreset = form.watch(
+                    `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
+                  );
+                  const scope: FieldScopeValue = promptOnInstallation
+                    ? "installation"
+                    : promptOnPreset
+                      ? "preset"
+                      : "static";
+                  const setScope = (next: FieldScopeValue) => {
+                    form.setValue(
+                      `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
+                      (next === "installation") as PathValue<
+                        TFieldValues,
+                        FieldPath<TFieldValues>
+                      >,
+                      { shouldDirty: true },
+                    );
+                    form.setValue(
+                      `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
+                      (next === "preset") as PathValue<
+                        TFieldValues,
+                        FieldPath<TFieldValues>
+                      >,
+                      { shouldDirty: true },
+                    );
+                    if (next !== "installation") {
+                      form.setValue(
+                        `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
+                        false as PathValue<
+                          TFieldValues,
+                          FieldPath<TFieldValues>
+                        >,
+                        { shouldDirty: true },
+                      );
+                    }
+                  };
                   return (
                     <div
                       key={field.id}
-                      className="grid grid-cols-[1.5fr_0.7fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
+                      className="grid grid-cols-[1.5fr_1.1fr_0.7fr_2fr_2.5fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
                     >
                       <FormField
                         control={control}
@@ -413,59 +450,11 @@ export function EnvironmentVariablesFormField<
                           </FormItem>
                         )}
                       />
-                      <FormField
-                        control={control}
-                        name={
-                          `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>
-                        }
-                        render={({ field }) => {
-                          const checkbox = (
-                            <Checkbox
-                              checked={field.value}
-                              disabled={disablePromptOnInstallation}
-                              onCheckedChange={(checked) => {
-                                field.onChange(checked);
-                                if (!checked) {
-                                  form.setValue(
-                                    `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
-                                    // biome-ignore lint/suspicious/noExplicitAny: Generic field types require any for setValue
-                                    false as any,
-                                  );
-                                }
-                              }}
-                            />
-                          );
-                          return (
-                            <FormItem>
-                              <FormControl>
-                                <div className="flex items-center h-10">
-                                  {disablePromptOnInstallation &&
-                                  disablePromptOnInstallationReason ? (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <span
-                                          // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex needed so tooltip trigger receives keyboard focus when wrapping a disabled control
-                                          tabIndex={0}
-                                          className="cursor-not-allowed"
-                                        >
-                                          {checkbox}
-                                        </span>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p className="max-w-xs">
-                                          {disablePromptOnInstallationReason}
-                                        </p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  ) : (
-                                    checkbox
-                                  )}
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          );
-                        }}
+                      <FieldScopeSelect
+                        value={scope}
+                        onChange={setScope}
+                        disableInstallation={disablePromptOnInstallation}
+                        disabledReason={disablePromptOnInstallationReason}
                       />
                       <FormField
                         control={control}
@@ -479,7 +468,7 @@ export function EnvironmentVariablesFormField<
                                 <Checkbox
                                   checked={field.value}
                                   onCheckedChange={field.onChange}
-                                  disabled={!promptOnInstallation}
+                                  disabled={scope !== "installation"}
                                 />
                               </div>
                             </FormControl>
@@ -488,11 +477,21 @@ export function EnvironmentVariablesFormField<
                         )}
                       />
                       {(() => {
-                        if (promptOnInstallation) {
+                        if (scope === "installation") {
                           return (
                             <div className="flex items-center h-10">
                               <p className="text-xs text-muted-foreground">
                                 Prompted at installation
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        if (scope === "preset") {
+                          return (
+                            <div className="flex items-center h-10">
+                              <p className="text-xs text-muted-foreground">
+                                Set per preset
                               </p>
                             </div>
                           );

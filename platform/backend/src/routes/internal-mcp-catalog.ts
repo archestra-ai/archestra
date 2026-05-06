@@ -24,16 +24,54 @@ import {
 } from "@/services/mcp-reinstall";
 import {
   ApiError,
+  CreateChildCatalogSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   InsertInternalMcpCatalogSchema,
+  type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
+  UpdateChildCatalogSchema,
   UuidIdSchema,
 } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
+
+/**
+ * Columns propagated from a parent catalog item to its children — both at
+ * child creation and on parent-edit cascade. Children inherit the parent's
+ * template and overlay only their `presetFieldValues` / identity columns.
+ *
+ * Note: `multitenant` is included so newly-created children match the parent.
+ * On parent PUT cascade, the schema-level "locked after creation" rule on
+ * Update silently no-ops it, which is what we want — children's tenancy was
+ * fixed at creation time.
+ */
+type SyncableCatalogFields = Pick<
+  InternalMcpCatalog,
+  | "version"
+  | "description"
+  | "instructions"
+  | "repository"
+  | "installationCommand"
+  | "requiresAuth"
+  | "authDescription"
+  | "authFields"
+  | "serverType"
+  | "multitenant"
+  | "serverUrl"
+  | "docsUrl"
+  | "clientSecretId"
+  | "localConfigSecretId"
+  | "localConfig"
+  | "deploymentSpecYaml"
+  | "userConfig"
+  | "mappingTemplates"
+  | "oauthConfig"
+  | "enterpriseManagedConfig"
+  | "icon"
+>;
 
 // Match the schema from getMcpServerTools endpoint
 const ToolWithAssignedAgentCountSchema = z.object({
@@ -59,6 +97,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
+        querystring: z.object({
+          includeChildren: z
+            .union([z.boolean(), z.enum(["true", "false"])])
+            .optional()
+            .transform((v) => v === true || v === "true"),
+        }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
         ),
@@ -76,6 +120,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,
+          includeChildren: request.query.includeChildren,
         }),
       );
     },
@@ -660,6 +705,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Children are edited via PATCH /:parentId/children/:childId — the
+      // catalog template fields cascade from parent only.
+      if (originalCatalogItem.parentCatalogItemId !== null) {
+        throw new ApiError(
+          400,
+          "Child catalog items (presets) cannot be edited via this endpoint. " +
+            "Use PATCH /api/internal_mcp_catalog/:parentId/children/:childId.",
+        );
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
@@ -667,83 +722,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Handle reinstall for installed servers
-      const installedServers = await McpServerModel.findByCatalogId(id);
+      // Cascade reinstall for the parent's own installs.
+      await cascadeReinstallForCatalog(originalCatalogItem, catalogItem);
 
-      if (installedServers.length > 0) {
-        // Check if new user input is required for reinstall
-        if (
-          requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)
-        ) {
-          // Manual reinstall required: mark servers and let user trigger reinstall
-          logger.info(
-            { catalogId: id, serverCount: installedServers.length },
-            "Catalog edit requires new user input - marking servers for manual reinstall",
-          );
-          for (const server of installedServers) {
-            await McpServerModel.update(server.id, { reinstallRequired: true });
-          }
-        } else {
-          // Auto-reinstall in background (no new user input needed)
-          logger.info(
-            { catalogId: id, serverCount: installedServers.length },
-            "Catalog edit does not require new user input - auto-reinstalling servers",
-          );
-
-          // Use setImmediate to not block the response
-          // Wrap entire callback in try/catch to prevent unhandled promise rejections
-          setImmediate(async () => {
-            try {
-              for (const server of installedServers) {
-                try {
-                  await McpServerModel.update(server.id, {
-                    localInstallationStatus: "pending",
-                    localInstallationError: null,
-                  });
-                  broadcastMcpInstallationStatus(server.id, "pending", null);
-                  await autoReinstallServer(server, catalogItem);
-                  await McpServerModel.update(server.id, {
-                    localInstallationStatus: "success",
-                    localInstallationError: null,
-                  });
-                  broadcastMcpInstallationStatus(server.id, "success", null);
-                  logger.info(
-                    { serverId: server.id, serverName: server.name },
-                    "Auto-reinstalled MCP server successfully",
-                  );
-                } catch (error) {
-                  const errorMessage =
-                    error instanceof Error ? error.message : "Unknown error";
-                  logger.error(
-                    {
-                      err: error,
-                      serverId: server.id,
-                      serverName: server.name,
-                    },
-                    "Failed to auto-reinstall MCP server - marking for manual reinstall",
-                  );
-                  // Mark for manual reinstall on failure
-                  await McpServerModel.update(server.id, {
-                    reinstallRequired: true,
-                    localInstallationStatus: "error",
-                    localInstallationError: errorMessage,
-                  });
-                  broadcastMcpInstallationStatus(
-                    server.id,
-                    "error",
-                    errorMessage,
-                  );
-                }
-              }
-            } catch (error) {
-              // Catch any unexpected errors from the iteration itself
-              logger.error(
-                { err: error, catalogId: id },
-                "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
-              );
-            }
-          });
-        }
+      // Cascade syncable fields to children, then trigger reinstall for each
+      // child's installs. Note: this snapshots children BEFORE updating them
+      // so the original-vs-new comparison passed to the cascade helper still
+      // reflects what changed.
+      const children = await InternalMcpCatalogModel.findChildren(id);
+      const syncableValues = pickSyncableFields(catalogItem);
+      for (const originalChild of children) {
+        const updatedChild = await InternalMcpCatalogModel.update(
+          originalChild.id,
+          syncableValues,
+        );
+        if (!updatedChild) continue;
+        await cascadeReinstallForCatalog(originalChild, updatedChild);
       }
 
       // Note: Tools are NOT deleted - they are synced during reinstall to preserve
@@ -1087,6 +1081,191 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/internal_mcp_catalog/:catalogId/children",
+    {
+      schema: {
+        operationId: RouteId.GetCatalogChildren,
+        description:
+          'List child catalog items ("presets" in UI) for a parent catalog item',
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.array(SelectInternalMcpCatalogSchema),
+        ),
+      },
+    },
+    async ({ params: { catalogId } }, reply) => {
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      if (parent.parentCatalogItemId !== null) {
+        throw new ApiError(
+          400,
+          "Children can only be listed under root catalog items",
+        );
+      }
+      return reply.send(await InternalMcpCatalogModel.findChildren(catalogId));
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:catalogId/children",
+    {
+      schema: {
+        operationId: RouteId.CreateCatalogChild,
+        description:
+          'Create a child catalog item ("preset" in UI) under a parent. ' +
+          "Inherits all template columns from parent.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        body: CreateChildCatalogSchema,
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const { catalogId } = request.params;
+      const { name, presetFieldValues } = request.body;
+
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      if (parent.parentCatalogItemId !== null) {
+        throw new ApiError(
+          400,
+          "Children can only be created under root catalog items",
+        );
+      }
+
+      try {
+        InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
+          parent,
+          presetFieldValues,
+        );
+      } catch (e) {
+        throw new ApiError(400, (e as Error).message);
+      }
+
+      const childInsert = {
+        ...pickSyncableFields(parent),
+        name,
+        presetFieldValues: presetFieldValues ?? {},
+        parentCatalogItemId: parent.id,
+        scope: parent.scope,
+      };
+
+      const child = await InternalMcpCatalogModel.create(childInsert, {
+        organizationId: parent.organizationId ?? request.organizationId,
+        authorId: request.user.id,
+      });
+
+      return reply.send(child);
+    },
+  );
+
+  fastify.patch(
+    "/api/internal_mcp_catalog/:catalogId/children/:childId",
+    {
+      schema: {
+        operationId: RouteId.UpdateCatalogChild,
+        description:
+          'Update a child catalog item ("preset" in UI). Only `name` and ' +
+          "`presetFieldValues` may be edited; template fields cascade from parent.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+          childId: UuidIdSchema,
+        }),
+        body: UpdateChildCatalogSchema,
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+      },
+    },
+    async (request, reply) => {
+      const { catalogId, childId } = request.params;
+      const { name, presetFieldValues } = request.body;
+
+      const parent = await InternalMcpCatalogModel.findById(catalogId, {
+        expandSecrets: false,
+      });
+      if (!parent || parent.parentCatalogItemId !== null) {
+        throw new ApiError(404, "Parent catalog item not found");
+      }
+
+      const originalChild = await InternalMcpCatalogModel.findById(childId);
+      if (!originalChild || originalChild.parentCatalogItemId !== parent.id) {
+        throw new ApiError(404, "Child catalog item not found");
+      }
+
+      if (presetFieldValues !== undefined) {
+        try {
+          InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
+            parent,
+            presetFieldValues,
+          );
+        } catch (e) {
+          throw new ApiError(400, (e as Error).message);
+        }
+      }
+
+      const updates: Record<string, unknown> = {};
+      if (name !== undefined) updates.name = name;
+      if (presetFieldValues !== undefined)
+        updates.presetFieldValues = presetFieldValues;
+
+      const updatedChild = await InternalMcpCatalogModel.update(
+        childId,
+        updates,
+      );
+      if (!updatedChild) {
+        throw new ApiError(404, "Child catalog item not found");
+      }
+
+      // Reinstall installs that point at this child if its name changed
+      // (other fields cannot change here, so cascade is a no-op for them).
+      await cascadeReinstallForCatalog(originalChild, updatedChild);
+
+      return reply.send(updatedChild);
+    },
+  );
+
+  fastify.delete(
+    "/api/internal_mcp_catalog/:catalogId/children/:childId",
+    {
+      schema: {
+        operationId: RouteId.DeleteCatalogChild,
+        description: 'Delete a child catalog item ("preset" in UI)',
+        tags: ["MCP Catalog"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+          childId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { catalogId, childId } }, reply) => {
+      const child = await InternalMcpCatalogModel.findById(childId, {
+        expandSecrets: false,
+      });
+      if (!child || child.parentCatalogItemId !== catalogId) {
+        throw new ApiError(404, "Child catalog item not found");
+      }
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.delete(childId),
+      });
+    },
+  );
+
+  fastify.get(
     "/api/internal_mcp_catalog/labels/values",
     {
       schema: {
@@ -1153,6 +1332,98 @@ async function getCatalogClientSecretValues(
       String(value),
     ]),
   );
+}
+
+async function cascadeReinstallForCatalog(
+  originalCatalogItem: InternalMcpCatalog,
+  catalogItem: InternalMcpCatalog,
+): Promise<void> {
+  const installedServers = await McpServerModel.findByCatalogId(catalogItem.id);
+  if (installedServers.length === 0) return;
+
+  if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
+    logger.info(
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog edit requires new user input - marking servers for manual reinstall",
+    );
+    for (const server of installedServers) {
+      await McpServerModel.update(server.id, { reinstallRequired: true });
+    }
+    return;
+  }
+
+  logger.info(
+    { catalogId: catalogItem.id, serverCount: installedServers.length },
+    "Catalog edit does not require new user input - auto-reinstalling servers",
+  );
+
+  setImmediate(async () => {
+    try {
+      for (const server of installedServers) {
+        try {
+          await McpServerModel.update(server.id, {
+            localInstallationStatus: "pending",
+            localInstallationError: null,
+          });
+          broadcastMcpInstallationStatus(server.id, "pending", null);
+          await autoReinstallServer(server, catalogItem);
+          await McpServerModel.update(server.id, {
+            localInstallationStatus: "success",
+            localInstallationError: null,
+          });
+          broadcastMcpInstallationStatus(server.id, "success", null);
+          logger.info(
+            { serverId: server.id, serverName: server.name },
+            "Auto-reinstalled MCP server successfully",
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          logger.error(
+            { err: error, serverId: server.id, serverName: server.name },
+            "Failed to auto-reinstall MCP server - marking for manual reinstall",
+          );
+          await McpServerModel.update(server.id, {
+            reinstallRequired: true,
+            localInstallationStatus: "error",
+            localInstallationError: errorMessage,
+          });
+          broadcastMcpInstallationStatus(server.id, "error", errorMessage);
+        }
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, catalogId: catalogItem.id },
+        "Unexpected error during auto-reinstall batch - some servers may need manual reinstall",
+      );
+    }
+  });
+}
+
+function pickSyncableFields(parent: InternalMcpCatalog): SyncableCatalogFields {
+  return {
+    version: parent.version,
+    description: parent.description,
+    instructions: parent.instructions,
+    repository: parent.repository,
+    installationCommand: parent.installationCommand,
+    requiresAuth: parent.requiresAuth,
+    authDescription: parent.authDescription,
+    authFields: parent.authFields,
+    serverType: parent.serverType,
+    multitenant: parent.multitenant,
+    serverUrl: parent.serverUrl,
+    docsUrl: parent.docsUrl,
+    clientSecretId: parent.clientSecretId,
+    localConfigSecretId: parent.localConfigSecretId,
+    localConfig: parent.localConfig,
+    deploymentSpecYaml: parent.deploymentSpecYaml,
+    userConfig: parent.userConfig,
+    mappingTemplates: parent.mappingTemplates,
+    oauthConfig: parent.oauthConfig,
+    enterpriseManagedConfig: parent.enterpriseManagedConfig,
+    icon: parent.icon,
+  };
 }
 
 export default internalMcpCatalogRoutes;

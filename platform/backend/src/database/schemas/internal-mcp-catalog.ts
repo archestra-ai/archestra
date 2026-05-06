@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   index,
   jsonb,
@@ -6,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
@@ -13,8 +15,10 @@ import type {
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalogServerType,
   LocalConfig,
+  MappingTemplate,
   OAuthConfig,
   UserConfig,
+  UserConfigFieldDefault,
 } from "@/types";
 import secretTable from "./secret";
 import usersTable from "./user";
@@ -64,6 +68,14 @@ const internalMcpCatalogTable = pgTable(
     // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
     deploymentSpecYaml: text("deployment_spec_yaml"),
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),
+    /**
+     * Multi-field templated mappings (e.g. composing a DSN from `host`,
+     * `port`, `database`, `username`, `password` into one header).
+     */
+    mappingTemplates: jsonb("mapping_templates")
+      .$type<Array<MappingTemplate>>()
+      .notNull()
+      .default([]),
     // OAuth configuration for remote servers
     oauthConfig: jsonb("oauth_config").$type<OAuthConfig>(),
     enterpriseManagedConfig: jsonb(
@@ -76,6 +88,23 @@ const internalMcpCatalogTable = pgTable(
       onDelete: "set null",
     }),
     scope: mcpCatalogScopeEnum("scope").notNull().default("org"),
+    /**
+     * Self-FK. NULL = root catalog item (parent / default preset).
+     * Non-NULL = child catalog item (UI-named "preset"); inherits all template
+     * columns from parent, overlays its own preset_field_values at runtime.
+     */
+    parentCatalogItemId: uuid("parent_catalog_item_id").references(
+      (): AnyPgColumn => internalMcpCatalogTable.id,
+      { onDelete: "cascade" },
+    ),
+    /**
+     * Values for fields the parent declared with promptOnPreset: true.
+     * Meaningful on parent (= default preset values) AND child (= preset overlay).
+     */
+    presetFieldValues: jsonb("preset_field_values")
+      .$type<Record<string, UserConfigFieldDefault>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -88,6 +117,13 @@ const internalMcpCatalogTable = pgTable(
     ),
     authorIdIdx: index("internal_mcp_catalog_author_id_idx").on(table.authorId),
     scopeIdx: index("internal_mcp_catalog_scope_idx").on(table.scope),
+    parentIdIdx: index("internal_mcp_catalog_parent_id_idx").on(
+      table.parentCatalogItemId,
+    ),
+    parentNameUnique: unique("internal_mcp_catalog_parent_name_unique").on(
+      table.parentCatalogItemId,
+      table.name,
+    ),
   }),
 );
 

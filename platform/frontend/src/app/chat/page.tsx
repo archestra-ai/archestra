@@ -99,6 +99,12 @@ import {
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import {
+  getMessageText,
+  getObjectMetadata,
+  hasCreatedAtMetadata,
+  messagesHaveSameRenderableContent,
+} from "./message-merging-utils";
+import {
   useConversationShare,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
@@ -2139,35 +2145,6 @@ function mergePersistedMessageMetadata(params: {
       },
     };
   });
-}
-
-function messagesHaveSameRenderableContent(params: {
-  liveMessage: UIMessage;
-  persistedMessage: UIMessage;
-}) {
-  return (
-    params.liveMessage.role === params.persistedMessage.role &&
-    getMessageText(params.liveMessage) ===
-      getMessageText(params.persistedMessage)
-  );
-}
-
-function getMessageText(message: UIMessage) {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("\n");
-}
-
-function hasCreatedAtMetadata(message: UIMessage) {
-  const metadata = getObjectMetadata(message);
-  return typeof metadata.createdAt === "string";
-}
-
-function getObjectMetadata(message: UIMessage): Record<string, unknown> {
-  return typeof message.metadata === "object" && message.metadata !== null
-    ? { ...message.metadata }
-    : {};
 }
 
 // =========================================================================

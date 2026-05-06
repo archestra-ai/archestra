@@ -278,11 +278,24 @@ class InternalMcpCatalogModel {
     return result;
   }
 
-  static async findByName(name: string): Promise<InternalMcpCatalog | null> {
+  static async findByName(
+    name: string,
+    options?: { organizationId?: string },
+  ): Promise<InternalMcpCatalog | null> {
+    const whereCondition = options?.organizationId
+      ? and(
+          eq(schema.internalMcpCatalogTable.name, name),
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            options.organizationId,
+          ),
+        )
+      : eq(schema.internalMcpCatalogTable.name, name);
+
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.name, name));
+      .where(whereCondition);
 
     if (!dbItem) {
       return null;

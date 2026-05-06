@@ -799,7 +799,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { name } = request.params;
-      const catalogItem = await InternalMcpCatalogModel.findByName(name);
+      const catalogItem = await InternalMcpCatalogModel.findByName(name, {
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, `Catalog item with name "${name}" not found`);

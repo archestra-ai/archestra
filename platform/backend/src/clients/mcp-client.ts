@@ -44,6 +44,7 @@ import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
+import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -379,13 +380,13 @@ class McpClient {
       tool.credentialResolutionMode === "enterprise_managed" &&
       !enterpriseTransportCredential
     ) {
-      const authError = this.buildExpiredAuthMessage(
-        catalogItem.name,
-        catalogItem.id,
-        targetMcpServerId,
-        tokenAuth,
-        "Archestra could not resolve a usable identity-provider token for your current session. Re-authenticate to continue using this tool.",
-      );
+      const authError =
+        await this.buildEnterpriseManagedIdentityProviderAuthMessage(
+          catalogItem.name,
+          catalogItem.id,
+          effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
+          tokenAuth,
+        );
       return this.createErrorResult(
         toolCall,
         agentId,
@@ -2259,6 +2260,47 @@ class McpClient {
       catalogId,
       catalogName: catalogDisplayName,
     };
+  }
+
+  private async buildEnterpriseManagedIdentityProviderAuthMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+    identityProviderId: string | null,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<AuthRequiredMcpToolError> {
+    const identityProvider = identityProviderId
+      ? await findExternalIdentityProviderById(identityProviderId)
+      : null;
+    if (!identityProvider) {
+      return this.buildAuthRequiredMessage(
+        catalogDisplayName,
+        catalogId,
+        tokenAuth,
+      );
+    }
+
+    const connectUrl = this.buildIdentityProviderConnectUrl(
+      identityProvider.providerId,
+    );
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `Authentication required for "${catalogDisplayName}"`,
+        detail: `This tool needs a current ${identityProvider.providerId} session for your account before Archestra can request the downstream credential.`,
+        actionLabel: `connect ${identityProvider.providerId}`,
+        url: connectUrl,
+        postAction:
+          "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      installUrl: connectUrl,
+    };
+  }
+
+  private buildIdentityProviderConnectUrl(providerId: string): string {
+    const searchParams = new URLSearchParams({ redirectTo: "/chat" });
+    return `${config.frontendBaseUrl}/auth/sso/${encodeURIComponent(providerId)}?${searchParams.toString()}`;
   }
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {

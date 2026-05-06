@@ -70,20 +70,22 @@ To use Enterprise-Managed Auth on a given MCP server, configure three places:
 
 Per-provider pages walk through each of these steps with concrete field values for that provider.
 
-## Hidden brokered IdPs
+## Linked downstream IdPs
 
 The IdP used for Archestra sign-in does not have to be the same IdP used for a downstream MCP tool. For example, users can sign into Archestra with Okta while one MCP tool calls an Entra-protected internal API.
 
 Configure the downstream IdP in **Settings > Identity Providers**, then disable **Show on sign-in page**. The provider remains usable for account linking and Enterprise-Managed Auth, but it will not appear as a primary SSO option on the login screen.
 
-For this pattern to work, each user must link the downstream IdP at least once so Archestra has a usable token for that IdP. When the tool runs, Archestra uses the tool's configured IdP token, exchanges it for the downstream API token, and injects the resulting credential into the MCP request.
+For this pattern to work, each user needs a downstream IdP session at least once so Archestra has a usable token for that IdP. Users do not need to find or configure this manually: if a tool call needs that token and it is missing or expired, Archestra returns an authentication-required tool result with a direct SSO link for the downstream IdP. After the user completes that SSO flow, they retry the tool call.
+
+When the tool runs, Archestra uses the tool's configured IdP token, exchanges it for the downstream API token, and injects the resulting credential into the MCP request.
 
 Example:
 
 1. Okta is enabled as the visible SSO provider for Archestra login
 2. Entra ID is configured as a hidden OIDC provider with Entra OBO settings
 3. The MCP catalog item selects **Identity Provider Token Exchange** and points to the Entra provider
-4. The user links Entra once
+4. The user clicks the tool's Entra SSO link the first time Archestra needs an Entra token
 5. The user calls the MCP Gateway through their normal Okta-backed Archestra identity
 6. Archestra exchanges the linked Entra user token for the downstream API token
 
@@ -134,7 +136,7 @@ You can override any of these in the form.
 
 - **Per-user identity required.** Token exchange only works when Archestra knows which user is calling. Gateway auth methods that carry per-user identity work: **Identity Provider JWT / JWKS**, **OAuth 2.1**, **ID-JAG**, and personal user bearer tokens. Team and organization bearer tokens do not — they don't resolve to a single user.
 - **HTTP transport only for local MCP servers.** Per-request token exchange and injection require the **streamable-http** transport. Local **stdio** MCP servers cannot do this — Archestra has no way to inject a fresh per-call header into a stdio process.
-- **The user must have a linked IdP session.** OAuth 2.1 gateway auth works when the authenticated Archestra user has previously linked the IdP configured on the tool. This can be the same provider used for Archestra login, or a hidden brokered provider used only for downstream MCP auth. JWKS-based gateway auth can use the incoming JWT directly when the gateway IdP and tool IdP match.
+- **The user must have a linked IdP session.** OAuth 2.1 gateway auth works when the authenticated Archestra user has a usable token for the IdP configured on the tool. This can be the same provider used for Archestra login, or a linked downstream provider used only for downstream MCP auth. JWKS-based gateway auth can use the incoming JWT directly when the gateway IdP and tool IdP match.
 - **SAML providers are not supported.** Token exchange is OIDC-only. SAML doesn't have an equivalent flow.
 
 ## See also

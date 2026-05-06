@@ -1769,6 +1769,111 @@ describe("McpClient", () => {
         fetchMock.mockRestore();
       });
 
+      test("returns a direct SSO link when a downstream IdP token is missing", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({
+          email: "missing-downstream@example.com",
+        });
+        const oktaIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "Okta",
+            issuer: "https://example.okta.com",
+            oidcConfig: {
+              clientId: "okta-gateway-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            },
+          },
+        );
+        const entraIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "EntraID",
+            issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+            ssoLoginEnabled: false,
+            oidcConfig: {
+              clientId: "archestra-entra-client-id",
+              tokenEndpoint:
+                "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+              enterpriseManagedCredentials: {
+                exchangeStrategy: "entra_obo",
+                tokenEndpoint:
+                  "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+                tokenEndpointAuthentication: "client_secret_post",
+                subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+              },
+            },
+          },
+        );
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: oktaIdentityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "entra protected api",
+          enterpriseManagedConfig: {
+            identityProviderId: entraIdentityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://downstream-app-id",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "entra protected api__query_codebase",
+          description: "Query codebase",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_missing_downstream_idp",
+            name: "entra protected api__query_codebase",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: `external_idp:${oktaIdentityProvider.id}:okta-sub`,
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+            isExternalIdp: true,
+            rawToken: "okta-gateway-jwt",
+          },
+        );
+
+        const connectUrl = `${config.frontendBaseUrl}/auth/sso/EntraID?redirectTo=%2Fchat`;
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          'Authentication required for "entra protected api"',
+        );
+        expect(result.error).toContain(
+          "This tool needs a current EntraID session",
+        );
+        expect(result.error).toContain(connectUrl);
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId,
+            catalogName: "entra protected api",
+            installUrl: connectUrl,
+          },
+        });
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
       test("injects the brokered managed credential into the outgoing MCP request", async ({
         makeIdentityProvider,
         makeOrganization,
@@ -2070,17 +2175,20 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(true);
         expect(result.error).toContain(
-          'Expired or invalid authentication for "keycloak protected demo"',
+          'Authentication required for "keycloak protected demo"',
         );
         expect(result.error).toContain(
-          `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`,
+          "This tool needs a current keycloak-managed-mcp session",
+        );
+        expect(result.error).toContain(
+          `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat`,
         );
         expect(result._meta).toMatchObject({
           archestraError: {
-            type: "auth_expired",
+            type: "auth_required",
             catalogId,
             catalogName: "keycloak protected demo",
-            serverId: mcpServerId,
+            installUrl: `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat`,
           },
         });
       });

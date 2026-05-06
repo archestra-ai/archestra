@@ -1,7 +1,8 @@
 "use client";
 
-import type { IdentityProviderFormValues } from "@shared";
+import { DocsPage, type IdentityProviderFormValues } from "@shared";
 import type { UseFormReturn } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   FormControl,
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
@@ -24,6 +26,11 @@ interface SamlConfigFormProps {
 }
 
 export function SamlConfigForm({ form, hideProviderId }: SamlConfigFormProps) {
+  const linkedDownstreamIdpDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformEnterpriseManagedAuth,
+    "linked-downstream-idps",
+  );
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4">
@@ -79,7 +86,10 @@ export function SamlConfigForm({ form, hideProviderId }: SamlConfigFormProps) {
                 <FormLabel>Show on sign-in page</FormLabel>
                 <FormDescription>
                   Disable this for providers used only to link delegated tokens
-                  for MCP tool authentication.
+                  for MCP tool authentication.{" "}
+                  <ExternalDocsLink href={linkedDownstreamIdpDocsUrl}>
+                    Learn more
+                  </ExternalDocsLink>
                 </FormDescription>
               </div>
             </FormItem>

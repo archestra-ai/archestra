@@ -78,6 +78,10 @@ export function OidcConfigForm({
   const issuer = form.watch("issuer") || "";
   const providerId = form.watch("providerId") || "";
   const showAllowedEmailDomains = providerId === "Google";
+  const linkedDownstreamIdpDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformEnterpriseManagedAuth,
+    "linked-downstream-idps",
+  );
 
   const inferredEnterpriseExchangeType = inferEnterpriseExchangeType({
     issuer,
@@ -162,7 +166,10 @@ export function OidcConfigForm({
                 <FormLabel>Show on sign-in page</FormLabel>
                 <FormDescription>
                   Disable this for providers used only to link delegated tokens
-                  for MCP tool authentication.
+                  for MCP tool authentication.{" "}
+                  <ExternalDocsLink href={linkedDownstreamIdpDocsUrl}>
+                    Learn more
+                  </ExternalDocsLink>
                 </FormDescription>
               </div>
             </FormItem>

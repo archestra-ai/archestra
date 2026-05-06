@@ -102,17 +102,16 @@ describe("handleBatchEmbedding", () => {
   test("throws when documentIds is missing", async () => {
     await expect(
       handleBatchEmbedding({ connectorRunId: "run-1" }),
-    ).rejects.toThrow(
-      "Missing documentIds or connectorRunId in batch_embedding payload",
-    );
+    ).rejects.toThrow("Missing documentIds in batch_embedding payload");
   });
 
-  test("throws when connectorRunId is missing", async () => {
-    await expect(
-      handleBatchEmbedding({ documentIds: ["doc-1"] }),
-    ).rejects.toThrow(
-      "Missing documentIds or connectorRunId in batch_embedding payload",
-    );
+  // connectorRunId is optional — file_upload connectors embed documents
+  test("processes documents without connectorRunId (file upload scenario)", async () => {
+    await handleBatchEmbedding({ documentIds: ["doc-1"] });
+
+    expect(mockProcessDocuments).toHaveBeenCalledWith(["doc-1"], undefined);
+    expect(mockCompleteBatch).not.toHaveBeenCalled();
+    expect(mockUpdateConnector).not.toHaveBeenCalled();
   });
 
   test("does not update connector status when run was superseded", async () => {

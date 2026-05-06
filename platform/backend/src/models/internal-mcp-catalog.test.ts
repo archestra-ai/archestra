@@ -509,6 +509,7 @@ describe("InternalMcpCatalogModel", () => {
       const found = await InternalMcpCatalogModel.findById(catalog.id, {
         userId: author.id,
         isAdmin: false,
+        organizationId: org.id,
       });
       expect(found).not.toBeNull();
 
@@ -516,6 +517,7 @@ describe("InternalMcpCatalogModel", () => {
       const denied = await InternalMcpCatalogModel.findById(catalog.id, {
         userId: otherUser.id,
         isAdmin: false,
+        organizationId: org.id,
       });
       expect(denied).toBeNull();
 
@@ -523,6 +525,7 @@ describe("InternalMcpCatalogModel", () => {
       const adminAccess = await InternalMcpCatalogModel.findById(catalog.id, {
         userId: otherUser.id,
         isAdmin: true,
+        organizationId: org.id,
       });
       expect(adminAccess).not.toBeNull();
     });
@@ -571,7 +574,12 @@ describe("InternalMcpCatalogModel", () => {
       // Author finds it
       const authorResults = await InternalMcpCatalogModel.searchByQuery(
         "searchscope-personal",
-        { expandSecrets: false, userId: author.id, isAdmin: false },
+        {
+          expandSecrets: false,
+          userId: author.id,
+          isAdmin: false,
+          organizationId: org.id,
+        },
       );
       expect(
         authorResults.some((r) => r.name === "searchscope-personal-item"),
@@ -580,7 +588,12 @@ describe("InternalMcpCatalogModel", () => {
       // Other user does not
       const otherResults = await InternalMcpCatalogModel.searchByQuery(
         "searchscope-personal",
-        { expandSecrets: false, userId: otherUser.id, isAdmin: false },
+        {
+          expandSecrets: false,
+          userId: otherUser.id,
+          isAdmin: false,
+          organizationId: org.id,
+        },
       );
       expect(
         otherResults.some((r) => r.name === "searchscope-personal-item"),

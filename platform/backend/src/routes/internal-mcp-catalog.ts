@@ -73,6 +73,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           expandSecrets: false,
           userId: request.user.id,
           isAdmin,
+          organizationId: request.organizationId,
         }),
       );
     },
@@ -292,6 +293,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
         isAdmin,
+        organizationId: request.organizationId,
       });
 
       if (!catalogItem) {
@@ -318,9 +320,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
       // Verify catalog exists (including virtual Archestra catalog)
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -377,18 +388,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
 
-      // Get the original catalog item to check if name or serverUrl changed
-      const originalCatalogItem = await InternalMcpCatalogModel.findById(id);
-
-      if (!originalCatalogItem) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-
-      // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,
       );
+
+      // Get the original catalog item to check if name or serverUrl changed
+      const originalCatalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
+
+      if (!originalCatalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
 
       if (!isAdmin) {
         // Non-admins can only edit their own personal items
@@ -724,8 +738,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+
       // Get the catalog item to check if it has secrets - don't expand secrets, just need IDs
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
         expandSecrets: false,
       });
 
@@ -734,10 +756,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Enforce ownership: non-admins can only delete own personal items
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
       if (
         !isAdmin &&
         (catalogItem.scope !== "personal" ||
@@ -844,8 +862,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeploymentYamlPreviewSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -925,8 +952,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeploymentYamlPreviewSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const catalogItem = await InternalMcpCatalogModel.findById(id);
+    async (request, reply) => {
+      const { id } = request.params;
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");

@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY =
+  "enterprise_managed_client_secret_override";
+
 export const CredentialResolutionModeSchema = z.enum([
   "static",
   "dynamic",

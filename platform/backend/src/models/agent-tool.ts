@@ -581,7 +581,10 @@ class AgentToolModel {
         .onConflictDoNothing();
     }
 
-    if (options?.mcpServerId || options?.credentialResolutionMode) {
+    if (
+      (options?.mcpServerId || options?.credentialResolutionMode) &&
+      existingAssignments.length > 0
+    ) {
       await db
         .update(schema.agentToolsTable)
         .set({

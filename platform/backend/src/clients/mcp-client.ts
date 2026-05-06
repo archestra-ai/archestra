@@ -3169,7 +3169,16 @@ function makeSyntheticResourceToolName(uri: string): string {
 }
 
 function isMethodNotFoundError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("Method not found");
+  if (error instanceof Error && error.message.includes("Method not found")) {
+    return true;
+  }
+
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === -32601
+  );
 }
 
 // Singleton instance

@@ -237,6 +237,31 @@ describe("McpClient", () => {
     expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
+  test("connectAndGetTools treats JSON-RPC method-not-found code as resource-only discovery", async () => {
+    mockListTools.mockRejectedValueOnce({ code: -32601 });
+    mockListResources.mockResolvedValueOnce({
+      resources: [
+        {
+          uri: "todo://todos",
+          name: "Todos",
+        },
+      ],
+    });
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const tools = await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "resource-token" },
+    });
+
+    expect(tools).toHaveLength(1);
+    expect(tools[0].name).toBe("read_resource_todos");
+    expect(mockListResources).toHaveBeenCalledTimes(1);
+  });
+
   describe("executeToolCall", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {

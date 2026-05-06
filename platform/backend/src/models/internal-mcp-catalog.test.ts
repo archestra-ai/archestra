@@ -1,6 +1,9 @@
 import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
-import { SelectInternalMcpCatalogSchema } from "@/types";
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  SelectInternalMcpCatalogSchema,
+} from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 
@@ -73,6 +76,37 @@ describe("InternalMcpCatalogModel", () => {
       expect(foundCatalog?.localConfig?.environment?.[1].value).toBe(
         "test-db-pass-789",
       );
+    });
+
+    test("expands enterprise-managed client secret override from catalog secret", async ({
+      makeSecret,
+    }) => {
+      const clientSecret = await makeSecret({
+        name: "enterprise-managed-resource-secret",
+        secret: {
+          [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
+            "resource-client-secret",
+        },
+      });
+
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "test-catalog-with-enterprise-secret",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        clientSecretId: clientSecret.id,
+        enterpriseManagedConfig: {
+          resourceType: "oauth_protected_resource",
+          resourceIdentifier: "https://example.com/mcp",
+          requestedCredentialType: "id_jag",
+        },
+      });
+
+      const catalogItems = await InternalMcpCatalogModel.findAll();
+      const foundCatalog = catalogItems.find((item) => item.id === catalog.id);
+
+      expect(
+        foundCatalog?.enterpriseManagedConfig?.clientSecretOverride,
+      ).toBe("resource-client-secret");
     });
 
     test("does not expand secrets when expandSecrets: false", async ({

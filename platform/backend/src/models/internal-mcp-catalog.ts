@@ -1,10 +1,11 @@
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
-import type {
-  InsertInternalMcpCatalog,
-  InternalMcpCatalog,
-  UpdateInternalMcpCatalog,
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  type InsertInternalMcpCatalog,
+  type InternalMcpCatalog,
+  type UpdateInternalMcpCatalog,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -386,6 +387,21 @@ class InternalMcpCatalogModel {
         }
       }
 
+      if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.clientSecretId,
+        );
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.clientSecretId);
+        const value =
+          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
+        if (value) {
+          catalogItem.enterpriseManagedConfig.clientSecretOverride =
+            String(value);
+        }
+      }
+
       // Enrich local config secret env vars
       if (
         catalogItem.localConfigSecretId &&
@@ -445,6 +461,16 @@ class InternalMcpCatalogModel {
         const value = secret?.secret.client_secret;
         if (value) {
           catalogItem.oauthConfig.client_secret = String(value);
+        }
+      }
+
+      if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
+        const secret = secretMap.get(catalogItem.clientSecretId);
+        const value =
+          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
+        if (value) {
+          catalogItem.enterpriseManagedConfig.clientSecretOverride =
+            String(value);
         }
       }
 

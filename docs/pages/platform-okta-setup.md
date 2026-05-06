@@ -126,7 +126,7 @@ Fill in:
 
 Click **Create Provider**. Users can now sign in:
 
-- **From the Archestra sign-in page** by clicking **Sign in with Okta**
+- **From the Archestra sign-in page** by entering their email address and clicking **Log in**. Archestra matches the email domain to the Okta provider, redirects the user to Okta, then completes the OIDC callback after Okta authentication.
 - **From the Archestra tile on their Okta End-User Dashboard** (OIN install only) — Okta redirects to Archestra and Archestra completes the SSO flow
 
 Test in a private browser window with a user who is assigned to the Okta app.
@@ -136,7 +136,7 @@ Test in a private browser window with a user who is assigned to the Okta app.
 | Feature | Supported | Notes |
 | --- | --- | --- |
 | **IdP-initiated SSO** | Yes | Users can start from the Archestra tile in the Okta End-User Dashboard when using the OIN app. |
-| **SP-initiated SSO** | Yes | Users start from the Archestra sign-in page, select **Sign in with Okta**, authenticate in Okta, and return to Archestra through the OIDC callback URL. |
+| **SP-initiated SSO** | Yes | Users open the Archestra login page, enter their email address, and click **Log in**. Archestra redirects them to Okta, then Okta returns them to Archestra through the OIDC callback URL after authentication. |
 | **SP-initiated SLO** | Yes | When users sign out of Archestra, Archestra can redirect them to Okta's OIDC logout endpoint. Keep **Enable RP-Initiated Logout** on unless your Okta app rejects the `post_logout_redirect_uri` parameter. |
 | **JIT provisioning** | Yes | First-time SSO users are created during login, then role mapping and team sync are applied from Okta claims. |
 

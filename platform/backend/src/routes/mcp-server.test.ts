@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerUserModel from "@/models/mcp-server-user";
@@ -1076,7 +1077,7 @@ describe("mcp server inspect route", () => {
         tokenEndpointAuthentication: "client_secret_post",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -1101,7 +1102,7 @@ describe("mcp server inspect route", () => {
     exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
       credentialType: "bearer_token",
       expiresInSeconds: null,
-      issuedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       value: "exchanged-github-token",
     });
 
@@ -1168,7 +1169,7 @@ describe("mcp server inspect route", () => {
         tokenEndpointAuthentication: "client_secret_basic",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
         },
       },
     });
@@ -1195,7 +1196,7 @@ describe("mcp server inspect route", () => {
     exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
       credentialType: "id_jag",
       expiresInSeconds: 300,
-      issuedTokenType: "urn:ietf:params:oauth:token-type:id_jag",
+      issuedTokenType: OAUTH_TOKEN_TYPE.IdJag,
       value: "session-id-jag",
     });
 
@@ -1212,7 +1213,8 @@ describe("mcp server inspect route", () => {
       }
 
       if (
-        href === "https://auth.example.com/.well-known/oauth-authorization-server"
+        href ===
+        "https://auth.example.com/.well-known/oauth-authorization-server"
       ) {
         return Response.json({
           token_endpoint: "https://auth.example.com/oauth/token",

@@ -1,3 +1,4 @@
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import {
@@ -9,8 +10,6 @@ import {
 
 const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
-const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
-const ID_JAG_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id-jag";
 
 class Rfc8693TokenExchangeStrategy
   implements EnterpriseCredentialExchangeStrategy
@@ -50,7 +49,7 @@ class Rfc8693TokenExchangeStrategy
       ),
       subject_token: params.assertion,
       subject_token_type:
-        enterpriseConfig.subjectTokenType ?? ACCESS_TOKEN_TYPE,
+        enterpriseConfig.subjectTokenType ?? OAUTH_TOKEN_TYPE.AccessToken,
     });
 
     const targetAudience =
@@ -131,7 +130,7 @@ class Rfc8693TokenExchangeStrategy
       issuedTokenType:
         typeof responseBody.issued_token_type === "string"
           ? responseBody.issued_token_type
-          : ACCESS_TOKEN_TYPE,
+          : OAUTH_TOKEN_TYPE.AccessToken,
     };
   }
 }
@@ -183,8 +182,8 @@ function mapRequestedTokenType(
   credentialType: EnterpriseCredentialExchangeParams["enterpriseManagedConfig"]["requestedCredentialType"],
 ): string {
   if (credentialType === "id_jag") {
-    return ID_JAG_TOKEN_TYPE;
+    return OAUTH_TOKEN_TYPE.IdJag;
   }
 
-  return ACCESS_TOKEN_TYPE;
+  return OAUTH_TOKEN_TYPE.AccessToken;
 }

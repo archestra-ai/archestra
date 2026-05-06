@@ -1,4 +1,5 @@
 import { createPrivateKey, randomUUID } from "node:crypto";
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
@@ -12,7 +13,6 @@ import {
 const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const CLIENT_ASSERTION_TYPE =
   "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
-const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 
 class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
   async exchangeCredential(
@@ -106,7 +106,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
       issuedTokenType:
         typeof responseBody.issued_token_type === "string"
           ? responseBody.issued_token_type
-          : ACCESS_TOKEN_TYPE,
+          : OAUTH_TOKEN_TYPE.AccessToken,
     };
   }
 }

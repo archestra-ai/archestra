@@ -1,4 +1,5 @@
 import { createPrivateKey, randomUUID } from "node:crypto";
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
@@ -14,9 +15,6 @@ const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
 const CLIENT_ASSERTION_TYPE =
   "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
-const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
-const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
-const ID_JAG_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id-jag";
 const OKTA_SECRET_TOKEN_TYPE = "urn:okta:params:oauth:token-type:secret";
 const OKTA_SERVICE_ACCOUNT_TOKEN_TYPE =
   "urn:okta:params:oauth:token-type:service-account";
@@ -60,7 +58,8 @@ class OktaManagedCredentialExchangeStrategy
         params.enterpriseManagedConfig.requestedCredentialType,
       ),
       subject_token: params.assertion,
-      subject_token_type: enterpriseConfig.subjectTokenType ?? ID_TOKEN_TYPE,
+      subject_token_type:
+        enterpriseConfig.subjectTokenType ?? OAUTH_TOKEN_TYPE.IdToken,
     });
 
     if (params.enterpriseManagedConfig.resourceIdentifier) {
@@ -244,13 +243,13 @@ function mapRequestedTokenType(
 ): string {
   switch (credentialType) {
     case "id_jag":
-      return ID_JAG_TOKEN_TYPE;
+      return OAUTH_TOKEN_TYPE.IdJag;
     case "secret":
       return OKTA_SECRET_TOKEN_TYPE;
     case "service_account":
       return OKTA_SERVICE_ACCOUNT_TOKEN_TYPE;
     default:
-      return ACCESS_TOKEN_TYPE;
+      return OAUTH_TOKEN_TYPE.AccessToken;
   }
 }
 

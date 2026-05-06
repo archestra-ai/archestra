@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -119,7 +120,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "id-jag-value",
-          issued_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+          issued_token_type: OAUTH_TOKEN_TYPE.IdJag,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -264,7 +265,7 @@ describe("resolveEnterpriseTransportCredential", () => {
             JSON.stringify({
               access_token: "mcp-server-access-token",
               issued_token_type:
-                "urn:ietf:params:oauth:token-type:access_token",
+                OAUTH_TOKEN_TYPE.AccessToken,
               expires_in: 300,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -431,7 +432,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint: "https://idp.example.com/token",
           tokenEndpointAuthentication: "client_secret_basic",
           clientSecret: "resource-secret",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
         },
       },
     });
@@ -461,7 +462,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           return new Response(
             JSON.stringify({
               access_token: "session-id-jag",
-              issued_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+              issued_token_type: OAUTH_TOKEN_TYPE.IdJag,
               expires_in: 300,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -500,7 +501,7 @@ describe("resolveEnterpriseTransportCredential", () => {
             JSON.stringify({
               access_token: "mcp-server-access-token",
               issued_token_type:
-                "urn:ietf:params:oauth:token-type:access_token",
+                OAUTH_TOKEN_TYPE.AccessToken,
               expires_in: 300,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -559,7 +560,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint:
             "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -584,7 +585,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "github-mock-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -641,7 +642,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           clientSecret: "archestra-oidc-secret",
           tokenEndpoint: "https://idp.example.com/oauth2/v1/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -666,7 +667,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "generic-downstream-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -728,7 +729,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -818,7 +819,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           tokenEndpoint:
             "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -843,7 +844,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       new Response(
         JSON.stringify({
           access_token: "downstream-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },

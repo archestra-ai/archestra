@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { isPlaywrightCatalogItem, RouteId } from "@shared";
+import { isPlaywrightCatalogItem, OAUTH_TOKEN_TYPE, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
@@ -1917,16 +1917,17 @@ async function getInstallDiscoveryAccessToken(params: {
     ? await findExternalIdentityProviderById(
         enterpriseManagedConfig.identityProviderId,
       )
-    : await findExternalIdentityProviderByProviderId(fallbackAccount.providerId);
+    : await findExternalIdentityProviderByProviderId(
+        fallbackAccount.providerId,
+      );
   if (!identityProvider) {
     return getCurrentInstallDiscoveryAccessToken(fallbackAccount);
   }
 
-  const account =
-    await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
-      params.userId,
-      identityProvider.providerId,
-    );
+  const account = await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+    params.userId,
+    identityProvider.providerId,
+  );
   if (!account) {
     return undefined;
   }
@@ -1970,7 +1971,9 @@ async function getInstallDiscoveryAccessToken(params: {
 
 async function getInstallDiscoverySubjectToken(params: {
   account: NonNullable<
-    Awaited<ReturnType<typeof AccountModel.getLatestSsoAccountByUserIdAndProviderId>>
+    Awaited<
+      ReturnType<typeof AccountModel.getLatestSsoAccountByUserIdAndProviderId>
+    >
   >;
   identityProvider: NonNullable<
     Awaited<ReturnType<typeof findExternalIdentityProviderById>>
@@ -1985,7 +1988,9 @@ async function getInstallDiscoverySubjectToken(params: {
 
 async function getCurrentInstallDiscoveryAccessToken(
   account: NonNullable<
-    Awaited<ReturnType<typeof AccountModel.getLatestSsoAccountWithAccessTokenByUserId>>
+    Awaited<
+      ReturnType<typeof AccountModel.getLatestSsoAccountWithAccessTokenByUserId>
+    >
   >,
 ): Promise<string | undefined> {
   if (!account.accessToken) {
@@ -2018,7 +2023,7 @@ function shouldUseInstallDiscoveryIdToken(
     identityProvider.oidcConfig?.enterpriseManagedCredentials;
   return (
     enterpriseManagedCredentials?.subjectTokenType ===
-      "urn:ietf:params:oauth:token-type:id_token" ||
+      OAUTH_TOKEN_TYPE.IdToken ||
     enterpriseManagedCredentials?.exchangeStrategy === "okta_managed"
   );
 }

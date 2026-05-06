@@ -1,3 +1,4 @@
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
@@ -16,7 +17,6 @@ export type ResolvedEnterpriseTransportCredential = {
 };
 
 const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 
 export async function resolveEnterpriseTransportCredential(params: {
   agentId: string;
@@ -183,10 +183,10 @@ export async function exchangeIdJagAtProtectedResource(params: {
         ? responseBody.expires_in
         : null,
     value: accessToken,
-    issuedTokenType:
-      typeof responseBody.issued_token_type === "string"
-        ? responseBody.issued_token_type
-        : ACCESS_TOKEN_TYPE,
+      issuedTokenType:
+        typeof responseBody.issued_token_type === "string"
+          ? responseBody.issued_token_type
+          : OAUTH_TOKEN_TYPE.AccessToken,
   };
 }
 

@@ -5,6 +5,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  OAUTH_TOKEN_TYPE,
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
@@ -1509,7 +1510,7 @@ describe("McpClient", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         });
@@ -1852,7 +1853,7 @@ describe("McpClient", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         });

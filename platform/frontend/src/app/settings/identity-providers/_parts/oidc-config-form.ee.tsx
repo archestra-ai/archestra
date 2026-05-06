@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, type IdentityProviderFormValues } from "@shared";
+import {
+  DocsPage,
+  type EnterpriseSubjectTokenType,
+  type IdentityProviderFormValues,
+  OAUTH_TOKEN_TYPE,
+} from "@shared";
 import { Info, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -568,10 +573,7 @@ function EnterpriseManagedCredentialsForm(props: {
     | "client_secret_basic";
   form: UseFormReturn<IdentityProviderFormValues>;
   inferredEnterpriseExchangeType: "okta_managed" | "rfc8693" | "entra_obo";
-  subjectTokenTypeDefault:
-    | "urn:ietf:params:oauth:token-type:access_token"
-    | "urn:ietf:params:oauth:token-type:id_token"
-    | "urn:ietf:params:oauth:token-type:jwt";
+  subjectTokenTypeDefault: EnterpriseSubjectTokenType;
 }) {
   const {
     authenticationDefault,
@@ -791,13 +793,13 @@ function EnterpriseManagedCredentialsForm(props: {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="urn:ietf:params:oauth:token-type:access_token">
+                      <SelectItem value={OAUTH_TOKEN_TYPE.AccessToken}>
                         Access token
                       </SelectItem>
-                      <SelectItem value="urn:ietf:params:oauth:token-type:id_token">
+                      <SelectItem value={OAUTH_TOKEN_TYPE.IdToken}>
                         ID token
                       </SelectItem>
-                      <SelectItem value="urn:ietf:params:oauth:token-type:jwt">
+                      <SelectItem value={OAUTH_TOKEN_TYPE.Jwt}>
                         Generic JWT
                       </SelectItem>
                     </SelectContent>

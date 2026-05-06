@@ -1,3 +1,4 @@
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
@@ -18,7 +19,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
           tokenEndpoint:
             "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -27,7 +28,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
       new Response(
         JSON.stringify({
           access_token: "exchanged-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -49,7 +50,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
       credentialType: "bearer_token",
       expiresInSeconds: 300,
       value: "exchanged-access-token",
-      issuedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -93,7 +94,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
           tokenEndpoint:
             "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -102,7 +103,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
       new Response(
         JSON.stringify({
           access_token: "github-access-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -139,7 +140,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
           clientSecret: "requesting-secret",
           tokenEndpoint: "https://idp.example.com/token",
           tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
         },
       },
     });
@@ -148,7 +149,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
       new Response(
         JSON.stringify({
           access_token: "id-jag-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:id-jag",
+          issued_token_type: OAUTH_TOKEN_TYPE.IdJag,
           expires_in: 300,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -171,7 +172,7 @@ describe("rfc8693TokenExchangeStrategy", () => {
       credentialType: "id_jag",
       expiresInSeconds: 300,
       value: "id-jag-token",
-      issuedTokenType: "urn:ietf:params:oauth:token-type:id-jag",
+      issuedTokenType: OAUTH_TOKEN_TYPE.IdJag,
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];

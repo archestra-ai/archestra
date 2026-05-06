@@ -1,4 +1,4 @@
-import type { IdentityProviderFormValues } from "@shared";
+import { type IdentityProviderFormValues, OAUTH_TOKEN_TYPE } from "@shared";
 import { describe, expect, it } from "vitest";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 
@@ -119,7 +119,7 @@ describe("normalizeIdentityProviderFormValues", () => {
       expect.objectContaining({
         exchangeStrategy: "rfc8693",
         tokenEndpointAuthentication: "client_secret_post",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
   });
@@ -167,7 +167,7 @@ describe("normalizeIdentityProviderFormValues", () => {
       expect.objectContaining({
         exchangeStrategy: "rfc8693",
         tokenEndpointAuthentication: "client_secret_post",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
   });
@@ -199,7 +199,7 @@ describe("normalizeIdentityProviderFormValues", () => {
       expect.objectContaining({
         exchangeStrategy: "entra_obo",
         tokenEndpointAuthentication: "client_secret_post",
-        subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
       }),
     );
   });

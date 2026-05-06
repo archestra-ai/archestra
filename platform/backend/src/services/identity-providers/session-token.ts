@@ -1,4 +1,5 @@
 import { jwtDecode } from "jwt-decode";
+import { OAUTH_TOKEN_TYPE, type OAuthTokenType } from "@shared";
 import logger from "@/logging";
 import { AccountModel, AgentModel } from "@/models";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
@@ -8,11 +9,6 @@ interface SessionExternalIdpToken {
   identityProviderId: string;
   providerId: string;
   rawToken: string;
-}
-
-export enum EnterpriseSubjectTokenType {
-  AccessToken = "urn:ietf:params:oauth:token-type:access_token",
-  IdToken = "urn:ietf:params:oauth:token-type:id_token",
 }
 
 type SubjectTokenPreference = "access_token" | "id_token";
@@ -116,10 +112,10 @@ function resolveSubjectTokenPreference(identityProvider: {
   const subjectTokenType = parseEnterpriseSubjectTokenType(
     identityProvider.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType,
   );
-  if (subjectTokenType === EnterpriseSubjectTokenType.AccessToken) {
+  if (subjectTokenType === OAUTH_TOKEN_TYPE.AccessToken) {
     return "access_token";
   }
-  if (subjectTokenType === EnterpriseSubjectTokenType.IdToken) {
+  if (subjectTokenType === OAUTH_TOKEN_TYPE.IdToken) {
     return "id_token";
   }
 
@@ -137,12 +133,12 @@ function resolveSubjectTokenPreference(identityProvider: {
 
 function parseEnterpriseSubjectTokenType(
   value: string | undefined,
-): EnterpriseSubjectTokenType | null {
-  if (value === EnterpriseSubjectTokenType.AccessToken) {
-    return EnterpriseSubjectTokenType.AccessToken;
+): OAuthTokenType | null {
+  if (value === OAUTH_TOKEN_TYPE.AccessToken) {
+    return OAUTH_TOKEN_TYPE.AccessToken;
   }
-  if (value === EnterpriseSubjectTokenType.IdToken) {
-    return EnterpriseSubjectTokenType.IdToken;
+  if (value === OAUTH_TOKEN_TYPE.IdToken) {
+    return OAUTH_TOKEN_TYPE.IdToken;
   }
   return null;
 }

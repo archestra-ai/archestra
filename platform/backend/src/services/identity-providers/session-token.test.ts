@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { afterEach, describe, expect, test, vi } from "@/test";
-import {
-  EnterpriseSubjectTokenType,
-  resolveSessionExternalIdpToken,
-} from "./session-token";
+import { resolveSessionExternalIdpToken } from "./session-token";
 
 describe("resolveSessionExternalIdpToken", () => {
   const originalFetch = global.fetch;
@@ -142,7 +140,7 @@ describe("resolveSessionExternalIdpToken", () => {
         clientId: "archestra-oidc",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: EnterpriseSubjectTokenType.AccessToken,
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -193,7 +191,7 @@ describe("resolveSessionExternalIdpToken", () => {
         clientId: "archestra-oidc",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: EnterpriseSubjectTokenType.IdToken,
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
         },
       },
     });
@@ -299,7 +297,7 @@ describe("resolveSessionExternalIdpToken", () => {
         tokenEndpointAuthentication: "client_secret_post",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: EnterpriseSubjectTokenType.AccessToken,
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });
@@ -369,7 +367,7 @@ describe("resolveSessionExternalIdpToken", () => {
         clientId: "archestra-oidc",
         enterpriseManagedCredentials: {
           exchangeStrategy: "rfc8693",
-          subjectTokenType: EnterpriseSubjectTokenType.AccessToken,
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
         },
       },
     });

@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_CLIENT_ASSERTION_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
@@ -167,7 +167,7 @@ describe("entraOboStrategy", () => {
     const requestBody = new URLSearchParams(String(requestInit?.body));
     expect(requestBody.get("client_secret")).toBeNull();
     expect(requestBody.get("client_assertion_type")).toBe(
-      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
     );
 
     const clientAssertion = requestBody.get("client_assertion");

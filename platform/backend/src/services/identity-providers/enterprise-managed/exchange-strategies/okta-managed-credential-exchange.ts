@@ -1,5 +1,9 @@
 import { createPrivateKey, randomUUID } from "node:crypto";
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import {
+  OAUTH_CLIENT_ASSERTION_TYPE,
+  OAUTH_GRANT_TYPE,
+  OAUTH_TOKEN_TYPE,
+} from "@shared";
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
@@ -11,10 +15,6 @@ import {
   extractProviderErrorMessage,
 } from "../exchange";
 
-const TOKEN_EXCHANGE_GRANT_TYPE =
-  "urn:ietf:params:oauth:grant-type:token-exchange";
-const CLIENT_ASSERTION_TYPE =
-  "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 const OKTA_SECRET_TOKEN_TYPE = "urn:okta:params:oauth:token-type:secret";
 const OKTA_SERVICE_ACCOUNT_TOKEN_TYPE =
   "urn:okta:params:oauth:token-type:service-account";
@@ -53,7 +53,7 @@ class OktaManagedCredentialExchangeStrategy
     }
 
     const requestBody = new URLSearchParams({
-      grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+      grant_type: OAUTH_GRANT_TYPE.TokenExchange,
       requested_token_type: mapRequestedTokenType(
         params.enterpriseManagedConfig.requestedCredentialType,
       ),
@@ -175,7 +175,10 @@ class OktaManagedCredentialExchangeStrategy
     }
 
     params.requestBody.set("client_id", params.clientId);
-    params.requestBody.set("client_assertion_type", CLIENT_ASSERTION_TYPE);
+    params.requestBody.set(
+      "client_assertion_type",
+      OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
+    );
     params.requestBody.set(
       "client_assertion",
       await buildClientAssertion({

@@ -1,5 +1,9 @@
 import { createPrivateKey, randomUUID } from "node:crypto";
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import {
+  OAUTH_CLIENT_ASSERTION_TYPE,
+  OAUTH_GRANT_TYPE,
+  OAUTH_TOKEN_TYPE,
+} from "@shared";
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
@@ -9,10 +13,6 @@ import {
   type EnterpriseManagedCredentialResult,
   extractProviderErrorMessage,
 } from "../exchange";
-
-const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-const CLIENT_ASSERTION_TYPE =
-  "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
 class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
   async exchangeCredential(
@@ -44,7 +44,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
 
     const requestBody = new URLSearchParams({
       client_id: clientId,
-      grant_type: JWT_BEARER_GRANT_TYPE,
+      grant_type: OAUTH_GRANT_TYPE.JwtBearer,
       requested_token_use: "on_behalf_of",
       assertion: params.assertion,
     });
@@ -167,7 +167,10 @@ async function buildAuthenticatedHeaders(params: {
 
   const algorithm = inferPrivateKeyAlgorithm(params.privateKeyPem);
 
-  params.requestBody.set("client_assertion_type", CLIENT_ASSERTION_TYPE);
+    params.requestBody.set(
+      "client_assertion_type",
+      OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
+    );
   params.requestBody.set(
     "client_assertion",
     await new SignJWT({})

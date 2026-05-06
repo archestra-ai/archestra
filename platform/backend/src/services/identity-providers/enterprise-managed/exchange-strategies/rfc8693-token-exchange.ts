@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import {
@@ -7,9 +7,6 @@ import {
   type EnterpriseManagedCredentialResult,
   extractProviderErrorMessage,
 } from "../exchange";
-
-const TOKEN_EXCHANGE_GRANT_TYPE =
-  "urn:ietf:params:oauth:grant-type:token-exchange";
 
 class Rfc8693TokenExchangeStrategy
   implements EnterpriseCredentialExchangeStrategy
@@ -43,7 +40,7 @@ class Rfc8693TokenExchangeStrategy
 
     const requestBody = new URLSearchParams({
       client_id: clientId,
-      grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+      grant_type: OAUTH_GRANT_TYPE.TokenExchange,
       requested_token_type: mapRequestedTokenType(
         params.enterpriseManagedConfig.requestedCredentialType,
       ),

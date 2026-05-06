@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  OAUTH_GRANT_TYPE,
   OAUTH_SCOPES,
 } from "@shared";
 import { decodeProtectedHeader } from "jose";
@@ -18,8 +19,7 @@ import {
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
 
-export const JWT_BEARER_GRANT_TYPE =
-  "urn:ietf:params:oauth:grant-type:jwt-bearer";
+export const JWT_BEARER_GRANT_TYPE = OAUTH_GRANT_TYPE.JwtBearer;
 /** @public — exported for testability */
 export const OAUTH_ID_JAG_TYP = "oauth-id-jag+jwt";
 export const MCP_RESOURCE_REFERENCE_PREFIX = "mcp-resource:";

@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
@@ -15,8 +15,6 @@ export type ResolvedEnterpriseTransportCredential = {
   headerValue: string;
   expiresInSeconds: number | null;
 };
-
-const JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
 export async function resolveEnterpriseTransportCredential(params: {
   agentId: string;
@@ -128,8 +126,8 @@ export async function exchangeIdJagAtProtectedResource(params: {
 
   const tokenEndpoint =
     await discoverProtectedResourceTokenEndpoint(resourceIdentifier);
-  const requestBody = new URLSearchParams({
-    grant_type: JWT_BEARER_GRANT_TYPE,
+    const requestBody = new URLSearchParams({
+      grant_type: OAUTH_GRANT_TYPE.JwtBearer,
     assertion: params.assertion,
   });
   if (params.enterpriseManagedConfig.scopes?.length) {

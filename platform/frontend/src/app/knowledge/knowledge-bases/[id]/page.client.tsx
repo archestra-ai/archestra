@@ -384,8 +384,8 @@ function AddConnectorDialog({
         }
         description={
           step === "choose"
-            ? "Reuse an existing connector or create a new one."
-            : "Choose connectors to assign to this knowledge base."
+            ? "Reuse an existing Connector or create a new one."
+            : "Choose Connectors to assign to this Knowledge Base."
         }
         size="small"
         footer={

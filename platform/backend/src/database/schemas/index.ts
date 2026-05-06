@@ -32,6 +32,7 @@ export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as kbChunksTable } from "./kb-chunk";
 export { default as kbDocumentsTable } from "./kb-document";
+export { default as kbUploadedFilesTable } from "./kb-uploaded-file";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,

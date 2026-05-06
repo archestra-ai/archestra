@@ -791,6 +791,52 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   () => null,
                 );
 
+                // Fallback persistence: if the client disconnected mid-stream
+                // (e.g. page reload), toUIMessageStream's onFinish may not
+                // fire because the writable side of the pipe is closed.
+                // After the LLM finishes (usage resolved), wait briefly for
+                // onFinish, then persist the assistant response ourselves
+                // using result.text which is available once the LLM completes.
+                if (!messagesPersisted && conversationId) {
+                  // Give onFinish a moment to fire (it may still work)
+                  await new Promise((r) => setTimeout(r, 500));
+                  if (!messagesPersisted) {
+                    messagesPersisted = true;
+                    try {
+                      const fullText = await Promise.resolve(
+                        result.text,
+                      ).catch(() => "");
+                      if (fullText) {
+                        const fallbackAssistantMessage = {
+                          id: `fb-${conversationId}-${Date.now()}`,
+                          role: "assistant" as const,
+                          parts: [
+                            { type: "text" as const, text: fullText },
+                          ],
+                        };
+                        const allMessages = [
+                          ...(messages as ChatMessage[]),
+                          fallbackAssistantMessage,
+                        ];
+                        await persistNewMessages(
+                          conversationId,
+                          allMessages,
+                          "fallbackPersist",
+                        );
+                        logger.info(
+                          { conversationId, textLength: fullText.length },
+                          "Fallback: persisted assistant response after client disconnect",
+                        );
+                      }
+                    } catch (err) {
+                      logger.error(
+                        { err, conversationId },
+                        "Fallback message persistence failed",
+                      );
+                    }
+                  }
+                }
+
                 // Write token usage data to the stream as a custom data part
                 if (usage) {
                   logger.info(

@@ -145,6 +145,8 @@ interface ChatMessagesProps {
   selectedModel?: string;
   modelSource?: ModelSource | null;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
+  /** True when the backend is still streaming but the client reconnected after a reload */
+  isWaitingForBackendStream?: boolean;
 }
 
 type PersistedChatError =
@@ -192,6 +194,7 @@ export function ChatMessages({
   selectedModel,
   modelSource,
   unsafeContextBoundary,
+  isWaitingForBackendStream = false,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
   const { data: authSession } = useSession();
@@ -1230,7 +1233,8 @@ export function ChatMessages({
             />
           ))}
           {(status === "submitted" ||
-            (status === "streaming" && isStreamingStalled)) && (
+            (status === "streaming" && isStreamingStalled) ||
+            isWaitingForBackendStream) && (
             <div className="absolute bottom-[-10] left-0">
               <Message from="assistant">
                 <img

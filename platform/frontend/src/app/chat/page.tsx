@@ -1035,33 +1035,31 @@ export function ChatPageContent({
     status,
   ]);
 
-  // Poll for the assistant response when the page was reloaded mid-stream.
-  // After reload the DB may only contain the user message (persisted early by
-  // the backend). The assistant response arrives once the backend stream
-  // finishes. We poll until the last message is no longer a user message.
-  useEffect(() => {
+  // Detect when the backend is still streaming after a page reload.
+  // The DB may only contain the user message (persisted early by the backend).
+  // The assistant response arrives once the backend stream finishes.
+  const isWaitingForBackendStream = useMemo(() => {
     if (!conversationId || status === "streaming" || status === "submitted") {
-      return;
+      return false;
     }
-
     const lastMsg = conversation?.messages?.at(-1) as UIMessage | undefined;
-    const isWaitingForAssistant =
-      lastMsg?.role === "user" && messages.length > 0;
+    return lastMsg?.role === "user" && messages.length > 0;
+  }, [conversationId, conversation?.messages, messages.length, status]);
 
-    if (!isWaitingForAssistant) return;
+  // Poll for the assistant response when the page was reloaded mid-stream.
+  useEffect(() => {
+    if (!isWaitingForBackendStream) return;
 
     const interval = setInterval(() => {
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [
+    isWaitingForBackendStream,
     conversationId,
-    conversation?.messages,
-    messages.length,
-    status,
     queryClient,
   ]);
 
@@ -1735,6 +1733,7 @@ export function ChatPageContent({
                     status={status}
                     optimisticToolCalls={optimisticToolCalls}
                     isLoadingConversation={isLoadingConversation}
+                    isWaitingForBackendStream={isWaitingForBackendStream}
                     onMessagesUpdate={setMessages}
                     agentName={
                       (currentProfileId

@@ -50,6 +50,7 @@ export default async function ToolGuardrailsPage() {
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
           excludeArchestraTools: true,
+          includeKnowledgeSourcesTool: true,
         },
       }),
       archestraApiSdk.getInternalMcpCatalog({ headers }),

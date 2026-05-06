@@ -45,9 +45,9 @@ export type ConnectorUrlConfig = {
 };
 
 export type ConnectorCredentialConfig = {
-  apiTokenLabel: string;
-  apiTokenPlaceholder: string;
-  apiTokenRequiredMessage: string;
+  apiTokenLabel?: string;
+  apiTokenPlaceholder?: string;
+  apiTokenRequiredMessage?: string;
   apiTokenHelpText?: ReactNode;
 };
 
@@ -79,6 +79,7 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   outline: CONNECTOR_TYPE_LABELS.outline,
   onedrive: CONNECTOR_TYPE_LABELS.onedrive ?? "OneDrive",
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
+  file_upload: CONNECTOR_TYPE_LABELS.file_upload,
   slack: CONNECTOR_TYPE_LABELS.slack,
 };
 
@@ -154,6 +155,11 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     description: "Sync CRM objects from Salesforce",
   },
   {
+    type: "file_upload",
+    label: CONNECTOR_DISPLAY_LABELS.file_upload,
+    description: "Upload your own text files and zip archives",
+  },
+  {
     type: "slack",
     label: CONNECTOR_DISPLAY_LABELS.slack,
     description: "Sync public channel messages from Slack",
@@ -224,6 +230,7 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       description:
         "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
     },
+    file_upload: null,
     slack: null,
   };
 
@@ -247,6 +254,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   onedrive: ({ form }) => <OneDriveConfigFields form={form} />,
   outline: ({ form }) => <OutlineConfigFields form={form} />,
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
+  file_upload: () => null,
   slack: ({ form }) => <SlackConfigFields control={form.control} />,
 };
 
@@ -314,6 +322,7 @@ export function getDefaultConnectorConfig(
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
+    file_upload: { type },
     slack: { type, skipBotMessages: true },
   };
 
@@ -339,7 +348,7 @@ export function getConnectorCredentialConfig(params: {
     ? "API token is required"
     : "API token or personal access token is required";
 
-  const apiTokenLabels: Record<ConnectorType, string> = {
+  const apiTokenLabels: Record<ConnectorType, string | undefined> = {
     servicenow: "Password",
     notion: "Integration Token",
     sharepoint: "Client Secret",
@@ -354,28 +363,31 @@ export function getConnectorCredentialConfig(params: {
     asana: "Personal Access Token",
     onedrive: "Client Secret",
     salesforce: "Password + Security Token",
+    file_upload: undefined,
     slack: "Bot Token",
   };
 
-  const createApiTokenPlaceholders: Record<ConnectorType, string> = {
-    servicenow: "Your ServiceNow password",
-    notion: "secret_...",
-    sharepoint: "Your Azure AD client secret",
-    gdrive: "Paste service account JSON key or OAuth access token",
-    dropbox: "Your Dropbox access token",
-    outline: "Your Outline API key (starts with ol_api_)",
-    jira: jiraConfluenceApiTokenPlaceholder,
-    confluence: jiraConfluenceApiTokenPlaceholder,
-    github: "Your personal access token",
-    gitlab: "Your personal access token",
-    linear: "Your personal access token",
-    asana: "Your personal access token",
-    onedrive: "Your Azure AD client secret",
-    salesforce: "Your Salesforce password followed by your security token",
-    slack: "xoxb-...",
+  const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
+    {
+      servicenow: "Your ServiceNow password",
+      notion: "secret_...",
+      sharepoint: "Your Azure AD client secret",
+      gdrive: "Paste service account JSON key or OAuth access token",
+      dropbox: "Your Dropbox access token",
+      outline: "Your Outline API key (starts with ol_api_)",
+      jira: jiraConfluenceApiTokenPlaceholder,
+      confluence: jiraConfluenceApiTokenPlaceholder,
+      github: "Your personal access token",
+      gitlab: "Your personal access token",
+      linear: "Your personal access token",
+      asana: "Your personal access token",
+      onedrive: "Your Azure AD client secret",
+      salesforce: "Your Salesforce password followed by your security token",
+      file_upload: undefined,
+      slack: "xoxb-...",
   };
 
-  const editApiTokenPlaceholders: Record<ConnectorType, string> = {
+  const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
     servicenow: "Leave empty to keep existing password",
     salesforce: "Leave empty to keep existing password + security token",
     notion: "Leave empty to keep existing token",
@@ -389,11 +401,12 @@ export function getConnectorCredentialConfig(params: {
     gitlab: "Leave empty to keep existing token",
     linear: "Leave empty to keep existing token",
     asana: "Leave empty to keep existing token",
+    file_upload: undefined,
     onedrive: "Leave empty to keep existing token",
     slack: "Leave empty to keep existing token",
   };
 
-  const apiTokenRequiredMessages: Record<ConnectorType, string> = {
+  const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
     servicenow: "Password is required",
     notion: "Integration token is required",
     sharepoint: "Client secret is required",
@@ -408,6 +421,7 @@ export function getConnectorCredentialConfig(params: {
     asana: "Personal access token is required",
     onedrive: "Client secret is required",
     salesforce: "Password and security token are required",
+    file_upload: undefined,
     slack: "Bot token is required",
   };
 
@@ -903,6 +917,7 @@ const INLINE_CONFIG_FIELDS: Record<
       )}
     />
   ),
+  file_upload: () => <></>,
 };
 
 export function ConnectorInlineConfigFields({

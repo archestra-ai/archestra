@@ -92,6 +92,23 @@ class KbDocumentModel {
     return result ?? null;
   }
 
+  static async findBySourceIds(params: {
+    connectorId: string;
+    sourceIds: string[];
+  }): Promise<KbDocument[]> {
+    if (params.sourceIds.length === 0) return [];
+
+    return await db
+      .select()
+      .from(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          inArray(schema.kbDocumentsTable.sourceId, params.sourceIds),
+        ),
+      );
+  }
+
   static async create(data: InsertKbDocument): Promise<KbDocument> {
     const [result] = await db
       .insert(schema.kbDocumentsTable)
@@ -158,6 +175,22 @@ class KbDocumentModel {
       .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
 
     return result.rowCount ?? 0;
+  }
+
+  static async deleteByConnectorAndSourceId(params: {
+    connectorId: string;
+    sourceId: string;
+  }): Promise<boolean> {
+    const result = await db
+      .delete(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          eq(schema.kbDocumentsTable.sourceId, params.sourceId),
+        ),
+      )
+      .returning({ id: schema.kbDocumentsTable.id });
+    return result.length > 0;
   }
 
   static async deleteByOrganization(organizationId: string): Promise<number> {

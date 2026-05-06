@@ -1026,6 +1026,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
+  // Connector File Upload Routes
+  [RouteId.UploadConnectorFiles]: { knowledgeSource: ["update"] },
+  [RouteId.GetConnectorFiles]: { knowledgeSource: ["read"] },
+  [RouteId.GetConnectorFile]: { knowledgeSource: ["read"] },
+  [RouteId.DeleteConnectorFile]: { knowledgeSource: ["delete"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 

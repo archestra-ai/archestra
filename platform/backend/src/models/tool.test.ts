@@ -2996,7 +2996,10 @@ describe("ToolModel", () => {
       await makeAgentTool(agent.id, kbTool?.id);
 
       const result = await ToolModel.findAllWithAssignments({
-        filters: { includeKnowledgeSourcesTool: true },
+        filters: {
+          excludeArchestraTools: true,
+          includeKnowledgeSourcesTool: true,
+        },
       });
 
       expect(result.data.some((tool) => tool.name === brandedKbToolName)).toBe(

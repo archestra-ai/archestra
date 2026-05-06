@@ -1841,11 +1841,23 @@ class ToolModel {
 
     // Exclude Archestra built-in tools
     if (filters?.excludeArchestraTools) {
+      const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      );
+
+      // Normally exclude all tools in the Archestra built-in catalog.
+      // However, when explicitly requested, include ONLY the knowledge sources tool.
       toolWhereConditions.push(
-        or(
-          isNull(schema.toolsTable.catalogId),
-          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-        ) ?? isNull(schema.toolsTable.catalogId),
+        filters.includeKnowledgeSourcesTool
+          ? (or(
+              isNull(schema.toolsTable.catalogId),
+              ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+              eq(schema.toolsTable.name, brandedKnowledgeToolName),
+            ) ?? isNull(schema.toolsTable.catalogId))
+          : (or(
+              isNull(schema.toolsTable.catalogId),
+              ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            ) ?? isNull(schema.toolsTable.catalogId)),
       );
     }
 

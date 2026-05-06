@@ -2,10 +2,11 @@
 
 import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -74,11 +75,17 @@ export function CreateConnectorDialog({
   onOpenChange: (open: boolean) => void;
   onBack?: () => void;
 }) {
+  const searchRef = useRef<HTMLInputElement>(null);
   const createConnector = useCreateConnector();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
   const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+
+  const filteredConnectorOptions = CONNECTOR_OPTIONS.filter((option) =>
+    option.label.toLowerCase().includes(search.toLowerCase()),
+  );
 
   const form = useForm<CreateConnectorFormValues>({
     defaultValues: {
@@ -167,6 +174,15 @@ export function CreateConnectorDialog({
     mode: "create",
   });
 
+  useLayoutEffect(() => {
+    if (open && step === "select") {
+      // Wait for dialog animations to complete
+      requestAnimationFrame(() => {
+        searchRef.current?.focus();
+      });
+    }
+  }, [open, step]);
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
@@ -187,32 +203,46 @@ export function CreateConnectorDialog({
                 Add Connector
               </DialogTitle>
               <DialogDescription>
-                Select a connector type to get started.
+                Select a Connector type to get started.
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="pt-4">
-              <div className="grid grid-cols-2 gap-3">
-                {CONNECTOR_OPTIONS.map((option) => (
-                  <button
-                    key={option.type}
-                    type="button"
-                    onClick={() => handleSelectType(option.type)}
-                    className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50"
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                      <ConnectorTypeIcon
-                        type={option.type}
-                        className="h-7 w-7"
-                      />
-                    </div>
-                    <div>
-                      <div className="font-medium">{option.label}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {option.description}
+              <SearchInput
+                ref={searchRef}
+                value={search}
+                onSearchChange={setSearch}
+                syncQueryParams={false}
+                debounceMs={300}
+                inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+              />
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                {filteredConnectorOptions.length ? (
+                  filteredConnectorOptions.map((option) => (
+                    <button
+                      key={option.type}
+                      type="button"
+                      onClick={() => handleSelectType(option.type)}
+                      className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                        <ConnectorTypeIcon
+                          type={option.type}
+                          className="h-7 w-7"
+                        />
                       </div>
-                    </div>
-                  </button>
-                ))}
+                      <div>
+                        <div className="font-medium">{option.label}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {option.description}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="col-span-2 flex flex-col items-center gap-2 rounded-lg border border-muted/50 p-5 text-center text-sm text-muted-foreground">
+                    No connectors match your filters. Try adjusting your search.
+                  </div>
+                )}
               </div>
             </DialogBody>
           </>

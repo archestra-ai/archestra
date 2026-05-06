@@ -50,6 +50,12 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 const mockMutateAsync = vi.fn();
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/knowledge/knowledge-bases",
+}));
+
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useCreateConnector: () => ({
     mutateAsync: mockMutateAsync,

@@ -326,15 +326,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { mcpServerInstallation: ["admin"] },
         request.headers,
       );
-      // Verify catalog exists (including virtual Archestra catalog)
-      const catalogItem = await InternalMcpCatalogModel.findById(id, {
-        userId: request.user.id,
-        isAdmin,
-        organizationId: request.organizationId,
-      });
+      // The built-in Archestra catalog is virtual; custom/private catalog IDs
+      // still need an access-checked backing row.
+      if (!isBuiltInCatalogId(id)) {
+        const catalogItem = await InternalMcpCatalogModel.findById(id, {
+          userId: request.user.id,
+          isAdmin,
+          organizationId: request.organizationId,
+        });
 
-      if (!catalogItem) {
-        throw new ApiError(404, "Catalog item not found");
+        if (!catalogItem) {
+          throw new ApiError(404, "Catalog item not found");
+        }
       }
 
       const tools = await ToolModel.findByCatalogId(id);

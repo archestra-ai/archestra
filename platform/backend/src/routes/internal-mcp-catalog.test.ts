@@ -12,15 +12,34 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
 describe("internal MCP catalog routes", () => {
   let app: FastifyInstance;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).user = user;
+      (
+        request as typeof request & {
+          user: User;
+          organizationId: string;
+        }
+      ).organizationId = organization.id;
+    });
     await app.register(internalMcpCatalogRoutes);
   });
 

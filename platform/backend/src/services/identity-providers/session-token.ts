@@ -1,5 +1,5 @@
-import { jwtDecode } from "jwt-decode";
 import { OAUTH_TOKEN_TYPE, type OAuthTokenType } from "@shared";
+import { jwtDecode } from "jwt-decode";
 import logger from "@/logging";
 import { AccountModel, AgentModel } from "@/models";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";

@@ -264,8 +264,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           return new Response(
             JSON.stringify({
               access_token: "mcp-server-access-token",
-              issued_token_type:
-                OAUTH_TOKEN_TYPE.AccessToken,
+              issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
               expires_in: 300,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -500,8 +499,7 @@ describe("resolveEnterpriseTransportCredential", () => {
           return new Response(
             JSON.stringify({
               access_token: "mcp-server-access-token",
-              issued_token_type:
-                OAUTH_TOKEN_TYPE.AccessToken,
+              issued_token_type: OAUTH_TOKEN_TYPE.AccessToken,
               expires_in: 300,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },

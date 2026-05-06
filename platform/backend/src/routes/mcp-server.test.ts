@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
 import { OAUTH_TOKEN_TYPE } from "@shared";
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import McpServerUserModel from "@/models/mcp-server-user";

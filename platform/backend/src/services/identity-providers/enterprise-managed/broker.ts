@@ -183,10 +183,10 @@ export async function exchangeIdJagAtProtectedResource(params: {
         ? responseBody.expires_in
         : null,
     value: accessToken,
-      issuedTokenType:
-        typeof responseBody.issued_token_type === "string"
-          ? responseBody.issued_token_type
-          : OAUTH_TOKEN_TYPE.AccessToken,
+    issuedTokenType:
+      typeof responseBody.issued_token_type === "string"
+        ? responseBody.issued_token_type
+        : OAUTH_TOKEN_TYPE.AccessToken,
   };
 }
 

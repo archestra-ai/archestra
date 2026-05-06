@@ -2440,9 +2440,7 @@ class McpClient {
     );
   }
 
-  private async discoverToolsOrResourceTools(
-    client: Client,
-  ): Promise<Tool[]> {
+  private async discoverToolsOrResourceTools(client: Client): Promise<Tool[]> {
     try {
       const toolsResult = await this.raceWithTimeout(
         client.listTools(),

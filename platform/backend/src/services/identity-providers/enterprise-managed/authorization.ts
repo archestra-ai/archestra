@@ -1,7 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
-  OAUTH_GRANT_TYPE,
   OAUTH_SCOPES,
 } from "@shared";
 import { decodeProtectedHeader } from "jose";

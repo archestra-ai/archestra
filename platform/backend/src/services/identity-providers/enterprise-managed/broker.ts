@@ -126,8 +126,8 @@ export async function exchangeIdJagAtProtectedResource(params: {
 
   const tokenEndpoint =
     await discoverProtectedResourceTokenEndpoint(resourceIdentifier);
-    const requestBody = new URLSearchParams({
-      grant_type: OAUTH_GRANT_TYPE.JwtBearer,
+  const requestBody = new URLSearchParams({
+    grant_type: OAUTH_GRANT_TYPE.JwtBearer,
     assertion: params.assertion,
   });
   if (params.enterpriseManagedConfig.scopes?.length) {

@@ -167,10 +167,10 @@ async function buildAuthenticatedHeaders(params: {
 
   const algorithm = inferPrivateKeyAlgorithm(params.privateKeyPem);
 
-    params.requestBody.set(
-      "client_assertion_type",
-      OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
-    );
+  params.requestBody.set(
+    "client_assertion_type",
+    OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
+  );
   params.requestBody.set(
     "client_assertion",
     await new SignJWT({})

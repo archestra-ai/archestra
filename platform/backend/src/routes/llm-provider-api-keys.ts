@@ -170,7 +170,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Provider API Keys"],
         body: z
           .object({
-            name: z.string().min(1, "Name is required"),
+            name: z.string().optional(),
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),

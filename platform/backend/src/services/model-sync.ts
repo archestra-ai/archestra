@@ -1,4 +1,8 @@
-import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
+import {
+  MODELS_DEV_PROVIDER_MAP,
+  type SupportedEmbeddingDimension,
+  type SupportedProvider,
+} from "@shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
@@ -284,29 +288,6 @@ export function resolveModelCapabilities(params: {
   });
 }
 
-/**
- * Maps models.dev provider IDs to Archestra provider names.
- */
-const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
-  openai: "openai",
-  openrouter: "openrouter",
-  anthropic: "anthropic",
-  google: "gemini",
-  "google-vertex": "gemini",
-  cohere: "cohere",
-  cerebras: "cerebras",
-  mistral: "mistral",
-  llama: "openai",
-  deepseek: "openai",
-  groq: "groq",
-  "fireworks-ai": "openai",
-  togetherai: "openai",
-  perplexity: null,
-  xai: "xai",
-  nvidia: null,
-  "amazon-bedrock": "bedrock",
-  azure: null,
-};
 
 /**
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.

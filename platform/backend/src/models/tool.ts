@@ -1847,17 +1847,19 @@ class ToolModel {
 
       // Normally exclude all tools in the Archestra built-in catalog.
       // However, when explicitly requested, include ONLY the knowledge sources tool.
+      const excludeBuiltInsCondition = filters.includeKnowledgeSourcesTool
+        ? or(
+            isNull(schema.toolsTable.catalogId),
+            ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, brandedKnowledgeToolName),
+          )
+        : or(
+            isNull(schema.toolsTable.catalogId),
+            ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          );
+
       toolWhereConditions.push(
-        filters.includeKnowledgeSourcesTool
-          ? (or(
-              isNull(schema.toolsTable.catalogId),
-              ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-              eq(schema.toolsTable.name, brandedKnowledgeToolName),
-            ) ?? isNull(schema.toolsTable.catalogId))
-          : (or(
-              isNull(schema.toolsTable.catalogId),
-              ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-            ) ?? isNull(schema.toolsTable.catalogId)),
+        excludeBuiltInsCondition ?? isNull(schema.toolsTable.catalogId),
       );
     }
 

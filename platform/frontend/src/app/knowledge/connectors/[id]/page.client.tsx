@@ -3,7 +3,6 @@
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   ArrowLeft,
   Database,
   Logs,

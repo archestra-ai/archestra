@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Okta — SSO sign-in plus Okta-managed token exchange for downstream MCP tool calls"
 order: 8
-lastUpdated: 2026-05-05
+lastUpdated: 2026-05-06
 ---
 
 <!--
@@ -109,8 +109,12 @@ If your tenant does not have access to the OIN tile, create the app manually:
 2. Select **OIDC - OpenID Connect** and **Web Application**
 3. Set **Sign-in redirect URIs** to `https://your-archestra-domain.com/api/auth/sso/callback/Okta` (the `Okta` segment is case-sensitive)
 4. Set **Sign-out redirect URIs** to `https://your-archestra-domain.com/auth/sign-in`
-5. Assign the users or groups that should access Archestra
-6. Save the integration and copy the Client ID and Client Secret from the **Sign On** tab
+5. For Okta dashboard launch, set **Login initiated by** to **Either Okta or App**
+6. Set **Login flow** to **Redirect to app to initiate login (OIDC Compliant)**
+7. Set **Initiate login URI** to `https://your-archestra-domain.com/auth/sso/Okta`
+8. Keep **Send ID Token directly to app (Okta Simplified)** disabled
+9. Assign the users or groups that should access Archestra
+10. Save the integration and copy the Client ID and Client Secret from the **Sign On** tab
 
 ## 2. Configure SSO in Archestra
 
@@ -127,7 +131,7 @@ Fill in:
 Click **Create Provider**. Users can now sign in:
 
 - **From the Archestra sign-in page** by entering their email address and clicking **Log in**. Archestra matches the email domain to the Okta provider, redirects the user to Okta, then completes the OIDC callback after Okta authentication.
-- **From the Archestra tile on their Okta End-User Dashboard** (OIN install only) — Okta redirects to Archestra and Archestra completes the SSO flow
+- **From the Archestra tile on their Okta End-User Dashboard** — Okta redirects to `https://your-archestra-domain.com/auth/sso/Okta`, Archestra starts the OIDC flow, then Okta returns the user through the callback URL
 
 Test in a private browser window with a user who is assigned to the Okta app.
 
@@ -135,7 +139,7 @@ Test in a private browser window with a user who is assigned to the Okta app.
 
 | Feature | Supported | Notes |
 | --- | --- | --- |
-| **IdP-initiated SSO** | Yes | Users can start from the Archestra tile in the Okta End-User Dashboard when using the OIN app. |
+| **IdP-initiated SSO** | Yes | Users can start from the Archestra tile in the Okta End-User Dashboard. For manual integrations, use the OIDC-compliant **Redirect to app to initiate login** flow and set the initiate login URI to `https://your-archestra-domain.com/auth/sso/Okta`. |
 | **SP-initiated SSO** | Yes | Users open the Archestra login page, enter their email address, and click **Log in**. Archestra redirects them to Okta, then Okta returns them to Archestra through the OIDC callback URL after authentication. |
 | **SP-initiated SLO** | Yes | When users sign out of Archestra, Archestra can redirect them to Okta's OIDC logout endpoint. Keep **Enable RP-Initiated Logout** on unless your Okta app rejects the `post_logout_redirect_uri` parameter. |
 | **JIT provisioning** | Yes | First-time SSO users are created during login, then role mapping and team sync are applied from Okta claims. |
@@ -208,6 +212,7 @@ Save the catalog item. When you assign tools from this server to an Agent or Gat
 ## Troubleshooting
 
 - **App tile opens the wrong place** (OIN install). The Archestra hostname in Okta must not include `https://` or a path — only the bare hostname.
+- **Manual Okta tile does not start SSO.** Set **Login initiated by** to **Either Okta or App**, **Login flow** to **Redirect to app to initiate login (OIDC Compliant)**, and **Initiate login URI** to `https://your-archestra-domain.com/auth/sso/Okta`. Do not use **Send ID Token directly to app (Okta Simplified)**.
 - **User cannot sign in.** Verify the user is assigned to the Archestra app integration in Okta.
 - **User denied after successful Okta authentication.** Verify the user matches any configured Archestra role mapping rules.
 - **Issuer mismatch on setup.** Verify that **Issuer** and **Discovery Endpoint** point to the same Okta org. Do not leave sample values such as `your-domain.okta.com` in either field.

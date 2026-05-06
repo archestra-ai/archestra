@@ -10,6 +10,13 @@ interface SessionExternalIdpToken {
   rawToken: string;
 }
 
+export enum EnterpriseSubjectTokenType {
+  AccessToken = "urn:ietf:params:oauth:token-type:access_token",
+  IdToken = "urn:ietf:params:oauth:token-type:id_token",
+}
+
+type SubjectTokenPreference = "access_token" | "id_token";
+
 export async function resolveSessionExternalIdpToken(params: {
   agentId: string;
   userId: string;
@@ -105,13 +112,14 @@ function resolveSubjectTokenPreference(identityProvider: {
       exchangeStrategy?: string;
     };
   } | null;
-}): "access_token" | "id_token" {
-  const subjectTokenType =
-    identityProvider.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType;
-  if (subjectTokenType === "urn:ietf:params:oauth:token-type:access_token") {
+}): SubjectTokenPreference {
+  const subjectTokenType = parseEnterpriseSubjectTokenType(
+    identityProvider.oidcConfig?.enterpriseManagedCredentials?.subjectTokenType,
+  );
+  if (subjectTokenType === EnterpriseSubjectTokenType.AccessToken) {
     return "access_token";
   }
-  if (subjectTokenType === "urn:ietf:params:oauth:token-type:id_token") {
+  if (subjectTokenType === EnterpriseSubjectTokenType.IdToken) {
     return "id_token";
   }
 
@@ -127,11 +135,23 @@ function resolveSubjectTokenPreference(identityProvider: {
   return "id_token";
 }
 
+function parseEnterpriseSubjectTokenType(
+  value: string | undefined,
+): EnterpriseSubjectTokenType | null {
+  if (value === EnterpriseSubjectTokenType.AccessToken) {
+    return EnterpriseSubjectTokenType.AccessToken;
+  }
+  if (value === EnterpriseSubjectTokenType.IdToken) {
+    return EnterpriseSubjectTokenType.IdToken;
+  }
+  return null;
+}
+
 function isStoredSubjectTokenExpired(params: {
   account: {
     accessTokenExpiresAt: Date | null;
   };
-  tokenPreference: "access_token" | "id_token";
+  tokenPreference: SubjectTokenPreference;
   rawToken: string;
 }): boolean {
   if (params.tokenPreference === "access_token") {

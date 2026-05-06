@@ -209,10 +209,13 @@ class UserTokenModel {
 
     const secretsById = new Map(
       await Promise.all(
-        candidates.map(async (token) => [
-          token.secretId,
-          await secretManager().getSecret(token.secretId),
-        ] as const),
+        candidates.map(
+          async (token) =>
+            [
+              token.secretId,
+              await secretManager().getSecret(token.secretId),
+            ] as const,
+        ),
       ),
     );
 

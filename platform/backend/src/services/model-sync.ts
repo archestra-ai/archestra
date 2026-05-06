@@ -288,7 +288,6 @@ export function resolveModelCapabilities(params: {
   });
 }
 
-
 /**
  * Build a map of modelId -> capabilities from models.dev data for a specific provider.
  */

@@ -1625,6 +1625,150 @@ describe("McpClient", () => {
         fetchMock.mockRestore();
       });
 
+      test("uses a linked secondary IdP token when the MCP gateway IdP differs from the tool IdP", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "linked-entra@example.com" });
+        const oktaIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "Okta",
+            issuer: "https://example.okta.com",
+            oidcConfig: {
+              clientId: "okta-gateway-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            },
+          },
+        );
+        const entraIdentityProvider = await makeIdentityProvider(
+          organization.id,
+          {
+            providerId: "EntraID",
+            issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
+            ssoLoginEnabled: false,
+            oidcConfig: {
+              clientId: "archestra-entra-client-id",
+              clientSecret: "archestra-entra-client-secret",
+              tokenEndpoint:
+                "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+              enterpriseManagedCredentials: {
+                exchangeStrategy: "entra_obo",
+                clientId: "archestra-entra-client-id",
+                clientSecret: "archestra-entra-client-secret",
+                tokenEndpoint:
+                  "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token",
+                tokenEndpointAuthentication: "client_secret_post",
+                subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+              },
+            },
+          },
+        );
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: oktaIdentityProvider.id,
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-linked-entra",
+          providerId: entraIdentityProvider.providerId,
+          userId: user.id,
+          accessToken: "linked-entra-access-token",
+          accessTokenExpiresAt: new Date(Date.now() + 300_000),
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          name: "entra protected api",
+          enterpriseManagedConfig: {
+            identityProviderId: entraIdentityProvider.id,
+            requestedCredentialType: "bearer_token",
+            resourceIdentifier: "api://downstream-app-id",
+            tokenInjectionMode: "authorization_bearer",
+          },
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "entra protected api__query_codebase",
+          description: "Query codebase",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              access_token: "downstream-entra-token",
+              expires_in: 300,
+              token_type: "Bearer",
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_linked_secondary_idp",
+            name: "entra protected api__query_codebase",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: `external_idp:${oktaIdentityProvider.id}:okta-sub`,
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+            isExternalIdp: true,
+            rawToken: "okta-gateway-jwt",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const [, requestInit] = fetchMock.mock.calls.at(0) ?? [];
+        expect(String(requestInit?.body)).toContain(
+          "requested_token_use=on_behalf_of",
+        );
+        expect(String(requestInit?.body)).toContain(
+          "assertion=linked-entra-access-token",
+        );
+        expect(String(requestInit?.body)).not.toContain("okta-gateway-jwt");
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe(
+          "Bearer downstream-entra-token",
+        );
+
+        fetchMock.mockRestore();
+      });
+
       test("injects the brokered managed credential into the outgoing MCP request", async ({
         makeIdentityProvider,
         makeOrganization,

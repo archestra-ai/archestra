@@ -50,6 +50,7 @@ export function EditIdentityProviderDialog({
     defaultValues: {
       providerId: "",
       issuer: "",
+      ssoLoginEnabled: true,
       domain: "",
       providerType: "oidc",
       oidcConfig: {
@@ -82,6 +83,7 @@ export function EditIdentityProviderDialog({
       form.reset({
         providerId: provider.providerId,
         issuer: provider.issuer,
+        ssoLoginEnabled: provider.ssoLoginEnabled ?? true,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
         roleMapping: {

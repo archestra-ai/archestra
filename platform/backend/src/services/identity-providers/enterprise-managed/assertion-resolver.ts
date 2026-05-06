@@ -22,17 +22,6 @@ export async function resolveEnterpriseAssertion(params: {
 
   const effectiveIdentityProviderId =
     params.identityProviderId ?? agent.identityProviderId;
-  if (effectiveIdentityProviderId !== agent.identityProviderId) {
-    logger.warn(
-      {
-        agentId: params.agentId,
-        requestedIdentityProviderId: params.identityProviderId,
-        agentIdentityProviderId: agent.identityProviderId,
-      },
-      "Enterprise assertion resolver: assignment identity provider does not match agent identity provider",
-    );
-    return null;
-  }
 
   const identityProvider = await findExternalIdentityProviderById(
     effectiveIdentityProviderId,
@@ -41,7 +30,11 @@ export async function resolveEnterpriseAssertion(params: {
     return null;
   }
 
-  if (params.tokenAuth?.isExternalIdp && params.tokenAuth.rawToken) {
+  if (
+    params.tokenAuth?.isExternalIdp &&
+    params.tokenAuth.rawToken &&
+    effectiveIdentityProviderId === agent.identityProviderId
+  ) {
     return {
       assertion: params.tokenAuth.rawToken,
       identityProviderId: effectiveIdentityProviderId,
@@ -55,6 +48,7 @@ export async function resolveEnterpriseAssertion(params: {
 
   const sessionToken = await resolveSessionExternalIdpToken({
     agentId: params.agentId,
+    identityProviderId: effectiveIdentityProviderId,
     userId: params.tokenAuth.userId,
   });
   if (!sessionToken) {

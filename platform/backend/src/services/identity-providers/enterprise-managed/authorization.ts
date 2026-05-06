@@ -19,7 +19,6 @@ import {
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
 
-export const JWT_BEARER_GRANT_TYPE = OAUTH_GRANT_TYPE.JwtBearer;
 /** @public — exported for testability */
 export const OAUTH_ID_JAG_TYP = "oauth-id-jag+jwt";
 export const MCP_RESOURCE_REFERENCE_PREFIX = "mcp-resource:";

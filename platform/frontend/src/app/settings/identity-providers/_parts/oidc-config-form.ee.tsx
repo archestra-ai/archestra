@@ -1,8 +1,8 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   DocsPage,
-  type EnterpriseSubjectTokenType,
   type IdentityProviderFormValues,
   OAUTH_TOKEN_TYPE,
 } from "@shared";
@@ -52,6 +52,20 @@ import {
 } from "./identity-provider-form.utils";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
+
+type EnterpriseSubjectTokenType = NonNullable<
+  NonNullable<
+    NonNullable<
+      archestraApiTypes.CreateIdentityProviderData["body"]["oidcConfig"]
+    >["enterpriseManagedCredentials"]
+  >["subjectTokenType"]
+>;
+
+const SUBJECT_TOKEN_LABEL_BY_TYPE = {
+  [OAUTH_TOKEN_TYPE.AccessToken]: "Access token",
+  [OAUTH_TOKEN_TYPE.IdToken]: "ID token",
+  [OAUTH_TOKEN_TYPE.Jwt]: "Generic JWT",
+} as const satisfies Record<EnterpriseSubjectTokenType, string>;
 
 interface OidcConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -793,15 +807,13 @@ function EnterpriseManagedCredentialsForm(props: {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value={OAUTH_TOKEN_TYPE.AccessToken}>
-                        Access token
-                      </SelectItem>
-                      <SelectItem value={OAUTH_TOKEN_TYPE.IdToken}>
-                        ID token
-                      </SelectItem>
-                      <SelectItem value={OAUTH_TOKEN_TYPE.Jwt}>
-                        Generic JWT
-                      </SelectItem>
+                      {Object.entries(SUBJECT_TOKEN_LABEL_BY_TYPE).map(
+                        ([tokenType, label]) => (
+                          <SelectItem key={tokenType} value={tokenType}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
                     </SelectContent>
                   </Select>
                   <FormDescription>

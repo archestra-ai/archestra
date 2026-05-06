@@ -1,10 +1,19 @@
 import {
+  type archestraApiTypes,
   IDENTITY_PROVIDER_ID,
   type IdentityProviderFormValues,
   isEntraHostname,
   isOktaHostname,
   OAUTH_TOKEN_TYPE,
 } from "@shared";
+
+type EnterpriseSubjectTokenType = NonNullable<
+  NonNullable<
+    NonNullable<
+      archestraApiTypes.CreateIdentityProviderData["body"]["oidcConfig"]
+    >["enterpriseManagedCredentials"]
+  >["subjectTokenType"]
+>;
 
 export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
@@ -156,7 +165,7 @@ export function getDefaultTokenEndpointAuthentication(
 
 export function getDefaultSubjectTokenType(
   exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
-): typeof OAUTH_TOKEN_TYPE.AccessToken | typeof OAUTH_TOKEN_TYPE.IdToken {
+): EnterpriseSubjectTokenType {
   return exchangeStrategy === "rfc8693" || exchangeStrategy === "entra_obo"
     ? OAUTH_TOKEN_TYPE.AccessToken
     : OAUTH_TOKEN_TYPE.IdToken;

@@ -17,7 +17,13 @@ import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
+import {
+  AgentModel,
+  McpServerModel,
+  TeamModel,
+  UserMemoryModel,
+  UserModel,
+} from "@/models";
 import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
   promptNeedsRendering,
@@ -193,9 +199,20 @@ export async function executeA2AMessage(
 
   const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
 
-  if (renderedPrompt) {
-    systemPrompt = renderedPrompt;
+  const userMemories = await UserMemoryModel.findAllForUser(
+    userId,
+    organizationId,
+  );
+  let memoryBlock: string | undefined;
+  if (userMemories.length > 0) {
+    const lines = userMemories
+      .map((m) => `- ${m.title}: ${m.content}`)
+      .join("\n");
+    memoryBlock = `The following notes about this user have been saved across sessions:\n${lines}`;
   }
+
+  systemPrompt =
+    [renderedPrompt, memoryBlock].filter(Boolean).join("\n\n") || undefined;
 
   // Track subagent execution so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).

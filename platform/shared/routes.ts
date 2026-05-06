@@ -368,6 +368,12 @@ export const RouteId = {
   GetUserPermissions: "getUserPermissions",
   GetImpersonableUsers: "getImpersonableUsers",
 
+  // User Memory Routes
+  GetUserMemories: "getUserMemories",
+  CreateUserMemory: "createUserMemory",
+  UpdateUserMemory: "updateUserMemory",
+  DeleteUserMemory: "deleteUserMemory",
+
   // Team Token Routes
   GetTokens: "getTokens",
   GetTokenValue: "getTokenValue",

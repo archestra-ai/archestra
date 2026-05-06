@@ -49,6 +49,7 @@ import {
   MessageModel,
   OrganizationModel,
   TeamModel,
+  UserMemoryModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
@@ -252,6 +253,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         promptContext,
       );
 
+      // Inject approved user memories into the system prompt so the agent
+      // can recall persistent context across sessions.
+      const userMemories = await UserMemoryModel.findAllForUser(
+        user.id,
+        organizationId,
+      );
+      let memoryBlock: string | undefined;
+      if (userMemories.length > 0) {
+        const lines = userMemories
+          .map((m) => `- ${m.title}: ${m.content}`)
+          .join("\n");
+        memoryBlock = `The following notes about this user have been saved across sessions:\n${lines}`;
+      }
+
       let toolResultInstructions: string = "";
       // Add MCP UI instruction when tools are available
       if (Object.keys(mcpTools).length > 0) {
@@ -263,7 +278,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
       systemPrompt =
-        [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+        [renderedPrompt, memoryBlock, toolDenialInstruction, toolResultInstructions]
           .filter(Boolean)
           .join("\n\n") || undefined;
 

@@ -55,6 +55,7 @@ export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenRoutes } from "./token";
 export { default as toolRoutes } from "./tool";
+export { default as userMemoryRoutes } from "./user-memory";
 export { default as userRoutes } from "./user";
 export { default as userTokenRoutes } from "./user-token";
 export { default as virtualApiKeysRoutes } from "./virtual-api-keys";

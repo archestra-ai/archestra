@@ -4420,6 +4420,14 @@ export const getUserTokenValue = <ThrowOnError extends boolean = false>(options?
  */
 export const rotateUserToken = <ThrowOnError extends boolean = false>(options?: Options<RotateUserTokenData, ThrowOnError>) => (options?.client ?? client).post<RotateUserTokenResponses, RotateUserTokenErrors, ThrowOnError>({ url: '/api/user-tokens/me/rotate', ...options });
 
+export const getUserMemories = <ThrowOnError extends boolean = false>(options?: Options<unknown, ThrowOnError>) => (options?.client ?? client).get<unknown, unknown, ThrowOnError>({ url: '/api/user-memories', ...options });
+
+export const createUserMemory = <ThrowOnError extends boolean = false>(options?: Options<unknown, ThrowOnError>) => (options?.client ?? client).post<unknown, unknown, ThrowOnError>({ url: '/api/user-memories', ...options });
+
+export const updateUserMemory = <ThrowOnError extends boolean = false>(options?: Options<unknown, ThrowOnError>) => (options?.client ?? client).patch<unknown, unknown, ThrowOnError>({ url: '/api/user-memories/{id}', ...options });
+
+export const deleteUserMemory = <ThrowOnError extends boolean = false>(options?: Options<unknown, ThrowOnError>) => (options?.client ?? client).delete<unknown, unknown, ThrowOnError>({ url: '/api/user-memories/{id}', ...options });
+
 /**
  * Get virtual API keys visible to the current user, with provider key mappings
  *

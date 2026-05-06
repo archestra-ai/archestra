@@ -58,6 +58,7 @@ export * from "./team-token";
 export * from "./tool";
 export * from "./tool-result-compression";
 export * from "./user";
+export * from "./user-memory";
 export * from "./user-token";
 export * from "./virtual-api-key";
 export * from "./visibility";

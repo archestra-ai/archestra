@@ -9,6 +9,7 @@ export function useSettingsTabs() {
   const { data: secretsType } = useSecretsType();
   return [
     { label: "Your Account", href: "/settings/account" },
+    { label: "Memory", href: "/settings/memory" },
     ...(permissionMap?.["/settings/api-keys"]
       ? [{ label: "API Keys", href: "/settings/api-keys" }]
       : []),

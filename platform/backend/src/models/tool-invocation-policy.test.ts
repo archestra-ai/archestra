@@ -1,7 +1,6 @@
 import {
   getArchestraToolFullName,
   TOOL_GET_AGENT_SHORT_NAME,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@shared";
 import { describe, expect, test } from "@/test";
@@ -126,18 +125,16 @@ describe("ToolInvocationPolicyModel", () => {
       const agent = await makeAgent();
       await seedAndAssignArchestraTools(agent.id);
 
-      const brandedKbTool = getArchestraToolFullName(
-        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-        { appName: "Acme Copilot", fullWhiteLabeling: true },
-      );
+      // By default, seedAndAssignArchestraTools uses archestra__ prefix
+      const kbToolName = "archestra__query_knowledge_sources";
 
       // Find the tool to apply policy to
       const { ToolModel } = await import("@/models");
-      const tool = await ToolModel.findByName(brandedKbTool);
-      expect(tool).toBeTruthy();
+      const tool = await ToolModel.findByName(kbToolName);
+      if (!tool) throw new Error(`Tool ${kbToolName} not found`);
 
       // Apply a block_always policy to the KB tool
-      await makeToolPolicy(tool!.id, {
+      await makeToolPolicy(tool.id, {
         conditions: [],
         action: "block_always",
         reason: "KB access forbidden",
@@ -145,7 +142,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       const result = await ToolInvocationPolicyModel.evaluateBatch(
         agent.id,
-        [{ toolCallName: brandedKbTool, toolInput: { query: "test" } }],
+        [{ toolCallName: kbToolName, toolInput: { query: "test" } }],
         mockContext,
         true,
         "restrictive",
@@ -154,6 +151,125 @@ describe("ToolInvocationPolicyModel", () => {
       // It should be blocked, unlike whoami or other built-ins
       expect(result.isAllowed).toBe(false);
       expect(result.reason).toContain("KB access forbidden");
+    });
+
+    test("query_knowledge_sources can require approval", async ({
+      makeAgent,
+      makeToolPolicy,
+      seedAndAssignArchestraTools,
+    }) => {
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+      const kbToolName = "archestra__query_knowledge_sources";
+
+      const { ToolModel } = await import("@/models");
+      const tool = await ToolModel.findByName(kbToolName);
+      if (!tool) throw new Error(`Tool ${kbToolName} not found`);
+
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "require_approval",
+        reason: "Approve this search",
+      });
+
+      const needsApproval =
+        await ToolInvocationPolicyModel.checkApprovalRequired(
+          kbToolName,
+          { query: "confidential" },
+          mockContext,
+          "restrictive",
+        );
+
+      expect(needsApproval).toBe(true);
+    });
+
+    test("query_knowledge_sources respects input-specific policies", async ({
+      makeAgent,
+      makeToolPolicy,
+      seedAndAssignArchestraTools,
+    }) => {
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+      const kbToolName = "archestra__query_knowledge_sources";
+
+      const { ToolModel } = await import("@/models");
+      const tool = await ToolModel.findByName(kbToolName);
+      if (!tool) throw new Error(`Tool ${kbToolName} not found`);
+
+      // Block only if query contains "forbidden"
+      await makeToolPolicy(tool.id, {
+        conditions: [
+          { key: "query", operator: "contains", value: "forbidden" },
+        ],
+        action: "block_always",
+        reason: "Search term blocked",
+      });
+
+      const allowedResult = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: kbToolName, toolInput: { query: "safe search" } }],
+        mockContext,
+        true,
+        "restrictive",
+      );
+      expect(allowedResult.isAllowed).toBe(true);
+
+      const blockedResult = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: kbToolName, toolInput: { query: "forbidden word" } }],
+        mockContext,
+        true,
+        "restrictive",
+      );
+      expect(blockedResult.isAllowed).toBe(false);
+      expect(blockedResult.reason).toContain("Search term blocked");
+    });
+
+    test("other Archestra tools still bypass policies even when KB tool is restricted", async ({
+      makeAgent,
+      makeToolPolicy,
+      seedAndAssignArchestraTools,
+    }) => {
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+      const kbToolName = "archestra__query_knowledge_sources";
+      const whoamiToolName = "archestra__whoami";
+
+      const { ToolModel } = await import("@/models");
+      const kbTool = await ToolModel.findByName(kbToolName);
+      const whoamiTool = await ToolModel.findByName(whoamiToolName);
+      if (!kbTool) throw new Error(`Tool ${kbToolName} not found`);
+      if (!whoamiTool) throw new Error(`Tool ${whoamiToolName} not found`);
+
+      // Block BOTH tools via policies
+      await makeToolPolicy(kbTool.id, {
+        conditions: [],
+        action: "block_always",
+        reason: "KB blocked",
+      });
+      await makeToolPolicy(whoamiTool.id, {
+        conditions: [],
+        action: "block_always",
+        reason: "Whoami blocked",
+      });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [
+          { toolCallName: whoamiToolName, toolInput: {} },
+          { toolCallName: kbToolName, toolInput: { query: "test" } },
+        ],
+        mockContext,
+        true,
+        "restrictive",
+      );
+
+      // whoami should bypass (it's first in the batch), but KB should be checked
+      // Actually evaluateBatch filters out bypassable tools BEFORE evaluation.
+      // So whoami is ignored, and only KB is evaluated.
+      expect(result.isAllowed).toBe(false);
+      expect(result.toolCallName).toBe(kbToolName);
+      expect(result.reason).toContain("KB blocked");
     });
 
     test("skips Archestra tools and evaluates non-Archestra tools", async ({

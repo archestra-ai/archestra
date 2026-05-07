@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserSearchableSelect } from "@/components/ui/user-searchable-select";
+import { VirtualKeySearchableSelect } from "@/components/ui/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -690,7 +691,7 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "virtual_key" && (
-                  <SearchableSelect
+                  <VirtualKeySearchableSelect
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -698,11 +699,8 @@ export default function LimitsPage() {
                         entityId: value,
                       }))
                     }
+                    virtualKeys={virtualKeys}
                     placeholder="Select virtual key"
-                    items={virtualKeys.map((key) => ({
-                      value: key.id,
-                      label: key.name,
-                    }))}
                     className="w-full sm:flex-1"
                   />
                 )}

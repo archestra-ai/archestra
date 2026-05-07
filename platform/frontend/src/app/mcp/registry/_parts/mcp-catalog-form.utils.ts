@@ -7,6 +7,7 @@ import {
   parseVaultReference,
 } from "@shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
+import { parseMcpArguments } from "@/lib/mcp/mcp-arguments-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
 type McpCatalogApiData =
@@ -34,12 +35,9 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
+    // Parse arguments using the dedicated parser (supports JSON and newline formats)
     const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
+      ? parseMcpArguments(values.localConfig.arguments)
       : [];
 
     data.localConfig = {

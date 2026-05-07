@@ -859,4 +859,30 @@ describe("transformFormToApiData - secret env var preservation", () => {
     expect(env[1]?.key).toBe("UNTOUCHED");
     expect(env[1]?.value ?? "").toBe("");
   });
+
+  it("parses arguments as JSON if they are in JSON format", () => {
+    const values = buildLocalFormValues([]);
+    if (values.localConfig) {
+      values.localConfig.arguments = '["--verbose", "/path/to/server.js"]';
+    }
+
+    const result = transformFormToApiData(values);
+    expect(result.localConfig?.arguments).toEqual([
+      "--verbose",
+      "/path/to/server.js",
+    ]);
+  });
+
+  it("parses arguments as newline-separated by default", () => {
+    const values = buildLocalFormValues([]);
+    if (values.localConfig) {
+      values.localConfig.arguments = "--verbose\n/path/to/server.js";
+    }
+
+    const result = transformFormToApiData(values);
+    expect(result.localConfig?.arguments).toEqual([
+      "--verbose",
+      "/path/to/server.js",
+    ]);
+  });
 });

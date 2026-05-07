@@ -1,3 +1,4 @@
+import { OAUTH_TOKEN_TYPE } from "@shared";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";
@@ -15,7 +16,7 @@ describe("oktaManagedCredentialExchangeStrategy", () => {
           tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
           tokenEndpointAuthentication: "client_secret_post",
           clientSecret: "ai-agent-client-secret",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+          subjectTokenType: OAUTH_TOKEN_TYPE.IdToken,
         },
       },
     });

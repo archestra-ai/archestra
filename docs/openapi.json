@@ -98104,6 +98104,9 @@
                           "clientIdOverride": {
                             "type": "string"
                           },
+                          "clientSecretOverride": {
+                            "type": "string"
+                          },
                           "tokenInjectionMode": {
                             "type": "string",
                             "enum": [
@@ -98934,6 +98937,9 @@
                       "clientIdOverride": {
                         "type": "string"
                       },
+                      "clientSecretOverride": {
+                        "type": "string"
+                      },
                       "tokenInjectionMode": {
                         "type": "string",
                         "enum": [
@@ -99477,6 +99483,9 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "clientSecretOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {
@@ -100333,6 +100342,9 @@
                         "clientIdOverride": {
                           "type": "string"
                         },
+                        "clientSecretOverride": {
+                          "type": "string"
+                        },
                         "tokenInjectionMode": {
                           "type": "string",
                           "enum": [
@@ -101154,6 +101166,9 @@
                       "clientIdOverride": {
                         "type": "string"
                       },
+                      "clientSecretOverride": {
+                        "type": "string"
+                      },
                       "tokenInjectionMode": {
                         "type": "string",
                         "enum": [
@@ -101705,6 +101720,9 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
+                          "type": "string"
+                        },
+                        "clientSecretOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {

@@ -1,12 +1,23 @@
+import type { z } from "zod";
 import logger from "@/logging";
 
-export async function fetchModelsWithBearerAuth<T>(params: {
+interface FetchModelsWithBearerAuthParams {
   url: string;
   apiKey: string;
   errorLabel: string;
   extraHeaders?: Record<string, string> | null;
-}): Promise<T> {
-  const { url, apiKey, errorLabel, extraHeaders } = params;
+}
+
+export async function fetchModelsWithBearerAuth<TSchema extends z.ZodType>(
+  params: FetchModelsWithBearerAuthParams & { schema: TSchema },
+): Promise<z.infer<TSchema>>;
+export async function fetchModelsWithBearerAuth<T>(
+  params: FetchModelsWithBearerAuthParams,
+): Promise<T>;
+export async function fetchModelsWithBearerAuth<TSchema extends z.ZodType>(
+  params: FetchModelsWithBearerAuthParams & { schema?: TSchema },
+): Promise<z.infer<TSchema> | unknown> {
+  const { url, apiKey, errorLabel, extraHeaders, schema } = params;
   const response = await fetch(url, {
     headers: {
       ...(extraHeaders ?? {}),
@@ -23,5 +34,6 @@ export async function fetchModelsWithBearerAuth<T>(params: {
     throw new Error(`Failed to fetch ${errorLabel}: ${response.status}`);
   }
 
-  return (await response.json()) as T;
+  const json = await response.json();
+  return schema ? schema.parse(json) : json;
 }

@@ -932,6 +932,7 @@ class ToolModel {
           schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -975,6 +976,7 @@ class ToolModel {
           schema.agentToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
       })
       .from(schema.toolsTable)
       .innerJoin(

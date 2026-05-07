@@ -35,6 +35,7 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import { linkedIdentityProviderPlugin } from "./linked-idp";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
@@ -145,6 +146,7 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    linkedIdentityProviderPlugin(),
     apiKey({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],

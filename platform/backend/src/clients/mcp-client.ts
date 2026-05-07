@@ -320,7 +320,10 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
     tokenAuth?: TokenAuthContext,
-    options?: { conversationId?: string },
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
     const authInfo =
@@ -386,6 +389,7 @@ class McpClient {
           catalogItem.id,
           effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
           tokenAuth,
+          options,
         );
       return this.createErrorResult(
         toolCall,
@@ -2211,7 +2215,8 @@ class McpClient {
       }),
       catalogId,
       catalogName: catalogDisplayName,
-      installUrl,
+      action: "install_mcp_credentials",
+      actionUrl: installUrl,
     };
   }
 
@@ -2267,6 +2272,10 @@ class McpClient {
     catalogId: string,
     identityProviderId: string | null,
     tokenAuth?: TokenAuthContext,
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
   ): Promise<AuthRequiredMcpToolError> {
     const identityProvider = identityProviderId
       ? await findExternalIdentityProviderById(identityProviderId)
@@ -2281,6 +2290,7 @@ class McpClient {
 
     const connectUrl = this.buildIdentityProviderConnectUrl(
       identityProvider.providerId,
+      options,
     );
     return {
       type: "auth_required",
@@ -2294,13 +2304,43 @@ class McpClient {
       }),
       catalogId,
       catalogName: catalogDisplayName,
-      installUrl: connectUrl,
+      action: "connect_identity_provider",
+      actionUrl: connectUrl,
+      providerId: identityProvider.providerId,
     };
   }
 
-  private buildIdentityProviderConnectUrl(providerId: string): string {
-    const searchParams = new URLSearchParams({ redirectTo: "/chat" });
+  private buildIdentityProviderConnectUrl(
+    providerId: string,
+    options?: {
+      conversationId?: string;
+      identityProviderRedirectPath?: string;
+    },
+  ): string {
+    const redirectTo = this.getIdentityProviderRedirectPath(options);
+    const searchParams = new URLSearchParams({
+      redirectTo,
+      mode: "linked-idp",
+    });
     return `${config.frontendBaseUrl}/auth/sso/${encodeURIComponent(providerId)}?${searchParams.toString()}`;
+  }
+
+  private getIdentityProviderRedirectPath(options?: {
+    conversationId?: string;
+    identityProviderRedirectPath?: string;
+  }): string {
+    if (
+      options?.identityProviderRedirectPath?.startsWith("/") &&
+      !options.identityProviderRedirectPath.startsWith("//")
+    ) {
+      return options.identityProviderRedirectPath;
+    }
+
+    if (options?.conversationId) {
+      return `/chat/${options.conversationId}`;
+    }
+
+    return "/chat";
   }
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {

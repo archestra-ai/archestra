@@ -16,12 +16,15 @@ export async function resolveEnterpriseAssertion(params: {
   tokenAuth?: TokenAuthContext;
 }): Promise<EnterpriseAssertionResolution | null> {
   const agent = await AgentModel.findById(params.agentId);
-  if (!agent?.identityProviderId) {
+  if (!agent) {
     return null;
   }
 
   const effectiveIdentityProviderId =
     params.identityProviderId ?? agent.identityProviderId;
+  if (!effectiveIdentityProviderId) {
+    return null;
+  }
 
   const identityProvider = await findExternalIdentityProviderById(
     effectiveIdentityProviderId,
@@ -33,6 +36,7 @@ export async function resolveEnterpriseAssertion(params: {
   if (
     params.tokenAuth?.isExternalIdp &&
     params.tokenAuth.rawToken &&
+    agent.identityProviderId &&
     effectiveIdentityProviderId === agent.identityProviderId
   ) {
     return {

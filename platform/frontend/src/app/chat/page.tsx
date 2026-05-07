@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -87,6 +87,10 @@ import {
   clearOAuthReauthChatResume,
   getOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
+import {
+  clearSsoSignInRedirectPath,
+  getSsoSignInRedirectPath,
+} from "@/lib/auth/sso-sign-in-attempt";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -151,11 +155,28 @@ export function ChatPageContent({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
   );
+
+  useEffect(() => {
+    if (routeConversationId) {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    const redirectPath = getSsoSignInRedirectPath();
+    if (!redirectPath || redirectPath === "/chat") {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    clearSsoSignInRedirectPath();
+    router.replace(redirectPath);
+  }, [routeConversationId, router]);
 
   // Hide version display from layout - chat page has its own version display
   useEffect(() => {
@@ -1370,6 +1391,11 @@ export function ChatPageContent({
 
     // Mark as triggered to prevent duplicate sends
     autoSendTriggeredRef.current = true;
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
 
     // Store the message to send after conversation is created
     pendingPromptRef.current = initialUserPrompt;
@@ -1384,6 +1410,43 @@ export function ChatPageContent({
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  useEffect(() => {
+    if (
+      autoSendTriggeredRef.current ||
+      !initialUserPrompt ||
+      !conversationId ||
+      !sendMessage ||
+      status !== "ready"
+    ) {
+      return;
+    }
+
+    autoSendTriggeredRef.current = true;
+
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
+
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: initialUserPrompt }],
+      metadata: { createdAt: new Date().toISOString() },
+    });
+  }, [
+    conversationId,
+    initialUserPrompt,
+    pathname,
+    router,
+    searchParams,
+    sendMessage,
+    status,
   ]);
 
   useEffect(() => {
@@ -2101,6 +2164,19 @@ export function ChatPageContent({
 
 export default function ChatPage() {
   return <ChatPageContent key="new-chat" />;
+}
+
+function clearUserPromptQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("user_prompt");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
 }
 
 function mergePersistedMessageMetadata(params: {

@@ -98,7 +98,9 @@ describe("parseAuthRequired", () => {
     const result = parseAuthRequired(text);
     expect(result).toEqual({
       catalogName: "jira-atlassian-remote",
-      installUrl: url,
+      actionUrl: url,
+      action: "install_mcp_credentials",
+      providerId: null,
     });
   });
 
@@ -112,7 +114,9 @@ describe("parseAuthRequired", () => {
     const result = parseAuthRequired(text);
     expect(result).toEqual({
       catalogName: "slack-remote",
-      installUrl: url,
+      actionUrl: url,
+      action: "install_mcp_credentials",
+      providerId: null,
     });
   });
 
@@ -123,7 +127,9 @@ describe("parseAuthRequired", () => {
     const result = parseAuthRequired(text);
     expect(result).toEqual({
       catalogName: "github-remote",
-      installUrl: url,
+      actionUrl: url,
+      action: "install_mcp_credentials",
+      providerId: null,
     });
   });
 
@@ -133,7 +139,9 @@ describe("parseAuthRequired", () => {
     const result = parseAuthRequired(text);
     expect(result).toEqual({
       catalogName: "my-org/custom-server",
-      installUrl: url,
+      actionUrl: url,
+      action: "install_mcp_credentials",
+      providerId: null,
     });
   });
 
@@ -274,7 +282,8 @@ describe("resolveToolAuthState", () => {
             type: "auth_required",
             message: "Authentication required",
             catalogName: "github-remote",
-            installUrl: "http://localhost:3000/mcp/registry?install=cat_abc",
+            action: "install_mcp_credentials",
+            actionUrl: "http://localhost:3000/mcp/registry?install=cat_abc",
             catalogId: "cat_abc",
           },
         },
@@ -282,7 +291,63 @@ describe("resolveToolAuthState", () => {
     ).toEqual({
       kind: "auth-required",
       catalogName: "github-remote",
-      installUrl: "http://localhost:3000/mcp/registry?install=cat_abc",
+      actionUrl: "http://localhost:3000/mcp/registry?install=cat_abc",
+      action: "install_mcp_credentials",
+      providerId: null,
+      catalogId: "cat_abc",
+    });
+  });
+
+  it("resolves structured linked identity provider auth-required errors", () => {
+    const actionUrl =
+      "http://localhost:3000/auth/sso/EntraID?redirectTo=%2Fchat%2Fconv-123";
+
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_required",
+            message: "Authentication required",
+            catalogName: "protected api",
+            action: "connect_identity_provider",
+            actionUrl,
+            providerId: "EntraID",
+            catalogId: "cat_abc",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-required",
+      catalogName: "protected api",
+      actionUrl,
+      action: "connect_identity_provider",
+      providerId: "EntraID",
+      catalogId: "cat_abc",
+    });
+  });
+
+  it("infers linked identity provider auth from legacy installUrl values", () => {
+    const actionUrl =
+      "http://localhost:3000/auth/sso/EntraID?redirectTo=%2Fchat%2Fconv-123";
+
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_required",
+            message: "Authentication required",
+            catalogName: "protected api",
+            installUrl: actionUrl,
+            catalogId: "cat_abc",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-required",
+      catalogName: "protected api",
+      actionUrl,
+      action: "connect_identity_provider",
+      providerId: "EntraID",
       catalogId: "cat_abc",
     });
   });
@@ -325,7 +390,9 @@ describe("resolveToolAuthState", () => {
     ).toEqual({
       kind: "auth-required",
       catalogName: "jira-remote",
-      installUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+      actionUrl: "http://localhost:3000/mcp/registry?install=cat_123",
+      action: "install_mcp_credentials",
+      providerId: null,
       catalogId: "cat_123",
     });
   });
@@ -340,7 +407,9 @@ describe("resolveAssistantTextAuthState", () => {
     ).toEqual({
       kind: "auth-required",
       catalogName: "slack-remote",
-      installUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+      actionUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+      action: "install_mcp_credentials",
+      providerId: null,
       catalogId: "cat_slack",
     });
   });

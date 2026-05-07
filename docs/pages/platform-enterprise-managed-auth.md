@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Per-user identity for downstream MCP tool calls — OBO, ID-JAG, Cross-App Access, and RFC 8693 token exchange"
 order: 4
-lastUpdated: 2026-05-06
+lastUpdated: 2026-05-07
 ---
 
 <!--
@@ -65,7 +65,7 @@ Archestra **infers the strategy automatically** from the OIDC issuer URL: Okta h
 To use Enterprise-Managed Auth on a given MCP server, configure three places:
 
 1. **Identity Provider** — In **Settings > Identity Providers**, open the OIDC provider and complete the **Enterprise-Managed Credentials** section. The main fields are **Exchange Client ID**, **Exchange Client Secret**, **Exchange Token Endpoint**, **Exchange Client Authentication**, and **User Token To Exchange**.
-2. **MCP catalog item** — In the server's **Multitenant Authorization** settings, choose **Identity Provider Token Exchange**. Set the **Requested Credential**, **Injection Mode**, and the **Managed Resource Identifier** (or scopes) for the downstream API.
+2. **MCP catalog item** — In the server's **Multitenant Authorization** settings, choose **Identity Provider Token Exchange**. Set the **Requested Credential**, **Injection Mode**, and the **Managed Resource Identifier** for the downstream API.
 3. **Tool assignment** — Assign the tool with **Resolve at call time** so Archestra resolves the downstream credential for the caller every time the tool runs.
 
 Per-provider pages walk through each of these steps with concrete field values for that provider.
@@ -76,7 +76,21 @@ The IdP used for Archestra sign-in does not have to be the same IdP used for a d
 
 Configure the downstream IdP in **Settings > Identity Providers**, then disable **Show on sign-in page**. The provider remains usable for account linking and Enterprise-Managed Auth, but it will not appear as a primary SSO option on the login screen.
 
-For this pattern to work, each user needs a downstream IdP session at least once so Archestra has a usable token for that IdP. Users do not need to find or configure this manually: if a tool call needs that token and it is missing or expired, Archestra returns an authentication-required tool result with a direct SSO link for the downstream IdP. After the user completes that SSO flow, they retry the tool call.
+For this pattern to work, each user needs a downstream IdP session at least once so Archestra has a usable token for that IdP. Users do not need to find or configure this manually: if a tool call needs that token and it is missing or expired, Archestra returns an authentication-required tool result with a direct SSO link for the downstream IdP. After the user completes that SSO flow, Archestra links the downstream IdP account to the Archestra user who started the tool call, restores the original browser session, and sends the user back to the same chat so they can retry.
+
+The downstream IdP email does not have to match the primary SSO email. The link is scoped to a short-lived request created from the active Archestra session, not to email matching. Normal SSO sign-in still follows the deployment's account-linking rules.
+
+The linked IdP should request the scopes needed to identify and refresh the linked IdP session. For Entra OBO, it must also request a delegated scope exposed by the Archestra/middle-tier app registration so the linked access token is issued to Archestra and can be used as the OBO assertion.
+
+- `openid`, `profile`, and `email` so Archestra can complete OIDC sign-in and link the IdP account to the current user
+- `offline_access` when the IdP supports refresh tokens, so Archestra can refresh the linked token instead of asking the user to reconnect on every expiry
+- For Entra OBO, the Archestra app's exposed delegated scope, for example `api://<archestra-app-client-id>/user_impersonation` or `api://<archestra-app-client-id>/access_as_user`
+
+If these scopes are missing, the browser login can appear to succeed but Archestra may not persist the linked IdP account.
+
+Downstream API access is configured on the MCP catalog item, not by adding every downstream API scope to the linked IdP login. For Entra OBO, set the MCP server's **Managed Resource Identifier** to the downstream resource, such as `https://graph.microsoft.com` or `api://<downstream-app-client-id>`. Archestra requests `<resource>/.default` during the OBO exchange, and Entra issues only the delegated permissions that have been granted and consented for that resource, such as `Mail.Read` or a downstream API's own `user_impersonation` scope.
+
+For 10 custom MCP servers that each call a different Entra-protected API, configure the same hidden Entra IdP once with the Archestra app's own exposed scope, then set each MCP catalog item to its own downstream resource identifier. Do not add all 10 downstream APIs' delegated scopes to the IdP login scopes unless you intentionally want the user to consent to all of them during the IdP linking flow.
 
 When the tool runs, Archestra uses the tool's configured IdP token, exchanges it for the downstream API token, and injects the resulting credential into the MCP request.
 

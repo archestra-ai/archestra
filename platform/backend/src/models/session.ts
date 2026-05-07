@@ -47,6 +47,18 @@ class SessionModel {
     return sessions;
   }
 
+  static async getByToken(token: string, tx?: Transaction) {
+    logger.debug("SessionModel.getByToken: fetching session");
+    const dbOrTx = tx ?? db;
+    const [session] = await dbOrTx
+      .select()
+      .from(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.token, token))
+      .limit(1);
+    logger.debug({ found: !!session }, "SessionModel.getByToken: completed");
+    return session ?? null;
+  }
+
   /**
    * Create a new session
    */

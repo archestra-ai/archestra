@@ -5,7 +5,7 @@ import {
   getIdpRoleMappingRuleRowTestId,
   type IdentityProviderFormValues,
 } from "@shared";
-import { Plus, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
@@ -64,12 +64,14 @@ export function RoleMappingForm({
   const providerClaimHint = getIdentityProviderClaimHint(
     form.watch("providerId"),
   );
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, move, remove } = useFieldArray({
     control: form.control,
     name: "roleMapping.rules",
   });
   const [selectedRuleIndex, setSelectedRuleIndex] = useState(0);
+  const [draggedRuleIndex, setDraggedRuleIndex] = useState<number | null>(null);
   const roleMappingRules = form.watch("roleMapping.rules") ?? [];
+  const defaultRole = form.watch("roleMapping.defaultRole") || "member";
   const activeRuleIndex =
     fields.length > 0 ? Math.min(selectedRuleIndex, fields.length - 1) : null;
   const activeRule =
@@ -78,6 +80,29 @@ export function RoleMappingForm({
     activeRuleIndex === null
       ? "the selected role mapping rule"
       : `role mapping rule ${activeRuleIndex + 1}${activeRule?.role ? ` (${activeRule.role})` : ""}`;
+
+  const moveRule = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    move(fromIndex, toIndex);
+    setSelectedRuleIndex((currentIndex) => {
+      if (currentIndex === fromIndex) return toIndex;
+      if (
+        fromIndex < toIndex &&
+        currentIndex > fromIndex &&
+        currentIndex <= toIndex
+      ) {
+        return currentIndex - 1;
+      }
+      if (
+        toIndex < fromIndex &&
+        currentIndex >= toIndex &&
+        currentIndex < fromIndex
+      ) {
+        return currentIndex + 1;
+      }
+      return currentIndex;
+    });
+  };
 
   const content = (
     <>
@@ -120,17 +145,49 @@ export function RoleMappingForm({
             role.
           </p>
         ) : (
-          <div className="space-y-4">
+          <ul className="space-y-4 list-none p-0 m-0">
             {fields.map((field, index) => (
-              <div
+              <li
                 key={field.id}
                 className={cn(
                   "flex items-start gap-3 p-3 border rounded-md transition-colors",
                   activeRuleIndex === index && "border-primary/50 bg-muted/20",
+                  draggedRuleIndex === index && "opacity-50",
                 )}
                 data-testid={getIdpRoleMappingRuleRowTestId(index)}
                 onFocusCapture={() => setSelectedRuleIndex(index)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const fromIndex = Number(
+                    event.dataTransfer.getData("text/plain"),
+                  );
+                  if (Number.isInteger(fromIndex)) {
+                    moveRule(fromIndex, index);
+                  }
+                  setDraggedRuleIndex(null);
+                }}
               >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  draggable={fields.length > 1}
+                  aria-label={`Drag role mapping rule ${index + 1}`}
+                  className="shrink-0 mt-6 cursor-grab text-muted-foreground active:cursor-grabbing"
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(index));
+                    setDraggedRuleIndex(index);
+                    setSelectedRuleIndex(index);
+                  }}
+                  onDragEnd={() => setDraggedRuleIndex(null)}
+                  disabled={fields.length < 2}
+                >
+                  <GripVertical className="h-4 w-4" />
+                </Button>
                 <div className="flex items-start gap-3 w-full flex-1 min-w-0">
                   <FormField
                     control={form.control}
@@ -202,9 +259,9 @@ export function RoleMappingForm({
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
 
@@ -288,6 +345,8 @@ export function RoleMappingForm({
         mode="role"
         template={activeRule?.expression}
         templateLabel={activeRuleLabel}
+        roleRules={roleMappingRules}
+        defaultRole={defaultRole}
         examples={HANDLEBARS_EXAMPLES}
       />
     </>

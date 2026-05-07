@@ -9,11 +9,18 @@ import { useIdentityProviderLatestIdTokenClaims } from "@/lib/auth/identity-prov
 
 type TemplateTestMode = "role" | "team-sync";
 
+type RoleMappingRule = {
+  expression: string;
+  role: string;
+};
+
 interface SsoTemplateTesterProps {
   identityProviderId?: string;
   template: string | undefined;
   templateLabel: string;
   mode: TemplateTestMode;
+  roleRules?: RoleMappingRule[];
+  defaultRole?: string;
 }
 
 let helpersRegistered = false;
@@ -25,6 +32,8 @@ export function SsoTemplateTester({
   template,
   templateLabel,
   mode,
+  roleRules,
+  defaultRole,
 }: SsoTemplateTesterProps) {
   const { data, isLoading } =
     useIdentityProviderLatestIdTokenClaims(identityProviderId);
@@ -41,8 +50,8 @@ export function SsoTemplateTester({
   }, [claims, identityProviderId, isLoading, mode, template]);
   const result = useMemo(() => {
     if (disabledReason || !claims) return null;
-    return evaluateTemplate({ claims, mode, template });
-  }, [claims, disabledReason, mode, template]);
+    return evaluateTemplate({ claims, defaultRole, mode, roleRules, template });
+  }, [claims, defaultRole, disabledReason, mode, roleRules, template]);
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/20 p-4">
@@ -95,7 +104,9 @@ interface TemplateTestResult {
 
 function evaluateTemplate(params: {
   claims: Record<string, unknown>;
+  defaultRole: string | undefined;
   mode: TemplateTestMode;
+  roleRules: RoleMappingRule[] | undefined;
   template: string | undefined;
 }): TemplateTestResult {
   try {
@@ -108,10 +119,14 @@ function evaluateTemplate(params: {
       return {
         ok: matched,
         label: matched ? "Match" : "No match",
-        description: matched
-          ? "This role mapping rule would match these claims."
-          : "This role mapping rule would not match these claims.",
-        output,
+        description: getRoleMappingDescription({
+          assignedRole: evaluateAssignedRole({
+            claims: params.claims,
+            defaultRole: params.defaultRole,
+            roleRules: params.roleRules,
+          }),
+          selectedRuleMatched: matched,
+        }),
       };
     }
 
@@ -145,6 +160,41 @@ function evaluateTemplate(params: {
           : "The template could not be evaluated.",
     };
   }
+}
+
+function evaluateAssignedRole(params: {
+  claims: Record<string, unknown>;
+  defaultRole: string | undefined;
+  roleRules: RoleMappingRule[] | undefined;
+}) {
+  for (const rule of params.roleRules ?? []) {
+    if (!rule.expression.trim()) continue;
+    const compiled = Handlebars.compile(rule.expression, { noEscape: true });
+    const output = compiled(params.claims).trim();
+    if (output.length > 0 && output !== "false" && output !== "0") {
+      return rule.role;
+    }
+  }
+
+  return params.defaultRole ?? "member";
+}
+
+function getRoleMappingDescription(params: {
+  assignedRole: string;
+  selectedRuleMatched: boolean;
+}) {
+  const selectedRuleText = params.selectedRuleMatched
+    ? "The selected rule matches."
+    : "The selected rule does not match.";
+  return `${selectedRuleText} Based on current rules and your latest token, you would be assigned ${formatRoleName(params.assignedRole)}.`;
+}
+
+function formatRoleName(role: string) {
+  return role
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function extractGroupsFromClaims(claims: Record<string, unknown>): string[] {

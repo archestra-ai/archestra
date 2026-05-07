@@ -4,7 +4,7 @@ import {
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
 } from "@shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
@@ -109,6 +109,15 @@ function getDeleteButtons() {
     .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
 }
 
+function makeDataTransfer() {
+  const data = new Map<string, string>();
+  return {
+    effectAllowed: "move",
+    getData: (key: string) => data.get(key) ?? "",
+    setData: (key: string, value: string) => data.set(key, value),
+  };
+}
+
 describe("RoleMappingForm", () => {
   it("shows latest ID token claims when editing an existing provider", async () => {
     render(<TestWrapper identityProviderId="idp-1" />);
@@ -158,7 +167,35 @@ describe("RoleMappingForm", () => {
       screen.getByText(/runs role mapping rule 2 \(admin\)/i),
     ).toBeInTheDocument();
     expect(screen.getByText("Match")).toBeInTheDocument();
-    expect(screen.getByText(/would match these claims/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/you would be assigned Admin/i),
+    ).toBeInTheDocument();
+  });
+
+  it("reorders role mapping rules by dragging a row handle", async () => {
+    render(
+      <TestWrapper
+        defaultRules={[
+          { expression: "first", role: "admin" },
+          { expression: "second", role: "member" },
+        ]}
+      />,
+    );
+
+    const dataTransfer = makeDataTransfer();
+    fireEvent.dragStart(
+      screen.getByRole("button", { name: "Drag role mapping rule 2" }),
+      { dataTransfer },
+    );
+    fireEvent.drop(screen.getByTestId("role-mapping-rule-0"), {
+      dataTransfer,
+    });
+
+    const templates = screen.getAllByTestId(
+      E2eTestId.IdpRoleMappingRuleTemplate,
+    );
+    expect(templates[0]).toHaveValue("second");
+    expect(templates[1]).toHaveValue("first");
   });
 
   it("shows the Okta groups claim hint", async () => {

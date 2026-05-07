@@ -5,11 +5,18 @@ import { Separator } from "@/components/ui/separator";
 import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { SsoTemplateTester } from "./sso-template-tester.ee";
 
+type RoleMappingRule = {
+  expression: string;
+  role: string;
+};
+
 interface SsoTemplateDebugSectionProps {
   identityProviderId?: string;
   template: string | undefined;
   templateLabel: string;
   mode: "role" | "team-sync";
+  roleRules?: RoleMappingRule[];
+  defaultRole?: string;
   examples: Array<{
     expression: string;
     description: string;
@@ -21,6 +28,8 @@ export function SsoTemplateDebugSection({
   template,
   templateLabel,
   mode,
+  roleRules,
+  defaultRole,
   examples,
 }: SsoTemplateDebugSectionProps) {
   return (
@@ -39,6 +48,8 @@ export function SsoTemplateDebugSection({
         mode={mode}
         template={template}
         templateLabel={templateLabel}
+        roleRules={roleRules}
+        defaultRole={defaultRole}
       />
 
       <IdTokenClaimsDebugger identityProviderId={identityProviderId} />

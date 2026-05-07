@@ -12,6 +12,58 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+/**
+ * Parses the free-form "arguments" textarea into a string array.
+ *
+ * Accepted formats (checked in order):
+ * 1. **JSON array** – if the trimmed input starts with `[`, it is parsed as
+ *    JSON. The result must be an array whose every element is a string;
+ *    otherwise an error is thrown so callers can surface it to the user.
+ * 2. **Newline-separated list** – one argument per line; blank lines are
+ *    ignored, each entry is trimmed.
+ *
+ * @throws {Error} When the input looks like a JSON array but is malformed or
+ *   contains non-string elements.
+ */
+export function parseArgumentsString(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch (err) {
+      throw new Error(
+        `Arguments field looks like a JSON array but could not be parsed: ${err instanceof Error ? err.message : "invalid JSON"}`,
+      );
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new Error(
+        "Arguments field was parsed as JSON but is not an array. " +
+          "Use a JSON array of strings, e.g. [\"--flag\", \"value\"].",
+      );
+    }
+
+    const nonStrings = parsed.filter((el) => typeof el !== "string");
+    if (nonStrings.length > 0) {
+      throw new Error(
+        `Arguments JSON array must contain only strings, ` +
+          `but found: ${nonStrings.map((el) => JSON.stringify(el)).join(", ")}.`,
+      );
+    }
+
+    return (parsed as string[]).filter((arg) => arg.length > 0);
+  }
+
+  // Fallback: newline-separated format
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -34,12 +86,9 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
+    // Parse arguments string into array (supports JSON array or newline-separated)
     const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
+      ? parseArgumentsString(values.localConfig.arguments)
       : [];
 
     data.localConfig = {

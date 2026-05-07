@@ -1,9 +1,83 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
+  parseArgumentsString,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+
+describe("parseArgumentsString", () => {
+  describe("JSON array format", () => {
+    it("parses a valid JSON array of strings", () => {
+      expect(parseArgumentsString('["--port", "8080", "--verbose"]')).toEqual([
+        "--port",
+        "8080",
+        "--verbose",
+      ]);
+    });
+
+    it("filters out empty strings inside a JSON array", () => {
+      expect(parseArgumentsString('["--flag", "", "value"]')).toEqual([
+        "--flag",
+        "value",
+      ]);
+    });
+
+    it("returns [] for an empty JSON array", () => {
+      expect(parseArgumentsString("[]")).toEqual([]);
+    });
+
+    it("throws a descriptive error for malformed JSON", () => {
+      expect(() =>
+        parseArgumentsString('["--flag", "value"'),
+      ).toThrow(/could not be parsed/);
+    });
+
+    it("throws when the parsed JSON value is not an array", () => {
+      expect(() =>
+        parseArgumentsString('{"key": "value"}'),
+      ).toThrow(/not an array/);
+    });
+
+    it("throws when the JSON array contains non-string elements", () => {
+      expect(() =>
+        parseArgumentsString('["--port", 8080, true]'),
+      ).toThrow(/only strings/);
+    });
+  });
+
+  describe("newline-separated format (fallback)", () => {
+    it("parses one-arg-per-line input", () => {
+      expect(parseArgumentsString("--port\n8080\n--verbose")).toEqual([
+        "--port",
+        "8080",
+        "--verbose",
+      ]);
+    });
+
+    it("trims whitespace from each line", () => {
+      expect(parseArgumentsString("  --flag  \n  value  ")).toEqual([
+        "--flag",
+        "value",
+      ]);
+    });
+
+    it("ignores blank lines", () => {
+      expect(parseArgumentsString("--a\n\n--b\n\n")).toEqual(["--a", "--b"]);
+    });
+
+    it("returns [] for an empty / whitespace-only string", () => {
+      expect(parseArgumentsString("")).toEqual([]);
+      expect(parseArgumentsString("   ")).toEqual([]);
+    });
+
+    it("returns a single-element array for a single argument", () => {
+      expect(parseArgumentsString("server.js")).toEqual(["server.js"]);
+    });
+  });
+});
+
+
 
 describe("transformFormToApiData", () => {
   it("maps custom auth and additional headers into userConfig", () => {

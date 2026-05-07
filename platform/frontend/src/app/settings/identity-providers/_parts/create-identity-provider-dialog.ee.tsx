@@ -54,6 +54,7 @@ export function CreateIdentityProviderDialog({
       ...(defaultValues || {
         providerId: "",
         issuer: "",
+        ssoLoginEnabled: true,
         domain: "",
         providerType: providerType,
         ...(providerType === "saml"

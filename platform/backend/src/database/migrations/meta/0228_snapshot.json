@@ -1,5 +1,5 @@
 {
-  "id": "78f60edf-c4f9-44ae-8def-94833e48acf1",
+  "id": "b9f159dd-45ee-44ee-9f44-6eb8f1826ae3",
   "prevId": "a3130e34-210c-4043-8de7-24f558e51f07",
   "version": "7",
   "dialect": "postgresql",
@@ -2473,12 +2473,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "virtual_key_id": {
-          "name": "virtual_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "session_id": {
           "name": "session_id",
           "type": "varchar",
@@ -2755,19 +2749,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "interactions_virtual_key_id_virtual_api_keys_id_fk": {
-          "name": "interactions_virtual_key_id_virtual_api_keys_id_fk",
-          "tableFrom": "interactions",
-          "tableTo": "virtual_api_keys",
-          "columnsFrom": [
-            "virtual_key_id"
           ],
           "columnsTo": [
             "id"
@@ -7335,7 +7316,50 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "team_member_team_id_user_id_idx": {
+          "name": "team_member_team_id_user_id_idx",
+          "columns": [
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "team_member_user_id_team_id_idx": {
+          "name": "team_member_user_id_team_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "team_member_team_id_team_id_fk": {
           "name": "team_member_team_id_team_id_fk",

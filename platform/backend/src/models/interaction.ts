@@ -25,10 +25,12 @@ import logger from "@/logging";
 import type {
   InsertInteraction,
   Interaction,
+  InteractionAuthMethod,
   SessionSummary,
   SortingQuery,
   UserInfo,
 } from "@/types";
+import { InteractionAuthMethodSchema } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel from "./limit";
 
@@ -915,6 +917,10 @@ class InteractionModel {
           profileId: schema.interactionsTable.profileId,
           profileName: schema.agentsTable.name,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
+          authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
+          authenticatedAppNames: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
           userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
@@ -1011,6 +1017,8 @@ class InteractionModel {
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
+        authMethods: parseInteractionAuthMethods(s.authMethods),
+        authenticatedAppNames: s.authenticatedAppNames ?? [],
         userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
         lastInteractionRequest: lastInteraction?.request ?? null,
         lastInteractionType: lastInteraction?.type ?? null,
@@ -1200,3 +1208,19 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+function parseInteractionAuthMethods(
+  value: string | null,
+): InteractionAuthMethod[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .filter(Boolean)
+    .flatMap((authMethod) => {
+      const result = InteractionAuthMethodSchema.safeParse(authMethod);
+      return result.success ? [result.data] : [];
+    });
+}

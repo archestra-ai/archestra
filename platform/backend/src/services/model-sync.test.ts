@@ -16,10 +16,12 @@ vi.mock("@/clients/models-dev-client", () => ({
 describe("ModelSyncService", () => {
   const originalOpenAiFetcher = modelFetchers.openai;
   const originalGeminiFetcher = modelFetchers.gemini;
+  const originalOpenrouterFetcher = modelFetchers.openrouter;
 
   afterEach(() => {
     modelFetchers.openai = originalOpenAiFetcher;
     modelFetchers.gemini = originalGeminiFetcher;
+    modelFetchers.openrouter = originalOpenrouterFetcher;
   });
 
   test("stores models with the API key's provider, not detected provider", async ({
@@ -294,5 +296,70 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("infers dimensions for known OpenRouter embedding models", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openrouter",
+    });
+
+    modelFetchers.openrouter = async () => [
+      {
+        id: "openrouter/auto",
+        displayName: "openrouter/auto",
+        provider: "openrouter" as SupportedProvider,
+      },
+      {
+        id: "openai/text-embedding-3-small",
+        displayName: "Text Embedding 3 Small",
+        provider: "openrouter" as SupportedProvider,
+      },
+      {
+        id: "nomic-ai/nomic-embed-text",
+        displayName: "Nomic Embed Text",
+        provider: "openrouter" as SupportedProvider,
+      },
+    ];
+
+    const count = await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openrouter",
+      apiKeyValue: "openrouter-key",
+    });
+
+    expect(count).toBe(3);
+
+    const embedding = await ModelModel.findByProviderAndModelId(
+      "openrouter",
+      "openai/text-embedding-3-small",
+    );
+    expect(embedding).toEqual(
+      expect.objectContaining({
+        provider: "openrouter",
+        modelId: "openai/text-embedding-3-small",
+        embeddingDimensions: 1536,
+      }),
+    );
+
+    const nomic = await ModelModel.findByProviderAndModelId(
+      "openrouter",
+      "nomic-ai/nomic-embed-text",
+    );
+    expect(nomic?.embeddingDimensions).toBe(768);
+
+    const linkedModels =
+      await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id]);
+    const selectableEmbeddingModels = linkedModels
+      .map((link) => link.model)
+      .filter((model) => model.embeddingDimensions !== null);
+    expect(
+      selectableEmbeddingModels.map((model) => model.modelId).sort(),
+    ).toEqual(["nomic-ai/nomic-embed-text", "openai/text-embedding-3-small"]);
   });
 });

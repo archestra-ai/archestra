@@ -1,6 +1,10 @@
 "use client";
 
-import { DocsPage, type IdentityProviderFormValues } from "@shared";
+import {
+  DocsPage,
+  type IdentityProviderFormValues,
+  OAUTH_TOKEN_TYPE,
+} from "@shared";
 import { Info, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -41,12 +45,20 @@ import {
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  type EnterpriseSubjectTokenType,
   getDefaultSubjectTokenType,
   getDefaultTokenEndpointAuthentication,
   inferEnterpriseExchangeType,
 } from "./identity-provider-form.utils";
 import { RoleMappingForm } from "./role-mapping-form.ee";
+import { SsoLoginEnabledField } from "./sso-login-enabled-field.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
+
+const SUBJECT_TOKEN_LABEL_BY_TYPE = {
+  [OAUTH_TOKEN_TYPE.AccessToken]: "Access token",
+  [OAUTH_TOKEN_TYPE.IdToken]: "ID token",
+  [OAUTH_TOKEN_TYPE.Jwt]: "Generic JWT",
+} as const satisfies Record<EnterpriseSubjectTokenType, string>;
 
 interface OidcConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -67,7 +79,6 @@ export function OidcConfigForm({
   const issuer = form.watch("issuer") || "";
   const providerId = form.watch("providerId") || "";
   const showAllowedEmailDomains = providerId === "Google";
-
   const inferredEnterpriseExchangeType = inferEnterpriseExchangeType({
     issuer,
     providerId,
@@ -135,6 +146,8 @@ export function OidcConfigForm({
             </FormItem>
           )}
         />
+
+        <SsoLoginEnabledField form={form} />
 
         {showAllowedEmailDomains && (
           <FormField
@@ -568,10 +581,7 @@ function EnterpriseManagedCredentialsForm(props: {
     | "client_secret_basic";
   form: UseFormReturn<IdentityProviderFormValues>;
   inferredEnterpriseExchangeType: "okta_managed" | "rfc8693" | "entra_obo";
-  subjectTokenTypeDefault:
-    | "urn:ietf:params:oauth:token-type:access_token"
-    | "urn:ietf:params:oauth:token-type:id_token"
-    | "urn:ietf:params:oauth:token-type:jwt";
+  subjectTokenTypeDefault: EnterpriseSubjectTokenType;
 }) {
   const {
     authenticationDefault,
@@ -791,15 +801,13 @@ function EnterpriseManagedCredentialsForm(props: {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="urn:ietf:params:oauth:token-type:access_token">
-                        Access token
-                      </SelectItem>
-                      <SelectItem value="urn:ietf:params:oauth:token-type:id_token">
-                        ID token
-                      </SelectItem>
-                      <SelectItem value="urn:ietf:params:oauth:token-type:jwt">
-                        Generic JWT
-                      </SelectItem>
+                      {Object.entries(SUBJECT_TOKEN_LABEL_BY_TYPE).map(
+                        ([tokenType, label]) => (
+                          <SelectItem key={tokenType} value={tokenType}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
                     </SelectContent>
                   </Select>
                   <FormDescription>

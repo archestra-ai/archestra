@@ -213,7 +213,7 @@ export default function LimitsPage() {
         permissions={{ llmLimit: ["create"] }}
         onClick={handleCreateOpen}
       >
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="h-4 w-4" />
         Add Limit
       </PermissionButton>,
     );

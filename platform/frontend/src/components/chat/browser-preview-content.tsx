@@ -480,7 +480,7 @@ export function BrowserPreviewContent({
                 // Installing or assigning in progress - show unified loading
                 <>
                   <Button disabled className="mt-10">
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     {isAssigningTools ? "Assigning tools" : "Installing"}
                   </Button>
                   <p className="text-xs text-muted-foreground">
@@ -501,7 +501,7 @@ export function BrowserPreviewContent({
                   >
                     {isInstallingBrowser ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Installing
                       </>
                     ) : (
@@ -553,7 +553,7 @@ export function BrowserPreviewContent({
                   >
                     {isInstallingBrowser ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Reinstalling
                       </>
                     ) : (

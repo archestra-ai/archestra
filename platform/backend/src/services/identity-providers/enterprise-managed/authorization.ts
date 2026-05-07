@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
-  DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
   OAUTH_SCOPES,
 } from "@shared";
 import { decodeProtectedHeader } from "jose";
@@ -18,8 +18,6 @@ import {
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
 
-export const JWT_BEARER_GRANT_TYPE =
-  "urn:ietf:params:oauth:grant-type:jwt-bearer";
 /** @public — exported for testability */
 export const OAUTH_ID_JAG_TYP = "oauth-id-jag+jwt";
 export const MCP_RESOURCE_REFERENCE_PREFIX = "mcp-resource:";
@@ -158,8 +156,8 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
     .digest("base64url");
   const organization = await OrganizationModel.getById(agent.organizationId);
   const expiresInSeconds =
-    organization?.mcpOauthAccessTokenLifetimeSeconds ??
-    DEFAULT_MCP_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
+    organization?.oauthAccessTokenLifetimeSeconds ??
+    DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS;
 
   await OAuthAccessTokenModel.create({
     tokenHash: accessTokenHash,

@@ -153,10 +153,16 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname === "/llm/proxies",
         subItems: [
           {
-            title: "Providers",
-            url: "/llm/providers/api-keys",
+            title: "Model Providers",
+            url: "/llm/model-providers/api-keys",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/providers"),
+              pathname.startsWith("/llm/model-providers"),
+          },
+          {
+            title: "Proxy Auth",
+            url: "/llm/proxy-auth/virtual-keys",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/llm/proxy-auth"),
           },
           {
             title: "Costs & Limits",

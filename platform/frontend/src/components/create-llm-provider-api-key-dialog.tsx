@@ -137,7 +137,7 @@ export function CreateLlmProviderApiKeyDialog({
           </Button>
           <Button type="submit" disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             )}
             Test & Create
           </Button>

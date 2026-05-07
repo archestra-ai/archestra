@@ -35,6 +35,16 @@ export const UserInfoSchema = z.object({
   name: z.string(),
 });
 
+export const InteractionAuthMethodSchema = z.enum([
+  "provider_key",
+  "virtual_key",
+  "jwks",
+  "oauth_client_credentials",
+  "oauth_user",
+  "internal",
+  "unknown",
+]);
+
 /**
  * Request/Response schemas that accept any provider type
  * These are used for the database schema definition
@@ -87,6 +97,7 @@ export const InteractionResponseSchema = z.union([
 
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
+  authMethod: InteractionAuthMethodSchema.nullable().optional(),
   toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
   unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
@@ -318,6 +329,7 @@ export type UserInfo = z.infer<typeof UserInfoSchema>;
 
 export type Interaction = z.infer<typeof SelectInteractionSchema>;
 export type InsertInteraction = z.infer<typeof InsertInteractionSchema>;
+export type InteractionAuthMethod = z.infer<typeof InteractionAuthMethodSchema>;
 
 export type InteractionRequest = z.infer<typeof InteractionRequestSchema>;
 export type InteractionResponse = z.infer<typeof InteractionResponseSchema>;
@@ -354,6 +366,8 @@ export const SessionSummarySchema = z.object({
   profileName: z.string().nullable(),
   externalAgentIds: z.array(z.string()),
   externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names
+  authMethods: z.array(InteractionAuthMethodSchema),
+  authenticatedAppNames: z.array(z.string()),
   userNames: z.array(z.string()),
   lastInteractionRequest: z.unknown().nullable(),
   lastInteractionType: z.string().nullable(),

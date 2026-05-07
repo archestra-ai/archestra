@@ -1,9 +1,19 @@
 import {
+  type archestraApiTypes,
   IDENTITY_PROVIDER_ID,
   type IdentityProviderFormValues,
   isEntraHostname,
   isOktaHostname,
+  OAUTH_TOKEN_TYPE,
 } from "@shared";
+
+export type EnterpriseSubjectTokenType = NonNullable<
+  NonNullable<
+    NonNullable<
+      archestraApiTypes.CreateIdentityProviderData["body"]["oidcConfig"]
+    >["enterpriseManagedCredentials"]
+  >["subjectTokenType"]
+>;
 
 export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
@@ -44,10 +54,14 @@ export function normalizeIdentityProviderFormValues(
     };
   }
 
+  const exchangeStrategy =
+    enterpriseManagedCredentials.exchangeStrategy || inferredExchangeType;
+
   return {
     ...normalizedData,
-    oidcConfig: {
-      ...oidcConfig,
+    oidcConfig: normalizeOidcConfigForEnterpriseExchange({
+      oidcConfig,
+      exchangeStrategy,
       enterpriseManagedCredentials: {
         exchangeStrategy: enterpriseManagedCredentials.exchangeStrategy
           ? enterpriseManagedCredentials.exchangeStrategy
@@ -60,7 +74,7 @@ export function normalizeIdentityProviderFormValues(
           enterpriseManagedCredentials.subjectTokenType ??
           getDefaultSubjectTokenType(inferredExchangeType),
       },
-    },
+    }),
   };
 }
 
@@ -155,10 +169,42 @@ export function getDefaultTokenEndpointAuthentication(
 
 export function getDefaultSubjectTokenType(
   exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo",
-):
-  | "urn:ietf:params:oauth:token-type:access_token"
-  | "urn:ietf:params:oauth:token-type:id_token" {
+): EnterpriseSubjectTokenType {
   return exchangeStrategy === "rfc8693" || exchangeStrategy === "entra_obo"
-    ? "urn:ietf:params:oauth:token-type:access_token"
-    : "urn:ietf:params:oauth:token-type:id_token";
+    ? OAUTH_TOKEN_TYPE.AccessToken
+    : OAUTH_TOKEN_TYPE.IdToken;
+}
+
+function normalizeOidcConfigForEnterpriseExchange(params: {
+  oidcConfig: NonNullable<IdentityProviderFormValues["oidcConfig"]>;
+  exchangeStrategy: "okta_managed" | "rfc8693" | "entra_obo";
+  enterpriseManagedCredentials: NonNullable<
+    NonNullable<
+      IdentityProviderFormValues["oidcConfig"]
+    >["enterpriseManagedCredentials"]
+  >;
+}): NonNullable<IdentityProviderFormValues["oidcConfig"]> {
+  if (params.exchangeStrategy !== "entra_obo") {
+    return {
+      ...params.oidcConfig,
+      enterpriseManagedCredentials: params.enterpriseManagedCredentials,
+    };
+  }
+
+  const { userInfoEndpoint: _userInfoEndpoint, ...oidcConfig } =
+    params.oidcConfig;
+
+  return {
+    ...oidcConfig,
+    mapping: {
+      ...oidcConfig.mapping,
+      id: oidcConfig.mapping?.id ?? "sub",
+      email:
+        !oidcConfig.mapping?.email || oidcConfig.mapping.email === "email"
+          ? "preferred_username"
+          : oidcConfig.mapping.email,
+      name: oidcConfig.mapping?.name ?? "name",
+    },
+    enterpriseManagedCredentials: params.enterpriseManagedCredentials,
+  };
 }

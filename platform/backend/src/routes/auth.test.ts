@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { IDENTITY_PROVIDER_ID } from "@shared";
+import { IDENTITY_PROVIDER_ID, LLM_PROXY_OAUTH_SCOPE } from "@shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
+import LlmOauthClientModel from "@/models/llm-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -29,7 +30,7 @@ describe("auth routes", () => {
     await app.close();
   });
 
-  test("applies organization MCP token lifetime to OAuth 2.1 token responses", async ({
+  test("applies organization OAuth token lifetime to OAuth 2.1 token responses", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -39,7 +40,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 604_800,
+      oauthAccessTokenLifetimeSeconds: 604_800,
     });
     const agent = await makeAgent({ organizationId: organization.id });
     const client = await makeOAuthClient({ userId: user.id });
@@ -100,7 +101,211 @@ describe("auth routes", () => {
     );
   });
 
-  test("applies MCP token lifetime when resource uses the token endpoint origin", async ({
+  test("issues LLM OAuth client access tokens with client credentials", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: LLM_PROXY_OAUTH_SCOPE,
+    });
+    expect(response.json().access_token).toMatch(/^llm_at_/);
+
+    const tokenHash = createHash("sha256")
+      .update(response.json().access_token)
+      .digest("base64url");
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.clientId).toBe(oauthClient.clientId);
+    expect(storedToken?.userId).toBeNull();
+    expect(storedToken?.scopes).toEqual([LLM_PROXY_OAUTH_SCOPE]);
+  });
+
+  test("rejects LLM OAuth client credentials with an invalid secret", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: "wrong-secret",
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid_client" });
+  });
+
+  test("rejects LLM OAuth client credentials without the proxy scope", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "openai" },
+    );
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: "mcp",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "invalid_scope",
+      error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+    });
+  });
+
+  test("applies organization OAuth token lifetime to user LLM proxy token responses", async ({
+    makeMember,
+    makeOAuthAccessToken,
+    makeOAuthClient,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id);
+    await OrganizationModel.patch(organization.id, {
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
+    });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawAccessToken = "model-router-user-oauth-access-token";
+    const tokenHash = createHash("sha256")
+      .update(rawAccessToken)
+      .digest("base64url");
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: tokenHash,
+      expiresAt: new Date("2026-01-01T01:00:00.000Z"),
+    });
+    vi.mocked(betterAuth.handler).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: rawAccessToken,
+          token_type: "Bearer",
+          expires_in: 3_600,
+          scope: `openid profile email ${LLM_PROXY_OAUTH_SCOPE}`,
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "authorization_code",
+        client_id: client.clientId,
+        code: "auth-code",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      access_token: rawAccessToken,
+      expires_in: 31_536_000,
+      scope: `openid profile email ${LLM_PROXY_OAUTH_SCOPE}`,
+    });
+
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.expiresAt.getTime()).toBeGreaterThan(
+      Date.now() + 31_535_000 * 1000,
+    );
+  });
+
+  test("applies OAuth token lifetime when resource uses the token endpoint origin", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -110,7 +315,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 31_536_000,
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
     });
     const agent = await makeAgent({ organizationId: organization.id });
     const client = await makeOAuthClient({ userId: user.id });
@@ -160,7 +365,7 @@ describe("auth routes", () => {
     });
   });
 
-  test("applies MCP token lifetime for HTTPS token endpoint origin behind proxy", async ({
+  test("applies OAuth token lifetime for HTTPS token endpoint origin behind proxy", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -170,7 +375,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 31_536_000,
+      oauthAccessTokenLifetimeSeconds: 31_536_000,
     });
     const agent = await makeAgent({ organizationId: organization.id });
     const client = await makeOAuthClient({ userId: user.id });
@@ -221,7 +426,7 @@ describe("auth routes", () => {
     });
   });
 
-  test("applies MCP token lifetime when resource uses the gateway slug", async ({
+  test("applies OAuth token lifetime when resource uses the gateway slug", async ({
     makeAgent,
     makeOAuthAccessToken,
     makeOAuthClient,
@@ -231,7 +436,7 @@ describe("auth routes", () => {
     const user = await makeUser();
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
-      mcpOauthAccessTokenLifetimeSeconds: 300,
+      oauthAccessTokenLifetimeSeconds: 300,
     });
     const agent = await makeAgent({
       agentType: "mcp_gateway",

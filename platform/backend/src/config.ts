@@ -521,6 +521,9 @@ const config = {
   a2aGateway: {
     endpoint: "/v1/a2a",
   },
+  a2aV2Gateway: {
+    endpoint: "/v2/a2a",
+  },
   agents: {
     advancedToolFeaturesEnabled:
       process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
@@ -581,6 +584,9 @@ const config = {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      azureFoundryEntraIdEnabled:
+        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
+        "true",
     },
     gemini: {
       baseUrl:
@@ -668,6 +674,8 @@ const config = {
       responsesApiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
         "2025-04-01-preview",
+      entraIdEnabled:
+        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED === "true",
     },
   },
   chat: {

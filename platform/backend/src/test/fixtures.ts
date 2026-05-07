@@ -6,6 +6,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
+  type SupportedProvider,
 } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
@@ -143,17 +144,22 @@ async function makeAdmin(overrides: MakeUserOverrides = {}) {
 async function makeVirtualApiKey(
   organizationId: string,
   overrides: Partial<
-    Pick<InsertVirtualApiKey, "name" | "chatApiKeyId" | "scope" | "authorId">
-  > = {},
+    Pick<InsertVirtualApiKey, "name" | "scope" | "authorId">
+  > & {
+    providerApiKeys?: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[];
+  } = {},
 ) {
   const result = await VirtualApiKeyModel.create({
     organizationId,
     name:
       overrides.name ??
       `Test Virtual Key ${crypto.randomUUID().substring(0, 8)}`,
-    chatApiKeyId: overrides.chatApiKeyId ?? null,
     scope: overrides.scope ?? "org",
     authorId: overrides.authorId ?? null,
+    providerApiKeys: overrides.providerApiKeys ?? [],
   });
   return result.virtualKey;
 }
@@ -829,6 +835,7 @@ async function makeIdentityProvider(
     oidcConfig?: Record<string, unknown>;
     samlConfig?: Record<string, unknown>;
     roleMapping?: Record<string, unknown>;
+    ssoLoginEnabled?: boolean;
     userId?: string | null;
   } = {},
 ) {
@@ -845,6 +852,7 @@ async function makeIdentityProvider(
         overrides.issuer ?? `https://issuer-${id.substring(0, 8)}.example.com`,
       domain: overrides.domain ?? "example.com",
       organizationId,
+      ssoLoginEnabled: overrides.ssoLoginEnabled ?? true,
       oidcConfig: overrides.oidcConfig
         ? (JSON.stringify(overrides.oidcConfig) as unknown as undefined)
         : undefined,

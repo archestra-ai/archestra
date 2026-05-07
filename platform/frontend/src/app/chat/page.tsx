@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -87,6 +87,10 @@ import {
   clearOAuthReauthChatResume,
   getOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
+import {
+  clearSsoSignInRedirectPath,
+  getSsoSignInRedirectPath,
+} from "@/lib/auth/sso-sign-in-attempt";
 import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
@@ -151,11 +155,28 @@ export function ChatPageContent({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
   );
+
+  useEffect(() => {
+    if (routeConversationId) {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    const redirectPath = getSsoSignInRedirectPath();
+    if (!redirectPath || redirectPath === "/chat") {
+      clearSsoSignInRedirectPath();
+      return;
+    }
+
+    clearSsoSignInRedirectPath();
+    router.replace(redirectPath);
+  }, [routeConversationId, router]);
 
   // Hide version display from layout - chat page has its own version display
   useEffect(() => {
@@ -522,17 +543,19 @@ export function ChatPageContent({
     conversation.userId === session?.user.id;
   useConversationShare(canManageShare ? conversationId : undefined);
   const isShared = !!conversation?.share;
-  const isReadOnlySharedConversation =
+  const isReadOnlyConversation =
     !!conversationId &&
-    !!conversation?.share &&
+    !!conversation &&
     conversation.userId !== session?.user.id;
+  const isReadOnlySharedConversation =
+    isReadOnlyConversation && !!conversation?.share;
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
     [conversation?.messages],
   );
   const shouldEnableChatSession =
     !!conversationId &&
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (!routeConversationId || !!conversation);
   const chatSession = useChatSession({
     conversationId: shouldEnableChatSession ? conversationId : undefined,
@@ -877,16 +900,16 @@ export function ChatPageContent({
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
-  const conversationToolsStateId = isReadOnlySharedConversation
+  const conversationToolsStateId = isReadOnlyConversation
     ? undefined
     : conversationId;
-  const browserToolsAgentId = isReadOnlySharedConversation
+  const browserToolsAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? promptAgentId ?? undefined)
       : (initialAgentId ?? undefined);
 
-  const playwrightSetupAgentId = isReadOnlySharedConversation
+  const playwrightSetupAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? undefined)
@@ -897,7 +920,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
       (!!conversationId && isLoadingConversation) ||
@@ -911,9 +934,7 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlySharedConversation &&
-        hasChatAccess &&
-        canUpdateAgent !== false,
+        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
     },
   );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
@@ -1370,6 +1391,11 @@ export function ChatPageContent({
 
     // Mark as triggered to prevent duplicate sends
     autoSendTriggeredRef.current = true;
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
 
     // Store the message to send after conversation is created
     pendingPromptRef.current = initialUserPrompt;
@@ -1384,6 +1410,43 @@ export function ChatPageContent({
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  useEffect(() => {
+    if (
+      autoSendTriggeredRef.current ||
+      !initialUserPrompt ||
+      !conversationId ||
+      !sendMessage ||
+      status !== "ready"
+    ) {
+      return;
+    }
+
+    autoSendTriggeredRef.current = true;
+
+    clearUserPromptQueryParam({
+      pathname,
+      router,
+      searchParams,
+    });
+
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: initialUserPrompt }],
+      metadata: { createdAt: new Date().toISOString() },
+    });
+  }, [
+    conversationId,
+    initialUserPrompt,
+    pathname,
+    router,
+    searchParams,
+    sendMessage,
+    status,
   ]);
 
   useEffect(() => {
@@ -1471,13 +1534,13 @@ export function ChatPageContent({
                   : "You don't have permission to create agents"
               }
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Create Agent
             </ButtonWithTooltip>
           ) : (
             <Button asChild>
               <Link href="/agents?create=true">
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 Create Agent
               </Link>
             </Button>
@@ -1720,7 +1783,7 @@ export function ChatPageContent({
                     "hidden md:block",
                 )}
               >
-                {isReadOnlySharedConversation ? (
+                {isReadOnlyConversation ? (
                   <MessageThread
                     messages={sharedConversationMessages}
                     containerClassName="h-full"
@@ -1780,7 +1843,7 @@ export function ChatPageContent({
                 )}
               </div>
 
-              {isReadOnlySharedConversation ? (
+              {isReadOnlyConversation ? (
                 <div className="sticky bottom-0 bg-background border-t p-4">
                   <div className="max-w-4xl mx-auto space-y-3">
                     <div className="relative">
@@ -1809,6 +1872,11 @@ export function ChatPageContent({
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
                         <Button
                           onClick={() => {
+                            if (!isReadOnlySharedConversation) {
+                              router.push("/chat");
+                              return;
+                            }
+
                             if (shouldPromptForForkAgentSelection) {
                               setIsForkDialogOpen(true);
                               return;
@@ -1817,8 +1885,10 @@ export function ChatPageContent({
                             void handleForkSharedConversation();
                           }}
                         >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Start New Chat from here
+                          <Plus className="h-4 w-4" />
+                          {isReadOnlySharedConversation
+                            ? "Start New Chat from here"
+                            : "Start New Chat"}
                         </Button>
                       </div>
                     </div>
@@ -1839,7 +1909,7 @@ export function ChatPageContent({
                         </span>
                       </div>
                       <Button onClick={() => router.push("/chat")}>
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4" />
                         New Conversation
                       </Button>
                     </div>
@@ -2103,6 +2173,19 @@ export default function ChatPage() {
   return <ChatPageContent key="new-chat" />;
 }
 
+function clearUserPromptQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("user_prompt");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
 function mergePersistedMessageMetadata(params: {
   liveMessages: UIMessage[];
   persistedMessages: UIMessage[];
@@ -2195,7 +2278,7 @@ function NoApiKeySetup() {
           data-testid={E2eTestId.QuickstartAddApiKeyButton}
           onClick={() => setIsDialogOpen(true)}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add API Key
         </Button>
       </div>

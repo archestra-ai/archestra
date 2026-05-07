@@ -1524,6 +1524,17 @@ tests:
           path: spec.template.metadata.annotations["config.linkerd.io/proxy-cpu-request"]
           value: "100m"
 
+  # Pod labels tests
+  - it: should apply pod labels when provided
+    documentIndex: 1
+    set:
+      archestra.podLabels:
+        azure.workload.identity/use: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["azure.workload.identity/use"]
+          value: "true"
+
   # Sensitive environment variable secretKeyRef tests
   - it: should use secretKeyRef for ARCHESTRA_AUTH_ADMIN_PASSWORD when provided
     documentIndex: 1

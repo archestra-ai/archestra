@@ -405,6 +405,33 @@ describe("identity provider routes", () => {
       expect(provider).not.toHaveProperty("samlConfig");
     });
 
+    test("hides providers disabled for SSO login", async ({
+      makeIdentityProvider,
+    }) => {
+      await makeIdentityProvider(organizationId, {
+        providerId: "primary-login-provider",
+        ssoLoginEnabled: true,
+      });
+      await makeIdentityProvider(organizationId, {
+        providerId: "brokered-token-provider",
+        ssoLoginEnabled: false,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/public",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = response.json() as Array<{ providerId: string }>;
+      expect(data.map((provider) => provider.providerId)).toContain(
+        "primary-login-provider",
+      );
+      expect(data.map((provider) => provider.providerId)).not.toContain(
+        "brokered-token-provider",
+      );
+    });
+
     test("returns empty array when no providers exist", async () => {
       const response = await app.inject({
         method: "GET",

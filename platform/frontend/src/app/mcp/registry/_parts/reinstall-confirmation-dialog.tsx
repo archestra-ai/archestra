@@ -51,12 +51,12 @@ export function ReinstallConfirmationDialog({
             <Button type="submit" disabled={isReinstalling}>
               {isReinstalling ? (
                 <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <RefreshCw className="h-4 w-4 animate-spin" />
                   Reinstalling...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                   Reinstall Now
                 </>
               )}

@@ -174,7 +174,7 @@ export function TokenManagerDialog({
           disabled={rotateMutation.isPending}
         >
           <RefreshCw
-            className={`mr-2 h-4 w-4 ${rotateMutation.isPending ? "animate-spin" : ""}`}
+            className={`h-4 w-4 ${rotateMutation.isPending ? "animate-spin" : ""}`}
           />
           {confirmRotate ? "Confirm Rotate" : "Rotate Token"}
         </Button>

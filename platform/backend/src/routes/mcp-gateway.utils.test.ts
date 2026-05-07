@@ -684,6 +684,39 @@ describe("validateExternalIdpToken", () => {
     expect(result).toBeNull();
   });
 
+  test("uses email-shaped subject when JWT has no email claim", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "user@example.com" });
+    await makeMember(user.id, org.id, { role: "admin" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user@example.com",
+      email: null,
+      name: "Test User",
+      rawClaims: { sub: "user@example.com" },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+    expect(result?.userId).toBe(user.id);
+    expect(result?.isExternalIdp).toBe(true);
+  });
+
   test("returns null when the identity provider OIDC config has no clientId for audience validation", async ({
     makeOrganization,
     makeIdentityProvider,

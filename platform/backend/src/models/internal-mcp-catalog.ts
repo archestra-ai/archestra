@@ -1,10 +1,11 @@
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
-import type {
-  InsertInternalMcpCatalog,
-  InternalMcpCatalog,
-  UpdateInternalMcpCatalog,
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  type InsertInternalMcpCatalog,
+  type InternalMcpCatalog,
+  type UpdateInternalMcpCatalog,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -62,14 +63,28 @@ class InternalMcpCatalogModel {
     expandSecrets?: boolean;
     userId?: string;
     isAdmin?: boolean;
+    organizationId?: string;
   }): Promise<InternalMcpCatalog[]> {
-    const { expandSecrets = true, userId, isAdmin } = options ?? {};
+    const {
+      expandSecrets = true,
+      userId,
+      isAdmin,
+      organizationId,
+    } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    if (userId && !isAdmin) {
+    if (userId && !isAdmin && !organizationId) {
+      return [];
+    }
+
+    if (userId && organizationId) {
       const accessibleIds =
-        await McpCatalogTeamModel.getUserAccessibleCatalogIds(userId, false);
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          userId,
+          !!isAdmin,
+          organizationId,
+        );
       if (accessibleIds.length === 0) return [];
       dbItems = await db
         .select()
@@ -101,9 +116,15 @@ class InternalMcpCatalogModel {
       expandSecrets?: boolean;
       userId?: string;
       isAdmin?: boolean;
+      organizationId?: string;
     },
   ): Promise<InternalMcpCatalog[]> {
-    const { expandSecrets = true, userId, isAdmin } = options ?? {};
+    const {
+      expandSecrets = true,
+      userId,
+      isAdmin,
+      organizationId,
+    } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
@@ -112,9 +133,17 @@ class InternalMcpCatalogModel {
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
 
-    if (userId && !isAdmin) {
+    if (userId && !isAdmin && !organizationId) {
+      return [];
+    }
+
+    if (userId && organizationId) {
       const accessibleIds =
-        await McpCatalogTeamModel.getUserAccessibleCatalogIds(userId, false);
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          userId,
+          !!isAdmin,
+          organizationId,
+        );
       if (accessibleIds.length === 0) return [];
       dbItems = await db
         .select()
@@ -150,15 +179,26 @@ class InternalMcpCatalogModel {
       expandSecrets?: boolean;
       userId?: string;
       isAdmin?: boolean;
+      organizationId?: string;
     },
   ): Promise<InternalMcpCatalog | null> {
-    const { expandSecrets = true, userId, isAdmin } = options ?? {};
+    const {
+      expandSecrets = true,
+      userId,
+      isAdmin,
+      organizationId,
+    } = options ?? {};
 
-    if (userId && !isAdmin) {
+    if (userId && !isAdmin && !organizationId) {
+      return null;
+    }
+
+    if (userId && organizationId) {
       const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess(
         userId,
         id,
-        false,
+        !!isAdmin,
+        organizationId,
       );
       if (!hasAccess) return null;
     }
@@ -239,11 +279,24 @@ class InternalMcpCatalogModel {
     return result;
   }
 
-  static async findByName(name: string): Promise<InternalMcpCatalog | null> {
+  static async findByName(
+    name: string,
+    options?: { organizationId?: string },
+  ): Promise<InternalMcpCatalog | null> {
+    const whereCondition = options?.organizationId
+      ? and(
+          eq(schema.internalMcpCatalogTable.name, name),
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            options.organizationId,
+          ),
+        )
+      : eq(schema.internalMcpCatalogTable.name, name);
+
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.name, name));
+      .where(whereCondition);
 
     if (!dbItem) {
       return null;
@@ -386,6 +439,21 @@ class InternalMcpCatalogModel {
         }
       }
 
+      if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
+        const unresolvedSecret = unresolvedSecretMap.get(
+          catalogItem.clientSecretId,
+        );
+        const secret = unresolvedSecret?.isByosVault
+          ? unresolvedSecret
+          : resolvedSecretMap.get(catalogItem.clientSecretId);
+        const value =
+          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
+        if (value) {
+          catalogItem.enterpriseManagedConfig.clientSecretOverride =
+            String(value);
+        }
+      }
+
       // Enrich local config secret env vars
       if (
         catalogItem.localConfigSecretId &&
@@ -445,6 +513,16 @@ class InternalMcpCatalogModel {
         const value = secret?.secret.client_secret;
         if (value) {
           catalogItem.oauthConfig.client_secret = String(value);
+        }
+      }
+
+      if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
+        const secret = secretMap.get(catalogItem.clientSecretId);
+        const value =
+          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
+        if (value) {
+          catalogItem.enterpriseManagedConfig.clientSecretOverride =
+            String(value);
         }
       }
 

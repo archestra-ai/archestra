@@ -479,13 +479,23 @@ async function handleSearchPrivateMcpRegistry(
   args: SearchPrivateMcpRegistryArgs,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { agent: contextAgent } = context;
+  const { agent: contextAgent, organizationId } = context;
   logger.info(
     { agentId: contextAgent.id, searchArgs: args },
     "search_private_mcp_registry tool called",
   );
 
   try {
+    if (!context.userId || !organizationId) {
+      return errorResult("user/organization context not available.");
+    }
+
+    const isAdmin = await userHasPermission(
+      context.userId,
+      organizationId,
+      "mcpServerInstallation",
+      "admin",
+    );
     const query = args.query;
 
     let catalogItems: InternalMcpCatalog[];
@@ -493,10 +503,16 @@ async function handleSearchPrivateMcpRegistry(
     if (query && query.trim() !== "") {
       catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
         expandSecrets: false,
+        userId: context.userId,
+        isAdmin,
+        organizationId,
       });
     } else {
       catalogItems = await InternalMcpCatalogModel.findAll({
         expandSecrets: false,
+        userId: context.userId,
+        isAdmin,
+        organizationId,
       });
     }
 
@@ -546,13 +562,26 @@ async function handleSearchPrivateMcpRegistry(
 async function handleGetMcpServers(
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { agent: contextAgent } = context;
+  const { agent: contextAgent, organizationId } = context;
 
   logger.info({ agentId: contextAgent.id }, "get_mcp_servers tool called");
 
   try {
+    if (!context.userId || !organizationId) {
+      return errorResult("user/organization context not available.");
+    }
+
+    const isAdmin = await userHasPermission(
+      context.userId,
+      organizationId,
+      "mcpServerInstallation",
+      "admin",
+    );
     const catalogItems = await InternalMcpCatalogModel.findAll({
       expandSecrets: false,
+      userId: context.userId,
+      isAdmin,
+      organizationId,
     });
 
     const items = catalogItems.map((c) => ({
@@ -574,7 +603,7 @@ async function handleGetMcpServerTools(
   args: GetMcpServerToolsArgs,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { agent: contextAgent } = context;
+  const { agent: contextAgent, organizationId } = context;
 
   logger.info(
     { agentId: contextAgent.id, mcpServerId: args.mcpServerId },
@@ -582,6 +611,29 @@ async function handleGetMcpServerTools(
   );
 
   try {
+    if (!context.userId || !organizationId) {
+      return errorResult("user/organization context not available.");
+    }
+
+    const isAdmin = await userHasPermission(
+      context.userId,
+      organizationId,
+      "mcpServerInstallation",
+      "admin",
+    );
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      args.mcpServerId,
+      {
+        expandSecrets: false,
+        userId: context.userId,
+        isAdmin,
+        organizationId,
+      },
+    );
+    if (!catalogItem) {
+      return errorResult("MCP server not found or you don't have access.");
+    }
+
     const tools = await ToolModel.findByCatalogId(args.mcpServerId);
     return structuredSuccessResult({ tools }, JSON.stringify(tools, null, 2));
   } catch (error) {
@@ -605,17 +657,21 @@ async function handleEditMcpDescription(
       return errorResult("user/organization context not available.");
     }
 
-    const existing = await InternalMcpCatalogModel.findById(args.id);
-    if (!existing) {
-      return errorResult("MCP server not found.");
-    }
-
     const isAdmin = await userHasPermission(
       context.userId,
       organizationId,
       "mcpServerInstallation",
       "admin",
     );
+
+    const existing = await InternalMcpCatalogModel.findById(args.id, {
+      userId: context.userId,
+      isAdmin,
+      organizationId,
+    });
+    if (!existing) {
+      return errorResult("MCP server not found.");
+    }
 
     if (!isAdmin) {
       if (
@@ -702,17 +758,21 @@ async function handleEditMcpConfig(
       return errorResult("user/organization context not available.");
     }
 
-    const existing = await InternalMcpCatalogModel.findById(args.id);
-    if (!existing) {
-      return errorResult("MCP server not found.");
-    }
-
     const isAdmin = await userHasPermission(
       context.userId,
       organizationId,
       "mcpServerInstallation",
       "admin",
     );
+
+    const existing = await InternalMcpCatalogModel.findById(args.id, {
+      userId: context.userId,
+      isAdmin,
+      organizationId,
+    });
+    if (!existing) {
+      return errorResult("MCP server not found.");
+    }
 
     if (!isAdmin) {
       if (
@@ -960,7 +1020,17 @@ async function handleDeployMcpServer(
       return errorResult("user/organization context not available.");
     }
 
-    const catalogItem = await InternalMcpCatalogModel.findById(args.catalogId);
+    const isAdmin = await userHasPermission(
+      context.userId,
+      organizationId,
+      "mcpServerInstallation",
+      "admin",
+    );
+    const catalogItem = await InternalMcpCatalogModel.findById(args.catalogId, {
+      userId: context.userId,
+      isAdmin,
+      organizationId,
+    });
     if (!catalogItem) {
       return errorResult("catalog item not found.");
     }

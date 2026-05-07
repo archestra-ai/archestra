@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -21,20 +21,27 @@ export const team = pgTable("team", {
     .default(false),
 });
 
-export const teamMember = pgTable("team_member", {
-  id: text("id").primaryKey(),
-  teamId: text("team_id")
-    .notNull()
-    .references(() => team.id, { onDelete: "cascade" }),
-  userId: text("user_id")
-    .notNull()
-    .references(() => usersTable.id, { onDelete: "cascade" }),
-  role: text("role").default("member").notNull(),
-  /**
-   * Indicates this membership was created via SSO team sync.
-   * Synced members are automatically managed during SSO login.
-   * Members without this flag were added manually and won't be removed by sync.
-   */
-  syncedFromSso: boolean("synced_from_sso").notNull().default(false),
-  createdAt: timestamp("created_at").notNull(),
-});
+export const teamMember = pgTable(
+  "team_member",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    role: text("role").default("member").notNull(),
+    /**
+     * Indicates this membership was created via SSO team sync.
+     * Synced members are automatically managed during SSO login.
+     * Members without this flag were added manually and won't be removed by sync.
+     */
+    syncedFromSso: boolean("synced_from_sso").notNull().default(false),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("team_member_team_id_user_id_idx").on(table.teamId, table.userId),
+    index("team_member_user_id_team_id_idx").on(table.userId, table.teamId),
+  ],
+);

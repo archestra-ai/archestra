@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
@@ -186,11 +186,7 @@ function KnowledgeBasesList() {
       <div>
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">
-            <SearchInput
-              objectNamePlural="knowledge bases"
-              searchFields={["name", "description"]}
-              paramName="search"
-            />
+            <SearchInput paramName="search" className="relative w-[370px]" />
           </div>
         </div>
 
@@ -395,14 +391,21 @@ function AddConnectorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const searchRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<"choose" | "reuse" | "create">("choose");
   const { data: allConnectors } = useAllConnectors();
   const assignMutation = useAssignConnectorToKnowledgeBases();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
 
-  const availableConnectors = (allConnectors ?? []).filter(
-    (c) => !assignedConnectorIds.has(c.id),
-  );
+  const availableConnectors = (allConnectors ?? [])
+    .filter((c) => !assignedConnectorIds.has(c.id))
+    .filter(
+      (c) =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.description?.toLowerCase().includes(search.toLowerCase()) ||
+        c.connectorType.toLowerCase().includes(search.toLowerCase()),
+    );
 
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
@@ -452,6 +455,12 @@ function AddConnectorDialog({
     onOpenChange(isOpen);
   };
 
+  useLayoutEffect(() => {
+    if (step === "reuse") {
+      searchRef.current?.focus();
+    }
+  }, [step]);
+
   return (
     <>
       <StandardDialog
@@ -479,8 +488,8 @@ function AddConnectorDialog({
         }
         description={
           step === "choose"
-            ? "Reuse an existing connector or create a new one."
-            : "Choose connectors to assign to this knowledge base."
+            ? "Reuse an existing Connector or create a new one."
+            : "Choose Connectors to assign to this Knowledge Base."
         }
         size="small"
         footer={
@@ -538,7 +547,7 @@ function AddConnectorDialog({
               <div>
                 <div className="font-medium">Create New</div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  Set up a new connector
+                  Set up a new Connector
                 </div>
               </div>
             </button>
@@ -546,42 +555,59 @@ function AddConnectorDialog({
         )}
 
         {step === "reuse" && (
-          <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto">
-            {availableConnectors.map((connector) => {
-              const isSelected = selectedIds.has(connector.id);
-              return (
-                <button
-                  key={connector.id}
-                  type="button"
-                  onClick={() => toggleSelected(connector.id)}
-                  className={cn(
-                    "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
-                    isSelected && "border-primary bg-primary/5",
-                  )}
-                >
-                  {isSelected && (
-                    <div className="absolute top-2 right-2">
-                      <Check className="h-4 w-4 text-primary" />
-                    </div>
-                  )}
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <ConnectorTypeIcon
-                      type={connector.connectorType}
-                      className="h-5 w-5"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {connector.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground capitalize">
-                      {connector.connectorType}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <SearchInput
+              ref={searchRef}
+              value={search}
+              onSearchChange={setSearch}
+              syncQueryParams={false}
+              debounceMs={300}
+              className="relative w-[370px]"
+              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+            />
+            <div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-y-auto pt-4">
+              {availableConnectors.length ? (
+                availableConnectors.map((connector) => {
+                  const isSelected = selectedIds.has(connector.id);
+                  return (
+                    <button
+                      key={connector.id}
+                      type="button"
+                      onClick={() => toggleSelected(connector.id)}
+                      className={cn(
+                        "relative flex items-center gap-3 rounded-lg border p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                        isSelected && "border-primary bg-primary/5",
+                      )}
+                    >
+                      {isSelected && (
+                        <div className="absolute top-2 right-2">
+                          <Check className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+                        <ConnectorTypeIcon
+                          type={connector.connectorType}
+                          className="h-5 w-5"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {connector.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {connector.connectorType}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="col-span-2 flex flex-col items-center gap-2 rounded-lg border border-muted/50 p-5 text-center text-sm text-muted-foreground">
+                  No connectors match your filters. Try adjusting your search.
+                </div>
+              )}
+            </div>
+          </>
         )}
       </StandardDialog>
 

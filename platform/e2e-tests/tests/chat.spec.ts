@@ -242,15 +242,10 @@ for (const config of testConfigs) {
       await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
       await modelSelectorTrigger.click();
 
-      // Wait for the model selector dialog to open
-      await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+      const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+      await expect(modelDialog).toBeVisible({ timeout: 5_000 });
 
       await selectRuntimeModelFromDialog(page, runtimeModel);
-
-      // Wait for dialog to close
-      await expect(page.getByRole("dialog")).not.toBeVisible({
-        timeout: 5_000,
-      });
 
       // Generate a unique message that contains our wiremock stub ID for matching
       // The wiremock mapping matches on bodyPatterns: [{ "contains": "chat-ui-e2e-test" }]

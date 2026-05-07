@@ -50,6 +50,7 @@ export function EditIdentityProviderDialog({
     defaultValues: {
       providerId: "",
       issuer: "",
+      ssoLoginEnabled: true,
       domain: "",
       providerType: "oidc",
       oidcConfig: {
@@ -82,6 +83,7 @@ export function EditIdentityProviderDialog({
       form.reset({
         providerId: provider.providerId,
         issuer: provider.issuer,
+        ssoLoginEnabled: provider.ssoLoginEnabled ?? true,
         domain: provider.domain,
         providerType: isSaml ? "saml" : "oidc",
         roleMapping: {
@@ -192,7 +194,7 @@ export function EditIdentityProviderDialog({
                 onClick={() => setShowDeleteConfirm(true)}
                 data-testid={E2eTestId.IdentityProviderDeleteButton}
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="h-4 w-4" />
                 Delete
               </PermissionButton>
               <Button type="button" variant="outline" onClick={handleClose}>

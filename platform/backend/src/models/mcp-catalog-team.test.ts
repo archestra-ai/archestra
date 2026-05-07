@@ -19,9 +19,38 @@ test("getUserAccessibleCatalogIds returns org-scoped items for any user", async 
   const ids = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
     user.id,
     false,
+    org.id,
   );
 
   expect(ids).toContain(orgCatalog.id);
+});
+
+test("getUserAccessibleCatalogIds scopes org items to the active organization", async ({
+  makeUser,
+  makeOrganization,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const otherOrg = await makeOrganization();
+
+  const orgCatalog = await makeInternalMcpCatalog({
+    scope: "org",
+    organizationId: org.id,
+  });
+  const otherOrgCatalog = await makeInternalMcpCatalog({
+    scope: "org",
+    organizationId: otherOrg.id,
+  });
+
+  const ids = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+    user.id,
+    false,
+    org.id,
+  );
+
+  expect(ids).toContain(orgCatalog.id);
+  expect(ids).not.toContain(otherOrgCatalog.id);
 });
 
 test("getUserAccessibleCatalogIds returns personal items only to author", async ({
@@ -42,12 +71,14 @@ test("getUserAccessibleCatalogIds returns personal items only to author", async 
   const authorIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
     author.id,
     false,
+    org.id,
   );
   expect(authorIds).toContain(personalCatalog.id);
 
   const otherIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
     otherUser.id,
     false,
+    org.id,
   );
   expect(otherIds).not.toContain(personalCatalog.id);
 });
@@ -74,12 +105,14 @@ test("getUserAccessibleCatalogIds returns team items to team members", async ({
   const memberIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
     member.id,
     false,
+    org.id,
   );
   expect(memberIds).toContain(teamCatalog.id);
 
   const nonMemberIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
     nonMember.id,
     false,
+    org.id,
   );
   expect(nonMemberIds).not.toContain(teamCatalog.id);
 });
@@ -102,6 +135,7 @@ test("getUserAccessibleCatalogIds returns all items for admin", async ({
   const adminIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
     admin.id,
     true,
+    org.id,
   );
   expect(adminIds).toContain(personalCatalog.id);
 });
@@ -141,6 +175,7 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
       otherUser.id,
       orgCatalog.id,
       false,
+      org.id,
     ),
   ).toBe(true);
 
@@ -150,6 +185,7 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
       author.id,
       personalCatalog.id,
       false,
+      org.id,
     ),
   ).toBe(true);
   expect(
@@ -157,6 +193,7 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
       otherUser.id,
       personalCatalog.id,
       false,
+      org.id,
     ),
   ).toBe(false);
 
@@ -166,6 +203,7 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
       teamMember.id,
       teamCatalog.id,
       false,
+      org.id,
     ),
   ).toBe(true);
   expect(
@@ -173,6 +211,7 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
       otherUser.id,
       teamCatalog.id,
       false,
+      org.id,
     ),
   ).toBe(false);
 
@@ -182,8 +221,32 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
       otherUser.id,
       personalCatalog.id,
       true,
+      org.id,
     ),
   ).toBe(true);
+});
+
+test("userHasCatalogAccess denies org-scoped catalog items from other organizations", async ({
+  makeUser,
+  makeOrganization,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const otherOrg = await makeOrganization();
+  const otherOrgCatalog = await makeInternalMcpCatalog({
+    scope: "org",
+    organizationId: otherOrg.id,
+  });
+
+  await expect(
+    McpCatalogTeamModel.userHasCatalogAccess(
+      user.id,
+      otherOrgCatalog.id,
+      true,
+      org.id,
+    ),
+  ).resolves.toBe(false);
 });
 
 test("syncCatalogTeams replaces team assignments", async ({
@@ -255,6 +318,7 @@ test("findAll with scope filtering returns correct items", async ({
     expandSecrets: false,
     userId: author.id,
     isAdmin: false,
+    organizationId: org.id,
   });
   const authorNames = authorItems.map((i) => i.name);
   expect(authorNames).toContain(orgCatalog.name);
@@ -266,6 +330,7 @@ test("findAll with scope filtering returns correct items", async ({
     expandSecrets: false,
     userId: otherUser.id,
     isAdmin: false,
+    organizationId: org.id,
   });
   const otherNames = otherItems.map((i) => i.name);
   expect(otherNames).toContain(orgCatalog.name);

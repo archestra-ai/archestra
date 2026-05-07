@@ -22,6 +22,40 @@ export type IdentityProviderId =
 export const IDENTITY_TRUSTED_PROVIDER_IDS =
   Object.values(IDENTITY_PROVIDER_ID);
 
+export const OAUTH_TOKEN_TYPE = {
+  AccessToken: "urn:ietf:params:oauth:token-type:access_token",
+  IdToken: "urn:ietf:params:oauth:token-type:id_token",
+  Jwt: "urn:ietf:params:oauth:token-type:jwt",
+  IdJag: "urn:ietf:params:oauth:token-type:id-jag",
+} as const;
+
+export type OAuthTokenType =
+  (typeof OAUTH_TOKEN_TYPE)[keyof typeof OAUTH_TOKEN_TYPE];
+
+export const OAUTH_GRANT_TYPE = {
+  TokenExchange: "urn:ietf:params:oauth:grant-type:token-exchange",
+  JwtBearer: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+} as const;
+
+export type OAuthGrantType =
+  (typeof OAUTH_GRANT_TYPE)[keyof typeof OAUTH_GRANT_TYPE];
+
+export const OAUTH_CLIENT_ASSERTION_TYPE = {
+  JwtBearer: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+} as const;
+
+export type OAuthClientAssertionType =
+  (typeof OAUTH_CLIENT_ASSERTION_TYPE)[keyof typeof OAUTH_CLIENT_ASSERTION_TYPE];
+
+export const ENTERPRISE_SUBJECT_TOKEN_TYPES = [
+  OAUTH_TOKEN_TYPE.AccessToken,
+  OAUTH_TOKEN_TYPE.IdToken,
+  OAUTH_TOKEN_TYPE.Jwt,
+] as const;
+
+export type EnterpriseSubjectTokenType =
+  (typeof ENTERPRISE_SUBJECT_TOKEN_TYPES)[number];
+
 export function emailMatchesAllowedIdentityProviderDomains(
   email: string,
   allowedDomains: string,
@@ -91,13 +125,7 @@ export const IdentityProviderOidcConfigSchema = z
         privateKeyPem: z.string().optional(),
         privateKeyId: z.string().optional(),
         clientAssertionAudience: z.string().optional(),
-        subjectTokenType: z
-          .enum([
-            "urn:ietf:params:oauth:token-type:access_token",
-            "urn:ietf:params:oauth:token-type:id_token",
-            "urn:ietf:params:oauth:token-type:jwt",
-          ])
-          .optional(),
+        subjectTokenType: z.enum(ENTERPRISE_SUBJECT_TOKEN_TYPES).optional(),
       })
       .optional(),
     mapping: z
@@ -228,6 +256,7 @@ export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
+    ssoLoginEnabled: z.boolean().optional(),
     domain: z.string().refine(
       (value) => {
         const domains = parseAllowedIdentityProviderDomains(value);

@@ -35,6 +35,7 @@ import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
+import { linkedIdentityProviderPlugin } from "./linked-idp";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
@@ -145,6 +146,14 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    /**
+     * Linked downstream identity provider auth must live inside Better Auth,
+     * rather than regular Fastify routes, because completing the flow has to
+     * restore the original browser session cookie. Better Auth owns the secure
+     * cookie name, signing format, and attributes, and they vary with baseURL
+     * and deployment settings.
+     */
+    linkedIdentityProviderPlugin(),
     apiKey({
       enableSessionForAPIKeys: true,
       apiKeyHeaders: [apiKeyAuthorizationHeaderName],
@@ -159,10 +168,15 @@ export const auth = betterAuth({
       },
       permissions: {
         /**
-         * NOTE: for now we will just grant all permissions to all API keys
+         * Better Auth applies these defaults to new API keys and uses them
+         * when `verifyApiKey` is called with a `permissions` body. Archestra
+         * route authorization does not rely on the stored key permissions;
+         * API-key requests are checked against the key owner's current RBAC
+         * permissions in hasPermission.
          *
-         * If we'd like to allow granting "scopes" to API keys, we will need to implement a more complex API-key
-         * permissions system/UI
+         * Docs:
+         * - https://better-auth.com/docs/plugins/api-key/reference#permissions
+         * - https://better-auth.com/docs/plugins/api-key/advanced#sessions-from-api-keys
          */
         defaultPermissions: allAvailableActions,
       },

@@ -196,12 +196,12 @@ describe("UserTokenModel", () => {
       expect(updated?.lastUsedAt).not.toBeNull();
     });
 
-    test("validates correct token among multiple tokens (batch fetch)", async ({
+    test("validates correct token among multiple token candidates", async ({
       makeUser,
       makeOrganization,
       makeMember,
     }) => {
-      // Create multiple users with tokens to exercise batch secret fetching
+      // Create multiple users with tokens to exercise candidate matching.
       const org = await makeOrganization();
       const user1 = await makeUser();
       const user2 = await makeUser();
@@ -218,7 +218,7 @@ describe("UserTokenModel", () => {
       );
       await UserTokenModel.create(user3.id, org.id, "Token 3");
 
-      // Validate the middle token to ensure batch lookup works correctly
+      // Validate the middle token to ensure lookup matches the correct secret.
       const validated = await UserTokenModel.validateToken(value2);
       expect(validated?.id).toBe(token2.id);
       expect(validated?.userId).toBe(user2.id);

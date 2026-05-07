@@ -702,7 +702,7 @@ export function ModelSelector({
   // If loading, show loading state
   if (isLoading) {
     return (
-      <PromptInputButton disabled>
+      <PromptInputButton className="w-[150px]" disabled>
         <Loader2 className="size-4 animate-spin" />
         <ModelSelectorName>Loading models...</ModelSelectorName>
       </PromptInputButton>
@@ -712,7 +712,7 @@ export function ModelSelector({
   // If no providers configured, show disabled state
   if (availableProviders.length === 0) {
     return (
-      <PromptInputButton disabled>
+      <PromptInputButton className="w-[150px]" disabled>
         <ModelSelectorName>No models available</ModelSelectorName>
       </PromptInputButton>
     );

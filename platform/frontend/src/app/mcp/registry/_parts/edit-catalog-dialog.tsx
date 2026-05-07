@@ -1,4 +1,4 @@
-import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
+import type { archestraApiTypes } from "@shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,10 +48,12 @@ export function EditCatalogContent({
 
   const onSubmit = async (values: McpCatalogFormValues) => {
     const apiData = transformFormToApiData(values);
+    // Tenancy is locked after creation — drop it from the update payload
+    const { multitenant: _multitenant, ...updateData } = apiData;
 
     await updateMutation.mutateAsync({
       id: item.id,
-      data: apiData,
+      data: updateData,
     });
 
     if (!keepOpenOnSave) {
@@ -65,7 +67,7 @@ export function EditCatalogContent({
       initialValues={item}
       onSubmit={onSubmit}
       embedded={keepOpenOnSave}
-      nameDisabled={isPlaywrightCatalogItem(item.id)}
+      nameDisabled
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       footer={({ isDirty, onReset }) => {

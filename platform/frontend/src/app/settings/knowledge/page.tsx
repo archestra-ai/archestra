@@ -211,7 +211,7 @@ function AddApiKeyDialog({
           </Button>
           <Button type="submit" disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             )}
             Test & Create
           </Button>
@@ -638,7 +638,7 @@ function KnowledgeSettingsContent() {
                   <p className="text-sm text-muted-foreground sm:pl-28">
                     Don't see your model?{" "}
                     <Link
-                      href="/llm/providers/models"
+                      href="/llm/model-providers/models"
                       className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
                     >
                       Sync models and configure embedding dimensions

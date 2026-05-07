@@ -16,8 +16,13 @@ describe("VirtualKeySearchableSelect", () => {
           {
             id: "key-456",
             name: "Production Key",
-            parentKeyProvider: "openai",
-            parentKeyName: "Main API Key",
+            providerApiKeys: [
+              {
+                provider: "openai",
+                providerApiKeyId: "pk-1",
+                providerApiKeyName: "Main API Key",
+              },
+            ],
           },
         ]}
       />,
@@ -40,8 +45,13 @@ describe("VirtualKeySearchableSelect", () => {
           {
             id: "key-1",
             name: "Production Key",
-            parentKeyProvider: "openai",
-            parentKeyName: "Main API Key",
+            providerApiKeys: [
+              {
+                provider: "openai",
+                providerApiKeyId: "pk-1",
+                providerApiKeyName: "Main API Key",
+              },
+            ],
           },
         ]}
       />,
@@ -64,6 +74,7 @@ describe("VirtualKeySearchableSelect", () => {
           {
             id: "key-1",
             name: "Test Key",
+            providerApiKeys: [],
           },
         ]}
       />,
@@ -82,8 +93,28 @@ describe("VirtualKeySearchableSelect", () => {
         value=""
         onValueChange={vi.fn()}
         virtualKeys={[
-          { id: "key-1", name: "Production Key", parentKeyProvider: "openai" },
-          { id: "key-2", name: "Staging Key", parentKeyProvider: "anthropic" },
+          {
+            id: "key-1",
+            name: "Production Key",
+            providerApiKeys: [
+              {
+                provider: "openai",
+                providerApiKeyId: "pk-1",
+                providerApiKeyName: "Prod API",
+              },
+            ],
+          },
+          {
+            id: "key-2",
+            name: "Staging Key",
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "pk-2",
+                providerApiKeyName: "Staging API",
+              },
+            ],
+          },
         ]}
       />,
     );
@@ -106,8 +137,28 @@ describe("VirtualKeySearchableSelect", () => {
         value=""
         onValueChange={vi.fn()}
         virtualKeys={[
-          { id: "key-1", name: "Key One", parentKeyProvider: "openai" },
-          { id: "key-2", name: "Key Two", parentKeyProvider: "anthropic" },
+          {
+            id: "key-1",
+            name: "Key One",
+            providerApiKeys: [
+              {
+                provider: "openai",
+                providerApiKeyId: "pk-1",
+                providerApiKeyName: "OpenAI API",
+              },
+            ],
+          },
+          {
+            id: "key-2",
+            name: "Key Two",
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "pk-2",
+                providerApiKeyName: "Anthropic API",
+              },
+            ],
+          },
         ]}
       />,
     );
@@ -133,14 +184,24 @@ describe("VirtualKeySearchableSelect", () => {
           {
             id: "key-1",
             name: "Key One",
-            parentKeyProvider: "openai",
-            parentKeyName: "Main API",
+            providerApiKeys: [
+              {
+                provider: "openai",
+                providerApiKeyId: "pk-1",
+                providerApiKeyName: "Main API",
+              },
+            ],
           },
           {
             id: "key-2",
             name: "Key Two",
-            parentKeyProvider: "anthropic",
-            parentKeyName: "Backup API",
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "pk-2",
+                providerApiKeyName: "Backup API",
+              },
+            ],
           },
         ]}
       />,

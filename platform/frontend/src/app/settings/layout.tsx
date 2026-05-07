@@ -22,7 +22,8 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   },
   "/settings/identity-providers": {
     title: "Identity Providers",
-    description: "Configure SSO and identity provider integrations.",
+    description:
+      "Configure SSO, linked downstream IdPs, and identity provider integrations.",
   },
   "/settings/knowledge": {
     title: "Knowledge",
@@ -32,11 +33,6 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/settings/llm": {
     title: "LLM",
     description: "Configure platform-wide LLM defaults and behavior.",
-  },
-  "/settings/mcp": {
-    title: "MCP",
-    description:
-      "Configure organization-wide MCP authentication and token behavior.",
   },
   "/settings/connection": {
     title: "Connect page",

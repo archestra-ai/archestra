@@ -128,8 +128,11 @@ describe("LLM proxy limit enforcement (integration)", () => {
       provider: "openai",
     });
     const { virtualKey, value: tokenValue } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      organizationId: org.id,
       name: "Test VK for limit",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: chatApiKey.id },
+      ],
     });
 
     // Create virtual_key limit with threshold of 1
@@ -306,8 +309,11 @@ describe("LLM proxy limit enforcement (integration)", () => {
       provider: "openai",
     });
     const { virtualKey, value: tokenValue } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      organizationId: org.id,
       name: "Multi-Limit VK",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: chatApiKey.id },
+      ],
     });
 
     // Create limits at all three levels — all exceeded
@@ -642,8 +648,11 @@ describe("LLM proxy limit enforcement (integration)", () => {
       provider: "openai",
     });
     const { virtualKey, value: tokenValue } = await VirtualApiKeyModel.create({
-      chatApiKeyId: chatApiKey.id,
+      organizationId: org.id,
       name: "Test VK for all-models limit",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: chatApiKey.id },
+      ],
     });
 
     // Create virtual_key all-models limit (model: null) with threshold of 1

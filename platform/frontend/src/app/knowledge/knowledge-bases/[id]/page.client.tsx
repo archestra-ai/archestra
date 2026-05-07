@@ -230,7 +230,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
                   onClick={() => checkHealth()}
                   disabled={isCheckingHealth}
                 >
-                  <Heart className="mr-2 h-4 w-4" />
+                  <Heart className="h-4 w-4" />
                   {isCheckingHealth ? "Checking..." : "Health Check"}
                 </Button>
               </div>
@@ -263,7 +263,7 @@ function KnowledgeBaseDetail({ id }: { id: string }) {
             onClick={() => setIsAddConnectorOpen(true)}
             size="sm"
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Add Connector
           </PermissionButton>
         </div>
@@ -384,8 +384,8 @@ function AddConnectorDialog({
         }
         description={
           step === "choose"
-            ? "Reuse an existing connector or create a new one."
-            : "Choose connectors to assign to this knowledge base."
+            ? "Reuse an existing Connector or create a new one."
+            : "Choose Connectors to assign to this Knowledge Base."
         }
         size="small"
         footer={

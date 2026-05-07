@@ -1,14 +1,7 @@
 "use client";
 
 import type { IdentityProviderFormValues } from "@shared";
-import { Info } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   FormControl,
@@ -19,13 +12,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
 import { SsoTemplateDebugSection } from "./sso-template-debug-section.ee";
@@ -123,41 +109,5 @@ export function TeamSyncConfigForm({
     </>
   );
 
-  if (embedded) {
-    return <div className="space-y-4">{content}</div>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <Separator />
-
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="team-sync" className="border-none">
-          <AccordionTrigger className="hover:no-underline">
-            <div className="flex items-center gap-2">
-              <h4 className="text-md font-medium">
-                Team Sync Configuration (Optional)
-              </h4>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-sm">
-                    <p>
-                      Configure how group identifiers are extracted from SSO
-                      tokens for automatic team membership synchronization.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-4 pt-4">
-            {content}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    </div>
-  );
+  return <div className={embedded ? "space-y-4" : "space-y-6"}>{content}</div>;
 }

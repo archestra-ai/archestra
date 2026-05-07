@@ -71,16 +71,9 @@ function TestWrapper({
   );
 }
 
-function openAccordion() {
-  const trigger = screen.getByText("Team Sync Configuration (Optional)");
-  return userEvent.click(trigger);
-}
-
 describe("TeamSyncConfigForm", () => {
   it("shows latest ID token claims when editing an existing provider", async () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    await openAccordion();
-
     expect(screen.getAllByText(/engineering/i).length).toBeGreaterThan(0);
   });
 
@@ -88,8 +81,6 @@ describe("TeamSyncConfigForm", () => {
     const user = userEvent.setup();
 
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    await openAccordion();
-
     await user.type(
       screen.getByLabelText("Groups Handlebars Template"),
       "{{#each groups}}{{this}},{{/each}}",
@@ -104,8 +95,6 @@ describe("TeamSyncConfigForm", () => {
 
   it("tests default team sync extraction when the template is empty", async () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    await openAccordion();
-
     expect(screen.getByText("Live Template Test")).toBeInTheDocument();
     expect(screen.getByText("Groups extracted")).toBeInTheDocument();
     expect(screen.getByText(/using default extraction/i)).toBeInTheDocument();
@@ -114,8 +103,6 @@ describe("TeamSyncConfigForm", () => {
 
   it("shows the Okta groups claim hint", async () => {
     render(<TestWrapper providerId="Okta" />);
-    await openAccordion();
-
     expect(
       screen.getByText(/Okta team sync commonly reads group names/i),
     ).toBeInTheDocument();
@@ -123,8 +110,6 @@ describe("TeamSyncConfigForm", () => {
 
   it("shows the Entra groups and roles claim hint", async () => {
     render(<TestWrapper providerId="EntraID" />);
-    await openAccordion();
-
     expect(
       screen.getByText(/Microsoft Entra ID team sync commonly reads/i),
     ).toBeInTheDocument();

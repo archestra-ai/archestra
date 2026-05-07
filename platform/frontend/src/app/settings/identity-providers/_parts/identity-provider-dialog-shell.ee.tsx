@@ -10,7 +10,6 @@ import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogForm,
@@ -136,7 +135,11 @@ export function IdentityProviderDialogShell({
                 </Button>
               </div>
 
-              <DialogBody className="p-6">{children}</DialogBody>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
+                  {children}
+                </div>
+              </div>
               <DialogStickyFooter className="mt-0">{footer}</DialogStickyFooter>
             </div>
           </DialogForm>

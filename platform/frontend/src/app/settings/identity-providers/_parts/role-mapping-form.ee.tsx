@@ -5,15 +5,9 @@ import {
   getIdpRoleMappingRuleRowTestId,
   type IdentityProviderFormValues,
 } from "@shared";
-import { Info, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,12 +23,6 @@ import { Input } from "@/components/ui/input";
 import { RoleSelectContent } from "@/components/ui/role-select";
 import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
@@ -303,43 +291,5 @@ export function RoleMappingForm({
     </>
   );
 
-  if (embedded) {
-    return <div className="space-y-4">{content}</div>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <Separator />
-
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="role-mapping" className="border-none">
-          <AccordionTrigger
-            className="hover:no-underline"
-            data-testid={E2eTestId.IdpRoleMappingAccordionTrigger}
-          >
-            <div className="flex items-center gap-2">
-              <h4 className="text-md font-medium">Role Mapping (Optional)</h4>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-sm">
-                    <p>
-                      Map identity provider attributes to {appName} roles using
-                      Handlebars templates. Rules are evaluated in order - first
-                      match wins.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-4 pt-4">
-            {content}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    </div>
-  );
+  return <div className={embedded ? "space-y-4" : "space-y-6"}>{content}</div>;
 }

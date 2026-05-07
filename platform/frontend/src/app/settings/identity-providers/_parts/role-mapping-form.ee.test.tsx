@@ -109,16 +109,9 @@ function getDeleteButtons() {
     .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
 }
 
-function openAccordion() {
-  const trigger = screen.getByText("Role Mapping (Optional)");
-  return userEvent.click(trigger);
-}
-
 describe("RoleMappingForm", () => {
   it("shows latest ID token claims when editing an existing provider", async () => {
     render(<TestWrapper identityProviderId="idp-1" />);
-    await openAccordion();
-
     expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/app-admin/i)).toBeInTheDocument();
     expect(
@@ -128,8 +121,6 @@ describe("RoleMappingForm", () => {
 
   it("hides latest ID token claims when creating a provider", async () => {
     render(<TestWrapper />);
-    await openAccordion();
-
     expect(
       screen.queryByText("Latest ID token claims"),
     ).not.toBeInTheDocument();
@@ -153,8 +144,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     expect(screen.getByText("Live Template Test")).toBeInTheDocument();
     expect(
       screen.getByText(/runs role mapping rule 1 \(member\)/i),
@@ -174,8 +163,6 @@ describe("RoleMappingForm", () => {
 
   it("shows the Okta groups claim hint", async () => {
     render(<TestWrapper providerId="Okta" />);
-    await openAccordion();
-
     expect(
       screen.getByText(/Okta group-based role rules commonly read/i),
     ).toBeInTheDocument();
@@ -184,8 +171,6 @@ describe("RoleMappingForm", () => {
 
   it("shows the Entra roles and groups claim hint", async () => {
     render(<TestWrapper providerId="EntraID" />);
-    await openAccordion();
-
     expect(
       screen.getByText(/Microsoft Entra ID role rules commonly read/i),
     ).toBeInTheDocument();
@@ -194,8 +179,6 @@ describe("RoleMappingForm", () => {
 
   it("adds a rule when clicking Add Rule", async () => {
     render(<TestWrapper />);
-    await openAccordion();
-
     expect(
       screen.getByText(
         "No mapping rules configured. All users will be assigned the default role.",
@@ -224,8 +207,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     const templateInputs = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
     );
@@ -238,8 +219,6 @@ describe("RoleMappingForm", () => {
         defaultRules={[{ expression: "rule-one", role: "admin" }]}
       />,
     );
-    await openAccordion();
-
     const row = screen.getByTestId("role-mapping-rule-0");
     const templateInput = screen.getByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
@@ -262,8 +241,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     expect(
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
     ).toHaveLength(3);
@@ -296,8 +273,6 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    await openAccordion();
-
     await userEvent.click(getDeleteButtons()[1]);
 
     const remaining = screen.getAllByTestId(
@@ -314,8 +289,6 @@ describe("RoleMappingForm", () => {
         defaultRules={[{ expression: "only-rule", role: "admin" }]}
       />,
     );
-    await openAccordion();
-
     expect(
       screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate),
     ).toHaveLength(1);
@@ -338,8 +311,6 @@ describe("RoleMappingForm", () => {
         defaultRules={[{ expression: "existing", role: "admin" }]}
       />,
     );
-    await openAccordion();
-
     await userEvent.click(getDeleteButtons()[0]);
     await userEvent.click(getAddRuleButton());
 
@@ -385,8 +356,6 @@ describe("RoleMappingForm", () => {
         onSubmit={onSubmit}
       />,
     );
-    await openAccordion();
-
     // Remove the second rule
     await userEvent.click(getDeleteButtons()[1]);
 
@@ -424,8 +393,6 @@ describe("RoleMappingForm", () => {
         onSubmit={onSubmit}
       />,
     );
-    await openAccordion();
-
     // Remove the only rule
     await userEvent.click(getDeleteButtons()[0]);
 

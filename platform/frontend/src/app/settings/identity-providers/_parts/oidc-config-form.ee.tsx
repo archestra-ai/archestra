@@ -5,16 +5,10 @@ import {
   type IdentityProviderFormValues,
   OAUTH_TOKEN_TYPE,
 } from "@shared";
-import { Info, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,12 +30,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -563,24 +551,7 @@ export function OidcConfigForm({
       {!activeSection && <Separator />}
 
       {(!activeSection || activeSection === "attribute-mapping") &&
-        (activeSection ? (
-          attributeMappingContent
-        ) : (
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="attribute-mapping" className="border-none">
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-md font-medium">
-                    Attribute Mapping (Optional)
-                  </h4>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pt-4">
-                {attributeMappingContent}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        ))}
+        attributeMappingContent}
 
       {(!activeSection ||
         activeSection === "enterprise-managed-credentials") && (
@@ -843,47 +814,7 @@ function EnterpriseManagedCredentialsForm(props: {
     </>
   );
 
-  if (embedded) {
-    return <div className="space-y-4">{content}</div>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <Separator />
-
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem
-          value="enterprise-managed-credentials"
-          className="border-none"
-        >
-          <AccordionTrigger className="hover:no-underline">
-            <div className="flex items-center gap-2">
-              <h4 className="text-md font-medium">
-                Enterprise-Managed Credentials (Optional)
-              </h4>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-sm">
-                    <p>
-                      Configure how {appName} exchanges a user&apos;s
-                      identity-provider token for a downstream tool credential
-                      at call-time.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-4 pt-4">
-            {content}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    </div>
-  );
+  return <div className={embedded ? "space-y-4" : "space-y-6"}>{content}</div>;
 }
 
 function getEnterpriseExchangeHint(

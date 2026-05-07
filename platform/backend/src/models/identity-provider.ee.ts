@@ -459,7 +459,8 @@ class IdentityProviderModel {
         id: schema.identityProvidersTable.id,
         providerId: schema.identityProvidersTable.providerId,
       })
-      .from(schema.identityProvidersTable);
+      .from(schema.identityProvidersTable)
+      .where(eq(schema.identityProvidersTable.ssoLoginEnabled, true));
 
     return idpProviders;
   }
@@ -606,6 +607,7 @@ class IdentityProviderModel {
           providerId: data.providerId,
           domain: data.domain,
         }) || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
+      ssoLoginEnabled: data.ssoLoginEnabled ?? true,
       organizationId,
       ...(data.oidcConfig && {
         oidcConfig:
@@ -632,10 +634,12 @@ class IdentityProviderModel {
     }
 
     const registrationData = await hydrateOidcConfigForRegistration(parsedData);
+    const { ssoLoginEnabled: _ssoLoginEnabled, ...betterAuthRegistrationData } =
+      registrationData;
 
     // Register with Better Auth
     await auth.api.registerSSOProvider({
-      body: registrationData,
+      body: betterAuthRegistrationData,
       headers: new Headers(headers),
     });
 
@@ -665,7 +669,9 @@ class IdentityProviderModel {
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
-    const oidcConfigJson = serializeConfigValue(registrationData.oidcConfig);
+    const oidcConfigJson = serializeConfigValue(
+      betterAuthRegistrationData.oidcConfig,
+    );
     const samlConfigJson = serializeConfigValue(data.samlConfig);
     const roleMappingJson = serializeConfigValue(data.roleMapping);
     const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
@@ -678,6 +684,7 @@ class IdentityProviderModel {
       .set({
         domain: persistedDomain,
         domainVerified: true,
+        ssoLoginEnabled: data.ssoLoginEnabled ?? true,
         ...(oidcConfigJson !== undefined && {
           oidcConfig: oidcConfigJson as unknown as typeof data.oidcConfig,
         }),

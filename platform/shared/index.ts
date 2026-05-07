@@ -16,6 +16,7 @@ export * from "./incoming-email";
 export * from "./interactions";
 export * from "./knowledge-base";
 export * from "./labels";
+export * from "./linked-idp-auth";
 export * from "./mcp-extensions";
 export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";

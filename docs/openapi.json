@@ -173553,6 +173553,9 @@
                       "domainVerified": {
                         "nullable": true,
                         "type": "boolean"
+                      },
+                      "ssoLoginEnabled": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -173562,7 +173565,8 @@
                       "providerId",
                       "organizationId",
                       "domain",
-                      "domainVerified"
+                      "domainVerified",
+                      "ssoLoginEnabled"
                     ],
                     "additionalProperties": false
                   }
@@ -174182,6 +174186,9 @@
                   "domainVerified": {
                     "nullable": true,
                     "type": "boolean"
+                  },
+                  "ssoLoginEnabled": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -174582,6 +174589,9 @@
                     "domainVerified": {
                       "nullable": true,
                       "type": "boolean"
+                    },
+                    "ssoLoginEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -174591,7 +174601,8 @@
                     "providerId",
                     "organizationId",
                     "domain",
-                    "domainVerified"
+                    "domainVerified",
+                    "ssoLoginEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -175791,6 +175802,9 @@
                     "domainVerified": {
                       "nullable": true,
                       "type": "boolean"
+                    },
+                    "ssoLoginEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -175800,7 +175814,8 @@
                     "providerId",
                     "organizationId",
                     "domain",
-                    "domainVerified"
+                    "domainVerified",
+                    "ssoLoginEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -176415,6 +176430,9 @@
                   "domainVerified": {
                     "nullable": true,
                     "type": "boolean"
+                  },
+                  "ssoLoginEnabled": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -176820,6 +176838,9 @@
                     "domainVerified": {
                       "nullable": true,
                       "type": "boolean"
+                    },
+                    "ssoLoginEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -176829,7 +176850,8 @@
                     "providerId",
                     "organizationId",
                     "domain",
-                    "domainVerified"
+                    "domainVerified",
+                    "ssoLoginEnabled"
                   ],
                   "additionalProperties": false
                 }

@@ -33,6 +33,7 @@ import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
 interface TeamSyncConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
   identityProviderId?: string;
+  embedded?: boolean;
 }
 
 const HANDLEBARS_EXAMPLES = [
@@ -53,11 +54,109 @@ const HANDLEBARS_EXAMPLES = [
 export function TeamSyncConfigForm({
   form,
   identityProviderId,
+  embedded = false,
 }: TeamSyncConfigFormProps) {
   const appName = useAppName();
   const providerClaimHint = getIdentityProviderClaimHint(
     form.watch("providerId"),
   );
+  const content = (
+    <>
+      {providerClaimHint && (
+        <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+          <span className="font-medium">{providerClaimHint.providerName}:</span>{" "}
+          {providerClaimHint.teamSyncNote}
+        </p>
+      )}
+
+      <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
+
+      <FormField
+        control={form.control}
+        name="teamSyncConfig.enabled"
+        render={({ field }) => (
+          <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+            <FormControl>
+              <Checkbox
+                checked={field.value !== false}
+                onCheckedChange={field.onChange}
+              />
+            </FormControl>
+            <div className="space-y-1 leading-none">
+              <FormLabel>Enable Team Sync</FormLabel>
+              <FormDescription>
+                When enabled, users are automatically added/removed from
+                {appName} teams based on their SSO group memberships.
+              </FormDescription>
+            </div>
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="teamSyncConfig.groupsExpression"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Groups Handlebars Template</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="{{#each roles}}{{this.name}},{{/each}}"
+                className="font-mono text-sm"
+                {...field}
+              />
+            </FormControl>
+            <FormDescription>
+              Handlebars template to extract group identifiers from SSO claims.
+              Should render to a comma-separated list or JSON array. Leave empty
+              to use default extraction.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem
+          value="examples"
+          className="!border rounded-md bg-muted/30"
+        >
+          <AccordionTrigger className="px-4 py-2 hover:no-underline">
+            <span className="text-sm font-medium">Example Templates</span>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4 pt-0">
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
+                <li key={`${expression}-${description}`}>
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
+                    {expression}
+                  </code>
+                  <span className="ml-2">- {description}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground mt-3">
+              Use this to extract group names from complex token structures. For
+              example, if your IdP sends{" "}
+              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                roles: [{"{"}name: &quot;admin&quot;{"}"}]
+              </code>
+              , use{" "}
+              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                {"{{#each roles}}{{this.name}},{{/each}}"}
+              </code>
+              .
+            </p>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{content}</div>;
+  }
+
   return (
     <div className="space-y-6">
       <Separator />
@@ -85,96 +184,7 @@ export function TeamSyncConfigForm({
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
-            {providerClaimHint && (
-              <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
-                <span className="font-medium">
-                  {providerClaimHint.providerName}:
-                </span>{" "}
-                {providerClaimHint.teamSyncNote}
-              </p>
-            )}
-
-            <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
-
-            <FormField
-              control={form.control}
-              name="teamSyncConfig.enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value !== false}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Enable Team Sync</FormLabel>
-                    <FormDescription>
-                      When enabled, users are automatically added/removed from
-                      {appName} teams based on their SSO group memberships.
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="teamSyncConfig.groupsExpression"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Groups Handlebars Template</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="{{#each roles}}{{this.name}},{{/each}}"
-                      className="font-mono text-sm"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Handlebars template to extract group identifiers from SSO
-                    claims. Should render to a comma-separated list or JSON
-                    array. Leave empty to use default extraction.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem
-                value="examples"
-                className="!border rounded-md bg-muted/30"
-              >
-                <AccordionTrigger className="px-4 py-2 hover:no-underline">
-                  <span className="text-sm font-medium">Example Templates</span>
-                </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4 pt-0">
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
-                      <li key={`${expression}-${description}`}>
-                        <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
-                          {expression}
-                        </code>
-                        <span className="ml-2">- {description}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Use this to extract group names from complex token
-                    structures. For example, if your IdP sends{" "}
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                      roles: [{"{"}name: &quot;admin&quot;{"}"}]
-                    </code>
-                    , use{" "}
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                      {"{{#each roles}}{{this.name}},{{/each}}"}
-                    </code>
-                    .
-                  </p>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+            {content}
           </AccordionContent>
         </AccordionItem>
       </Accordion>

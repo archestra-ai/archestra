@@ -2272,9 +2272,15 @@ function renderToolAuthPart(params: {
       <AuthRequiredTool
         toolName={toolName}
         catalogName={authState.catalogName}
-        installUrl={authState.installUrl}
+        actionUrl={authState.actionUrl}
+        action={authState.action}
+        providerId={authState.providerId}
         onInstall={
-          onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
+          authState.action === "install_mcp_credentials" &&
+          onInstallMcp &&
+          catalogId
+            ? () => onInstallMcp(catalogId)
+            : undefined
         }
       />
     );
@@ -2313,9 +2319,15 @@ function renderAssistantAuthPart(params: {
       <AuthRequiredTool
         toolName={toolName}
         catalogName={authState.catalogName}
-        installUrl={authState.installUrl}
+        actionUrl={authState.actionUrl}
+        action={authState.action}
+        providerId={authState.providerId}
         onInstall={
-          onInstallMcp && catalogId ? () => onInstallMcp(catalogId) : undefined
+          authState.action === "install_mcp_credentials" &&
+          onInstallMcp &&
+          catalogId
+            ? () => onInstallMcp(catalogId)
+            : undefined
         }
       />
     );

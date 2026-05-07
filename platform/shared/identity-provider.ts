@@ -125,9 +125,7 @@ export const IdentityProviderOidcConfigSchema = z
         privateKeyPem: z.string().optional(),
         privateKeyId: z.string().optional(),
         clientAssertionAudience: z.string().optional(),
-        subjectTokenType: z
-          .enum(ENTERPRISE_SUBJECT_TOKEN_TYPES)
-          .optional(),
+        subjectTokenType: z.enum(ENTERPRISE_SUBJECT_TOKEN_TYPES).optional(),
       })
       .optional(),
     mapping: z
@@ -258,6 +256,7 @@ export const IdentityProviderFormSchema = z
   .object({
     providerId: z.string().min(1, "Provider ID is required"),
     issuer: z.string().min(1, "Issuer is required"),
+    ssoLoginEnabled: z.boolean().optional(),
     domain: z.string().refine(
       (value) => {
         const domains = parseAllowedIdentityProviderDomains(value);

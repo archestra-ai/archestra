@@ -28,7 +28,7 @@ Archestra supports automatic team membership synchronization based on user group
 
 ## Configuring team sync
 
-When creating or editing an SSO provider, expand the **Team Sync Configuration (Optional)** section.
+When creating or editing an SSO provider, select the **Team Sync** section.
 
 1. **Enable Team Sync** — when enabled (default), users are automatically added or removed from Archestra teams based on their SSO group memberships.
 2. **Groups Handlebars Template** — a [Handlebars](https://handlebarsjs.com/) template that extracts group identifiers from the ID token claims. Should render to a comma-separated list or JSON array. Leave empty to use default extraction.
@@ -141,7 +141,7 @@ When users with the `dev-team` group log in via SSO, they will automatically be 
 If your IdP sends roles as objects (for example `roles: [{name: "admin"}, {name: "viewer"}]`):
 
 1. Edit your SSO provider configuration
-2. Expand **Team Sync Configuration**
+2. Select **Team Sync**
 3. Set **Groups Handlebars Template** to `{{#each roles}}{{this.name}},{{/each}}`
 4. Save the provider
 5. Link your teams to group identifiers like `admin` or `viewer`

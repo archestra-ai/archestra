@@ -20,7 +20,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   fetchToolUiResource,
@@ -48,6 +48,8 @@ import {
   MemberModel,
   MessageModel,
   OrganizationModel,
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
 import { startActiveChatSpan } from "@/observability/tracing";
@@ -904,11 +906,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findAccessibleById({
-        id: id,
-        userId: user.id,
-        organizationId: organizationId,
-      });
+      const conversation =
+        (await ConversationModel.findAccessibleById({
+          id: id,
+          userId: user.id,
+          organizationId: organizationId,
+        })) ??
+        (await findScheduleRunConversationForAdmin({
+          conversationId: id,
+          userId: user.id,
+          organizationId,
+        }));
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -2334,6 +2342,39 @@ function attachRequestAbortListeners(params: {
   reply.raw.on("close", onConnectionClose);
 
   return cleanup;
+}
+
+async function findScheduleRunConversationForAdmin(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  const isScheduledTaskAdmin = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "scheduledTask",
+    "admin",
+  );
+  if (!isScheduledTaskAdmin) {
+    return null;
+  }
+
+  const run = await ScheduleTriggerRunModel.findByChatConversationId(
+    params.conversationId,
+  );
+  if (!run || run.organizationId !== params.organizationId) {
+    return null;
+  }
+
+  const trigger = await ScheduleTriggerModel.findById(run.triggerId);
+  if (!trigger || trigger.organizationId !== params.organizationId) {
+    return null;
+  }
+
+  return await ConversationModel.findByIdInOrganization({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
 }
 
 /**

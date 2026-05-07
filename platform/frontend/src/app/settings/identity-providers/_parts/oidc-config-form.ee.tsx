@@ -51,6 +51,7 @@ import {
   inferEnterpriseExchangeType,
 } from "./identity-provider-form.utils";
 import { RoleMappingForm } from "./role-mapping-form.ee";
+import { SsoLoginEnabledField } from "./sso-login-enabled-field.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
 const SUBJECT_TOKEN_LABEL_BY_TYPE = {
@@ -62,6 +63,12 @@ const SUBJECT_TOKEN_LABEL_BY_TYPE = {
 interface OidcConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
   identityProviderId?: string;
+  activeSection?:
+    | "general"
+    | "attribute-mapping"
+    | "enterprise-managed-credentials"
+    | "role-mapping"
+    | "team-sync";
   /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
@@ -71,6 +78,7 @@ interface OidcConfigFormProps {
 export function OidcConfigForm({
   form,
   identityProviderId,
+  activeSection,
   hidePkce,
   hideProviderId,
 }: OidcConfigFormProps) {
@@ -80,7 +88,6 @@ export function OidcConfigForm({
   const issuer = form.watch("issuer") || "";
   const providerId = form.watch("providerId") || "";
   const showAllowedEmailDomains = providerId === "Google";
-
   const inferredEnterpriseExchangeType = inferEnterpriseExchangeType({
     issuer,
     providerId,
@@ -111,283 +118,311 @@ export function OidcConfigForm({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4">
-        {!hideProviderId && (
-          <FormField
-            control={form.control}
-            name="providerId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Provider ID</FormLabel>
-                <FormControl>
-                  <Input placeholder="my-company-idp" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Unique identifier for this identity provider. Used in callback
-                  URLs.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <FormField
-          control={form.control}
-          name="issuer"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Issuer</FormLabel>
-              <FormControl>
-                <Input placeholder="https://auth.company.com" {...field} />
-              </FormControl>
-              <FormDescription>
-                The issuer URL of your identity provider.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {showAllowedEmailDomains && (
-          <FormField
-            control={form.control}
-            name="domain"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Allowed Email Domains</FormLabel>
-                <FormControl>
-                  <Input placeholder="company.com, subsidiary.com" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Users can sign in with this provider only when their returned
-                  email matches one of these domains. Separate multiple domains
-                  with commas.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <Separator />
-
-        <div>
-          <h4 className="text-md font-medium mb-4">OIDC Settings</h4>
-        </div>
-        <FormField
-          control={form.control}
-          name="oidcConfig.clientId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Client ID</FormLabel>
-              <FormControl>
-                <Input placeholder="your-client-id" {...field} />
-              </FormControl>
-              <FormDescription>
-                The client ID provided by your OIDC provider.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.clientSecret"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Client Secret</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  placeholder="your-client-secret"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                The client secret provided by your OIDC provider.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {providerId === "Google" && (
-          <FormField
-            control={form.control}
-            name="oidcConfig.hd"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Hosted Domain Hint (Optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="example.com" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Passes Google&apos;s `hd` parameter to prefer account
-                  selection for a Workspace domain. This is a Google hint, not
-                  the security boundary; sign-in is enforced by Allowed Email
-                  Domains.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.discoveryEndpoint"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Discovery Endpoint</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="https://auth.company.com/.well-known/openid-configuration"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                The OIDC discovery endpoint URL
-                (/.well-known/openid-configuration).
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.authorizationEndpoint"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Authorization Endpoint (Optional)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="https://auth.company.com/authorize"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Override the authorization endpoint if not using discovery.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.tokenEndpoint"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Token Endpoint (Optional)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="https://auth.company.com/token"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Override the token endpoint if not using discovery.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.userInfoEndpoint"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>UserInfo Endpoint (Optional)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="https://auth.company.com/userinfo"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Override the userinfo endpoint if not using discovery.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.jwksEndpoint"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>JWKS Endpoint (Optional)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="https://auth.company.com/.well-known/jwks.json"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Override the JWKS endpoint if not using discovery.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="space-y-3">
-          <FormLabel>Scopes</FormLabel>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add scope (e.g., profile)"
-              value={newScope}
-              onChange={(e) => setNewScope(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addScope();
-                }
-              }}
+      {(!activeSection || activeSection === "general") && (
+        <div className="grid gap-4">
+          {!hideProviderId && (
+            <FormField
+              control={form.control}
+              name="providerId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Provider ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="my-company-idp" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Unique identifier for this identity provider. Used in
+                    callback URLs.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <Button
-              type="button"
-              onClick={addScope}
-              size="icon"
-              variant="outline"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          {scopes.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {scopes.map((scope) => (
-                <Badge
-                  key={scope}
-                  variant="secondary"
-                  className="flex items-center gap-1"
-                >
-                  {scope}
-                  <button
-                    type="button"
-                    onClick={() => removeScope(scope)}
-                    className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
           )}
-          <FormDescription>
-            OAuth scopes to request. Common scopes: openid, email, profile.
-          </FormDescription>
-        </div>
 
-        {!hidePkce && (
           <FormField
             control={form.control}
-            name="oidcConfig.pkce"
+            name="issuer"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Issuer</FormLabel>
+                <FormControl>
+                  <Input placeholder="https://auth.company.com" {...field} />
+                </FormControl>
+                <FormDescription>
+                  The issuer URL of your identity provider.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <SsoLoginEnabledField form={form} />
+
+          {showAllowedEmailDomains && (
+            <FormField
+              control={form.control}
+              name="domain"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Allowed Email Domains</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="company.com, subsidiary.com"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Users can sign in with this provider only when their
+                    returned email matches one of these domains. Separate
+                    multiple domains with commas.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          <Separator />
+
+          <div>
+            <h4 className="text-md font-medium mb-4">OIDC Settings</h4>
+          </div>
+          <FormField
+            control={form.control}
+            name="oidcConfig.clientId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Client ID</FormLabel>
+                <FormControl>
+                  <Input placeholder="your-client-id" {...field} />
+                </FormControl>
+                <FormDescription>
+                  The client ID provided by your OIDC provider.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.clientSecret"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Client Secret</FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    placeholder="your-client-secret"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  The client secret provided by your OIDC provider.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {providerId === "Google" && (
+            <FormField
+              control={form.control}
+              name="oidcConfig.hd"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Hosted Domain Hint (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="example.com" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Passes Google&apos;s `hd` parameter to prefer account
+                    selection for a Workspace domain. This is a Google hint, not
+                    the security boundary; sign-in is enforced by Allowed Email
+                    Domains.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.discoveryEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Discovery Endpoint</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://auth.company.com/.well-known/openid-configuration"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  The OIDC discovery endpoint URL
+                  (/.well-known/openid-configuration).
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.authorizationEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Authorization Endpoint (Optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://auth.company.com/authorize"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Override the authorization endpoint if not using discovery.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.tokenEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Token Endpoint (Optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://auth.company.com/token"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Override the token endpoint if not using discovery.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.userInfoEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>UserInfo Endpoint (Optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://auth.company.com/userinfo"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Override the userinfo endpoint if not using discovery.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.jwksEndpoint"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>JWKS Endpoint (Optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://auth.company.com/.well-known/jwks.json"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Override the JWKS endpoint if not using discovery.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="space-y-3">
+            <FormLabel>Scopes</FormLabel>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Add scope (e.g., profile)"
+                value={newScope}
+                onChange={(e) => setNewScope(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addScope();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={addScope}
+                size="icon"
+                variant="outline"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            {scopes.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {scopes.map((scope) => (
+                  <Badge
+                    key={scope}
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
+                    {scope}
+                    <button
+                      type="button"
+                      onClick={() => removeScope(scope)}
+                      className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <FormDescription>
+              OAuth scopes to request. Common scopes: openid, email, profile.
+            </FormDescription>
+          </div>
+
+          {!hidePkce && (
+            <FormField
+              control={form.control}
+              name="oidcConfig.pkce"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Enable PKCE</FormLabel>
+                    <FormDescription>
+                      Use Proof Key for Code Exchange for enhanced security.
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+          )}
+
+          <FormField
+            control={form.control}
+            name="oidcConfig.enableRpInitiatedLogout"
             render={({ field }) => (
               <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                 <FormControl>
@@ -397,185 +432,185 @@ export function OidcConfigForm({
                   />
                 </FormControl>
                 <div className="space-y-1 leading-none">
-                  <FormLabel>Enable PKCE</FormLabel>
+                  <FormLabel>Enable RP-Initiated Logout</FormLabel>
                   <FormDescription>
-                    Use Proof Key for Code Exchange for enhanced security.
+                    Send the <code>post_logout_redirect_uri</code> parameter
+                    during sign-out.{" "}
+                    <ExternalDocsLink
+                      href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
+                      className="inline-flex items-center gap-1 underline underline-offset-4"
+                    >
+                      Learn more
+                    </ExternalDocsLink>
                   </FormDescription>
                 </div>
               </FormItem>
             )}
           />
-        )}
 
-        <FormField
-          control={form.control}
-          name="oidcConfig.enableRpInitiatedLogout"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>Enable RP-Initiated Logout</FormLabel>
-                <FormDescription>
-                  Send the <code>post_logout_redirect_uri</code> parameter
-                  during sign-out.{" "}
-                  <ExternalDocsLink
-                    href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
-                    className="inline-flex items-center gap-1 underline underline-offset-4"
-                  >
-                    Learn more
-                  </ExternalDocsLink>
-                </FormDescription>
+          <FormField
+            control={form.control}
+            name="oidcConfig.overrideUserInfo"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Override User Info</FormLabel>
+                  <FormDescription>
+                    Override user information with provider data on each login.
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+        </div>
+      )}
+
+      {!activeSection && <Separator />}
+
+      {(!activeSection || activeSection === "attribute-mapping") && (
+        <Accordion
+          type="single"
+          collapsible={!activeSection}
+          defaultValue={
+            activeSection === "attribute-mapping"
+              ? "attribute-mapping"
+              : undefined
+          }
+          className="w-full"
+        >
+          <AccordionItem value="attribute-mapping" className="border-none">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <h4 className="text-md font-medium">
+                  Attribute Mapping (Optional)
+                </h4>
               </div>
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="oidcConfig.overrideUserInfo"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <div className="grid gap-4">
+                <FormField
+                  control={form.control}
+                  name="oidcConfig.mapping.id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>User ID Claim</FormLabel>
+                      <FormControl>
+                        <Input placeholder="sub" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The claim that contains the unique user identifier.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>Override User Info</FormLabel>
-                <FormDescription>
-                  Override user information with provider data on each login.
-                </FormDescription>
+
+                <FormField
+                  control={form.control}
+                  name="oidcConfig.mapping.email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Claim</FormLabel>
+                      <FormControl>
+                        <Input placeholder="email" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The claim that contains the user&apos;s email address.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oidcConfig.mapping.name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name Claim</FormLabel>
+                      <FormControl>
+                        <Input placeholder="name" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The claim that contains the user&apos;s display name.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oidcConfig.mapping.emailVerified"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Verified Claim (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="email_verified" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The claim that indicates if the email is verified.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oidcConfig.mapping.image"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Avatar Image Claim (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="picture" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The claim that contains the user&apos;s profile picture
+                        URL.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
-            </FormItem>
-          )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
+
+      {(!activeSection ||
+        activeSection === "enterprise-managed-credentials") && (
+        <EnterpriseManagedCredentialsForm
+          authenticationDefault={authenticationDefault}
+          form={form}
+          inferredEnterpriseExchangeType={inferredEnterpriseExchangeType}
+          subjectTokenTypeDefault={subjectTokenTypeDefault}
+          embedded={!!activeSection}
         />
-      </div>
+      )}
 
-      <Separator />
+      {(!activeSection || activeSection === "role-mapping") && (
+        <RoleMappingForm
+          form={form}
+          identityProviderId={identityProviderId}
+          embedded={!!activeSection}
+        />
+      )}
 
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="attribute-mapping" className="border-none">
-          <AccordionTrigger className="hover:no-underline">
-            <div className="flex items-center gap-2">
-              <h4 className="text-md font-medium">
-                Attribute Mapping (Optional)
-              </h4>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="pt-4">
-            <div className="grid gap-4">
-              <FormField
-                control={form.control}
-                name="oidcConfig.mapping.id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>User ID Claim</FormLabel>
-                    <FormControl>
-                      <Input placeholder="sub" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      The claim that contains the unique user identifier.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oidcConfig.mapping.email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Claim</FormLabel>
-                    <FormControl>
-                      <Input placeholder="email" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      The claim that contains the user&apos;s email address.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oidcConfig.mapping.name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name Claim</FormLabel>
-                    <FormControl>
-                      <Input placeholder="name" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      The claim that contains the user&apos;s display name.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oidcConfig.mapping.emailVerified"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Verified Claim (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="email_verified" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      The claim that indicates if the email is verified.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oidcConfig.mapping.image"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Avatar Image Claim (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="picture" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      The claim that contains the user&apos;s profile picture
-                      URL.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-
-      <EnterpriseManagedCredentialsForm
-        authenticationDefault={authenticationDefault}
-        form={form}
-        inferredEnterpriseExchangeType={inferredEnterpriseExchangeType}
-        subjectTokenTypeDefault={subjectTokenTypeDefault}
-      />
-
-      <RoleMappingForm
-        form={form}
-        identityProviderId={identityProviderId}
-      />
-
-      <TeamSyncConfigForm
-        form={form}
-        identityProviderId={identityProviderId}
-      />
+      {(!activeSection || activeSection === "team-sync") && (
+        <TeamSyncConfigForm
+          form={form}
+          identityProviderId={identityProviderId}
+          embedded={!!activeSection}
+        />
+      )}
     </div>
   );
 }
@@ -588,12 +623,14 @@ function EnterpriseManagedCredentialsForm(props: {
   form: UseFormReturn<IdentityProviderFormValues>;
   inferredEnterpriseExchangeType: "okta_managed" | "rfc8693" | "entra_obo";
   subjectTokenTypeDefault: EnterpriseSubjectTokenType;
+  embedded?: boolean;
 }) {
   const {
     authenticationDefault,
     form,
     inferredEnterpriseExchangeType,
     subjectTokenTypeDefault,
+    embedded = false,
   } = props;
   const appName = useAppName();
   const identityProvidersDocsUrl = getFrontendDocsUrl(
@@ -602,9 +639,14 @@ function EnterpriseManagedCredentialsForm(props: {
 
   return (
     <div className="space-y-6">
-      <Separator />
+      {!embedded && <Separator />}
 
-      <Accordion type="single" collapsible className="w-full">
+      <Accordion
+        type="single"
+        collapsible={!embedded}
+        defaultValue={embedded ? "enterprise-managed-credentials" : undefined}
+        className="w-full"
+      >
         <AccordionItem
           value="enterprise-managed-credentials"
           className="border-none"

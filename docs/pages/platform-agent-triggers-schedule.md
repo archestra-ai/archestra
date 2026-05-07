@@ -3,7 +3,7 @@ title: Scheduled Tasks
 category: Agents
 order: 3
 description: Run agents automatically on a repeating schedule
-lastUpdated: 2026-04-15
+lastUpdated: 2026-05-07
 ---
 
 <!--
@@ -18,11 +18,11 @@ Common use cases: daily standup preparation (fetching tasks and summarizing prog
 
 ## Chat Follow-up
 
-Every completed run preserves the full agent conversation. Open any run from the task's History to review the result and continue chatting with the agent in the same context — ask follow-up questions, request changes, or dig deeper into the output.
+Every completed run preserves the full agent conversation. Open any run from the task's History to review the result. Task owners can continue chatting with the agent in the same context to ask follow-up questions, request changes, or dig deeper into the output.
 
 ![Task detail with run history](/docs/automated_screenshots/platform-agent-triggers-schedule_detail.webp)
 
-Each run opens as a regular chat where you can continue the conversation.
+Each run opens as a chat. Admins can view other users' run conversations, but only the conversation owner can continue them.
 
 ![Completed run conversation](/docs/automated_screenshots/platform-agent-triggers-schedule_run.webp)
 

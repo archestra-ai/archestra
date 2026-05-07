@@ -110,4 +110,45 @@ describe("schedule trigger routes", () => {
       ],
     });
   });
+
+  test("returns 403 when a non-admin opens another user's run conversation", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+
+    const owner = await makeUser();
+    const member = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+
+    adminUser = member;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/runs/${run.id}/conversation`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "You do not have access to this scheduled task",
+    );
+  });
 });

@@ -168,6 +168,83 @@ describe("chat conversation and message routes", () => {
     });
   });
 
+  test("returns 404 when non-admin member opens another user's scheduled run conversation", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const member = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
+
+    currentUser = member;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("Conversation not found");
+  });
+
+  test("returns 404 when admin opens another user's conversation that is not a scheduled run", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+      selectedModel: "gpt-4o",
+      selectedProvider: "openai",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("Conversation not found");
+  });
+
   test("returns 404 when updating a missing conversation", async () => {
     const response = await app.inject({
       method: "PATCH",

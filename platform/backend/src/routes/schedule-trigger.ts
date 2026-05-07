@@ -718,6 +718,9 @@ async function ensureRunConversation(params: {
     trigger.messageTemplate,
   );
 
+  // Backfilled run conversations are owned by the requester so follow-up chat
+  // uses their own model/API key access, while existing run conversations keep
+  // their original owner.
   const conversation = await ConversationModel.create({
     userId,
     organizationId,

@@ -146,6 +146,13 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    /**
+     * Linked downstream identity provider auth must live inside Better Auth,
+     * rather than regular Fastify routes, because completing the flow has to
+     * restore the original browser session cookie. Better Auth owns the secure
+     * cookie name, signing format, and attributes, and they vary with baseURL
+     * and deployment settings.
+     */
     linkedIdentityProviderPlugin(),
     apiKey({
       enableSessionForAPIKeys: true,

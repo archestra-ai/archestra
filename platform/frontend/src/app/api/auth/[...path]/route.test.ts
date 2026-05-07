@@ -204,6 +204,30 @@ describe("auth route handler", () => {
       expect(response.headers.get("content-encoding")).toBeNull();
       expect(response.headers.get("x-custom-header")).toBe("value");
     });
+
+    it("should forward set-cookie headers from the backend response", async () => {
+      const mockResponse = createMockResponse('{"ok": true}', {
+        headers: {
+          "Set-Cookie":
+            "archestra.session_token=restored; Path=/; HttpOnly; SameSite=Lax",
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(mockResponse);
+
+      const request = createMockRequest("/api/auth/linked-idp/complete", {
+        method: "POST",
+        body: '{"intentId":"intent-123"}',
+      });
+      const params = {
+        params: Promise.resolve({ path: ["linked-idp", "complete"] }),
+      };
+
+      const response = await POST(request, params);
+
+      expect(response.headers.get("set-cookie")).toContain(
+        "archestra.session_token=restored",
+      );
+    });
   });
 
   describe("SAML origin handling", () => {

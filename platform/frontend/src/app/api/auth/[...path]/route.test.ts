@@ -53,7 +53,7 @@ describe("auth route handler", () => {
     options: {
       status?: number;
       statusText?: string;
-      headers?: Record<string, string>;
+      headers?: Headers | Record<string, string>;
     } = {},
   ) => {
     return new Response(body, {
@@ -233,6 +233,37 @@ describe("auth route handler", () => {
       expect(response.headers.get("set-cookie")).toContain(
         "archestra.session_token=restored",
       );
+    });
+
+    it("should split combined set-cookie fallback headers", async () => {
+      const headers = new Headers({
+        "Set-Cookie":
+          "archestra.session_token=restored; Expires=Wed, 21 Oct 2030 07:28:00 GMT; Path=/; HttpOnly, archestra.session_data=data; Path=/; HttpOnly",
+      });
+      Object.defineProperty(headers, "getSetCookie", {
+        value: undefined,
+      });
+      const mockResponse = createMockResponse('{"ok": true}', { headers });
+      vi.mocked(global.fetch).mockResolvedValue(mockResponse);
+
+      const request = createMockRequest(LINKED_IDP_AUTH_COMPLETE_ENDPOINT, {
+        method: "POST",
+        body: '{"intentId":"intent-123"}',
+      });
+      const params = {
+        params: Promise.resolve({
+          path: LINKED_IDP_AUTH_COMPLETE_ENDPOINT.replace(
+            /^\/api\/auth\//,
+            "",
+          ).split("/"),
+        }),
+      };
+
+      const response = await POST(request, params);
+      const setCookie = response.headers.get("set-cookie");
+
+      expect(setCookie).toContain("archestra.session_token=restored");
+      expect(setCookie).toContain("archestra.session_data=data");
     });
   });
 

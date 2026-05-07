@@ -218,4 +218,19 @@ describe("linked identity provider auth", () => {
       }),
     ).rejects.toThrow("Original session is no longer available");
   });
+
+  test.each([
+    ["https://evil.example.com/phish"],
+    ["//evil.example.com/phish"],
+    ["/\\evil.example.com/phish"],
+  ])("normalizes unsafe redirect path %s", async (redirectTo) => {
+    const result = await createLinkedIdentityProviderIntent({
+      originalUserId: "user-id",
+      originalSessionId: "session-id",
+      providerId: "downstream-idp",
+      redirectTo,
+    });
+
+    expect(result.redirectTo).toBe("/chat");
+  });
 });

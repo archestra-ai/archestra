@@ -36,11 +36,12 @@ class VerificationModel {
       "VerificationModel.getByIdentifier: fetching verification value",
     );
     const dbOrTx = tx ?? db;
-    const [verification] = await dbOrTx
+    const query = dbOrTx
       .select()
       .from(schema.verificationsTable)
       .where(eq(schema.verificationsTable.identifier, identifier))
       .limit(1);
+    const [verification] = await (tx ? query.for("update") : query);
     logger.debug(
       { identifier, found: !!verification },
       "VerificationModel.getByIdentifier: completed",

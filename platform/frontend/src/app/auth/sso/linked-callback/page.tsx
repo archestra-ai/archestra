@@ -39,12 +39,10 @@ export default function LinkedIdentityProviderCallbackPage() {
 
     try {
       const result = await completeLinkedIdentityProviderIntent(intentId);
-      window.location.replace(
-        appendUserPrompt(
-          getValidatedRedirectPath(result.redirectTo) || fallbackRedirectPath,
-          "retry",
-        ),
-      );
+      const redirectPath = result.redirectTo
+        ? getValidatedRedirectPath(result.redirectTo)
+        : fallbackRedirectPath;
+      window.location.replace(appendUserPrompt(redirectPath, "retry"));
     } catch {
       setFailed(true);
       toast.error("Failed to complete identity provider connection");

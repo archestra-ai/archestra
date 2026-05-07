@@ -227,7 +227,7 @@ class AccountModel {
       { providerId },
       "AccountModel.deleteByProviderId: deleting accounts",
     );
-    const dbOrTx = tx || db;
+    const dbOrTx = tx ?? db;
     const deleted = await dbOrTx
       .delete(schema.accountsTable)
       .where(eq(schema.accountsTable.providerId, providerId))

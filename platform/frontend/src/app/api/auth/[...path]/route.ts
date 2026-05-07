@@ -101,7 +101,14 @@ function getSetCookieHeaders(headers: Headers) {
   }
 
   const setCookie = headers.get("set-cookie");
-  return setCookie ? [setCookie] : [];
+  return setCookie ? splitCombinedSetCookieHeader(setCookie) : [];
+}
+
+function splitCombinedSetCookieHeader(header: string) {
+  return header
+    .split(/,(?=\s*[^;,=\s]+(?:\.[^;,=\s]+)*=)/)
+    .map((cookie) => cookie.trim())
+    .filter(Boolean);
 }
 
 export const GET = handler;

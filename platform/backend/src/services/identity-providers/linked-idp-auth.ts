@@ -169,7 +169,11 @@ function parseLinkedIdentityProviderIntent(value: string) {
 }
 
 function normalizeRedirectPath(redirectTo: string) {
-  if (redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+  if (
+    redirectTo.startsWith("/") &&
+    !redirectTo.startsWith("//") &&
+    !redirectTo.includes("\\")
+  ) {
     return redirectTo;
   }
 

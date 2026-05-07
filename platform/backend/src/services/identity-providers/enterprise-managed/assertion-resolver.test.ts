@@ -1,6 +1,4 @@
-import { randomUUID } from "node:crypto";
 import { OAUTH_TOKEN_TYPE } from "@shared";
-import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import { resolveEnterpriseAssertion } from "./assertion-resolver";
 
@@ -10,6 +8,7 @@ describe("resolveEnterpriseAssertion", () => {
     makeIdentityProvider,
     makeMember,
     makeOrganization,
+    makeAccount,
     makeUser,
   }) => {
     const org = await makeOrganization();
@@ -32,15 +31,11 @@ describe("resolveEnterpriseAssertion", () => {
       identityProviderId: null,
     });
 
-    await db.insert(schema.accountsTable).values({
-      id: randomUUID(),
+    await makeAccount(user.id, {
       accountId: "acct-entra-linked",
       providerId: identityProvider.providerId,
-      userId: user.id,
       accessToken: "linked-entra-access-token",
       accessTokenExpiresAt: new Date(Date.now() + 3600_000),
-      createdAt: new Date(),
-      updatedAt: new Date(),
     });
 
     const result = await resolveEnterpriseAssertion({

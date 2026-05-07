@@ -152,8 +152,8 @@ async function evaluateTemplate(params: {
   template: string | undefined;
 }): Promise<TemplateTestResult> {
   try {
-    const handlebars = await loadHandlebars();
     if (params.mode === "role") {
+      const handlebars = await loadHandlebars();
       const compiled = handlebars.compile(params.template ?? "", {
         noEscape: true,
       });
@@ -176,23 +176,31 @@ async function evaluateTemplate(params: {
     }
 
     const hasTemplate = Boolean(params.template?.trim());
-    const output = hasTemplate
-      ? handlebars
-          .compile(params.template ?? "", { noEscape: true })(params.claims)
-          .trim()
-      : "";
-    const groups = hasTemplate
-      ? extractSsoGroupsFromRenderedTemplate(output)
-      : extractSsoGroupsFromClaims(params.claims);
+    if (!hasTemplate) {
+      const groups = extractSsoGroupsFromClaims(params.claims);
+      return {
+        ok: groups.length > 0,
+        label: groups.length > 0 ? "Groups extracted" : "No groups",
+        description:
+          groups.length > 0
+            ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted using default extraction.`
+            : "Default extraction did not find any group identifiers.",
+        output: JSON.stringify(groups, null, 2),
+      };
+    }
+
+    const handlebars = await loadHandlebars();
+    const output = handlebars
+      .compile(params.template ?? "", { noEscape: true })(params.claims)
+      .trim();
+    const groups = extractSsoGroupsFromRenderedTemplate(output);
     return {
       ok: groups.length > 0,
       label: groups.length > 0 ? "Groups extracted" : "No groups",
       description:
         groups.length > 0
-          ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted${hasTemplate ? "" : " using default extraction"}.`
-          : hasTemplate
-            ? "This template did not extract any group identifiers."
-            : "Default extraction did not find any group identifiers.",
+          ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted.`
+          : "This template did not extract any group identifiers.",
       output: JSON.stringify(groups, null, 2),
     };
   } catch (error) {

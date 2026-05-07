@@ -69,6 +69,7 @@ export function TeamSyncConfigForm({
               <FormLabel>Enable Team Sync</FormLabel>
               <FormDescription>
                 When enabled, users are automatically added/removed from
+                {` `}
                 {appName} teams based on their SSO group memberships.
               </FormDescription>
             </div>

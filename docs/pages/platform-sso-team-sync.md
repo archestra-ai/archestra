@@ -157,7 +157,7 @@ If your IdP sends roles as objects (for example `roles: [{name: "admin"}, {name:
 5. Ensure your IdP is configured to include group claims in the ID token, and that Archestra requests the groups scope required by your IdP
 6. Check backend logs for sync errors
 
-You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input.
+Use the built-in template tester in the Team Sync section to test the groups template against your latest decoded ID token claims.
 
 **Users not being removed from teams:**
 

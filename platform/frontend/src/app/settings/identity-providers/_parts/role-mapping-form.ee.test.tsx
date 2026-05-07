@@ -57,14 +57,18 @@ vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
 
 function TestWrapper({
   defaultRules = [],
+  defaultRole = "member",
   onSubmit,
   providerId = "test",
   identityProviderId,
+  strictMode = false,
 }: {
   defaultRules?: Array<{ expression: string; role: string }>;
+  defaultRole?: "admin" | "member" | string;
   onSubmit?: (data: IdentityProviderFormValues) => void;
   providerId?: string;
   identityProviderId?: string;
+  strictMode?: boolean;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
@@ -85,6 +89,8 @@ function TestWrapper({
       },
       roleMapping: {
         rules: defaultRules,
+        defaultRole,
+        strictMode,
       },
     },
   });
@@ -107,15 +113,6 @@ function getDeleteButtons() {
   return screen
     .getAllByRole("button", { name: "" })
     .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
-}
-
-function makeDataTransfer() {
-  const data = new Map<string, string>();
-  return {
-    effectAllowed: "move",
-    getData: (key: string) => data.get(key) ?? "",
-    setData: (key: string, value: string) => data.set(key, value),
-  };
 }
 
 describe("RoleMappingForm", () => {
@@ -172,7 +169,48 @@ describe("RoleMappingForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("reorders role mapping rules by dragging a row handle", async () => {
+  it("shows the default role assignment when no role mapping rules match and strict mode is off", async () => {
+    render(
+      <TestWrapper
+        identityProviderId="idp-1"
+        defaultRole="member"
+        defaultRules={[
+          {
+            expression: '{{#includes roles "not-present"}}true{{/includes}}',
+            role: "admin",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("No match")).toBeInTheDocument();
+    expect(
+      screen.getByText(/you would be assigned Member/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows strict mode denial when no role mapping rules match", async () => {
+    render(
+      <TestWrapper
+        identityProviderId="idp-1"
+        strictMode
+        defaultRole="member"
+        defaultRules={[
+          {
+            expression: '{{#includes roles "not-present"}}true{{/includes}}',
+            role: "admin",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("No match")).toBeInTheDocument();
+    expect(
+      screen.getByText(/sign-in would be denied by strict mode/i),
+    ).toBeInTheDocument();
+  });
+
+  it("reorders role mapping rules with the keyboard drag handle", async () => {
     render(
       <TestWrapper
         defaultRules={[
@@ -182,14 +220,11 @@ describe("RoleMappingForm", () => {
       />,
     );
 
-    const dataTransfer = makeDataTransfer();
-    fireEvent.dragStart(
-      screen.getByRole("button", { name: "Drag role mapping rule 2" }),
-      { dataTransfer },
-    );
-    fireEvent.drop(screen.getByTestId("role-mapping-rule-0"), {
-      dataTransfer,
+    const dragHandle = screen.getByRole("button", {
+      name: "Drag role mapping rule 2",
     });
+    dragHandle.focus();
+    fireEvent.keyDown(dragHandle, { code: "ArrowUp", key: "ArrowUp" });
 
     const templates = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,

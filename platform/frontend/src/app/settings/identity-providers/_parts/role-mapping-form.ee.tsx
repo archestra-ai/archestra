@@ -1,6 +1,22 @@
 "use client";
 
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   E2eTestId,
   getIdpRoleMappingRuleRowTestId,
   type IdentityProviderFormValues,
@@ -69,9 +85,19 @@ export function RoleMappingForm({
     name: "roleMapping.rules",
   });
   const [selectedRuleIndex, setSelectedRuleIndex] = useState(0);
-  const [draggedRuleIndex, setDraggedRuleIndex] = useState<number | null>(null);
   const roleMappingRules = form.watch("roleMapping.rules") ?? [];
   const defaultRole = form.watch("roleMapping.defaultRole") || "member";
+  const strictMode = form.watch("roleMapping.strictMode") || false;
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
   const activeRuleIndex =
     fields.length > 0 ? Math.min(selectedRuleIndex, fields.length - 1) : null;
   const activeRule =
@@ -102,6 +128,17 @@ export function RoleMappingForm({
       }
       return currentIndex;
     });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const fromIndex = fields.findIndex((field) => field.id === active.id);
+    const toIndex = fields.findIndex((field) => field.id === over.id);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    moveRule(fromIndex, toIndex);
   };
 
   const content = (
@@ -145,123 +182,40 @@ export function RoleMappingForm({
             role.
           </p>
         ) : (
-          <ul className="space-y-4 list-none p-0 m-0">
-            {fields.map((field, index) => (
-              <li
-                key={field.id}
-                className={cn(
-                  "flex items-start gap-3 p-3 border rounded-md transition-colors",
-                  activeRuleIndex === index && "border-primary/50 bg-muted/20",
-                  draggedRuleIndex === index && "opacity-50",
-                )}
-                data-testid={getIdpRoleMappingRuleRowTestId(index)}
-                onFocusCapture={() => setSelectedRuleIndex(index)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const fromIndex = Number(
-                    event.dataTransfer.getData("text/plain"),
-                  );
-                  if (Number.isInteger(fromIndex)) {
-                    moveRule(fromIndex, index);
-                  }
-                  setDraggedRuleIndex(null);
-                }}
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  draggable={fields.length > 1}
-                  aria-label={`Drag role mapping rule ${index + 1}`}
-                  className="shrink-0 mt-6 cursor-grab text-muted-foreground active:cursor-grabbing"
-                  onDragStart={(event) => {
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", String(index));
-                    setDraggedRuleIndex(index);
-                    setSelectedRuleIndex(index);
-                  }}
-                  onDragEnd={() => setDraggedRuleIndex(null)}
-                  disabled={fields.length < 2}
-                >
-                  <GripVertical className="h-4 w-4" />
-                </Button>
-                <div className="flex items-start gap-3 w-full flex-1 min-w-0">
-                  <FormField
-                    control={form.control}
-                    name={`roleMapping.rules.${index}.expression`}
-                    render={({ field }) => (
-                      <FormItem className="flex-[3] min-w-0">
-                        <div className="flex min-h-5 items-center gap-2">
-                          <FormLabel className="text-xs">
-                            Handlebars Template
-                          </FormLabel>
-                          {activeRuleIndex === index && (
-                            <Badge variant="outline" className="px-1.5 py-0">
-                              Tested below
-                            </Badge>
-                          )}
-                        </div>
-                        <FormControl>
-                          <Input
-                            placeholder='{{#includes groups "admin"}}true{{/includes}}'
-                            className="font-mono text-sm"
-                            data-testid={E2eTestId.IdpRoleMappingRuleTemplate}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={fields.map((field) => field.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="space-y-4 list-none p-0 m-0">
+                {fields.map((field, index) => (
+                  <RoleMappingRuleRow
+                    key={field.id}
+                    appName={appName}
+                    fieldId={field.id}
+                    fieldsLength={fields.length}
+                    form={form}
+                    index={index}
+                    isActive={activeRuleIndex === index}
+                    onRemove={() => {
+                      setSelectedRuleIndex((currentIndex) => {
+                        if (currentIndex <= index) return currentIndex;
+                        return currentIndex - 1;
+                      });
+                      remove(index);
+                    }}
+                    onMoveDown={() => moveRule(index, index + 1)}
+                    onMoveUp={() => moveRule(index, index - 1)}
+                    onSelect={() => setSelectedRuleIndex(index)}
                   />
-                  <FormField
-                    control={form.control}
-                    name={`roleMapping.rules.${index}.role`}
-                    render={({ field }) => (
-                      <FormItem className="flex-1 min-w-[220px] max-w-[360px]">
-                        <div className="flex min-h-5 items-center">
-                          <FormLabel className="text-xs">
-                            {appName} Role
-                          </FormLabel>
-                        </div>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger
-                              data-testid={E2eTestId.IdpRoleMappingRuleRole}
-                            >
-                              <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <RoleSelectContent />
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 mt-6 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    setSelectedRuleIndex((currentIndex) => {
-                      if (currentIndex <= index) return currentIndex;
-                      return currentIndex - 1;
-                    });
-                    remove(index);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </li>
-            ))}
-          </ul>
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
@@ -347,10 +301,145 @@ export function RoleMappingForm({
         templateLabel={activeRuleLabel}
         roleRules={roleMappingRules}
         defaultRole={defaultRole}
+        strictMode={strictMode}
         examples={HANDLEBARS_EXAMPLES}
       />
     </>
   );
 
   return <div className={embedded ? "space-y-4" : "space-y-6"}>{content}</div>;
+}
+
+function RoleMappingRuleRow({
+  appName,
+  fieldId,
+  fieldsLength,
+  form,
+  index,
+  isActive,
+  onMoveDown,
+  onMoveUp,
+  onRemove,
+  onSelect,
+}: {
+  appName: string;
+  fieldId: string;
+  fieldsLength: number;
+  form: UseFormReturn<IdentityProviderFormValues>;
+  index: number;
+  isActive: boolean;
+  onMoveDown: () => void;
+  onMoveUp: () => void;
+  onRemove: () => void;
+  onSelect: () => void;
+}) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: fieldId,
+    disabled: fieldsLength < 2,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-start gap-3 p-3 border rounded-md transition-colors",
+        isActive && "border-primary/50 bg-muted/20",
+        isDragging && "relative z-10 opacity-70 shadow-md",
+      )}
+      data-testid={getIdpRoleMappingRuleRowTestId(index)}
+      onFocusCapture={onSelect}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Drag role mapping rule ${index + 1}`}
+        className="shrink-0 mt-6 cursor-grab text-muted-foreground active:cursor-grabbing"
+        disabled={fieldsLength < 2}
+        {...attributes}
+        {...listeners}
+        onKeyDown={(event) => {
+          listeners?.onKeyDown?.(event);
+          if (event.key === "ArrowUp" && index > 0) {
+            event.preventDefault();
+            onMoveUp();
+          }
+          if (event.key === "ArrowDown" && index < fieldsLength - 1) {
+            event.preventDefault();
+            onMoveDown();
+          }
+        }}
+      >
+        <GripVertical className="h-4 w-4" />
+      </Button>
+      <div className="flex items-start gap-3 w-full flex-1 min-w-0">
+        <FormField
+          control={form.control}
+          name={`roleMapping.rules.${index}.expression`}
+          render={({ field }) => (
+            <FormItem className="flex-[3] min-w-0">
+              <div className="flex min-h-5 items-center gap-2">
+                <FormLabel className="text-xs">Handlebars Template</FormLabel>
+                {isActive && (
+                  <Badge variant="outline" className="px-1.5 py-0">
+                    Tested below
+                  </Badge>
+                )}
+              </div>
+              <FormControl>
+                <Input
+                  placeholder='{{#includes groups "admin"}}true{{/includes}}'
+                  className="font-mono text-sm"
+                  data-testid={E2eTestId.IdpRoleMappingRuleTemplate}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={`roleMapping.rules.${index}.role`}
+          render={({ field }) => (
+            <FormItem className="flex-1 min-w-[220px] max-w-[360px]">
+              <div className="flex min-h-5 items-center">
+                <FormLabel className="text-xs">{appName} Role</FormLabel>
+              </div>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger data-testid={E2eTestId.IdpRoleMappingRuleRole}>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                </FormControl>
+                <RoleSelectContent />
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="shrink-0 mt-6 text-destructive hover:text-destructive"
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </li>
+  );
 }

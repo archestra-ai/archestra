@@ -17,6 +17,7 @@ interface SsoTemplateDebugSectionProps {
   mode: "role" | "team-sync";
   roleRules?: RoleMappingRule[];
   defaultRole?: string;
+  strictMode?: boolean;
   examples: Array<{
     expression: string;
     description: string;
@@ -30,6 +31,7 @@ export function SsoTemplateDebugSection({
   mode,
   roleRules,
   defaultRole,
+  strictMode,
   examples,
 }: SsoTemplateDebugSectionProps) {
   return (
@@ -50,6 +52,7 @@ export function SsoTemplateDebugSection({
         templateLabel={templateLabel}
         roleRules={roleRules}
         defaultRole={defaultRole}
+        strictMode={strictMode}
       />
 
       <IdTokenClaimsDebugger identityProviderId={identityProviderId} />

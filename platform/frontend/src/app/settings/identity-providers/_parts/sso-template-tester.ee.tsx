@@ -21,6 +21,7 @@ interface SsoTemplateTesterProps {
   mode: TemplateTestMode;
   roleRules?: RoleMappingRule[];
   defaultRole?: string;
+  strictMode?: boolean;
 }
 
 let helpersRegistered = false;
@@ -34,6 +35,7 @@ export function SsoTemplateTester({
   mode,
   roleRules,
   defaultRole,
+  strictMode = false,
 }: SsoTemplateTesterProps) {
   const { data, isLoading } =
     useIdentityProviderLatestIdTokenClaims(identityProviderId);
@@ -50,8 +52,23 @@ export function SsoTemplateTester({
   }, [claims, identityProviderId, isLoading, mode, template]);
   const result = useMemo(() => {
     if (disabledReason || !claims) return null;
-    return evaluateTemplate({ claims, defaultRole, mode, roleRules, template });
-  }, [claims, defaultRole, disabledReason, mode, roleRules, template]);
+    return evaluateTemplate({
+      claims,
+      defaultRole,
+      mode,
+      roleRules,
+      strictMode,
+      template,
+    });
+  }, [
+    claims,
+    defaultRole,
+    disabledReason,
+    mode,
+    roleRules,
+    strictMode,
+    template,
+  ]);
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/20 p-4">
@@ -107,6 +124,7 @@ function evaluateTemplate(params: {
   defaultRole: string | undefined;
   mode: TemplateTestMode;
   roleRules: RoleMappingRule[] | undefined;
+  strictMode: boolean;
   template: string | undefined;
 }): TemplateTestResult {
   try {
@@ -120,10 +138,11 @@ function evaluateTemplate(params: {
         ok: matched,
         label: matched ? "Match" : "No match",
         description: getRoleMappingDescription({
-          assignedRole: evaluateAssignedRole({
+          outcome: evaluateRoleMappingOutcome({
             claims: params.claims,
             defaultRole: params.defaultRole,
             roleRules: params.roleRules,
+            strictMode: params.strictMode,
           }),
           selectedRuleMatched: matched,
         }),
@@ -162,31 +181,55 @@ function evaluateTemplate(params: {
   }
 }
 
-function evaluateAssignedRole(params: {
+type RoleMappingOutcome =
+  | {
+      kind: "assigned";
+      role: string;
+    }
+  | {
+      kind: "denied";
+    };
+
+function evaluateRoleMappingOutcome(params: {
   claims: Record<string, unknown>;
   defaultRole: string | undefined;
   roleRules: RoleMappingRule[] | undefined;
-}) {
+  strictMode: boolean;
+}): RoleMappingOutcome {
   for (const rule of params.roleRules ?? []) {
     if (!rule.expression.trim()) continue;
     const compiled = Handlebars.compile(rule.expression, { noEscape: true });
     const output = compiled(params.claims).trim();
     if (output.length > 0 && output !== "false" && output !== "0") {
-      return rule.role;
+      return {
+        kind: "assigned",
+        role: rule.role,
+      };
     }
   }
 
-  return params.defaultRole ?? "member";
+  if (params.strictMode) {
+    return { kind: "denied" };
+  }
+
+  return {
+    kind: "assigned",
+    role: params.defaultRole ?? "member",
+  };
 }
 
 function getRoleMappingDescription(params: {
-  assignedRole: string;
+  outcome: RoleMappingOutcome;
   selectedRuleMatched: boolean;
 }) {
   const selectedRuleText = params.selectedRuleMatched
     ? "The selected rule matches."
     : "The selected rule does not match.";
-  return `${selectedRuleText} Based on current rules and your latest token, you would be assigned ${formatRoleName(params.assignedRole)}.`;
+  if (params.outcome.kind === "denied") {
+    return `${selectedRuleText} Based on current rules and your latest token, sign-in would be denied by strict mode.`;
+  }
+
+  return `${selectedRuleText} Based on current rules and your latest token, you would be assigned ${formatRoleName(params.outcome.role)}.`;
 }
 
 function formatRoleName(role: string) {

@@ -249,6 +249,36 @@ describe("SearchableMultiSelect", () => {
     expect(screen.queryByText("Item Three")).not.toBeInTheDocument();
   });
 
+  it("shows text suffix when showSelectedBadges is false", () => {
+    render(
+      <SearchableMultiSelect
+        value={["item-1", "item-2"]}
+        onValueChange={vi.fn()}
+        items={mockItems}
+        showSelectedBadges={false}
+        selectedSuffix={(n) => `${n === 1 ? "item" : "items"} selected`}
+      />,
+    );
+
+    expect(screen.queryByText("Item One")).not.toBeInTheDocument();
+    expect(screen.queryByText("Item Two")).not.toBeInTheDocument();
+    expect(screen.getByText("2 items selected")).toBeInTheDocument();
+  });
+
+  it("shows string suffix when showSelectedBadges is false", () => {
+    render(
+      <SearchableMultiSelect
+        value={["item-1"]}
+        onValueChange={vi.fn()}
+        items={mockItems}
+        showSelectedBadges={false}
+        selectedSuffix="picked"
+      />,
+    );
+
+    expect(screen.getByText("1 picked")).toBeInTheDocument();
+  });
+
   it("disables the combobox when disabled prop is true", () => {
     render(
       <SearchableMultiSelect

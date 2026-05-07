@@ -2,10 +2,21 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CircleHelp, Edit, Plus, Trash2 } from "lucide-react";
+import {
+  Building2,
+  CircleHelp,
+  Edit,
+  Key,
+  Network,
+  Plus,
+  Trash2,
+  User,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelPicker } from "@/components/llm-model-picker";
@@ -33,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UserSearchableSelect } from "@/components/ui/user-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -85,6 +97,49 @@ const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
   "1w": "Every week",
   "1m": "Every month",
 };
+
+const ENTITY_TYPE_ITEMS: Array<{
+  value: LimitFormEntityType;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    value: "organization",
+    label: "Organization",
+    icon: <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
+    value: "team",
+    label: "Team",
+    icon: <Users className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
+    value: "agent",
+    label: "Agent",
+    icon: (
+      <AgentIcon
+        icon={null}
+        fallbackType="agent"
+        className="h-4 w-4 shrink-0 text-muted-foreground"
+      />
+    ),
+  },
+  {
+    value: "llm_proxy",
+    label: "LLM Proxy",
+    icon: <Network className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
+    value: "user",
+    label: "User",
+    icon: <User className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
+    value: "virtual_key",
+    label: "Virtual Key",
+    icon: <Key className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+];
 
 function formatCurrencyWhole(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -567,28 +622,35 @@ export default function LimitsPage() {
             <div className="space-y-2">
               <Label>Apply to</Label>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Select
+                <SearchableSelect
                   value={formState.entityType}
-                  onValueChange={(value: LimitEntityType) =>
+                  onValueChange={(value) =>
                     setFormState((current) => ({
                       ...current,
-                      entityType: value,
+                      entityType: value as LimitFormEntityType,
                       entityId: "",
                     }))
                   }
-                >
-                  <SelectTrigger className="w-full sm:flex-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="organization">Organization</SelectItem>
-                    <SelectItem value="team">Team</SelectItem>
-                    <SelectItem value="agent">Agent</SelectItem>
-                    <SelectItem value="llm_proxy">LLM Proxy</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="virtual_key">Virtual Key</SelectItem>
-                  </SelectContent>
-                </Select>
+                  placeholder="Select scope"
+                  items={ENTITY_TYPE_ITEMS.map((item) => ({
+                    value: item.value,
+                    label: item.label,
+                    content: (
+                      <span className="flex items-center gap-2">
+                        {item.icon}
+                        {item.label}
+                      </span>
+                    ),
+                    selectedContent: (
+                      <span className="flex items-center gap-2">
+                        {item.icon}
+                        {item.label}
+                      </span>
+                    ),
+                  }))}
+                  className="w-full sm:flex-1"
+                  showSearchIcon={false}
+                />
 
                 {formState.entityType === "team" && (
                   <SearchableSelect
@@ -609,7 +671,7 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "user" && (
-                  <SearchableSelect
+                  <UserSearchableSelect
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -617,11 +679,12 @@ export default function LimitsPage() {
                         entityId: value,
                       }))
                     }
-                    placeholder="Select user"
-                    items={members.map((member) => ({
-                      value: member.id,
-                      label: member.name ?? member.email ?? "Unknown user",
+                    users={members.map((member) => ({
+                      userId: member.id,
+                      name: member.name,
+                      email: member.email,
                     }))}
+                    placeholder="Select user"
                     className="w-full sm:flex-1"
                   />
                 )}

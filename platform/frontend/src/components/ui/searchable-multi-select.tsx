@@ -22,6 +22,7 @@ interface SearchableMultiSelectProps {
     searchText?: string;
     content?: React.ReactNode;
     selectedContent?: React.ReactNode;
+    description?: string;
     disabled?: boolean;
   }>;
   className?: string;
@@ -35,6 +36,8 @@ interface SearchableMultiSelectProps {
   listClassName?: string;
   maxBadgeDisplay?: number;
   maxSelected?: number;
+  showSelectedBadges?: boolean;
+  selectedSuffix?: string | ((count: number) => string);
 }
 
 export function SearchableMultiSelect({
@@ -54,6 +57,8 @@ export function SearchableMultiSelect({
   listClassName,
   maxBadgeDisplay = 3,
   maxSelected,
+  showSelectedBadges = true,
+  selectedSuffix = "selected",
 }: SearchableMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -112,7 +117,7 @@ export function SearchableMultiSelect({
           <div className="flex flex-wrap gap-1 flex-1 items-center">
             {selectedItems.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
-            ) : (
+            ) : showSelectedBadges ? (
               <>
                 {visibleBadges.map((item) => (
                   <Badge
@@ -145,6 +150,13 @@ export function SearchableMultiSelect({
                   </Badge>
                 )}
               </>
+            ) : (
+              <span>
+                {selectedItems.length}{" "}
+                {typeof selectedSuffix === "function"
+                  ? selectedSuffix(selectedItems.length)
+                  : selectedSuffix}
+              </span>
             )}
           </div>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -203,6 +215,11 @@ export function SearchableMultiSelect({
                 >
                   <span className="min-w-0 flex-1">
                     {item.content ?? item.label}
+                    {item.description && (
+                      <span className="block text-xs text-muted-foreground truncate">
+                        {item.description}
+                      </span>
+                    )}
                   </span>
                   <Check
                     className={cn(

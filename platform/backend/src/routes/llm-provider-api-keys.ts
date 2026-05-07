@@ -266,6 +266,15 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           }),
         );
+      } else if (PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {
+        // No API key provided for an optional-key provider (e.g. Ollama, vLLM).
+        // Still verify the endpoint is reachable so the user gets early feedback.
+        await testApiKeyOrThrow(
+          body.provider,
+          "",
+          body.baseUrl,
+          body.extraHeaders,
+        );
       }
 
       if (!secret && !PROVIDERS_WITH_OPTIONAL_API_KEY.has(body.provider)) {

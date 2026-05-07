@@ -2,6 +2,18 @@ import config from "@/config";
 import logger from "@/logging";
 import { type ModelInfo, PLACEHOLDER_BEARER_TOKEN } from "./types";
 
+const DOCKER_HOST_HINT =
+  " If Archestra is running inside Docker, try changing the Base URL to http://host.docker.internal:11434/ to reach Ollama on the host machine.";
+
+function isLocalhostUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchOllamaModels(
   apiKey: string,
   baseUrlOverride?: string | null,
@@ -9,12 +21,21 @@ export async function fetchOllamaModels(
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.ollama.baseUrl;
   const url = `${baseUrl}/models`;
-  const response = await fetch(url, {
-    headers: {
-      ...(extraHeaders ?? {}),
-      Authorization: apiKey ? `Bearer ${apiKey}` : PLACEHOLDER_BEARER_TOKEN,
-    },
-  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        ...(extraHeaders ?? {}),
+        Authorization: apiKey ? `Bearer ${apiKey}` : PLACEHOLDER_BEARER_TOKEN,
+      },
+    });
+  } catch (err) {
+    const hint = isLocalhostUrl(baseUrl) ? DOCKER_HOST_HINT : "";
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ url, error: message }, "Failed to connect to Ollama");
+    throw new Error(`Failed to connect to Ollama at ${baseUrl}: ${message}.${hint}`);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

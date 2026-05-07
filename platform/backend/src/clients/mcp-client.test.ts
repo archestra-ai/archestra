@@ -5,6 +5,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  OAUTH_TOKEN_TYPE,
 } from "@shared";
 import { vi } from "vitest";
 import config from "@/config";
@@ -27,6 +28,7 @@ const mockCallTool = vi.fn();
 const mockConnect = vi.fn();
 const mockClose = vi.fn();
 const mockListTools = vi.fn();
+const mockListResources = vi.fn();
 const mockPing = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
@@ -36,6 +38,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.callTool = mockCallTool;
     this.close = mockClose;
     this.listTools = mockListTools;
+    this.listResources = mockListResources;
     this.ping = mockPing;
   }),
 }));
@@ -121,6 +124,7 @@ describe("McpClient", () => {
     mockConnect.mockReset();
     mockClose.mockReset();
     mockListTools.mockReset();
+    mockListResources.mockReset();
     mockPing.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
@@ -144,6 +148,7 @@ describe("McpClient", () => {
 
     // Default: listTools returns empty list (fallback to stripped name)
     mockListTools.mockResolvedValue({ tools: [] });
+    mockListResources.mockResolvedValue({ resources: [] });
   });
 
   test("invalidateConnectionsForServer closes cached active connections for the server", async () => {
@@ -191,6 +196,70 @@ describe("McpClient", () => {
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
+    mockListTools.mockRejectedValueOnce(new Error("Method not found"));
+    mockListResources.mockResolvedValueOnce({
+      resources: [
+        {
+          uri: "todo://todos",
+          name: "Todos",
+          description: "Read todos",
+        },
+      ],
+    });
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const tools = await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "resource-token" },
+    });
+
+    expect(tools).toEqual([
+      {
+        name: "read_resource_todos",
+        description: "Read todos",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+        _meta: {
+          archestraResourceUri: "todo://todos",
+        },
+        annotations: undefined,
+      },
+    ]);
+    expect(mockListResources).toHaveBeenCalledTimes(1);
+  });
+
+  test("connectAndGetTools treats JSON-RPC method-not-found code as resource-only discovery", async () => {
+    mockListTools.mockRejectedValueOnce({ code: -32601 });
+    mockListResources.mockResolvedValueOnce({
+      resources: [
+        {
+          uri: "todo://todos",
+          name: "Todos",
+        },
+      ],
+    });
+
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const tools = await mcpClient.connectAndGetTools({
+      catalogItem,
+      mcpServerId,
+      secrets: { access_token: "resource-token" },
+    });
+
+    expect(tools).toHaveLength(1);
+    expect(tools[0].name).toBe("read_resource_todos");
+    expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
   describe("executeToolCall", () => {
@@ -1466,7 +1535,7 @@ describe("McpClient", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         });
@@ -1809,7 +1878,7 @@ describe("McpClient", () => {
               tokenEndpoint:
                 "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
               tokenEndpointAuthentication: "client_secret_post",
-              subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
             },
           },
         });

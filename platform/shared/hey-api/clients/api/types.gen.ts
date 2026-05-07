@@ -26621,6 +26621,7 @@ export type GetInternalMcpCatalogResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -26747,6 +26748,7 @@ export type CreateInternalMcpCatalogItemData = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -26938,6 +26940,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -27226,6 +27229,7 @@ export type GetInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -27350,6 +27354,7 @@ export type UpdateInternalMcpCatalogItemData = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -27543,6 +27548,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
+            clientSecretOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;

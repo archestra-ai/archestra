@@ -100,6 +100,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeArchestraTools,
         },
         userId: user.id,
+        organizationId,
         isAgentAdmin,
         skipPagination,
       });

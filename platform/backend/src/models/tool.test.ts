@@ -435,6 +435,7 @@ describe("ToolModel", () => {
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",
         credentialResolutionMode: "static",
+        meta: null,
       });
     });
 

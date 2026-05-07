@@ -679,9 +679,8 @@ async function ensureRunConversation(params: {
   });
 
   if (run.chatConversationId) {
-    const existing = await ConversationModel.findById({
+    const existing = await ConversationModel.findByIdInOrganization({
       id: run.chatConversationId,
-      userId,
       organizationId,
     });
     if (existing) {
@@ -689,7 +688,7 @@ async function ensureRunConversation(params: {
       if (run.artifact && !existing.artifact) {
         const updated = await ConversationModel.update(
           existing.id,
-          userId,
+          existing.userId,
           organizationId,
           { artifact: run.artifact },
         );

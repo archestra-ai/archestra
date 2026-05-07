@@ -522,17 +522,19 @@ export function ChatPageContent({
     conversation.userId === session?.user.id;
   useConversationShare(canManageShare ? conversationId : undefined);
   const isShared = !!conversation?.share;
-  const isReadOnlySharedConversation =
+  const isReadOnlyConversation =
     !!conversationId &&
-    !!conversation?.share &&
+    !!conversation &&
     conversation.userId !== session?.user.id;
+  const isReadOnlySharedConversation =
+    isReadOnlyConversation && !!conversation?.share;
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
     [conversation?.messages],
   );
   const shouldEnableChatSession =
     !!conversationId &&
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (!routeConversationId || !!conversation);
   const chatSession = useChatSession({
     conversationId: shouldEnableChatSession ? conversationId : undefined,
@@ -877,16 +879,16 @@ export function ChatPageContent({
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
-  const conversationToolsStateId = isReadOnlySharedConversation
+  const conversationToolsStateId = isReadOnlyConversation
     ? undefined
     : conversationId;
-  const browserToolsAgentId = isReadOnlySharedConversation
+  const browserToolsAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? promptAgentId ?? undefined)
       : (initialAgentId ?? undefined);
 
-  const playwrightSetupAgentId = isReadOnlySharedConversation
+  const playwrightSetupAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
       ? (conversationAgentId ?? undefined)
@@ -897,7 +899,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
-    !isReadOnlySharedConversation &&
+    !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
       (!!conversationId && isLoadingConversation) ||
@@ -911,9 +913,7 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlySharedConversation &&
-        hasChatAccess &&
-        canUpdateAgent !== false,
+        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
     },
   );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
@@ -1720,7 +1720,7 @@ export function ChatPageContent({
                     "hidden md:block",
                 )}
               >
-                {isReadOnlySharedConversation ? (
+                {isReadOnlyConversation ? (
                   <MessageThread
                     messages={sharedConversationMessages}
                     containerClassName="h-full"
@@ -1780,7 +1780,7 @@ export function ChatPageContent({
                 )}
               </div>
 
-              {isReadOnlySharedConversation ? (
+              {isReadOnlyConversation ? (
                 <div className="sticky bottom-0 bg-background border-t p-4">
                   <div className="max-w-4xl mx-auto space-y-3">
                     <div className="relative">
@@ -1809,6 +1809,11 @@ export function ChatPageContent({
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
                         <Button
                           onClick={() => {
+                            if (!isReadOnlySharedConversation) {
+                              router.push("/chat");
+                              return;
+                            }
+
                             if (shouldPromptForForkAgentSelection) {
                               setIsForkDialogOpen(true);
                               return;
@@ -1818,7 +1823,9 @@ export function ChatPageContent({
                           }}
                         >
                           <Plus className="h-4 w-4" />
-                          Start New Chat from here
+                          {isReadOnlySharedConversation
+                            ? "Start New Chat from here"
+                            : "Start New Chat"}
                         </Button>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { SSO_TEMPLATE_HELPER_LIST_LABEL } from "@shared";
 import { Separator } from "@/components/ui/separator";
 import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { SsoTemplateTester } from "./sso-template-tester.ee";
@@ -55,8 +56,7 @@ export function SsoTemplateDebugSection({
           ))}
         </ul>
         <p className="text-xs text-muted-foreground mt-3">
-          Templates can use helpers such as includes, equals, contains, and, or,
-          exists, json, and pluck.
+          Templates can use helpers such as {SSO_TEMPLATE_HELPER_LIST_LABEL}.
         </p>
       </div>
     </div>

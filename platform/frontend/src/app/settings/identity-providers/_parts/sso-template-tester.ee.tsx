@@ -1,5 +1,6 @@
 "use client";
 
+import { registerSsoTemplateHelpers } from "@shared";
 import Handlebars from "handlebars";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,7 @@ interface SsoTemplateTesterProps {
 
 let helpersRegistered = false;
 
-registerSsoTemplateHelpers();
+registerTemplateHelpers();
 
 export function SsoTemplateTester({
   identityProviderId,
@@ -206,108 +207,13 @@ function normalizeGroups(value: unknown): string[] {
   return [];
 }
 
-function registerSsoTemplateHelpers() {
+function registerTemplateHelpers() {
   if (helpersRegistered) return;
   helpersRegistered = true;
 
-  Handlebars.registerHelper("json", (context) => {
-    if (typeof context === "string") {
-      try {
-        return JSON.parse(context);
-      } catch {
-        return context;
-      }
-    }
-    return JSON.stringify(context);
-  });
-
-  Handlebars.registerHelper(
-    "includes",
-    function (
-      this: unknown,
-      array: unknown,
-      value: unknown,
-      options: Handlebars.HelperOptions,
-    ) {
-      if (!Array.isArray(array)) return options.inverse(this);
-      const found = array.some((item) => {
-        if (typeof item === "string" && typeof value === "string") {
-          return item.toLowerCase() === value.toLowerCase();
-        }
-        return item === value;
-      });
-      return found ? options.fn(this) : options.inverse(this);
+  registerSsoTemplateHelpers({
+    registerHelper: (name, helper) => {
+      Handlebars.registerHelper(name, helper);
     },
-  );
-
-  Handlebars.registerHelper(
-    "contains",
-    function (
-      this: unknown,
-      str: unknown,
-      substring: unknown,
-      options: Handlebars.HelperOptions,
-    ) {
-      if (typeof str !== "string" || typeof substring !== "string") {
-        return options.inverse(this);
-      }
-      return str.toLowerCase().includes(substring.toLowerCase())
-        ? options.fn(this)
-        : options.inverse(this);
-    },
-  );
-
-  Handlebars.registerHelper(
-    "equals",
-    function (
-      this: unknown,
-      a: unknown,
-      b: unknown,
-      options: Handlebars.HelperOptions,
-    ) {
-      if (typeof a === "string" && typeof b === "string") {
-        return a.toLowerCase() === b.toLowerCase()
-          ? options.fn(this)
-          : options.inverse(this);
-      }
-      return a === b ? options.fn(this) : options.inverse(this);
-    },
-  );
-
-  Handlebars.registerHelper(
-    "and",
-    function (this: unknown, ...args: unknown[]) {
-      const options = args.pop() as Handlebars.HelperOptions;
-      return args.every(Boolean) ? options.fn(this) : options.inverse(this);
-    },
-  );
-
-  Handlebars.registerHelper("or", function (this: unknown, ...args: unknown[]) {
-    const options = args.pop() as Handlebars.HelperOptions;
-    return args.some(Boolean) ? options.fn(this) : options.inverse(this);
-  });
-
-  Handlebars.registerHelper(
-    "exists",
-    function (
-      this: unknown,
-      value: unknown,
-      options: Handlebars.HelperOptions,
-    ) {
-      return value !== null && value !== undefined
-        ? options.fn(this)
-        : options.inverse(this);
-    },
-  );
-
-  Handlebars.registerHelper("pluck", (array, property) => {
-    if (!Array.isArray(array)) return [];
-    return array
-      .map((item) =>
-        typeof item === "object" && item
-          ? (item as Record<string, unknown>)[property]
-          : null,
-      )
-      .filter((value) => value !== null && value !== undefined);
   });
 }

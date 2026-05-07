@@ -224,3 +224,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @josemiguel3125-sketch
 - @AnshulBhati01
 - @pokeehokee
+- @hassaansaleem28

@@ -117,7 +117,7 @@ describe("connector file upload routes", () => {
       });
     });
 
-    test("rejects files larger than the 10MB size limit", async () => {
+    test("rejects files larger than the 5MB size limit", async () => {
       const oversized = Buffer.alloc(
         fileProcessor.MAX_FILE_SIZE_BYTES + 1,
         0x61,
@@ -139,7 +139,7 @@ describe("connector file upload routes", () => {
       });
     });
 
-    test("accepts files at the 10MB size limit", async () => {
+    test("accepts files at the 5MB size limit", async () => {
       vi.spyOn(fileProcessor, "extractTextFiles").mockResolvedValueOnce({
         extracted: [
           {

@@ -30,7 +30,6 @@ const nextConfig: NextConfig = {
     incomingRequests: true,
   },
   experimental: {
-    proxyClientMaxBodySize: "15mb", // default 10mb; raised for base64-encoded file uploads
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
   },
   httpAgentOptions: {

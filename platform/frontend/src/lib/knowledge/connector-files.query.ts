@@ -208,8 +208,15 @@ export function formatFileSize(bytes: number): string {
 }
 
 
-/** ~(10mb + overhead) */
-const MAX_BATCH_BYTES = 14 * 1024 * 1024;
+/**
+ * Maximum estimated JSON payload per upload batch.
+ *
+ * Each file can be up to 5 MB raw.  Base64 encoding adds ~33 % overhead
+ * (5 MB → ~6.67 MB), plus a small amount of JSON framing.  Keeping each
+ * batch under ~7 MB ensures the request body stays well within the
+ * Next.js middleware body-size limit (default 10 MB).
+ */
+const MAX_BATCH_BYTES = 7 * 1024 * 1024;
 
 type EncodedFile = { name: string; mimeType: string; content: string };
 
@@ -223,7 +230,6 @@ function splitIntoBatches(files: EncodedFile[]): EncodedFile[][] {
   let currentSize = 0;
 
   for (const file of files) {
-    // Estimate JSON size: base64 content + name/mimeType + JSON overhead
     const fileSize = file.content.length + file.name.length + file.mimeType.length + 64;
 
     if (currentBatch.length > 0 && currentSize + fileSize > MAX_BATCH_BYTES) {

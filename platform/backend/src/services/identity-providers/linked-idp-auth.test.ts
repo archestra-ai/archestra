@@ -28,7 +28,6 @@ describe("linked identity provider auth", () => {
     const { intentId } = await createLinkedIdentityProviderIntent({
       originalUserId: originalUser.id,
       originalSessionId: originalSession.id,
-      originalSessionToken: originalSession.token,
       providerId: "downstream-idp",
       redirectTo: "/chat/conversation-123",
     });
@@ -93,7 +92,6 @@ describe("linked identity provider auth", () => {
     const { intentId } = await createLinkedIdentityProviderIntent({
       originalUserId: originalUser.id,
       originalSessionId: originalSession.id,
-      originalSessionToken: originalSession.token,
       providerId: "downstream-idp",
       redirectTo: "/chat",
     });
@@ -138,7 +136,6 @@ describe("linked identity provider auth", () => {
     const { intentId } = await createLinkedIdentityProviderIntent({
       originalUserId: user.id,
       originalSessionId: session.id,
-      originalSessionToken: session.token,
       providerId: "downstream-idp",
       redirectTo: "/chat",
     });
@@ -177,7 +174,6 @@ describe("linked identity provider auth", () => {
     const { intentId } = await createLinkedIdentityProviderIntent({
       originalUserId: originalUser.id,
       originalSessionId: originalSession.id,
-      originalSessionToken: originalSession.token,
       providerId: "downstream-idp",
       redirectTo: "/chat",
     });
@@ -210,7 +206,6 @@ describe("linked identity provider auth", () => {
     const { intentId } = await createLinkedIdentityProviderIntent({
       originalUserId: originalUser.id,
       originalSessionId: originalSession.id,
-      originalSessionToken: originalSession.token,
       providerId: "downstream-idp",
       redirectTo: "/chat",
     });

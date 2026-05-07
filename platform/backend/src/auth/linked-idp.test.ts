@@ -68,13 +68,14 @@ describe("linked identity provider auth plugin", () => {
         eq(schema.verificationsTable.identifier, `linked-idp:${body.intentId}`),
       );
     expect(verification).toBeDefined();
-    expect(JSON.parse(verification.value)).toMatchObject({
+    const intent = JSON.parse(verification.value);
+    expect(intent).toMatchObject({
       originalUserId: user.id,
       originalSessionId: session.id,
-      originalSessionToken: session.token,
       providerId: "downstream-idp",
       redirectTo: "/chat",
     });
+    expect(intent).not.toHaveProperty("originalSessionToken");
   });
 
   test("completes a linked IdP intent and restores a Better Auth session cookie", async ({

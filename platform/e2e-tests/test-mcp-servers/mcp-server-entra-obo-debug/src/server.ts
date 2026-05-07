@@ -1,4 +1,4 @@
-// biome-ignore-all lint/suspicious/noConsole: local demo MCP server
+// biome-ignore-all lint/suspicious/noConsole: test MCP server logs startup details
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
@@ -76,7 +76,9 @@ app.delete(MCP_PATH, (_req, res) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`entra-obo-debug-mcp listening at http://localhost:${PORT}${MCP_PATH}`);
+  console.log(
+    `entra-obo-debug-mcp listening at http://localhost:${PORT}${MCP_PATH}`,
+  );
 });
 
 function getScopes(token: string) {

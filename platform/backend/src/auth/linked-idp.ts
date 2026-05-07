@@ -30,7 +30,6 @@ export function linkedIdentityProviderPlugin() {
             await createLinkedIdentityProviderIntent({
               originalUserId: user.id,
               originalSessionId: session.id,
-              originalSessionToken: session.token,
               providerId: ctx.body.providerId,
               redirectTo: ctx.body.redirectTo,
             }),

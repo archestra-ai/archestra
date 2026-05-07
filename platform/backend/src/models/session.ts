@@ -33,9 +33,10 @@ class SessionModel {
   /**
    * Get a session by ID
    */
-  static async getById(id: string) {
+  static async getById(id: string, tx?: Transaction) {
     logger.debug({ id }, "SessionModel.getById: fetching session");
-    const sessions = await db
+    const dbOrTx = tx ?? db;
+    const sessions = await dbOrTx
       .select()
       .from(schema.sessionsTable)
       .where(eq(schema.sessionsTable.id, id))

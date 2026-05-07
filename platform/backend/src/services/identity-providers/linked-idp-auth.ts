@@ -17,7 +17,6 @@ const LINKED_IDP_INTENT_PREFIX = LINKED_IDP_SSO_MODE;
 const LinkedIdentityProviderIntentSchema = z.object({
   originalUserId: z.string(),
   originalSessionId: z.string(),
-  originalSessionToken: z.string(),
   providerId: z.string(),
   redirectTo: z.string(),
   createdAt: z.string(),
@@ -30,7 +29,6 @@ type LinkedIdentityProviderIntent = z.infer<
 export async function createLinkedIdentityProviderIntent(params: {
   originalUserId: string;
   originalSessionId: string;
-  originalSessionToken: string;
   providerId: string;
   redirectTo: string;
 }) {
@@ -39,7 +37,6 @@ export async function createLinkedIdentityProviderIntent(params: {
   const intent: LinkedIdentityProviderIntent = {
     originalUserId: params.originalUserId,
     originalSessionId: params.originalSessionId,
-    originalSessionToken: params.originalSessionToken,
     providerId: params.providerId,
     redirectTo,
     createdAt: new Date().toISOString(),
@@ -78,14 +75,13 @@ export async function completeLinkedIdentityProviderIntent(params: {
     }
 
     const intent = parseLinkedIdentityProviderIntent(verification.value);
-    const originalSession = await SessionModel.getByToken(
-      intent.originalSessionToken,
+    const [originalSession] = await SessionModel.getById(
+      intent.originalSessionId,
       tx,
     );
 
     if (
       !originalSession ||
-      originalSession.id !== intent.originalSessionId ||
       originalSession.userId !== intent.originalUserId ||
       originalSession.expiresAt < new Date()
     ) {
@@ -141,7 +137,7 @@ export async function completeLinkedIdentityProviderIntent(params: {
     );
 
     return {
-      originalSessionToken: intent.originalSessionToken,
+      originalSessionToken: originalSession.token,
       redirectTo: intent.redirectTo,
     };
   });

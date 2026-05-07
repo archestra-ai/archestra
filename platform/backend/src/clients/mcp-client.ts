@@ -2297,7 +2297,7 @@ class McpClient {
       type: "auth_required",
       message: formatActionableAuthError({
         title: `Authentication required for "${catalogDisplayName}"`,
-        detail: `This tool needs a current ${identityProvider.providerId} session for your account before Archestra can request the downstream credential.`,
+        detail: `This tool needs a current ${identityProvider.providerId} session for your account before this deployment can request the downstream credential.`,
         actionLabel: `connect ${identityProvider.providerId}`,
         url: connectUrl,
         postAction:

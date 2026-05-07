@@ -3,6 +3,7 @@
 import Handlebars from "handlebars";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIdentityProviderLatestIdTokenClaims } from "@/lib/auth/identity-provider.query.ee";
 
 type TemplateTestMode = "role" | "team-sync";
@@ -43,26 +44,27 @@ export function SsoTemplateTester({
   }, [claims, disabledReason, mode, template]);
 
   return (
-    <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-0.5">
-          <div className="text-sm font-medium">Live Template Test</div>
-          <p className="text-xs text-muted-foreground">
-            Runs {templateLabel} against your latest decoded ID token claims.
-          </p>
-        </div>
-
-        {result && (
-          <div className="flex items-center gap-2 sm:ml-auto sm:justify-end sm:text-right">
-            <Badge variant={result.ok ? "default" : "destructive"}>
-              {result.label}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              {result.description}
-            </span>
-          </div>
-        )}
+    <div className="space-y-3 rounded-md border bg-muted/20 p-4">
+      <div className="space-y-0.5">
+        <div className="text-sm font-medium">Live Template Test</div>
+        <p className="text-xs text-muted-foreground">
+          Runs {templateLabel} against your latest decoded ID token claims.
+        </p>
       </div>
+
+      {result && (
+        <div className="flex flex-col gap-2 rounded-md border bg-background/50 px-3 py-2 sm:flex-row sm:items-center">
+          <Badge
+            variant={result.ok ? "secondary" : "destructive"}
+            className="w-fit"
+          >
+            {result.label}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {result.description}
+          </span>
+        </div>
+      )}
 
       {disabledReason && (
         <p className="text-xs text-muted-foreground">{disabledReason}</p>
@@ -71,9 +73,11 @@ export function SsoTemplateTester({
       {result && (
         <div>
           {result.output && (
-            <pre className="max-h-32 overflow-auto rounded-md bg-background p-2 text-xs font-mono whitespace-pre-wrap break-words">
-              {result.output}
-            </pre>
+            <ScrollArea className="max-h-40 overflow-auto rounded-md border bg-muted/40">
+              <pre className="p-3 text-xs leading-relaxed whitespace-pre-wrap break-words font-mono">
+                {result.output}
+              </pre>
+            </ScrollArea>
           )}
         </div>
       )}

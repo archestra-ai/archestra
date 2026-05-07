@@ -14,6 +14,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -35,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { cn } from "@/lib/utils";
 import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
 import { SsoTemplateDebugSection } from "./sso-template-debug-section.ee";
 
@@ -134,8 +136,12 @@ export function RoleMappingForm({
             {fields.map((field, index) => (
               <div
                 key={field.id}
-                className="flex items-start gap-3 p-3 border rounded-md"
+                className={cn(
+                  "flex items-start gap-3 p-3 border rounded-md transition-colors",
+                  activeRuleIndex === index && "border-primary/50 bg-muted/20",
+                )}
                 data-testid={getIdpRoleMappingRuleRowTestId(index)}
+                onFocusCapture={() => setSelectedRuleIndex(index)}
               >
                 <div className="flex items-start gap-3 w-full flex-1 min-w-0">
                   <FormField
@@ -143,16 +149,22 @@ export function RoleMappingForm({
                     name={`roleMapping.rules.${index}.expression`}
                     render={({ field }) => (
                       <FormItem className="flex-[3] min-w-0">
-                        <FormLabel className="text-xs">
-                          Handlebars Template
-                        </FormLabel>
+                        <div className="flex min-h-5 items-center gap-2">
+                          <FormLabel className="text-xs">
+                            Handlebars Template
+                          </FormLabel>
+                          {activeRuleIndex === index && (
+                            <Badge variant="outline" className="px-1.5 py-0">
+                              Tested below
+                            </Badge>
+                          )}
+                        </div>
                         <FormControl>
                           <Input
                             placeholder='{{#includes groups "admin"}}true{{/includes}}'
                             className="font-mono text-sm"
                             data-testid={E2eTestId.IdpRoleMappingRuleTemplate}
                             {...field}
-                            onFocus={() => setSelectedRuleIndex(index)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -185,15 +197,6 @@ export function RoleMappingForm({
                     )}
                   />
                 </div>
-                <Button
-                  type="button"
-                  variant={activeRuleIndex === index ? "secondary" : "outline"}
-                  size="sm"
-                  className="shrink-0 mt-6"
-                  onClick={() => setSelectedRuleIndex(index)}
-                >
-                  {activeRuleIndex === index ? "Testing" : "Test"}
-                </Button>
                 <Button
                   type="button"
                   variant="ghost"

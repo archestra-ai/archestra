@@ -161,7 +161,9 @@ describe("RoleMappingForm", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("No match")).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "Test" })[0]);
+    await user.click(
+      screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate)[1],
+    );
 
     expect(
       screen.getByText(/runs role mapping rule 2 \(admin\)/i),

@@ -50,7 +50,22 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
-  useModelsWithApiKeys: () => ({ data: [] }),
+  useModelsWithApiKeys: () => ({
+    data: [
+      {
+        modelId: "gpt-4o",
+        provider: "openai",
+        pricePerMillionInput: "2.50",
+        pricePerMillionOutput: "10.00",
+      },
+      {
+        modelId: "claude-3.5-sonnet",
+        provider: "anthropic",
+        pricePerMillionInput: "3.00",
+        pricePerMillionOutput: "15.00",
+      },
+    ],
+  }),
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -150,6 +165,28 @@ vi.mock("@/components/llm-model-multi-select", () => ({
   LlmModelMultiSearchableSelect: () => <div>Model multi filter</div>,
 }));
 
+vi.mock("@/components/llm-model-picker", () => ({
+  LlmModelPicker: ({
+    value,
+    placeholder,
+    multiple,
+  }: {
+    value: string | string[];
+    placeholder?: string;
+    multiple?: boolean;
+  }) => (
+    <div data-testid={multiple ? "multi-select" : "single-select"}>
+      {Array.isArray(value) && value.length === 0
+        ? placeholder || "All models"
+        : Array.isArray(value) && value.includes("all")
+          ? "All models"
+          : Array.isArray(value)
+            ? value.join(",")
+            : value || placeholder}
+    </div>
+  ),
+}));
+
 vi.mock("@/components/form-dialog", () => ({
   FormDialog: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -230,17 +267,17 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/multi-select", () => ({
-  MultiSelect: ({
+vi.mock("@/components/ui/searchable-multi-select", () => ({
+  SearchableMultiSelect: ({
     value,
-    allLabel,
+    placeholder,
   }: {
     value: string[];
     onValueChange: (v: string[]) => void;
-    allLabel?: string;
+    placeholder?: string;
   }) => (
     <div data-testid="multi-select">
-      {value.length === 0 ? allLabel || "All" : value.join(",")}
+      {value.length === 0 ? placeholder || "All models" : value.join(",")}
     </div>
   ),
 }));

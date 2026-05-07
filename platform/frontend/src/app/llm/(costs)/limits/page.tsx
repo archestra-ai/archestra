@@ -8,13 +8,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
 import { DataTable } from "@/components/ui/data-table";
 import {
   DialogBody,
@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Progress } from "@/components/ui/progress";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -685,22 +684,21 @@ export default function LimitsPage() {
 
             <div className="space-y-2">
               <Label>Select models</Label>
-              <MultiSelect
-                value={formState.models}
-                onValueChange={(values) =>
+              <LlmModelPicker
+                multiple
+                sortDirection="desc"
+                value={formState.isAllModels ? ["all"] : formState.models}
+                onValueChange={(values) => {
+                  const isAllModels = values.includes("all");
                   setFormState((current) => ({
                     ...current,
-                    models: values,
-                    isAllModels: values.length === 0,
-                  }))
-                }
-                placeholder="Select models..."
-                allValue="__all__"
-                allLabel="All models"
-                items={modelOptions.map((option) => ({
-                  value: option.value,
-                  label: option.model,
-                }))}
+                    models: isAllModels ? [] : values,
+                    isAllModels,
+                  }));
+                }}
+                models={modelOptions}
+                editable
+                includeAllOption
               />
             </div>
 

@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -396,8 +397,8 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                                 </span>
                               )}
                             </Label>
-                            <Input
-                              placeholder={prop.description || `Enter ${name}`}
+                            <Textarea
+                              placeholder={prop.description || `Enter ${name} (supports JSON)`}
                               value={paramValues[name] ?? ""}
                               onChange={(e) =>
                                 setParamValues((prev) => ({
@@ -405,7 +406,8 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                                   [name]: e.target.value,
                                 }))
                               }
-                              className="font-mono text-xs"
+                              className="font-mono text-xs min-h-[60px] resize-y"
+                              rows={2}
                             />
                           </div>
                         );

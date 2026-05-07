@@ -3,7 +3,7 @@ title: Overview
 category: MCP
 order: -1
 description: How MCP servers, gateways, authentication, and orchestration fit together
-lastUpdated: 2026-04-20
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -46,6 +46,8 @@ Remote MCP servers run outside Archestra and are reached over HTTP. Use them whe
 Self-hosted MCP servers run inside your Kubernetes cluster through the MCP Orchestrator. Use them when you want isolation, lifecycle management, local network access, or a custom server image.
 
 Both types can be assigned to Agents and MCP Gateways. The client does not need to know which runtime backs each tool.
+
+Some MCP servers expose resources through `resources/list` instead of callable tools through `tools/list`. When a remote server has resources but no tools, Archestra creates read-resource tools during installation so agents can access those resources through the normal tool assignment flow.
 
 ## Authentication Model
 

@@ -493,6 +493,28 @@ class McpClient {
           targetToolName = parseFullToolName(toolCall.name).toolName;
         }
 
+        const resourceUri = getSyntheticResourceToolUri(tool.meta);
+        if (resourceUri) {
+          const result = await client.readResource({ uri: resourceUri });
+          return await this.createSuccessResult({
+            toolCall,
+            agentId,
+            mcpServerName,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result.contents),
+              },
+            ],
+            isError: false,
+            _meta: { resourceUri },
+            authInfo,
+            structuredContent: {
+              contents: result.contents as unknown,
+            },
+          });
+        }
+
         // Resolve the actual tool name from the server (preserving original casing).
         // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
         // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
@@ -2374,18 +2396,16 @@ class McpClient {
           "Connection timeout after 30 seconds",
         );
 
-        // List tools with timeout
-        const toolsResult = await this.raceWithTimeout(
-          client.listTools(),
-          30000,
-          "List tools timeout after 30 seconds",
-        );
+        // List tools with timeout. Some MCP servers expose only resources; for
+        // those, synthesize read-resource tools so agents can still exercise the
+        // server through the normal tool-assignment path.
+        const tools = await this.discoverToolsOrResourceTools(client);
 
         // Close connection (we just needed the tools)
         await client.close();
 
         // Transform tools to our format
-        return toolsResult.tools.map((tool: Tool) => ({
+        return tools.map((tool: Tool) => ({
           name: tool.name,
           description: tool.description || `Tool: ${tool.name}`,
           inputSchema: tool.inputSchema as Record<string, unknown>,
@@ -2418,6 +2438,45 @@ class McpClient {
         lastError?.message || "Unknown error"
       }`,
     );
+  }
+
+  private async discoverToolsOrResourceTools(client: Client): Promise<Tool[]> {
+    try {
+      const toolsResult = await this.raceWithTimeout(
+        client.listTools(),
+        30000,
+        "List tools timeout after 30 seconds",
+      );
+      return toolsResult.tools;
+    } catch (error) {
+      if (!isMethodNotFoundError(error)) {
+        throw error;
+      }
+
+      const resourcesResult = await this.raceWithTimeout(
+        client.listResources(),
+        30000,
+        "List resources timeout after 30 seconds",
+      );
+
+      return resourcesResult.resources.map((resource) => {
+        const uri = resource.uri;
+        const displayName = resource.name ?? resource.uri;
+        return {
+          name: makeSyntheticResourceToolName(uri),
+          description:
+            resource.description ?? `Read MCP resource ${displayName}`,
+          inputSchema: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+          _meta: {
+            archestraResourceUri: uri,
+          },
+        };
+      }) as Tool[];
+    }
   }
 
   /**
@@ -3082,6 +3141,43 @@ function isHighFrequencyBrowserTool(toolName: string): boolean {
     name.includes("browser_screenshot") ||
     name.includes("browser_tabs") ||
     name.includes("browser_resize")
+  );
+}
+
+function getSyntheticResourceToolUri(
+  meta: Record<string, unknown> | null | undefined,
+): string | null {
+  const nestedMeta = meta?._meta;
+  if (!nestedMeta || typeof nestedMeta !== "object") {
+    return null;
+  }
+
+  const resourceUri = (nestedMeta as Record<string, unknown>)
+    .archestraResourceUri;
+  return typeof resourceUri === "string" && resourceUri.length > 0
+    ? resourceUri
+    : null;
+}
+
+function makeSyntheticResourceToolName(uri: string): string {
+  const slug = uri
+    .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+  return `read_resource_${slug || "resource"}`.slice(0, 128);
+}
+
+function isMethodNotFoundError(error: unknown): boolean {
+  if (error instanceof Error && error.message.includes("Method not found")) {
+    return true;
+  }
+
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === -32601
   );
 }
 

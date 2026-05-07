@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.34](https://github.com/archestra-ai/archestra/compare/platform-v1.2.33...platform-v1.2.34) (2026-05-06)
+
+
+### Features
+
+* add file upload knowledge connector ([#3924](https://github.com/archestra-ai/archestra/issues/3924)) ([9069119](https://github.com/archestra-ai/archestra/commit/9069119ce16a2892c5e8ea1dc6bd1481b15e966d))
+
+
+### Bug Fixes
+
+* add fetching embedding models for openrouter provider ([#4368](https://github.com/archestra-ai/archestra/issues/4368)) ([d0ea63b](https://github.com/archestra-ai/archestra/commit/d0ea63bd1d8476140d55bac0d979efa20feb9b64))
+* org-scoped MCP visibility ([#4411](https://github.com/archestra-ai/archestra/issues/4411)) ([afa33cf](https://github.com/archestra-ai/archestra/commit/afa33cf00e7b24f2fe29f6baaa459b45e3d1ecbf))
+* stale MCP pod cleanup ([#4409](https://github.com/archestra-ai/archestra/issues/4409)) ([3e7c2c6](https://github.com/archestra-ai/archestra/commit/3e7c2c6f8bd6034a26b6155f1245c17030080c6b))
+* support protected resource enterprise credentials ([#4389](https://github.com/archestra-ai/archestra/issues/4389)) ([7d2f3b2](https://github.com/archestra-ai/archestra/commit/7d2f3b2ba3609ae7fcb26b66554bbae48cc11441))
+
+
+### Code Refactoring
+
+* **models:** centralize MODELS_DEV_PROVIDER_MAP into shared constants ([#4407](https://github.com/archestra-ai/archestra/issues/4407)) ([beeecf4](https://github.com/archestra-ai/archestra/commit/beeecf479a4687d90a588d611c02d08f2dae822f))
+
+
+### Miscellaneous Chores
+
+* allow search in add & reuse connector dialogs ([#4246](https://github.com/archestra-ai/archestra/issues/4246)) ([1189478](https://github.com/archestra-ai/archestra/commit/118947855275038c0d96882bfb75eb76ab37e437))
+
 ## [1.2.33](https://github.com/archestra-ai/archestra/compare/platform-v1.2.32...platform-v1.2.33) (2026-05-05)
 
 

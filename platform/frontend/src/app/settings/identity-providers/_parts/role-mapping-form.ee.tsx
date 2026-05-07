@@ -164,9 +164,11 @@ export function RoleMappingForm({
                     name={`roleMapping.rules.${index}.role`}
                     render={({ field }) => (
                       <FormItem className="flex-1 min-w-[220px] max-w-[360px]">
-                        <FormLabel className="text-xs">
-                          {appName} Role
-                        </FormLabel>
+                        <div className="flex min-h-5 items-center">
+                          <FormLabel className="text-xs">
+                            {appName} Role
+                          </FormLabel>
+                        </div>
                         <Select
                           onValueChange={field.onChange}
                           value={field.value}

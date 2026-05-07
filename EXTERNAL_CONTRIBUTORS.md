@@ -221,3 +221,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @guptadeepak8
 - @CrocCartelDevTeam
 - @BISHT-CX
+- @josemiguel3125-sketch

@@ -1,7 +1,12 @@
+import {
+  CompleteLinkedIdentityProviderIntentRequestSchema,
+  CreateLinkedIdentityProviderIntentRequestSchema,
+  LINKED_IDP_AUTH_COMPLETE_PATH,
+  LINKED_IDP_AUTH_INTENT_PATH,
+} from "@shared";
 import { createAuthEndpoint, sessionMiddleware } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import type { BetterAuthPlugin } from "better-auth/types";
-import { z } from "zod";
 import {
   completeLinkedIdentityProviderIntent,
   createLinkedIdentityProviderIntent,
@@ -13,14 +18,11 @@ export function linkedIdentityProviderPlugin() {
     id: "linked-identity-provider",
     endpoints: {
       createLinkedIdentityProviderIntent: createAuthEndpoint(
-        "/linked-idp/intent",
+        LINKED_IDP_AUTH_INTENT_PATH,
         {
           method: "POST",
           use: [sessionMiddleware],
-          body: z.object({
-            providerId: z.string().min(1),
-            redirectTo: z.string().default("/chat"),
-          }),
+          body: CreateLinkedIdentityProviderIntentRequestSchema,
         },
         async (ctx) => {
           const { user, session } = ctx.context.session;
@@ -36,13 +38,11 @@ export function linkedIdentityProviderPlugin() {
         },
       ),
       completeLinkedIdentityProviderIntent: createAuthEndpoint(
-        "/linked-idp/complete",
+        LINKED_IDP_AUTH_COMPLETE_PATH,
         {
           method: "POST",
           use: [sessionMiddleware],
-          body: z.object({
-            intentId: z.string().min(1),
-          }),
+          body: CompleteLinkedIdentityProviderIntentRequestSchema,
         },
         async (ctx) => {
           const { user, session } = ctx.context.session;

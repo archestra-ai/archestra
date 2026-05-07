@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  LINKED_IDP_SSO_MODE,
   MCP_APPS_EXTENSION_ID,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -1856,7 +1857,7 @@ describe("McpClient", () => {
           { conversationId: "00000000-0000-4000-8000-000000000123" },
         );
 
-        const connectUrl = `${config.frontendBaseUrl}/auth/sso/EntraID?redirectTo=%2Fchat%2F00000000-0000-4000-8000-000000000123&mode=linked-idp`;
+        const connectUrl = `${config.frontendBaseUrl}/auth/sso/EntraID?redirectTo=%2Fchat%2F00000000-0000-4000-8000-000000000123&mode=${LINKED_IDP_SSO_MODE}`;
         expect(result.isError).toBe(true);
         expect(result.error).toContain(
           'Authentication required for "entra protected api"',
@@ -2185,7 +2186,7 @@ describe("McpClient", () => {
           "This tool needs a current keycloak-managed-mcp session",
         );
         expect(result.error).toContain(
-          `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=linked-idp`,
+          `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=${LINKED_IDP_SSO_MODE}`,
         );
         expect(result._meta).toMatchObject({
           archestraError: {
@@ -2193,7 +2194,7 @@ describe("McpClient", () => {
             catalogId,
             catalogName: "keycloak protected demo",
             action: "connect_identity_provider",
-            actionUrl: `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=linked-idp`,
+            actionUrl: `${config.frontendBaseUrl}/auth/sso/keycloak-managed-mcp?redirectTo=%2Fchat&mode=${LINKED_IDP_SSO_MODE}`,
             providerId: "keycloak-managed-mcp",
           },
         });

@@ -1,3 +1,7 @@
+import {
+  LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
+  LINKED_IDP_AUTH_INTENT_ENDPOINT,
+} from "@shared";
 import { getCookies, parseSetCookieHeader } from "better-auth/cookies";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
@@ -9,7 +13,7 @@ import { describe, expect, test } from "@/test";
 describe("linked identity provider auth plugin", () => {
   test("requires an authenticated session to create a linked IdP intent", async () => {
     const response = await betterAuth.handler(
-      new Request("http://localhost:3000/api/auth/linked-idp/intent", {
+      new Request(`http://localhost:3000${LINKED_IDP_AUTH_INTENT_ENDPOINT}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -36,7 +40,7 @@ describe("linked identity provider auth plugin", () => {
     });
 
     const response = await betterAuth.handler(
-      new Request("http://localhost:3000/api/auth/linked-idp/intent", {
+      new Request(`http://localhost:3000${LINKED_IDP_AUTH_INTENT_ENDPOINT}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -97,7 +101,7 @@ describe("linked identity provider auth plugin", () => {
     });
 
     const intentResponse = await betterAuth.handler(
-      new Request("http://localhost:3000/api/auth/linked-idp/intent", {
+      new Request(`http://localhost:3000${LINKED_IDP_AUTH_INTENT_ENDPOINT}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -113,7 +117,7 @@ describe("linked identity provider auth plugin", () => {
     const { intentId } = (await intentResponse.json()) as { intentId: string };
 
     const completeResponse = await betterAuth.handler(
-      new Request("http://localhost:3000/api/auth/linked-idp/complete", {
+      new Request(`http://localhost:3000${LINKED_IDP_AUTH_COMPLETE_ENDPOINT}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",

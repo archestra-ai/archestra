@@ -1,3 +1,4 @@
+import { LINKED_IDP_SSO_MODE } from "@shared";
 import { z } from "zod";
 import db, { type Transaction } from "@/database";
 import logger from "@/logging";
@@ -11,7 +12,7 @@ import {
 import { ApiError } from "@/types";
 
 const LINKED_IDP_INTENT_TTL_MS = 10 * 60 * 1000;
-const LINKED_IDP_INTENT_PREFIX = "linked-idp";
+const LINKED_IDP_INTENT_PREFIX = LINKED_IDP_SSO_MODE;
 
 const LinkedIdentityProviderIntentSchema = z.object({
   originalUserId: z.string(),

@@ -1,10 +1,18 @@
-export const LINKED_IDP_SSO_MODE = "linked-idp";
+import {
+  type CompleteLinkedIdentityProviderIntentRequest,
+  type CompleteLinkedIdentityProviderIntentResponse,
+  CompleteLinkedIdentityProviderIntentResponseSchema,
+  type CreateLinkedIdentityProviderIntentRequest,
+  type CreateLinkedIdentityProviderIntentResponse,
+  CreateLinkedIdentityProviderIntentResponseSchema,
+  LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
+  LINKED_IDP_AUTH_INTENT_ENDPOINT,
+} from "@shared";
 
-export async function createLinkedIdentityProviderIntent(params: {
-  providerId: string;
-  redirectTo: string;
-}) {
-  const response = await fetch("/api/auth/linked-idp/intent", {
+export async function createLinkedIdentityProviderIntent(
+  params: CreateLinkedIdentityProviderIntentRequest,
+): Promise<CreateLinkedIdentityProviderIntentResponse> {
+  const response = await fetch(LINKED_IDP_AUTH_INTENT_ENDPOINT, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -15,25 +23,30 @@ export async function createLinkedIdentityProviderIntent(params: {
     throw new Error("Failed to create identity provider link request");
   }
 
-  return (await response.json()) as {
-    intentId: string;
-    redirectTo: string;
-  };
+  return CreateLinkedIdentityProviderIntentResponseSchema.parse(
+    await response.json(),
+  );
 }
 
-export async function completeLinkedIdentityProviderIntent(intentId: string) {
-  const response = await fetch("/api/auth/linked-idp/complete", {
+export async function completeLinkedIdentityProviderIntent(
+  intentId: string,
+): Promise<CompleteLinkedIdentityProviderIntentResponse> {
+  const body = {
+    intentId,
+  } satisfies CompleteLinkedIdentityProviderIntentRequest;
+
+  const response = await fetch(LINKED_IDP_AUTH_COMPLETE_ENDPOINT, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ intentId }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     throw new Error("Failed to complete identity provider link request");
   }
 
-  return (await response.json()) as {
-    redirectTo: string;
-  };
+  return CompleteLinkedIdentityProviderIntentResponseSchema.parse(
+    await response.json(),
+  );
 }

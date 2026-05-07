@@ -1,3 +1,4 @@
+import { LINKED_IDP_AUTH_COMPLETE_ENDPOINT } from "@shared";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -214,12 +215,17 @@ describe("auth route handler", () => {
       });
       vi.mocked(global.fetch).mockResolvedValue(mockResponse);
 
-      const request = createMockRequest("/api/auth/linked-idp/complete", {
+      const request = createMockRequest(LINKED_IDP_AUTH_COMPLETE_ENDPOINT, {
         method: "POST",
         body: '{"intentId":"intent-123"}',
       });
       const params = {
-        params: Promise.resolve({ path: ["linked-idp", "complete"] }),
+        params: Promise.resolve({
+          path: LINKED_IDP_AUTH_COMPLETE_ENDPOINT.replace(
+            /^\/api\/auth\//,
+            "",
+          ).split("/"),
+        }),
       };
 
       const response = await POST(request, params);

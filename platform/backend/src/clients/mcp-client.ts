@@ -14,6 +14,7 @@ import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -2320,7 +2321,7 @@ class McpClient {
     const redirectTo = this.getIdentityProviderRedirectPath(options);
     const searchParams = new URLSearchParams({
       redirectTo,
-      mode: "linked-idp",
+      mode: LINKED_IDP_SSO_MODE,
     });
     return `${config.frontendBaseUrl}/auth/sso/${encodeURIComponent(providerId)}?${searchParams.toString()}`;
   }

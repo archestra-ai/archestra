@@ -1,5 +1,6 @@
 "use client";
 
+import { LINKED_IDP_SSO_MODE } from "@shared";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,10 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  createLinkedIdentityProviderIntent,
-  LINKED_IDP_SSO_MODE,
-} from "@/lib/auth/linked-idp";
+import { createLinkedIdentityProviderIntent } from "@/lib/auth/linked-idp";
 import { recordSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {

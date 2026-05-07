@@ -1,3 +1,4 @@
+import { LINKED_IDP_SSO_MODE } from "@shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useParams, useSearchParams } from "next/navigation";
@@ -93,7 +94,7 @@ describe("IdpInitiatedSsoPage", () => {
     vi.mocked(useSearchParams).mockReturnValue({
       get: vi.fn((key: string) => {
         if (key === "redirectTo") return encodeURIComponent("/chat/conv-123");
-        if (key === "mode") return "linked-idp";
+        if (key === "mode") return LINKED_IDP_SSO_MODE;
         return null;
       }),
     } as unknown as ReturnType<typeof useSearchParams>);

@@ -51,6 +51,7 @@ import {
   inferEnterpriseExchangeType,
 } from "./identity-provider-form.utils";
 import { RoleMappingForm } from "./role-mapping-form.ee";
+import { SsoLoginEnabledField } from "./sso-login-enabled-field.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
 
 const SUBJECT_TOKEN_LABEL_BY_TYPE = {
@@ -78,11 +79,6 @@ export function OidcConfigForm({
   const issuer = form.watch("issuer") || "";
   const providerId = form.watch("providerId") || "";
   const showAllowedEmailDomains = providerId === "Google";
-  const linkedDownstreamIdpDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformEnterpriseManagedAuth,
-    "linked-downstream-idps",
-  );
-
   const inferredEnterpriseExchangeType = inferEnterpriseExchangeType({
     issuer,
     providerId,
@@ -151,30 +147,7 @@ export function OidcConfigForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="ssoLoginEnabled"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start gap-3 rounded-md border p-3">
-              <FormControl>
-                <Checkbox
-                  checked={field.value ?? true}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>Show on sign-in page</FormLabel>
-                <FormDescription>
-                  Disable this for providers used only to link delegated tokens
-                  for MCP tool authentication.{" "}
-                  <ExternalDocsLink href={linkedDownstreamIdpDocsUrl}>
-                    Learn more
-                  </ExternalDocsLink>
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
-        />
+        <SsoLoginEnabledField form={form} />
 
         {showAllowedEmailDomains && (
           <FormField

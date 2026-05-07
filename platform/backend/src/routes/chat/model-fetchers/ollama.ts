@@ -1,18 +1,10 @@
 import config from "@/config";
 import logger from "@/logging";
+import { isLoopbackRedirectUri } from "@/utils/network";
 import { type ModelInfo, PLACEHOLDER_BEARER_TOKEN } from "./types";
 
 const DOCKER_HOST_HINT =
-  " If Archestra is running inside Docker, try changing the Base URL to http://host.docker.internal:11434/ to reach Ollama on the host machine.";
-
-function isLocalhostUrl(url: string): boolean {
-  try {
-    const { hostname } = new URL(url);
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  } catch {
-    return false;
-  }
-}
+  " If running inside Docker, try changing the Base URL to http://host.docker.internal:11434/ to reach Ollama on the host machine.";
 
 export async function fetchOllamaModels(
   apiKey: string,
@@ -31,7 +23,7 @@ export async function fetchOllamaModels(
       },
     });
   } catch (err) {
-    const hint = isLocalhostUrl(baseUrl) ? DOCKER_HOST_HINT : "";
+    const hint = isLoopbackRedirectUri(baseUrl) ? DOCKER_HOST_HINT : "";
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ url, error: message }, "Failed to connect to Ollama");
     throw new Error(`Failed to connect to Ollama at ${baseUrl}: ${message}.${hint}`);

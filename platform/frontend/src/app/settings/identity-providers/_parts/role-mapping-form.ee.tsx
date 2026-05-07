@@ -34,9 +34,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
+import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
+  identityProviderId?: string;
 }
 
 const HANDLEBARS_EXAMPLES = [
@@ -60,8 +63,14 @@ const HANDLEBARS_EXAMPLES = [
   },
 ];
 
-export function RoleMappingForm({ form }: RoleMappingFormProps) {
+export function RoleMappingForm({
+  form,
+  identityProviderId,
+}: RoleMappingFormProps) {
   const appName = useAppName();
+  const providerClaimHint = getIdentityProviderClaimHint(
+    form.watch("providerId"),
+  );
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "roleMapping.rules",
@@ -96,6 +105,17 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
+            {providerClaimHint && (
+              <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                <span className="font-medium">
+                  {providerClaimHint.providerName}:
+                </span>{" "}
+                {providerClaimHint.roleMappingNote}
+              </p>
+            )}
+
+            <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Mapping Rules</FormLabel>

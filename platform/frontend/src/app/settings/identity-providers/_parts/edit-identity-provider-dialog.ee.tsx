@@ -179,7 +179,10 @@ export function EditIdentityProviderDialog({
               {providerType === "saml" ? (
                 <SamlConfigForm form={form} />
               ) : (
-                <OidcConfigForm form={form} />
+                <OidcConfigForm
+                  form={form}
+                  identityProviderId={provider.id}
+                />
               )}
             </DialogBody>
 

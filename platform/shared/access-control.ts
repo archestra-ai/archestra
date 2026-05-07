@@ -866,6 +866,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProvider]: {
     identityProvider: ["read"],
   },
+  [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
+    identityProvider: ["read"],
+  },
   [RouteId.CreateIdentityProvider]: {
     identityProvider: ["create"],
   },

@@ -152,7 +152,7 @@ If your IdP sends roles as objects (for example `roles: [{name: "admin"}, {name:
 
 1. Check that **Enable Team Sync** is enabled in your SSO provider settings
 2. Verify your Handlebars template extracts the expected groups from the ID token
-3. Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect your ID token claims
+3. Expand **Latest ID token claims** in the Team Sync Configuration section to inspect the decoded claims from your latest sign-in
 4. Check that the group identifier in Archestra exactly matches the extracted group name
 5. Ensure your IdP is configured to include group claims in the ID token, and that Archestra requests the groups scope required by your IdP
 6. Check backend logs for sync errors
@@ -167,7 +167,7 @@ You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsj
 
 **Checking ID token groups:**
 
-Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect the ID token and verify the groups claim contains the expected values. Role mapping and team sync both use ID token claims exclusively.
+When editing an existing OIDC provider, expand **Latest ID token claims** in the Role Mapping or Team Sync Configuration section and verify the groups claim contains the expected values. Role mapping and team sync both use ID token claims exclusively.
 
 ## See also
 

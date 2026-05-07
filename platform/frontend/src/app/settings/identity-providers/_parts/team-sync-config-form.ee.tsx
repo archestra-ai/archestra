@@ -27,9 +27,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
+import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
 
 interface TeamSyncConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
+  identityProviderId?: string;
 }
 
 const HANDLEBARS_EXAMPLES = [
@@ -47,8 +50,14 @@ const HANDLEBARS_EXAMPLES = [
   },
 ];
 
-export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
+export function TeamSyncConfigForm({
+  form,
+  identityProviderId,
+}: TeamSyncConfigFormProps) {
   const appName = useAppName();
+  const providerClaimHint = getIdentityProviderClaimHint(
+    form.watch("providerId"),
+  );
   return (
     <div className="space-y-6">
       <Separator />
@@ -76,6 +85,17 @@ export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
+            {providerClaimHint && (
+              <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                <span className="font-medium">
+                  {providerClaimHint.providerName}:
+                </span>{" "}
+                {providerClaimHint.teamSyncNote}
+              </p>
+            )}
+
+            <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
+
             <FormField
               control={form.control}
               name="teamSyncConfig.enabled"

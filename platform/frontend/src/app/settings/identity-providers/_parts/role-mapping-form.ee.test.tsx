@@ -42,18 +42,35 @@ vi.mock("@/lib/organization.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
+  useIdentityProviderLatestIdTokenClaims: () => ({
+    data: {
+      claims: {
+        email: "admin@example.com",
+        roles: ["app-admin"],
+      },
+      updatedAt: "2026-05-07T00:00:00.000Z",
+    },
+    isLoading: false,
+  }),
+}));
+
 function TestWrapper({
   defaultRules = [],
   onSubmit,
+  providerId = "test",
+  identityProviderId,
 }: {
   defaultRules?: Array<{ expression: string; role: string }>;
   onSubmit?: (data: IdentityProviderFormValues) => void;
+  providerId?: string;
+  identityProviderId?: string;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
     resolver: zodResolver(IdentityProviderFormSchema as any),
     defaultValues: {
-      providerId: "test",
+      providerId,
       issuer: "https://example.com",
       domain: "example.com",
       providerType: "oidc",
@@ -75,7 +92,7 @@ function TestWrapper({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit((data) => onSubmit?.(data))}>
-        <RoleMappingForm form={form} />
+        <RoleMappingForm form={form} identityProviderId={identityProviderId} />
         <Button type="submit">Save</Button>
       </form>
     </Form>
@@ -98,6 +115,48 @@ function openAccordion() {
 }
 
 describe("RoleMappingForm", () => {
+  it("shows latest ID token claims when editing an existing provider", async () => {
+    render(<TestWrapper identityProviderId="idp-1" />);
+    await openAccordion();
+
+    await userEvent.click(screen.getByText("Latest ID token claims"));
+
+    expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
+    expect(screen.getByText(/app-admin/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/raw signed token is never shown/i),
+    ).toBeInTheDocument();
+  });
+
+  it("hides latest ID token claims when creating a provider", async () => {
+    render(<TestWrapper />);
+    await openAccordion();
+
+    expect(
+      screen.queryByText("Latest ID token claims"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the Okta groups claim hint", async () => {
+    render(<TestWrapper providerId="Okta" />);
+    await openAccordion();
+
+    expect(
+      screen.getByText(/Okta group-based role rules commonly read/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/groups/)).toBeInTheDocument();
+  });
+
+  it("shows the Entra roles and groups claim hint", async () => {
+    render(<TestWrapper providerId="EntraID" />);
+    await openAccordion();
+
+    expect(
+      screen.getByText(/Microsoft Entra ID role rules commonly read/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/App role assignments/i)).toBeInTheDocument();
+  });
+
   it("adds a rule when clicking Add Rule", async () => {
     render(<TestWrapper />);
     await openAccordion();

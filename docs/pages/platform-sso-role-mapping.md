@@ -113,7 +113,7 @@ This template:
 - Ensure your IdP is sending the expected claims in the ID token
 - The `includes` helper handles null/undefined arrays gracefully
 
-You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input. To inspect the actual claims your IdP sends, paste the ID token into [jwt.io](https://jwt.io).
+You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input. When editing an existing OIDC provider, expand **Latest ID token claims** in the Role Mapping section to inspect the decoded claims from your latest sign-in.
 
 ## See also
 

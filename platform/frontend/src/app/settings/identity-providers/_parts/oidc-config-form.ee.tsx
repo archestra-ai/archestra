@@ -61,6 +61,7 @@ const SUBJECT_TOKEN_LABEL_BY_TYPE = {
 
 interface OidcConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
+  identityProviderId?: string;
   /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
@@ -69,6 +70,7 @@ interface OidcConfigFormProps {
 
 export function OidcConfigForm({
   form,
+  identityProviderId,
   hidePkce,
   hideProviderId,
 }: OidcConfigFormProps) {
@@ -565,9 +567,15 @@ export function OidcConfigForm({
         subjectTokenTypeDefault={subjectTokenTypeDefault}
       />
 
-      <RoleMappingForm form={form} />
+      <RoleMappingForm
+        form={form}
+        identityProviderId={identityProviderId}
+      />
 
-      <TeamSyncConfigForm form={form} />
+      <TeamSyncConfigForm
+        form={form}
+        identityProviderId={identityProviderId}
+      />
     </div>
   );
 }

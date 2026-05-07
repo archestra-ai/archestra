@@ -356,6 +356,8 @@ export const RouteId = {
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
   GetIdentityProvider: "getIdentityProvider",
+  GetIdentityProviderLatestIdTokenClaims:
+    "getIdentityProviderLatestIdTokenClaims",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",

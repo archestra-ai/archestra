@@ -1,4 +1,8 @@
-import { type SupportedProvider, TimeInMs } from "@shared";
+import {
+  MODELS_DEV_PROVIDER_MAP,
+  type SupportedProvider,
+  TimeInMs,
+} from "@shared";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -35,33 +39,6 @@ const RETRY_CONFIG = {
   baseDelayMs: 1000,
   maxDelayMs: 30000,
 } as const;
-
-/**
- * Maps models.dev provider IDs to Archestra provider names.
- */
-const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> = {
-  openai: "openai",
-  openrouter: "openrouter",
-  anthropic: "anthropic",
-  google: "gemini",
-  "google-vertex": "gemini",
-  cohere: "cohere",
-  cerebras: "cerebras",
-  mistral: "mistral",
-  minimax: "minimax",
-  // These providers use OpenAI-compatible API in Archestra
-  llama: "openai",
-  deepseek: "deepseek",
-  groq: "groq",
-  "fireworks-ai": "openai",
-  togetherai: "openai",
-  // Explicitly unsupported providers (return null to skip)
-  perplexity: null,
-  xai: "xai",
-  nvidia: null,
-  "amazon-bedrock": null,
-  azure: null,
-};
 
 // ============================================================================
 // Types for models.dev API response

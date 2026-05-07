@@ -13,25 +13,35 @@ class McpCatalogTeamModel {
   static async getUserAccessibleCatalogIds(
     userId: string,
     isAdmin: boolean,
+    organizationId: string,
   ): Promise<string[]> {
     if (isAdmin) {
       const allCatalogs = await db
         .select({ id: schema.internalMcpCatalogTable.id })
-        .from(schema.internalMcpCatalogTable);
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+        );
       return allCatalogs.map((c) => c.id);
     }
 
     // Mirrors the agent (profile) access control approach: org-visible + personal + team-based
     const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM internal_mcp_catalog WHERE scope = 'org'
+      SELECT id FROM internal_mcp_catalog
+        WHERE scope = 'org' AND organization_id = ${organizationId}
       UNION
-      SELECT id FROM internal_mcp_catalog WHERE author_id = ${userId} AND scope = 'personal'
+      SELECT id FROM internal_mcp_catalog
+        WHERE author_id = ${userId}
+          AND scope = 'personal'
+          AND organization_id = ${organizationId}
       UNION
       SELECT ct.catalog_id AS id
         FROM mcp_catalog_team ct
         INNER JOIN internal_mcp_catalog c ON ct.catalog_id = c.id
         INNER JOIN team_member tm ON ct.team_id = tm.team_id
-        WHERE tm.user_id = ${userId} AND c.scope = 'team'
+        WHERE tm.user_id = ${userId}
+          AND c.scope = 'team'
+          AND c.organization_id = ${organizationId}
     `);
 
     return result.rows.map((r) => r.id);
@@ -44,19 +54,21 @@ class McpCatalogTeamModel {
     userId: string,
     catalogId: string,
     isAdmin: boolean,
+    organizationId: string,
   ): Promise<boolean> {
-    if (isAdmin) return true;
-
     const [catalog] = await db
       .select({
         scope: schema.internalMcpCatalogTable.scope,
         authorId: schema.internalMcpCatalogTable.authorId,
+        organizationId: schema.internalMcpCatalogTable.organizationId,
       })
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, catalogId))
       .limit(1);
 
     if (!catalog) return false;
+    if (catalog.organizationId !== organizationId) return false;
+    if (isAdmin) return true;
 
     if (catalog.scope === "org") return true;
 

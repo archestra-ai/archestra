@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Per-user identity for downstream MCP tool calls — OBO, ID-JAG, Cross-App Access, and RFC 8693 token exchange"
 order: 4
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-05
 ---
 
 <!--
@@ -81,8 +81,9 @@ A live demo of this is [motd.xaa.rocks](https://motd.xaa.rocks) — a "Resource"
 To use ID-JAG with Archestra:
 
 1. Configure your IdP to issue ID-JAGs with the audience equal to the third-party app
-2. In the MCP catalog item, set **Requested Credential** to **ID-JAG** and **Managed Resource Identifier** to the audience
-3. Archestra includes the assertion in tool calls; the third-party verifies it and exchanges for its own token
+2. In the MCP catalog item, set **Requested Credential** to **ID-JAG** and **Managed Resource Identifier** to the resource server URL or audience
+3. If the MCP server is an OAuth protected resource, set the protected-resource token endpoint audience and resource client credentials
+4. Archestra exchanges the user's IdP token for an ID-JAG, swaps that ID-JAG at the protected resource's authorization server, and sends the resulting access token to the MCP server
 
 ## Field reference
 
@@ -97,6 +98,8 @@ The Enterprise-Managed Credentials form on each OIDC provider has these fields:
 | **Signing Key ID** | The `kid` of the public key registered with the IdP. Only used with `private_key_jwt`. |
 | **Client Assertion Audience** | Optional override for the `aud` claim of the client assertion. Defaults to the exchange token endpoint. |
 | **User Token To Exchange** | Which token Archestra should hand back to the IdP for exchange. `Access token` (Entra default), `ID token` (Okta default), or generic `JWT`. |
+
+For OAuth protected resources that accept ID-JAG, the MCP catalog item can also override the resource app's client ID and secret. Use these overrides when the requesting app registered with the IdP is different from the client that authenticates to the resource authorization server.
 
 ### Strategy defaults
 

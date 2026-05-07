@@ -5,6 +5,7 @@ import {
   IDENTITY_PROVIDER_ID,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   LLM_PROXY_OAUTH_SCOPE,
+  OAUTH_GRANT_TYPE,
   RouteId,
 } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
@@ -28,7 +29,6 @@ import {
 import {
   buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
-  JWT_BEARER_GRANT_TYPE,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { ApiError, constructResponseSchema } from "@/types";
@@ -388,7 +388,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (body?.grant_type === JWT_BEARER_GRANT_TYPE) {
+      if (body?.grant_type === OAUTH_GRANT_TYPE.JwtBearer) {
         const { clientId: authenticatedClientId, clientSecret } =
           extractOAuthClientCredentials({
             authorizationHeader: request.headers.authorization,

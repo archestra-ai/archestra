@@ -1094,8 +1094,10 @@ export async function validateExternalIdpToken(
       "validateExternalIdpToken: JWT validated via external IdP JWKS",
     );
 
-    // Match JWT email claim to an Archestra user for access control
-    if (!result.email) {
+    // Match JWT email claim to an Archestra user for access control. Some IdPs
+    // use the subject as the user email and omit the email claim.
+    const userEmail = result.email ?? getEmailFromSubject(result.sub);
+    if (!userEmail) {
       logger.warn(
         { profileId, sub: result.sub },
         "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
@@ -1103,10 +1105,10 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    const user = await UserModel.findByEmail(result.email);
+    const user = await UserModel.findByEmail(userEmail);
     if (!user) {
       logger.warn(
-        { profileId, email: result.email },
+        { profileId, email: userEmail },
         "validateExternalIdpToken: JWT email does not match any Archestra user",
       );
       return null;
@@ -1115,7 +1117,7 @@ export async function validateExternalIdpToken(
     const member = await MemberModel.getByUserId(user.id, agent.organizationId);
     if (!member) {
       logger.warn(
-        { profileId, userId: user.id, email: result.email },
+        { profileId, userId: user.id, email: userEmail },
         "validateExternalIdpToken: user is not a member of the gateway's organization",
       );
       return null;
@@ -1171,6 +1173,15 @@ export async function validateExternalIdpToken(
     );
     return null;
   }
+}
+
+function getEmailFromSubject(subject: string | undefined): string | null {
+  // This fallback is intentionally loose: after token validation succeeds,
+  // it only decides whether an email-shaped subject can be used for lookup.
+  if (!subject || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
+    return null;
+  }
+  return subject;
 }
 
 /**

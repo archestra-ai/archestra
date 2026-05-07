@@ -195,7 +195,7 @@ describe("TeamTokenModel", () => {
       expect(validated).toBeNull();
     });
 
-    test("validates correct token among multiple tokens (batch fetch)", async ({
+    test("validates correct token among multiple token candidates", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -205,7 +205,7 @@ describe("TeamTokenModel", () => {
       const team1 = await makeTeam(org.id, user.id, { name: "Team A" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team B" });
 
-      // Create multiple tokens to verify batch secret fetching
+      // Create multiple tokens to verify candidate matching.
       await TeamTokenModel.create({
         organizationId: org.id,
         name: "Org Token",
@@ -224,7 +224,7 @@ describe("TeamTokenModel", () => {
         teamId: team2.id,
       });
 
-      // Validate the middle token - should find it via batch secret lookup
+      // Validate the middle token - should match the correct secret.
       const validated = await TeamTokenModel.validateToken(value2);
       expect(validated).not.toBeNull();
       expect(validated?.name).toBe("Team A Token");

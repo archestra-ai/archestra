@@ -91,7 +91,7 @@ export const RERANKER_MIN_RELEVANCE_SCORE = 3;
 type NomicTaskType = "search_document" | "search_query";
 
 export function isNomicModel(model: string): boolean {
-  return model.startsWith("nomic");
+  return model.startsWith("nomic") || model.includes("/nomic-embed-text");
 }
 
 /**

@@ -220,3 +220,7 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @keyurhariyani
 - @guptadeepak8
 - @CrocCartelDevTeam
+- @BISHT-CX
+- @josemiguel3125-sketch
+- @AnshulBhati01
+- @pokeehokee

@@ -125,9 +125,7 @@ export const IdentityProviderOidcConfigSchema = z
         privateKeyPem: z.string().optional(),
         privateKeyId: z.string().optional(),
         clientAssertionAudience: z.string().optional(),
-        subjectTokenType: z
-          .enum(ENTERPRISE_SUBJECT_TOKEN_TYPES)
-          .optional(),
+        subjectTokenType: z.enum(ENTERPRISE_SUBJECT_TOKEN_TYPES).optional(),
       })
       .optional(),
     mapping: z

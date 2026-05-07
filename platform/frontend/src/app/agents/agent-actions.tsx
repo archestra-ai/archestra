@@ -59,7 +59,7 @@ export function AgentActions({
           testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
         };
 
-  const actions: TableRowAction[] = [
+  const primaryActions: TableRowAction[] = [
     {
       icon: <Plug className="h-4 w-4" />,
       label: "Connect",
@@ -75,6 +75,10 @@ export function AgentActions({
       disabledTooltip: "Built-in agents cannot be chatted with",
       href: `/chat/new?agent_id=${agent.id}`,
     },
+    editOrViewAction,
+  ];
+
+  const dropdownActions: TableRowAction[] = [
     {
       icon: <Clock className="h-4 w-4" />,
       label: "Schedule",
@@ -106,7 +110,6 @@ export function AgentActions({
           : undefined,
       onClick: () => onExport(agent),
     },
-    editOrViewAction,
     {
       icon: <Trash2 className="h-4 w-4" />,
       label: "Delete",
@@ -121,5 +124,10 @@ export function AgentActions({
     },
   ];
 
-  return <TableRowActions actions={actions} />;
+  return (
+    <TableRowActions
+      actions={primaryActions}
+      dropdownActions={dropdownActions}
+    />
+  );
 }

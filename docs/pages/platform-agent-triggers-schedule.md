@@ -22,10 +22,10 @@ Every completed run preserves the full agent conversation. Open any run from the
 
 ![Task detail with run history](/docs/automated_screenshots/platform-agent-triggers-schedule_detail.webp)
 
-Each run opens as a chat. Admins can view other users' run conversations, but only the conversation owner can continue them.
+Each run opens as a chat. Users with `scheduledTask:admin` can view other users' run conversations, but only the conversation owner can continue them.
 
 ![Completed run conversation](/docs/automated_screenshots/platform-agent-triggers-schedule_run.webp)
 
 ## Permissions
 
-The `scheduledTask` resource controls access. Without `admin` permission, users only see the tasks they created. Admins can view and manage all tasks across the organization. See [Access Control](/docs/platform-access-control) for role configuration.
+The `scheduledTask` resource controls access. Without `scheduledTask:admin`, users only see the tasks they created. Users with `scheduledTask:admin` can view and manage all tasks across the organization. See [Access Control](/docs/platform-access-control) for role configuration.

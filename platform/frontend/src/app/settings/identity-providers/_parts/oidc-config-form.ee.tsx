@@ -640,7 +640,6 @@ function EnterpriseManagedCredentialsForm(props: {
         {`Leave this empty unless ${appName} should exchange the signed-in user's identity-provider token for a downstream tool token when tools run.`}
       </p>
       <p className="text-sm text-muted-foreground">
-        {appName} suggests exchange defaults from the issuer URL.
         {getEnterpriseExchangeHint(inferredEnterpriseExchangeType)}
         {identityProvidersDocsUrl ? (
           <>
@@ -892,11 +891,11 @@ function getEnterpriseExchangeHint(
 ): string {
   switch (exchangeStrategy) {
     case "okta_managed":
-      return " For this provider, the suggested defaults are private key JWT client authentication and ID token exchange.";
+      return "For Okta, the suggested defaults are private key JWT client authentication and ID token exchange.";
     case "rfc8693":
-      return " For this provider, the suggested defaults are RFC 8693 token exchange with client secret POST and access token exchange.";
+      return "For this identity provider, the suggested defaults are RFC 8693 token exchange with client secret POST and access token exchange.";
     case "entra_obo":
-      return " For this provider, the suggested defaults are Microsoft Entra on-behalf-of with client secret POST and access token exchange.";
+      return "For Microsoft Entra ID, the suggested defaults are on-behalf-of with client secret POST and access token exchange.";
   }
 }
 

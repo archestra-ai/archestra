@@ -78,10 +78,27 @@ export async function loginViaUi(
   page: Page,
   email: string,
   password: string,
+  options: { skipDefaultPasswordPrompt?: boolean } = {},
 ): Promise<void> {
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
-  await page.getByRole("button", { name: /^login$/i }).click();
+  await page.getByRole("button", { name: /^(sign in|login)$/i }).click();
+  if (options.skipDefaultPasswordPrompt !== false) {
+    await skipDefaultPasswordChangePromptIfVisible(page);
+  }
+}
+
+export async function skipDefaultPasswordChangePromptIfVisible(
+  page: Page,
+): Promise<void> {
+  const promptVisible = await page
+    .getByTestId(E2eTestId.DefaultPasswordChangePrompt)
+    .waitFor({ state: "visible", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (promptVisible) {
+    await page.getByTestId(E2eTestId.DefaultPasswordChangeSkipButton).click();
+  }
 }
 
 export async function navigateAndVerifyAuth(params: {

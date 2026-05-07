@@ -48,6 +48,7 @@ export const DocsPage = {
   PlatformQuickstart: "platform-quickstart",
   PlatformSecretsManagement: "platform-secrets-management",
   PlatformSlack: "platform-slack",
+  PlatformSsoTeamSync: "platform-sso-team-sync",
   PlatformSupportedLlmProviders: "platform-supported-llm-providers",
   PlatformVercelAiExample: "platform-vercel-ai-example",
 } as const;

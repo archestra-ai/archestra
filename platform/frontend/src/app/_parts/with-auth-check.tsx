@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
+import { isDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
@@ -63,6 +64,10 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
   const isSpecialAuth = isSpecialAuthPage(pathname);
+  const isDefaultPasswordChangePage =
+    pathname?.startsWith("/auth/sign-in") &&
+    typeof window !== "undefined" &&
+    isDefaultPasswordChangePending();
 
   // Track mount state to avoid hydration errors with isRefetching
   useEffect(() => {
@@ -101,7 +106,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       // - During login: user needs to complete 2FA verification (not logged in yet)
       // - During setup: user is setting up 2FA (logged in)
       return;
-    } else if (isAuthPage && isLoggedIn) {
+    } else if (isAuthPage && isLoggedIn && !isDefaultPasswordChangePage) {
       // User is logged in but on auth page (sign-in/sign-up), redirect to redirectTo or home
       const redirectTo = searchParams.get("redirectTo");
       router.push(getValidatedRedirectPath(redirectTo));
@@ -122,6 +127,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     isSpecialAuth,
     pathname,
     searchParams,
+    isDefaultPasswordChangePage,
   ]);
 
   // Show loading while checking auth/permissions
@@ -130,7 +136,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   } else if (isSpecialAuth) {
     // Special auth pages are always rendered (handles both 2FA verification and setup)
     return <>{children}</>;
-  } else if (isAuthPage && isLoggedIn) {
+  } else if (isAuthPage && isLoggedIn && !isDefaultPasswordChangePage) {
     // During redirects, show nothing to avoid flash
     return null;
   } else if (!isAuthPage && !isLoggedIn) {

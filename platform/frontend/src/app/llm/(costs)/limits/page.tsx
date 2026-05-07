@@ -666,6 +666,7 @@ export default function LimitsPage() {
                     items={teams.map((team) => ({
                       value: team.id,
                       label: team.name,
+                      description: team.description ?? undefined,
                     }))}
                     className="w-full sm:flex-1"
                   />
@@ -718,6 +719,7 @@ export default function LimitsPage() {
                     items={agents.map((agent) => ({
                       value: agent.id,
                       label: agent.name,
+                      description: agent.description ?? undefined,
                     }))}
                     className="w-full sm:flex-1"
                   />
@@ -736,6 +738,7 @@ export default function LimitsPage() {
                     items={llmProxies.map((proxy) => ({
                       value: proxy.id,
                       label: proxy.name,
+                      description: proxy.description ?? undefined,
                     }))}
                     className="w-full sm:flex-1"
                   />

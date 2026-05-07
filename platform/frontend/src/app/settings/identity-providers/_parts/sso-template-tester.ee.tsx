@@ -33,11 +33,12 @@ export function SsoTemplateTester({
     }
     if (isLoading) return "Loading latest ID token claims.";
     if (!claims) return "No latest ID token claims are available to test.";
-    if (!template?.trim()) return "Enter a template to test.";
+    if (mode === "role" && !template?.trim())
+      return "Enter a template to test.";
     return null;
-  }, [claims, identityProviderId, isLoading, template]);
+  }, [claims, identityProviderId, isLoading, mode, template]);
   const result = useMemo(() => {
-    if (disabledReason || !claims || !template?.trim()) return null;
+    if (disabledReason || !claims) return null;
     return evaluateTemplate({ claims, mode, template });
   }, [claims, disabledReason, mode, template]);
 
@@ -90,13 +91,14 @@ interface TemplateTestResult {
 function evaluateTemplate(params: {
   claims: Record<string, unknown>;
   mode: TemplateTestMode;
-  template: string;
+  template: string | undefined;
 }): TemplateTestResult {
   try {
-    const compiled = Handlebars.compile(params.template, { noEscape: true });
-    const output = compiled(params.claims).trim();
-
     if (params.mode === "role") {
+      const compiled = Handlebars.compile(params.template ?? "", {
+        noEscape: true,
+      });
+      const output = compiled(params.claims).trim();
       const matched = output.length > 0 && output !== "false" && output !== "0";
       return {
         ok: matched,
@@ -108,14 +110,24 @@ function evaluateTemplate(params: {
       };
     }
 
-    const groups = extractGroupsFromRenderedTemplate(output);
+    const hasTemplate = Boolean(params.template?.trim());
+    const output = hasTemplate
+      ? Handlebars.compile(params.template ?? "", { noEscape: true })(
+          params.claims,
+        ).trim()
+      : "";
+    const groups = hasTemplate
+      ? extractGroupsFromRenderedTemplate(output)
+      : extractGroupsFromClaims(params.claims);
     return {
       ok: groups.length > 0,
       label: groups.length > 0 ? "Groups extracted" : "No groups",
       description:
         groups.length > 0
-          ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted.`
-          : "This template did not extract any group identifiers.",
+          ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted${hasTemplate ? "" : " using default extraction"}.`
+          : hasTemplate
+            ? "This template did not extract any group identifiers."
+            : "Default extraction did not find any group identifiers.",
       output: JSON.stringify(groups, null, 2),
     };
   } catch (error) {
@@ -128,6 +140,26 @@ function evaluateTemplate(params: {
           : "The template could not be evaluated.",
     };
   }
+}
+
+function extractGroupsFromClaims(claims: Record<string, unknown>): string[] {
+  const groupClaimNames = [
+    "groups",
+    "group",
+    "memberOf",
+    "member_of",
+    "roles",
+    "role",
+    "teams",
+    "team",
+  ];
+
+  for (const claimName of groupClaimNames) {
+    const groups = normalizeGroups(claims[claimName]);
+    if (groups.length > 0) return groups;
+  }
+
+  return [];
 }
 
 function extractGroupsFromRenderedTemplate(output: string): string[] {
@@ -146,6 +178,28 @@ function extractGroupsFromRenderedTemplate(output: string): string[] {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function normalizeGroups(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => normalizeGroups(item))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    if (!value.trim()) return [];
+    if (value.includes(",")) {
+      return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [value.trim()];
+  }
+
+  return [];
 }
 
 function registerSsoTemplateHelpers() {

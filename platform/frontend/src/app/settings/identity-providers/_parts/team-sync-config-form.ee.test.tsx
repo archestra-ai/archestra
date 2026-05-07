@@ -81,7 +81,7 @@ describe("TeamSyncConfigForm", () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
     await openAccordion();
 
-    expect(screen.getByText(/engineering/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/engineering/i).length).toBeGreaterThan(0);
   });
 
   it("shows a live template test result for team sync extraction", async () => {
@@ -100,6 +100,16 @@ describe("TeamSyncConfigForm", () => {
     expect(
       screen.getByText(/group identifier.*extracted/i),
     ).toBeInTheDocument();
+  });
+
+  it("tests default team sync extraction when the template is empty", async () => {
+    render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
+    await openAccordion();
+
+    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
+    expect(screen.getByText("Groups extracted")).toBeInTheDocument();
+    expect(screen.getByText(/using default extraction/i)).toBeInTheDocument();
+    expect(screen.queryByText("Enter a template to test.")).toBeNull();
   });
 
   it("shows the Okta groups claim hint", async () => {

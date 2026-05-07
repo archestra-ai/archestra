@@ -64,8 +64,6 @@ export function IdentityProviderDialogShell({
   footer,
   sidebarFooter,
 }: IdentityProviderDialogShellProps) {
-  const activeNavItem = navItems.find((item) => item.id === activeSection);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -125,9 +123,6 @@ export function IdentityProviderDialogShell({
               <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold truncate">{title}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground truncate">
-                    {activeNavItem?.label ?? description}
-                  </p>
                 </div>
                 <Button
                   type="button"

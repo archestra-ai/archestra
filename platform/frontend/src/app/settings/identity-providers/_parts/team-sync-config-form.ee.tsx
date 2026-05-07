@@ -64,7 +64,6 @@ export function TeamSyncConfigForm({
     <>
       {providerClaimHint && (
         <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
-          <span className="font-medium">{providerClaimHint.providerName}:</span>{" "}
           {providerClaimHint.teamSyncNote}
         </p>
       )}

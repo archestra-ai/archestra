@@ -6,6 +6,7 @@ import {
   type IdentityProviderFormValues,
 } from "@shared";
 import { Info, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import {
   Accordion,
@@ -34,8 +35,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
+import { SsoTemplateDebugSection } from "./sso-template-debug-section.ee";
 
 interface RoleMappingFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -77,6 +78,16 @@ export function RoleMappingForm({
     control: form.control,
     name: "roleMapping.rules",
   });
+  const [selectedRuleIndex, setSelectedRuleIndex] = useState(0);
+  const roleMappingRules = form.watch("roleMapping.rules") ?? [];
+  const activeRuleIndex =
+    fields.length > 0 ? Math.min(selectedRuleIndex, fields.length - 1) : null;
+  const activeRule =
+    activeRuleIndex === null ? null : roleMappingRules[activeRuleIndex];
+  const activeRuleLabel =
+    activeRuleIndex === null
+      ? "the selected role mapping rule"
+      : `role mapping rule ${activeRuleIndex + 1}${activeRule?.role ? ` (${activeRule.role})` : ""}`;
 
   const content = (
     <>
@@ -87,8 +98,6 @@ export function RoleMappingForm({
         </p>
       )}
 
-      <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
-
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <FormLabel>Mapping Rules</FormLabel>
@@ -96,7 +105,10 @@ export function RoleMappingForm({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => append({ expression: "", role: "member" })}
+            onClick={() => {
+              append({ expression: "", role: "member" });
+              setSelectedRuleIndex(fields.length);
+            }}
             data-testid={E2eTestId.IdpRoleMappingAddRule}
           >
             <Plus className="mr-1 h-4 w-4" />
@@ -106,9 +118,10 @@ export function RoleMappingForm({
 
         {fields.length > 1 && (
           <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
-            <span className="font-medium">Note:</span> Rules are evaluated in
-            order from top to bottom. The first matching rule determines the
-            user&apos;s role. Order your most specific rules first.
+            <span className="font-medium">Note:</span>
+            {` `}Rules are evaluated in order from top to bottom. The first
+            matching rule determines the user&apos;s role. Order your most
+            specific rules first.
           </p>
         )}
 
@@ -140,6 +153,7 @@ export function RoleMappingForm({
                             className="font-mono text-sm"
                             data-testid={E2eTestId.IdpRoleMappingRuleTemplate}
                             {...field}
+                            onFocus={() => setSelectedRuleIndex(index)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -174,10 +188,25 @@ export function RoleMappingForm({
                 </div>
                 <Button
                   type="button"
+                  variant={activeRuleIndex === index ? "secondary" : "outline"}
+                  size="sm"
+                  className="shrink-0 mt-6"
+                  onClick={() => setSelectedRuleIndex(index)}
+                >
+                  {activeRuleIndex === index ? "Testing" : "Test"}
+                </Button>
+                <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
                   className="shrink-0 mt-6 text-destructive hover:text-destructive"
-                  onClick={() => remove(index)}
+                  onClick={() => {
+                    setSelectedRuleIndex((currentIndex) => {
+                      if (currentIndex <= index) return currentIndex;
+                      return currentIndex - 1;
+                    });
+                    remove(index);
+                  }}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -262,33 +291,13 @@ export function RoleMappingForm({
         )}
       />
 
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem
-          value="examples"
-          className="!border rounded-md bg-muted/30"
-        >
-          <AccordionTrigger className="px-4 py-2 hover:no-underline">
-            <span className="text-sm font-medium">Example Templates</span>
-          </AccordionTrigger>
-          <AccordionContent className="px-4 pb-4 pt-0">
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
-                <li key={`${expression}-${description}`}>
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
-                    {expression}
-                  </code>
-                  <span className="ml-2">- {description}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-muted-foreground mt-3">
-              Templates should render to a non-empty string when the rule
-              matches. Available helpers: includes, equals, contains, and, or,
-              exists.
-            </p>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      <SsoTemplateDebugSection
+        identityProviderId={identityProviderId}
+        mode="role"
+        template={activeRule?.expression}
+        templateLabel={activeRuleLabel}
+        examples={HANDLEBARS_EXAMPLES}
+      />
     </>
   );
 

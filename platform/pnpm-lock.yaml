@@ -611,6 +611,9 @@ importers:
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.4)
+      handlebars:
+        specifier: ^4.7.9
+        version: 4.7.9
       import-in-the-middle:
         specifier: 3.0.0
         version: 3.0.0

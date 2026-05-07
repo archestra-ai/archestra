@@ -1,6 +1,9 @@
 "use client";
 
-import type { IdentityProviderFormValues } from "@shared";
+import {
+  getIdentityProviderDialogNavButtonTestId,
+  type IdentityProviderFormValues,
+} from "@shared";
 import { IdCard, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -61,6 +64,8 @@ export function IdentityProviderDialogShell({
   footer,
   sidebarFooter,
 }: IdentityProviderDialogShellProps) {
+  const activeNavItem = navItems.find((item) => item.id === activeSection);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -94,6 +99,9 @@ export function IdentityProviderDialogShell({
                     key={navItem.id}
                     type="button"
                     variant="ghost"
+                    data-testid={getIdentityProviderDialogNavButtonTestId(
+                      navItem.id,
+                    )}
                     className={cn(
                       "justify-start h-9 px-3 font-normal w-full",
                       activeSection === navItem.id &&
@@ -118,7 +126,7 @@ export function IdentityProviderDialogShell({
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold truncate">{title}</h2>
                   <p className="mt-1 text-sm text-muted-foreground truncate">
-                    {description}
+                    {activeNavItem?.label ?? description}
                   </p>
                 </div>
                 <Button

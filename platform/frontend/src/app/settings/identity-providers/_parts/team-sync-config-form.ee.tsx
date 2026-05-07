@@ -27,8 +27,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
+import { SsoTemplateDebugSection } from "./sso-template-debug-section.ee";
 
 interface TeamSyncConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
@@ -68,8 +68,6 @@ export function TeamSyncConfigForm({
           {providerClaimHint.teamSyncNote}
         </p>
       )}
-
-      <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
 
       <FormField
         control={form.control}
@@ -116,40 +114,13 @@ export function TeamSyncConfigForm({
         )}
       />
 
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem
-          value="examples"
-          className="!border rounded-md bg-muted/30"
-        >
-          <AccordionTrigger className="px-4 py-2 hover:no-underline">
-            <span className="text-sm font-medium">Example Templates</span>
-          </AccordionTrigger>
-          <AccordionContent className="px-4 pb-4 pt-0">
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
-                <li key={`${expression}-${description}`}>
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
-                    {expression}
-                  </code>
-                  <span className="ml-2">- {description}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-muted-foreground mt-3">
-              Use this to extract group names from complex token structures. For
-              example, if your IdP sends{" "}
-              <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                roles: [{"{"}name: &quot;admin&quot;{"}"}]
-              </code>
-              , use{" "}
-              <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                {"{{#each roles}}{{this.name}},{{/each}}"}
-              </code>
-              .
-            </p>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      <SsoTemplateDebugSection
+        identityProviderId={identityProviderId}
+        mode="team-sync"
+        template={form.watch("teamSyncConfig.groupsExpression")}
+        templateLabel="the team sync groups template"
+        examples={HANDLEBARS_EXAMPLES}
+      />
     </>
   );
 

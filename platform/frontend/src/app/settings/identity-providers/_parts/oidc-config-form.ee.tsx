@@ -116,6 +116,95 @@ export function OidcConfigForm({
     [scopes, form],
   );
 
+  const attributeMappingContent = (
+    <div className="grid gap-4">
+      <FormField
+        control={form.control}
+        name="oidcConfig.mapping.id"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>User ID Claim</FormLabel>
+            <FormControl>
+              <Input placeholder="sub" {...field} />
+            </FormControl>
+            <FormDescription>
+              The claim that contains the unique user identifier.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.mapping.email"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Email Claim</FormLabel>
+            <FormControl>
+              <Input placeholder="email" {...field} />
+            </FormControl>
+            <FormDescription>
+              The claim that contains the user&apos;s email address.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.mapping.name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Name Claim</FormLabel>
+            <FormControl>
+              <Input placeholder="name" {...field} />
+            </FormControl>
+            <FormDescription>
+              The claim that contains the user&apos;s display name.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.mapping.emailVerified"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Email Verified Claim (Optional)</FormLabel>
+            <FormControl>
+              <Input placeholder="email_verified" {...field} />
+            </FormControl>
+            <FormDescription>
+              The claim that indicates if the email is verified.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.mapping.image"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Avatar Image Claim (Optional)</FormLabel>
+            <FormControl>
+              <Input placeholder="picture" {...field} />
+            </FormControl>
+            <FormDescription>
+              The claim that contains the user&apos;s profile picture URL.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {(!activeSection || activeSection === "general") && (
@@ -473,117 +562,25 @@ export function OidcConfigForm({
 
       {!activeSection && <Separator />}
 
-      {(!activeSection || activeSection === "attribute-mapping") && (
-        <Accordion
-          type="single"
-          collapsible={!activeSection}
-          defaultValue={
-            activeSection === "attribute-mapping"
-              ? "attribute-mapping"
-              : undefined
-          }
-          className="w-full"
-        >
-          <AccordionItem value="attribute-mapping" className="border-none">
-            <AccordionTrigger className="hover:no-underline">
-              <div className="flex items-center gap-2">
-                <h4 className="text-md font-medium">
-                  Attribute Mapping (Optional)
-                </h4>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4">
-              <div className="grid gap-4">
-                <FormField
-                  control={form.control}
-                  name="oidcConfig.mapping.id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>User ID Claim</FormLabel>
-                      <FormControl>
-                        <Input placeholder="sub" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        The claim that contains the unique user identifier.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="oidcConfig.mapping.email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email Claim</FormLabel>
-                      <FormControl>
-                        <Input placeholder="email" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        The claim that contains the user&apos;s email address.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="oidcConfig.mapping.name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name Claim</FormLabel>
-                      <FormControl>
-                        <Input placeholder="name" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        The claim that contains the user&apos;s display name.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="oidcConfig.mapping.emailVerified"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email Verified Claim (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="email_verified" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        The claim that indicates if the email is verified.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="oidcConfig.mapping.image"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Avatar Image Claim (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="picture" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        The claim that contains the user&apos;s profile picture
-                        URL.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      )}
+      {(!activeSection || activeSection === "attribute-mapping") &&
+        (activeSection ? (
+          attributeMappingContent
+        ) : (
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="attribute-mapping" className="border-none">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-md font-medium">
+                    Attribute Mapping (Optional)
+                  </h4>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4">
+                {attributeMappingContent}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ))}
 
       {(!activeSection ||
         activeSection === "enterprise-managed-credentials") && (
@@ -637,16 +634,225 @@ function EnterpriseManagedCredentialsForm(props: {
     DocsPage.PlatformIdentityProviders,
   );
 
+  const content = (
+    <>
+      <p className="text-sm text-muted-foreground">
+        {`Leave this empty unless ${appName} should exchange the signed-in user's identity-provider token for a downstream tool token when tools run.`}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {appName} suggests exchange defaults from the issuer URL.
+        {getEnterpriseExchangeHint(inferredEnterpriseExchangeType)}
+        {identityProvidersDocsUrl ? (
+          <>
+            {" "}
+            <ExternalDocsLink
+              href={identityProvidersDocsUrl}
+              className="inline-flex items-center gap-1 underline underline-offset-4"
+            >
+              Learn more
+            </ExternalDocsLink>
+          </>
+        ) : null}
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.clientId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Exchange Client ID</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Client ID used for token exchange"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                Optional override. If empty, {appName} uses the main OIDC client
+                ID above.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="oidcConfig.enterpriseManagedCredentials.clientSecret"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Exchange Client Secret</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Optional" {...field} />
+              </FormControl>
+              <FormDescription>
+                Only used when the exchange endpoint authenticates with a client
+                secret.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.enterpriseManagedCredentials.tokenEndpoint"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Exchange Token Endpoint</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="https://your-idp.example.com/oauth2/v1/token"
+                {...field}
+              />
+            </FormControl>
+            <FormDescription>
+              Optional override for the token endpoint {appName} should call to
+              exchange the user&apos;s token.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.enterpriseManagedCredentials.tokenEndpointAuthentication"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Exchange Client Authentication</FormLabel>
+            <Select
+              value={field.value ?? authenticationDefault}
+              onValueChange={field.onChange}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="private_key_jwt">Private key JWT</SelectItem>
+                <SelectItem value="client_secret_post">
+                  Client secret POST
+                </SelectItem>
+                <SelectItem value="client_secret_basic">
+                  Client secret Basic
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              {getAuthenticationHint(inferredEnterpriseExchangeType)}
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.enterpriseManagedCredentials.privateKeyId"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Signing Key ID</FormLabel>
+            <FormControl>
+              <Input placeholder="kid" {...field} />
+            </FormControl>
+            <FormDescription>
+              Only used for <code>private_key_jwt</code> authentication.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.enterpriseManagedCredentials.clientAssertionAudience"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Client Assertion Audience (Optional)</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="Defaults to the exchange token endpoint"
+                {...field}
+              />
+            </FormControl>
+            <FormDescription>
+              Optional override for <code>private_key_jwt</code> client
+              assertions.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.enterpriseManagedCredentials.subjectTokenType"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>User Token To Exchange</FormLabel>
+            <Select
+              value={field.value ?? subjectTokenTypeDefault}
+              onValueChange={field.onChange}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {Object.entries(SUBJECT_TOKEN_LABEL_BY_TYPE).map(
+                  ([tokenType, label]) => (
+                    <SelectItem key={tokenType} value={tokenType}>
+                      {label}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              {getSubjectTokenHint(inferredEnterpriseExchangeType)}
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="oidcConfig.enterpriseManagedCredentials.privateKeyPem"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Private Key PEM</FormLabel>
+            <FormControl>
+              <Textarea
+                placeholder="-----BEGIN PRIVATE KEY-----"
+                className="min-h-32 font-mono text-xs"
+                {...field}
+              />
+            </FormControl>
+            <FormDescription>
+              Only used for <code>private_key_jwt</code> authentication.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{content}</div>;
+  }
+
   return (
     <div className="space-y-6">
-      {!embedded && <Separator />}
+      <Separator />
 
-      <Accordion
-        type="single"
-        collapsible={!embedded}
-        defaultValue={embedded ? "enterprise-managed-credentials" : undefined}
-        className="w-full"
-      >
+      <Accordion type="single" collapsible className="w-full">
         <AccordionItem
           value="enterprise-managed-credentials"
           className="border-none"
@@ -673,219 +879,7 @@ function EnterpriseManagedCredentialsForm(props: {
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pt-4">
-            <p className="text-sm text-muted-foreground">
-              Leave this empty unless {appName} should exchange the signed-in
-              user&apos;s identity-provider token for a downstream tool token
-              when tools run.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {appName} suggests exchange defaults from the issuer URL.
-              {getEnterpriseExchangeHint(inferredEnterpriseExchangeType)}
-              {identityProvidersDocsUrl ? (
-                <>
-                  {" "}
-                  <ExternalDocsLink
-                    href={identityProvidersDocsUrl}
-                    className="inline-flex items-center gap-1 underline underline-offset-4"
-                  >
-                    Learn more
-                  </ExternalDocsLink>
-                </>
-              ) : null}
-            </p>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="oidcConfig.enterpriseManagedCredentials.clientId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Exchange Client ID</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Client ID used for token exchange"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Optional override. If empty, {appName} uses the main OIDC
-                      client ID above.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oidcConfig.enterpriseManagedCredentials.clientSecret"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Exchange Client Secret</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="Optional"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Only used when the exchange endpoint authenticates with a
-                      client secret.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.tokenEndpoint"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Exchange Token Endpoint</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://your-idp.example.com/oauth2/v1/token"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Optional override for the token endpoint {appName} should
-                    call to exchange the user&apos;s token.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.tokenEndpointAuthentication"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Exchange Client Authentication</FormLabel>
-                  <Select
-                    value={field.value ?? authenticationDefault}
-                    onValueChange={field.onChange}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="private_key_jwt">
-                        Private key JWT
-                      </SelectItem>
-                      <SelectItem value="client_secret_post">
-                        Client secret POST
-                      </SelectItem>
-                      <SelectItem value="client_secret_basic">
-                        Client secret Basic
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    {getAuthenticationHint(inferredEnterpriseExchangeType)}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.privateKeyId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Signing Key ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="kid" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Only used for <code>private_key_jwt</code> authentication.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.clientAssertionAudience"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Assertion Audience (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Defaults to the exchange token endpoint"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Optional override for <code>private_key_jwt</code> client
-                    assertions.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.subjectTokenType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>User Token To Exchange</FormLabel>
-                  <Select
-                    value={field.value ?? subjectTokenTypeDefault}
-                    onValueChange={field.onChange}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.entries(SUBJECT_TOKEN_LABEL_BY_TYPE).map(
-                        ([tokenType, label]) => (
-                          <SelectItem key={tokenType} value={tokenType}>
-                            {label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    {getSubjectTokenHint(inferredEnterpriseExchangeType)}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="oidcConfig.enterpriseManagedCredentials.privateKeyPem"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Private Key PEM</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="-----BEGIN PRIVATE KEY-----"
-                      className="min-h-32 font-mono text-xs"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Only used for <code>private_key_jwt</code> authentication.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {content}
           </AccordionContent>
         </AccordionItem>
       </Accordion>

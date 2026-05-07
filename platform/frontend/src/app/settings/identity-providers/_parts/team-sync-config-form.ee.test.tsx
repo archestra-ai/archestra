@@ -59,6 +59,7 @@ function TestWrapper({
       },
       teamSyncConfig: {
         enabled: true,
+        groupsExpression: "",
       },
     },
   });
@@ -80,9 +81,25 @@ describe("TeamSyncConfigForm", () => {
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
     await openAccordion();
 
-    await userEvent.click(screen.getByText("Latest ID token claims"));
-
     expect(screen.getByText(/engineering/i)).toBeInTheDocument();
+  });
+
+  it("shows a live template test result for team sync extraction", async () => {
+    const user = userEvent.setup();
+
+    render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
+    await openAccordion();
+
+    await user.type(
+      screen.getByLabelText("Groups Handlebars Template"),
+      "{{#each groups}}{{this}},{{/each}}",
+    );
+
+    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
+    expect(screen.getByText("Groups extracted")).toBeInTheDocument();
+    expect(
+      screen.getByText(/group identifier.*extracted/i),
+    ).toBeInTheDocument();
   });
 
   it("shows the Okta groups claim hint", async () => {

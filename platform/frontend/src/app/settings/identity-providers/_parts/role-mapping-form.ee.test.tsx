@@ -119,8 +119,6 @@ describe("RoleMappingForm", () => {
     render(<TestWrapper identityProviderId="idp-1" />);
     await openAccordion();
 
-    await userEvent.click(screen.getByText("Latest ID token claims"));
-
     expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/app-admin/i)).toBeInTheDocument();
     expect(
@@ -137,6 +135,41 @@ describe("RoleMappingForm", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a live template test result for the selected role mapping rule", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper
+        identityProviderId="idp-1"
+        defaultRules={[
+          {
+            expression: '{{#includes roles "not-present"}}true{{/includes}}',
+            role: "member",
+          },
+          {
+            expression: '{{#includes roles "app-admin"}}true{{/includes}}',
+            role: "admin",
+          },
+        ]}
+      />,
+    );
+    await openAccordion();
+
+    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
+    expect(
+      screen.getByText(/runs role mapping rule 1 \(member\)/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No match")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "Test" })[0]);
+
+    expect(
+      screen.getByText(/runs role mapping rule 2 \(admin\)/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Match")).toBeInTheDocument();
+    expect(screen.getByText(/would match these claims/i)).toBeInTheDocument();
+  });
+
   it("shows the Okta groups claim hint", async () => {
     render(<TestWrapper providerId="Okta" />);
     await openAccordion();
@@ -144,7 +177,7 @@ describe("RoleMappingForm", () => {
     expect(
       screen.getByText(/Okta group-based role rules commonly read/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/groups/)).toBeInTheDocument();
+    expect(screen.getAllByText(/groups/).length).toBeGreaterThan(0);
   });
 
   it("shows the Entra roles and groups claim hint", async () => {

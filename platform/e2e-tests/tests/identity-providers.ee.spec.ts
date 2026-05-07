@@ -3,6 +3,7 @@ import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   E2eTestId,
+  getIdentityProviderDialogNavButtonTestId,
   getIdpRoleMappingRuleRowTestId,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
@@ -256,6 +257,15 @@ async function getTeamIdByNameViaApi(
 
 function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
+}
+
+async function openIdentityProviderDialogSection(
+  page: Page,
+  section: string,
+): Promise<void> {
+  await page
+    .getByTestId(getIdentityProviderDialogNavButtonTestId(section))
+    .click();
 }
 
 function getIdentityProviderConfigId(
@@ -818,7 +828,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     // STEP 3: Configure Role Mapping with TWO rules
     // The first rule will NOT match (looks for a non-existent group)
     // The second rule WILL match (looks for archestra-admins group)
-    await page.getByTestId(E2eTestId.IdpRoleMappingAccordionTrigger).click();
+    await openIdentityProviderDialogSection(page, "role-mapping");
 
     const addRuleButton = page.getByTestId(E2eTestId.IdpRoleMappingAddRule);
     await expect(addRuleButton).toBeVisible();
@@ -886,8 +896,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await fillOidcProviderForm(page, providerName);
 
     // STEP 2: Configure Role Mapping
-    // Expand the Role Mapping accordion
-    await page.getByTestId(E2eTestId.IdpRoleMappingAccordionTrigger).click();
+    await openIdentityProviderDialogSection(page, "role-mapping");
 
     // Wait for accordion to expand - look for the Add Rule button
     const addRuleButton = page.getByTestId(E2eTestId.IdpRoleMappingAddRule);

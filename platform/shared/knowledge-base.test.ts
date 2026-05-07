@@ -24,6 +24,16 @@ describe("addNomicTaskPrefix", () => {
     ).toBe("search_document: some text");
   });
 
+  it("works with OpenRouter-prefixed nomic models", () => {
+    expect(
+      addNomicTaskPrefix(
+        "nomic-ai/nomic-embed-text",
+        "some text",
+        "search_query",
+      ),
+    ).toBe("search_query: some text");
+  });
+
   it("returns text unchanged for non-nomic models", () => {
     expect(
       addNomicTaskPrefix(

@@ -1,3 +1,4 @@
+import { OAUTH_GRANT_TYPE } from "@shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -5,7 +6,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { parseTrustProxy } from "@/config";
-import { JWT_BEARER_GRANT_TYPE } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -90,7 +90,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         "authorization_code",
         "refresh_token",
         "client_credentials",
-        JWT_BEARER_GRANT_TYPE,
+        OAUTH_GRANT_TYPE.JwtBearer,
       ]);
       expect(body.code_challenge_methods_supported).toEqual(["S256"]);
       expect(body.token_endpoint_auth_methods_supported).toContain("none");

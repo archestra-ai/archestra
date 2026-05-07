@@ -621,6 +621,57 @@ describe("AgentToolModel.findAll", () => {
       expect(includedToolNames).toContain("archestra__exclude_test_tool_1");
       expect(includedToolNames).toContain("archestra__exclude_test_tool_2");
     });
+
+    test("non-admin users can see org-agent tools bound to org-scoped MCP servers", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, organization.id);
+
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+        scope: "org",
+      });
+      const agent = await makeAgent({
+        organizationId: organization.id,
+        scope: "org",
+      });
+      const tool = await makeTool({
+        name: "org-installed-mcp-tool",
+        catalogId: catalog.id,
+      });
+      const mcpServer = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+
+      await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: mcpServer.id,
+      });
+
+      const result = await AgentToolModel.findAll({
+        filters: {
+          agentId: agent.id,
+          excludeArchestraTools: true,
+        },
+        userId: user.id,
+        organizationId: organization.id,
+        isAgentAdmin: false,
+        skipPagination: true,
+      });
+
+      expect(result.data.map((assignment) => assignment.tool.id)).toContain(
+        tool.id,
+      );
+    });
   });
 
   describe("Combined Filters, Sorting, and Pagination", () => {

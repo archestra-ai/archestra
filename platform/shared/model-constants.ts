@@ -284,3 +284,37 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   minimax: "MiniMax-M2.5",
   azure: "gpt-4o",
 };
+/**
+ * Maps models.dev provider IDs to Archestra provider names.
+ * This is the single source of truth for all synchronization logic.
+ *
+ * Providers mapped to `null` are explicitly skipped during models.dev sync.
+ * This includes providers that use custom authentication flows (e.g., Bedrock
+ * uses SigV4, Azure uses Azure-specific auth) and are therefore managed
+ * through their own dedicated sync pathways.
+ */
+export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
+  {
+    openai: "openai",
+    openrouter: "openrouter",
+    anthropic: "anthropic",
+    google: "gemini",
+    "google-vertex": "gemini",
+    cohere: "cohere",
+    cerebras: "cerebras",
+    mistral: "mistral",
+    minimax: "minimax",
+    // These providers use OpenAI-compatible API in Archestra
+    llama: "openai",
+    deepseek: "deepseek",
+    groq: "groq",
+    "fireworks-ai": "openai",
+    togetherai: "openai",
+    xai: "xai",
+    // Explicitly unsupported providers (return null to skip during models.dev sync)
+    // Bedrock and Azure have dedicated auth flows and are not synced via models.dev
+    "amazon-bedrock": null,
+    azure: null,
+    perplexity: null,
+    nvidia: null,
+  };

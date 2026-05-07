@@ -98,4 +98,5 @@ export type McpToolAssignment = {
   credentialResolutionMode: z.infer<typeof CredentialResolutionModeSchema>;
   catalogId: string | null;
   catalogName: string | null;
+  meta: Record<string, unknown> | null;
 };

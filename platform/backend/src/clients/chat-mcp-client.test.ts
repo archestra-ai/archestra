@@ -59,6 +59,7 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 beforeEach(() => {
   vi.mocked(mcpClient.executeToolCall).mockReset();
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
+  vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
 
 describe("isBrowserMcpTool", () => {
@@ -1267,6 +1268,44 @@ describe("getChatMcpClient", () => {
       .calls[0] as [URL, { requestInit?: RequestInit }];
     const headers = new Headers(options.requestInit?.headers);
     expect(headers.get("Authorization")).toBe("Bearer external-idp-jwt");
+  });
+
+  test("falls back to the internal gateway token when session-derived external IdP auth fails", async () => {
+    mockConnect.mockReset();
+    mockConnect
+      .mockRejectedValueOnce(new Error("Unauthorized"))
+      .mockResolvedValueOnce(undefined);
+    mockClose.mockReset();
+    vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue({
+      identityProviderId: crypto.randomUUID(),
+      providerId: "okta-chat",
+      rawToken: "external-idp-jwt",
+    });
+
+    const agentId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const organizationId = crypto.randomUUID();
+
+    const client = await chatClient.getChatMcpClient(
+      agentId,
+      userId,
+      organizationId,
+      undefined,
+      "internal-fallback-token",
+    );
+
+    expect(client).not.toBeNull();
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+
+    const authorizationHeaders = vi
+      .mocked(StreamableHTTPClientTransport)
+      .mock.calls.map(([, options]) =>
+        new Headers(
+          (options as { requestInit?: RequestInit }).requestInit?.headers,
+        ).get("Authorization"),
+      );
+    expect(authorizationHeaders).toContain("Bearer external-idp-jwt");
+    expect(authorizationHeaders).toContain("Bearer internal-fallback-token");
   });
 });
 

@@ -251,6 +251,7 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 ### Supported OpenRouter APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Embeddings API** (`/embeddings`) - ✅ Supported for Knowledge Base embeddings
 
 ### OpenRouter Connection Details
 
